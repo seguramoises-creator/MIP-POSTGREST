@@ -7,6 +7,7 @@ export type Rol =
   | 'GERENTE_DISTRITO'
   | 'GERENTE_MARCA'
   | 'REPRESENTANTE_MEDICO'
+  | 'CAPACITACION'
   | 'CONSULTA';
 
 // ── Auth ──────────────────────────────────────────────────────────────

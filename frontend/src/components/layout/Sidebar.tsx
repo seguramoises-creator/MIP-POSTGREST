@@ -6,7 +6,7 @@ import {
 import {
   Dashboard, TrendingUp, TrackChanges, LocalHospital, EmojiEvents,
   CloudUpload, Settings, AdminPanelSettings, Assessment,
-  SportsScore, Leaderboard, ScatterPlot,
+  SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { Rol } from '../../types';
@@ -27,6 +27,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Productividad',         path: '/productividad', icon: <TrendingUp />,         roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'REPRESENTANTE_MEDICO'] },
   { label: 'Indicadores Desempeño', path: '/coaching',      icon: <Leaderboard />,        roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
   { label: 'Matriz LSII',           path: '/lsii',          icon: <ScatterPlot />,        roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
+  { label: 'Exámenes',              path: '/examenes',      icon: <Quiz />,               roles: ['ADMIN', 'CAPACITACION', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO'] },
+  { label: 'Mis Exámenes',          path: '/mis-examenes',  icon: <AssignmentTurnedIn />, roles: ['ADMIN', 'CAPACITACION', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'REPRESENTANTE_MEDICO'] },
   { label: 'Cobertura Predictiva',  path: '/cobertura-predictiva', icon: <TrackChanges />, roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA'] },
   { label: 'Categorización Médica', path: '/categorizacion',icon: <LocalHospital />,      roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
   { label: 'Reconocimiento',        path: '/reconocimiento',icon: <EmojiEvents />,        roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },
@@ -44,6 +46,7 @@ const ROL_LABELS: Record<Rol, string> = {
   GERENTE_DISTRITO:      'Ger. Distrito',
   GERENTE_MARCA:         'Ger. Marca',
   REPRESENTANTE_MEDICO:  'Rep. Médico',
+  CAPACITACION:          'Capacitación',
   CONSULTA:              'Consulta',
 };
 

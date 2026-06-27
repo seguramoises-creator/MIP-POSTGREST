@@ -20,6 +20,8 @@ import Admin from './pages/admin/Admin';
 import Usuarios from './pages/admin/Usuarios';
 import Reportes from './pages/reportes/Reportes';
 import Lsii from './pages/lsii/Lsii';
+import Examenes from './pages/examenes/Examenes';
+import MisExamenes from './pages/examenes/MisExamenes';
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
 
@@ -68,6 +70,8 @@ function AppRoutes() {
         <Route path="ranking" element={<Ranking />} />
         <Route path="reconocimiento" element={<Reconocimiento />} />
         <Route path="lsii" element={<Lsii />} />
+        <Route path="mis-examenes" element={<MisExamenes />} />
+        <Route path="examenes" element={<ProtectedRoute allowedRoles={['ADMIN','CAPACITACION','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO']}><Examenes /></ProtectedRoute>} />
         <Route path="etl" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><ETL /></ProtectedRoute>} />
         <Route path="admin" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><Admin /></ProtectedRoute>} />
         <Route path="usuarios" element={<ProtectedRoute allowedRoles={['ADMIN']}><Usuarios /></ProtectedRoute>} />
