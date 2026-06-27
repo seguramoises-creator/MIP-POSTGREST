@@ -17,6 +17,7 @@ from app.api.v1.routers.exportacion   import router as exportacion_router
 from app.api.v1.routers.lsii          import router as lsii_router
 from app.api.v1.routers.cobertura_predictiva import router as cobertura_predictiva_router
 from app.api.v1.routers.categorizacion import router as categorizacion_router
+from app.api.v1.routers.examenes      import router as examenes_router
 
 api_router = APIRouter()
 
@@ -34,3 +35,4 @@ api_router.include_router(etl_router)
 api_router.include_router(dims_router)
 api_router.include_router(exportacion_router)
 api_router.include_router(lsii_router)
+api_router.include_router(examenes_router)
