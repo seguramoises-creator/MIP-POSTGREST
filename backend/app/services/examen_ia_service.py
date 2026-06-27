@@ -44,7 +44,12 @@ def extraer_texto_fuente(ruta: str, tipo_archivo: str) -> str:
 
 
 def construir_prompt(texto: str, n_multi: int, n_casos: int) -> str:
-    """Construye el prompt base para la generación de preguntas con Claude."""
+    """Construye el prompt base para la generación de preguntas con Claude.
+
+    El texto de entrada se trunca a _TEXTO_MAX_CHARS para acotar el tamaño del
+    prompt y el costo de tokens, independientemente del tamaño del archivo fuente.
+    """
+    texto_acotado = texto[:_TEXTO_MAX_CHARS]
     total = n_multi + n_casos
     return (
         "Eres un experto en capacitación farmacéutica. Analiza el siguiente documento "
@@ -53,17 +58,50 @@ def construir_prompt(texto: str, n_multi: int, n_casos: int) -> str:
         "Devuelve SOLO un arreglo JSON. Cada pregunta con este esquema:\n"
         "tipo: 'multi'|'caso'; escenario: string (solo caso); texto: string; "
         "opciones: [string,string,string,string] (exactamente 4); correcta: 0|1|2|3; "
-        "explicacion: string.\n\nDOCUMENTO:\n" + texto)
+        "explicacion: string.\n\nDOCUMENTO:\n" + texto_acotado)
+
+
+# Maximum characters fed into the prompt to bound token cost.
+_TEXTO_MAX_CHARS = 40_000
 
 
 def _extraer_json(texto_respuesta: str):
-    """Extrae y parsea JSON de la respuesta del modelo, tolerando fences ```json."""
+    """Extrae y parsea JSON de la respuesta del modelo.
+
+    Estrategia en orden de precedencia:
+    1. Si hay un bloque ```json ... ``` o ``` ... ```, usa su contenido.
+    2. De lo contrario busca el primer '[' o '{' y el último ']' o '}'
+       correspondiente y parsea ese fragmento (tolerante a texto extra
+       antes/después del JSON).
+    3. Intenta parsear el texto completo como JSON.
+    4. Lanza ValueError si todo falla.
+    """
     t = texto_respuesta.strip()
+
+    # Strategy 1: fenced code block
     if "```" in t:
-        t = t.split("```")[1]
-        if t.startswith("json"):
-            t = t[4:]
-    t = t.strip()
+        import re
+        # Match ```json ... ``` or ``` ... ```
+        m = re.search(r"```(?:json)?\s*([\s\S]*?)```", t)
+        if m:
+            candidate = m.group(1).strip()
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass  # fall through to other strategies
+
+    # Strategy 2: first balanced JSON array or object
+    for open_ch, close_ch in (("[", "]"), ("{", "}")):
+        start = t.find(open_ch)
+        end = t.rfind(close_ch)
+        if start != -1 and end != -1 and end > start:
+            candidate = t[start:end + 1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+
+    # Strategy 3: full text
     try:
         return json.loads(t)
     except json.JSONDecodeError as e:

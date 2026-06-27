@@ -117,3 +117,80 @@ def test_persistir_preguntas_marca_correcta(monkeypatch):
     opciones = preguntas_agregadas[0].opciones
     # la opción en índice 2 es la correcta
     assert any(getattr(o, "es_correcta", False) and o.indice_original == 2 for o in opciones)
+
+
+# ── Tests Fase 3 Fix — magic bytes IA + JSON robusto ────────────────────────
+
+from app.api.v1.routers.examenes import _validar_magic_bytes_ia
+
+
+class TestMagicBytesIA:
+    """Regression locks for the IA-specific magic-byte validator.
+
+    The critical security case is the INVERTED check: an Excel/ZIP file
+    renamed to .pdf must be REJECTED (this is the bug that existed before
+    the fix — the old ETL validator accepted it).
+    """
+
+    def test_pdf_valido(self):
+        content = b"%PDF-1.7 blah blah"
+        assert _validar_magic_bytes_ia(content, ".pdf") is True
+
+    def test_docx_valido(self):
+        content = b"PK\x03\x04 fake ooxml content"
+        assert _validar_magic_bytes_ia(content, ".docx") is True
+
+    def test_pptx_valido(self):
+        content = b"PK\x03\x04 fake pptx content"
+        assert _validar_magic_bytes_ia(content, ".pptx") is True
+
+    def test_txt_valido(self):
+        content = b"hola mundo, esto es texto plano"
+        assert _validar_magic_bytes_ia(content, ".txt") is True
+
+    def test_txt_con_nul_rechazado(self):
+        # A binary file renamed to .txt should be rejected (NUL in first 1024 bytes)
+        content = b"PK\x03\x04\x00\x00binary data"
+        assert _validar_magic_bytes_ia(content, ".txt") is False
+
+    def test_zip_renombrado_pdf_rechazado(self):
+        # CRITICAL: Excel/ZIP magic bytes with .pdf extension must be REJECTED
+        content = b"PK\x03\x04 this is an xlsx renamed to pdf"
+        assert _validar_magic_bytes_ia(content, ".pdf") is False
+
+    def test_ole2_renombrado_pdf_rechazado(self):
+        # OLE2 (legacy .xls) renamed to .pdf must be REJECTED
+        content = b"\xd0\xcf\x11\xe0 legacy xls data"
+        assert _validar_magic_bytes_ia(content, ".pdf") is False
+
+    def test_extension_desconocida_rechazada(self):
+        content = b"PK\x03\x04 whatever"
+        assert _validar_magic_bytes_ia(content, ".rtf") is False
+
+
+class TestExtraerJsonRobusto:
+    """Regression locks for the robust _extraer_json implementation."""
+
+    def test_fenced_json(self):
+        respuesta = '```json\n[{"tipo": "multi"}]\n```'
+        data = ia._extraer_json(respuesta)
+        assert isinstance(data, list) and data[0]["tipo"] == "multi"
+
+    def test_fenced_sin_lang(self):
+        respuesta = '```\n[{"tipo": "caso"}]\n```'
+        data = ia._extraer_json(respuesta)
+        assert data[0]["tipo"] == "caso"
+
+    def test_bare_array(self):
+        respuesta = 'Aquí están las preguntas:\n[{"tipo": "multi"}]\nFin.'
+        data = ia._extraer_json(respuesta)
+        assert isinstance(data, list)
+
+    def test_bare_object(self):
+        respuesta = 'Resultado: {"tipo": "multi"}'
+        data = ia._extraer_json(respuesta)
+        assert data["tipo"] == "multi"
+
+    def test_texto_invalido_lanza_valueerror(self):
+        with pytest.raises(ValueError):
+            ia._extraer_json("esto no es JSON ni array ni nada válido")

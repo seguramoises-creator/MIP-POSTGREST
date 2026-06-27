@@ -63,14 +63,46 @@ from app.services import examen_intento_service as intento_svc
 from app.services import examen_ia_service
 from app.services import examen_service
 
-# Reuse safe-filename + magic-bytes helpers from the ETL router (same security pattern)
-from app.api.v1.routers.etl import _safe_filename, _validar_magic_bytes
+# Reuse safe-filename helper from the ETL router (UUID-based, prevents Path Traversal)
+from app.api.v1.routers.etl import _safe_filename
+from app.core.config import settings
 
 # Upload directory (mirrors ETL pattern; created at startup if absent)
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "uploads", "ia_fuentes")
 
 TIPOS_ARCHIVO_IA = {"pdf", "docx", "pptx", "texto"}
 EXTENSIONES_IA = {".pdf", ".docx", ".pptx", ".txt"}
+
+# Magic-byte signatures for the IA file types.
+# Each extension maps to a tuple of accepted byte prefixes (checked against
+# the first 4 bytes of the uploaded content).  .txt has no binary signature —
+# we accept any content but optionally reject NUL-containing data as a hint
+# that a binary file was renamed to .txt.
+_MAGIC_IA: dict[str, tuple[bytes, ...] | None] = {
+    ".pdf":  (b"%PDF",),
+    ".docx": (b"PK\x03\x04",),   # OOXML = ZIP
+    ".pptx": (b"PK\x03\x04",),   # OOXML = ZIP
+    ".txt":  None,                # no binary signature; accepted unconditionally
+}
+
+
+def _validar_magic_bytes_ia(content: bytes, ext: str) -> bool:
+    """Validates file magic bytes for IA-accepted types.
+
+    Returns True if the content is consistent with the given extension:
+    - .pdf  → must start with b"%PDF"
+    - .docx / .pptx → must start with b"PK\\x03\\x04" (ZIP/OOXML)
+    - .txt  → accepted as long as no NUL bytes in the first 1024 bytes
+              (rejects binaries accidentally renamed to .txt)
+    - any other extension → False (caller should have already blocked it)
+    """
+    sigs = _MAGIC_IA.get(ext)
+    if sigs is None:
+        # .txt: no binary signature; reject obvious binary data
+        if ext == ".txt":
+            return b"\x00" not in content[:1024]
+        return False  # unknown extension
+    return any(content[:len(sig)] == sig for sig in sigs)
 
 # ---------------------------------------------------------------------------
 # RBAC constants
@@ -228,10 +260,17 @@ async def generar_ia(
                 detail=f"Extensión no soportada. Permitidas: {EXTENSIONES_IA}",
             )
         content = await archivo.read()
-        if not _validar_magic_bytes(content, ext):
+        # Size cap — reuse the same limit as the ETL router
+        max_bytes = settings.ETL_MAX_FILE_SIZE_MB * 1024 * 1024
+        if len(content) > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"El archivo excede el límite de {settings.ETL_MAX_FILE_SIZE_MB} MB",
+            )
+        if not _validar_magic_bytes_ia(content, ext):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="El archivo no tiene un formato válido (magic bytes inválidos)",
+                detail="El archivo no tiene un formato válido (magic bytes inválidos para el tipo declarado)",
             )
         os.makedirs(UPLOAD_DIR, exist_ok=True)
         safe_name = _safe_filename(archivo.filename)
