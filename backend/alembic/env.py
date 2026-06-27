@@ -28,6 +28,7 @@ config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 from app.db.database import Base  # noqa: E402
 from app.models import usuario, dimensiones, hechos  # noqa: F401,E402
 from app.models import cat_models  # noqa: F401,E402  ← cat.* / stg.* (Categorización Médica jun-2026)
+from app.models import exam_models  # noqa: F401,E402  ← esquema exam (Módulo de Exámenes)
 
 target_metadata = Base.metadata
 
@@ -35,7 +36,7 @@ target_metadata = Base.metadata
 def include_object(object, name, type_, reflected, compare_to):
     """Ignora objetos fuera de los esquemas de la app (p.ej. del sistema)."""
     if type_ == "table" and object.schema not in (
-        "Config", "Security", "DW", "Audit", "ETL", "dbo", None
+        "Config", "Security", "DW", "Audit", "ETL", "exam", "dbo", None
     ):
         return False
     return True
