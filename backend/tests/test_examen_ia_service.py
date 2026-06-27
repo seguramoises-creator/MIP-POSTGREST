@@ -60,3 +60,38 @@ def test_extraer_texto_plano(tmp_path):
 def test_extraer_tipo_no_soportado_falla(tmp_path):
     with pytest.raises(ValueError):
         ia.extraer_texto_fuente("x", "rtf")
+
+
+# ── Tests Fase 3 — generación con cliente inyectable ─────────────────────────
+import json as _json
+from unittest.mock import MagicMock
+
+
+def _mock_client(payload):
+    client = MagicMock()
+    msg = MagicMock()
+    bloque = MagicMock()
+    bloque.text = _json.dumps(payload)
+    msg.content = [bloque]
+    client.messages.create.return_value = msg
+    return client
+
+
+def test_generar_preguntas_ia_parsea_y_valida():
+    payload = [{"tipo": "multi", "texto": "¿?", "opciones": ["a", "b", "c", "d"],
+                "correcta": 0, "explicacion": "e"}]
+    client = _mock_client(payload)
+    out = ia.generar_preguntas_ia("texto fuente", n_multi=1, n_casos=0, client=client)
+    assert len(out) == 1 and out[0]["correcta"] == 0
+    assert client.messages.create.called
+
+
+def test_generar_preguntas_ia_json_invalido_falla():
+    client = MagicMock()
+    msg = MagicMock()
+    bloque = MagicMock()
+    bloque.text = "no soy json"
+    msg.content = [bloque]
+    client.messages.create.return_value = msg
+    with pytest.raises(ValueError):
+        ia.generar_preguntas_ia("t", 1, 0, client=client)

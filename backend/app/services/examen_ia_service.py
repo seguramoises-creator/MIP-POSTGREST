@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from loguru import logger
+from app.core.config import settings
 
 
 def extraer_texto_fuente(ruta: str, tipo_archivo: str) -> str:
@@ -28,6 +29,49 @@ def extraer_texto_fuente(ruta: str, tipo_archivo: str) -> str:
         with open(ruta, "r", encoding="utf-8", errors="ignore") as f:
             return f.read()
     raise ValueError(f"Tipo de archivo no soportado: {tipo_archivo}")
+
+
+def construir_prompt(texto: str, n_multi: int, n_casos: int) -> str:
+    """Construye el prompt base para la generación de preguntas con Claude."""
+    total = n_multi + n_casos
+    return (
+        "Eres un experto en capacitación farmacéutica. Analiza el siguiente documento "
+        f"y genera exactamente {total} preguntas de evaluación:\n"
+        f"- {n_multi} de opción múltiple\n- {n_casos} casos clínicos\n\n"
+        "Devuelve SOLO un arreglo JSON. Cada pregunta con este esquema:\n"
+        "tipo: 'multi'|'caso'; escenario: string (solo caso); texto: string; "
+        "opciones: [string,string,string,string] (exactamente 4); correcta: 0|1|2|3; "
+        "explicacion: string.\n\nDOCUMENTO:\n" + texto)
+
+
+def _extraer_json(texto_respuesta: str):
+    """Extrae y parsea JSON de la respuesta del modelo, tolerando fences ```json."""
+    t = texto_respuesta.strip()
+    if "```" in t:
+        t = t.split("```")[1]
+        if t.startswith("json"):
+            t = t[4:]
+    t = t.strip()
+    try:
+        return json.loads(t)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"La IA no devolvió JSON válido: {e}")
+
+
+def generar_preguntas_ia(texto: str, n_multi: int, n_casos: int,
+                         client=None, model: str | None = None) -> list[dict]:
+    """Genera preguntas llamando a Claude. El cliente se inyecta para testing."""
+    if client is None:
+        import anthropic
+        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    model = model or settings.EXAM_AI_MODEL
+    prompt = construir_prompt(texto, n_multi, n_casos)
+    respuesta = client.messages.create(
+        model=model, max_tokens=4096,
+        messages=[{"role": "user", "content": prompt}])
+    texto_resp = "".join(getattr(b, "text", "") for b in respuesta.content)
+    data = _extraer_json(texto_resp)
+    return validar_preguntas_generadas(data)
 
 
 def validar_preguntas_generadas(data: list) -> list[dict]:
