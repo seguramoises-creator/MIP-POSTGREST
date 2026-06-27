@@ -166,7 +166,11 @@ def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:
     asignacion = db.query(AsignacionExamen).filter(
         AsignacionExamen.id == intento.asignacion_id
     ).first()
+    if asignacion is None:
+        raise ValueError("Asignación del intento no encontrada")
     examen = db.query(Examen).filter(Examen.id == asignacion.examen_id).first()
+    if examen is None:
+        raise ValueError("Examen del intento no encontrado")
 
     respuestas = list(
         db.query(IntentoRespuesta).filter(IntentoRespuesta.intento_id == intento_id).all()
