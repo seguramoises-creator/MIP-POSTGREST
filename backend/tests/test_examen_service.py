@@ -1,3 +1,6 @@
+import pytest
+from types import SimpleNamespace
+from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 from app.models.usuario import Rol
@@ -17,3 +20,22 @@ def test_crear_examen_arranca_en_borrador_manual():
     assert examen.fuente == "manual"
     assert examen.nombre == "Producto X"
     assert db.add.called and db.commit.called
+
+
+def test_publicar_sin_preguntas_falla(monkeypatch):
+    db = MagicMock()
+    examen = SimpleNamespace(id=1, estado="borrador", preguntas=[], fecha_publicacion=None)
+    monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: examen)
+    with pytest.raises(ValueError):
+        examen_service.publicar_examen(db, 1)
+
+
+def test_publicar_con_preguntas_activa(monkeypatch):
+    db = MagicMock()
+    examen = SimpleNamespace(id=1, estado="borrador",
+                             preguntas=[SimpleNamespace(id=9)], fecha_publicacion=None)
+    monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: examen)
+    resultado = examen_service.publicar_examen(db, 1)
+    assert resultado.estado == "activo"
+    assert resultado.fecha_publicacion is not None
+    assert db.commit.called

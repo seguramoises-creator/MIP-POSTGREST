@@ -1,4 +1,6 @@
 """SCGCPR — Servicio del Módulo de Exámenes: CRUD y ciclo de vida."""
+from datetime import datetime, timezone
+
 from loguru import logger
 from sqlalchemy.orm import Session
 
@@ -33,3 +35,19 @@ def listar_examenes(db: Session) -> list[Examen]:
 
 def obtener_examen(db: Session, examen_id: int) -> Examen | None:
     return db.query(Examen).filter(Examen.id == examen_id).first()
+
+
+def publicar_examen(db: Session, examen_id: int) -> Examen:
+    examen = obtener_examen(db, examen_id)
+    if examen is None:
+        raise ValueError("Examen no encontrado")
+    if examen.estado != "borrador":
+        raise ValueError(f"Solo se publica un examen en borrador (estado actual: {examen.estado})")
+    if not examen.preguntas:  # RN-02
+        raise ValueError("El examen debe tener al menos 1 pregunta para publicarse")
+    examen.estado = "activo"
+    examen.fecha_publicacion = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(examen)
+    logger.info(f"Examen id={examen.id} publicado")
+    return examen
