@@ -139,3 +139,30 @@ class ReporteIntento(BaseModel):
     total: int
     fecha_fin: datetime | None
     respuestas: list[ReporteRespuesta]
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 schemas — Generación con IA
+# ---------------------------------------------------------------------------
+
+
+class GenerarIARequest(BaseModel):
+    nombre: str = Field(min_length=1, max_length=200)
+    producto: str | None = None
+    n_multi: int = Field(default=5, ge=0, le=50)
+    n_casos: int = Field(default=0, ge=0, le=50)
+    texto_pegado: str | None = None
+
+
+class GenerarIAResponse(BaseModel):
+    job_id: int
+    examen_id: int
+    estado: str
+
+
+class JobIAEstado(BaseModel):
+    job_id: int
+    estado: str
+    mensaje_error: str | None = None
+    examen_id: int | None = None
+    total_preguntas: int = 0
