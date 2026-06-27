@@ -144,6 +144,10 @@ class Settings(BaseSettings):
     # ── Reportes
     REPORTS_DIR: str = "reports"
 
+    # ── Módulo de Exámenes — IA (Fase 3)
+    ANTHROPIC_API_KEY: str = ""
+    EXAM_AI_MODEL: str = "claude-sonnet-4-6"
+
     @property
     def is_production(self) -> bool:
         return self.APP_ENV == "production"
