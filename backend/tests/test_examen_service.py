@@ -1,6 +1,5 @@
 import pytest
 from types import SimpleNamespace
-from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 from app.models.usuario import Rol
@@ -39,3 +38,12 @@ def test_publicar_con_preguntas_activa(monkeypatch):
     assert resultado.estado == "activo"
     assert resultado.fecha_publicacion is not None
     assert db.commit.called
+
+
+def test_publicar_examen_no_borrador_falla(monkeypatch):
+    db = MagicMock()
+    examen = SimpleNamespace(id=1, estado="activo",
+                             preguntas=[SimpleNamespace(id=9)], fecha_publicacion=None)
+    monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: examen)
+    with pytest.raises(ValueError):
+        examen_service.publicar_examen(db, 1)
