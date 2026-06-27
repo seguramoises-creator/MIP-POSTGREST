@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.models.exam_models import Examen
-from app.schemas.examenes import ExamenCrear
+from app.models.exam_models import Examen, Pregunta, PreguntaOpcion
+from app.schemas.examenes import ExamenCrear, PreguntaCrear
 
 
 def crear_examen(db: Session, datos: ExamenCrear, creado_por_usuario_id: int) -> Examen:
@@ -35,6 +35,57 @@ def listar_examenes(db: Session) -> list[Examen]:
 
 def obtener_examen(db: Session, examen_id: int) -> Examen | None:
     return db.query(Examen).filter(Examen.id == examen_id).first()
+
+
+def agregar_pregunta(db: Session, examen_id: int, datos: PreguntaCrear) -> Pregunta:
+    examen = obtener_examen(db, examen_id)
+    if examen is None:
+        raise ValueError("Examen no encontrado")
+    if examen.estado != "borrador":
+        raise ValueError("Solo se editan preguntas de un examen en borrador")  # RN-01
+    n_correctas = sum(1 for o in datos.opciones if o.es_correcta)
+    if n_correctas != 1:
+        raise ValueError("La pregunta debe tener exactamente 1 opción correcta")
+    orden = len(examen.preguntas)
+    pregunta = Pregunta(
+        examen_id=examen_id,
+        tipo=datos.tipo,
+        escenario=datos.escenario,
+        texto=datos.texto,
+        explicacion=datos.explicacion,
+        orden=orden,
+    )
+    for idx, op in enumerate(datos.opciones):
+        pregunta.opciones.append(
+            PreguntaOpcion(
+                texto_opcion=op.texto_opcion,
+                indice_original=idx,
+                es_correcta=op.es_correcta,
+            )
+        )
+    db.add(pregunta)
+    db.commit()
+    db.refresh(pregunta)
+    logger.info(f"Pregunta id={pregunta.id} agregada a examen id={examen_id}")
+    return pregunta
+
+
+def eliminar_pregunta(db: Session, pregunta_id: int) -> None:
+    pregunta = db.query(Pregunta).filter(Pregunta.id == pregunta_id).first()
+    if pregunta is None:
+        raise ValueError("Pregunta no encontrada")
+    db.delete(pregunta)
+    db.commit()
+    logger.info(f"Pregunta id={pregunta_id} eliminada")
+
+
+def reordenar_preguntas(db: Session, examen_id: int, orden_ids: list[int]) -> None:
+    for nuevo_orden, pid in enumerate(orden_ids):
+        db.query(Pregunta).filter(
+            Pregunta.id == pid, Pregunta.examen_id == examen_id
+        ).update({"orden": nuevo_orden})
+    db.commit()
+    logger.info(f"Preguntas del examen id={examen_id} reordenadas")
 
 
 def publicar_examen(db: Session, examen_id: int) -> Examen:

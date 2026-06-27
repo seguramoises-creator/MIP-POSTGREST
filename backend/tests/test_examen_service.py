@@ -47,3 +47,32 @@ def test_publicar_examen_no_borrador_falla(monkeypatch):
     monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: examen)
     with pytest.raises(ValueError):
         examen_service.publicar_examen(db, 1)
+
+
+# ---------------------------------------------------------------------------
+# Task 3: CRUD de preguntas/opciones
+# ---------------------------------------------------------------------------
+from app.schemas.examenes import PreguntaCrear, PreguntaOpcionCrear
+
+
+def _pcrear(n_correctas=1):
+    ops = [PreguntaOpcionCrear(texto_opcion=f"o{i}", es_correcta=(i < n_correctas)) for i in range(4)]
+    return PreguntaCrear(texto="¿?", opciones=ops)
+
+
+def test_agregar_pregunta_requiere_examen_borrador(monkeypatch):
+    db = MagicMock()
+    examen = SimpleNamespace(id=1, estado="activo", preguntas=[])
+    monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: examen)
+    with pytest.raises(ValueError):
+        examen_service.agregar_pregunta(db, 1, _pcrear())
+
+
+def test_agregar_pregunta_exige_una_correcta(monkeypatch):
+    db = MagicMock()
+    examen = SimpleNamespace(id=1, estado="borrador", preguntas=[])
+    monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: examen)
+    with pytest.raises(ValueError):
+        examen_service.agregar_pregunta(db, 1, _pcrear(n_correctas=0))
+    with pytest.raises(ValueError):
+        examen_service.agregar_pregunta(db, 1, _pcrear(n_correctas=2))
