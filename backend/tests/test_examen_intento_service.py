@@ -298,6 +298,61 @@ def test_entregar_intento_happy_path_aprobado():
     db.commit.assert_called()
 
 
+# ---------------------------------------------------------------------------
+# Tests de validar_intento_vigente (Fix 1 — Task 8)
+# ---------------------------------------------------------------------------
+
+def _mock_db_para_validar(*, fecha_limite=None, tiempo_limite_min=None, fecha_inicio=None):
+    """Construye un db mock para las dos queries que validar_intento_vigente realiza:
+    1. query(AsignacionExamen) → asignacion con fecha_limite
+    2. query(Examen)           → examen con tiempo_limite_min
+    """
+    from tests.conftest import FakeQuery
+
+    db = MagicMock()
+    asignacion = SimpleNamespace(
+        id=1, examen_id=7, fecha_limite=fecha_limite,
+        estado="pendiente",
+    )
+    examen = SimpleNamespace(id=7, tiempo_limite_min=tiempo_limite_min)
+    db.query.side_effect = [
+        FakeQuery(first_result=asignacion),
+        FakeQuery(first_result=examen),
+    ]
+    return db
+
+
+def test_validar_intento_vigente_vencido_por_fecha_limite():
+    """Asignación con fecha_limite en el pasado → raises ValueError('vencida')."""
+    fl_pasada = datetime.now(timezone.utc) - timedelta(hours=1)
+    db = _mock_db_para_validar(fecha_limite=fl_pasada)
+    intento = SimpleNamespace(
+        asignacion_id=1,
+        fecha_inicio=datetime.now(timezone.utc) - timedelta(minutes=5),
+    )
+    with pytest.raises(ValueError, match="vencida"):
+        svc.validar_intento_vigente(db, intento)
+
+
+def test_validar_intento_vigente_agotado_por_tiempo():
+    """Examen con tiempo_limite_min=10 y fecha_inicio 20 min atrás → raises ValueError('tiempo')."""
+    fi = datetime.now(timezone.utc) - timedelta(minutes=20)
+    db = _mock_db_para_validar(tiempo_limite_min=10, fecha_inicio=fi)
+    intento = SimpleNamespace(asignacion_id=1, fecha_inicio=fi)
+    with pytest.raises(ValueError, match="tiempo"):
+        svc.validar_intento_vigente(db, intento)
+
+
+def test_validar_intento_vigente_ok():
+    """Intento dentro de plazo y tiempo → NO levanta excepción."""
+    fl_futura = datetime.now(timezone.utc) + timedelta(hours=2)
+    fi = datetime.now(timezone.utc) - timedelta(minutes=2)
+    db = _mock_db_para_validar(fecha_limite=fl_futura, tiempo_limite_min=10, fecha_inicio=fi)
+    intento = SimpleNamespace(asignacion_id=1, fecha_inicio=fi)
+    # Debe terminar sin excepción
+    svc.validar_intento_vigente(db, intento)
+
+
 def test_entregar_intento_cierra_asignacion_si_agota_intentos():
     """RN-06: si no aprueba pero agota intentos_max → asignacion pasa a 'completado'."""
     from tests.conftest import FakeQuery

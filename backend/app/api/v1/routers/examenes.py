@@ -35,7 +35,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_active_user, get_db, require_roles
-from app.models.exam_models import AsignacionExamen, IntentoExamen
+from app.models.exam_models import AsignacionExamen, Examen, IntentoExamen
 from app.models.usuario import Rol
 from app.schemas.examenes import (
     AsignacionCrear,
@@ -349,10 +349,39 @@ def entregar(
     _verificar_intento_del_evaluado(intento, tipo, eid)
 
     try:
-        intento_svc.entregar_intento(db, intento_id)
-        reporte = intento_svc.generar_reporte(db, intento_id)
+        intento_entregado = intento_svc.entregar_intento(db, intento_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    # La entrega ya fue confirmada (commit en entregar_intento). El reporte es
+    # opcional: si falla por cualquier razón, devolvemos un payload mínimo válido
+    # en lugar de retornar 500 al cliente — la entrega NO debe parecer fallida.
+    try:
+        reporte = intento_svc.generar_reporte(db, intento_id)
+    except Exception:
+        # Fallback: construir ReporteIntento mínimo desde el intento ya entregado.
+        asignacion = db.query(AsignacionExamen).filter(
+            AsignacionExamen.id == intento_entregado.asignacion_id
+        ).first()
+        examen = (
+            db.query(Examen).filter(
+                Examen.id == asignacion.examen_id
+            ).first()
+            if asignacion
+            else None
+        )
+        reporte = {
+            "intento_id": intento_entregado.id,
+            "examen_nombre": examen.nombre if examen else "",
+            "producto": examen.producto if examen else None,
+            "score": float(intento_entregado.score or 0),
+            "aprobado": bool(intento_entregado.aprobado),
+            "nota_minima": examen.nota_minima if examen else 0,
+            "correctas": 0,
+            "total": 0,
+            "fecha_fin": intento_entregado.fecha_fin,
+            "respuestas": [],
+        }
 
     return reporte
 

@@ -1,7 +1,7 @@
 """SCGCPR — Servicio de intentos de examen: aleatorización, corrección, reporte."""
 import json
 import random
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from loguru import logger
 from sqlalchemy.orm import Session
@@ -169,6 +169,44 @@ def registrar_respuesta(
     return resp
 
 
+def validar_intento_vigente(db: Session, intento) -> None:
+    """Levanta ValueError si el intento ya no puede recibir respuestas por vencimiento.
+
+    Comprueba dos condiciones independientes:
+    1. La asignación tiene fecha_limite y ya expiró (comparación datetime UTC-aware).
+    2. El examen tiene tiempo_limite_min y el tiempo desde fecha_inicio fue superado.
+
+    Ambas fechas almacenadas se tratan como UTC si son naive (sin tzinfo), igual que
+    el resto del proyecto (datetime.now(timezone.utc), nunca utcnow()).
+    """
+    asignacion = db.query(AsignacionExamen).filter(
+        AsignacionExamen.id == intento.asignacion_id
+    ).first()
+    if asignacion is None:
+        raise ValueError("Asignación del intento no encontrada")
+
+    examen = db.query(Examen).filter(Examen.id == asignacion.examen_id).first()
+    if examen is None:
+        raise ValueError("Examen del intento no encontrado")
+
+    ahora = datetime.now(timezone.utc)
+
+    if asignacion.fecha_limite is not None:
+        fl = asignacion.fecha_limite
+        # Tratar naive como UTC (consistente con el resto del proyecto)
+        if fl.tzinfo is None:
+            fl = fl.replace(tzinfo=timezone.utc)
+        if ahora > fl:
+            raise ValueError("La asignación está vencida")
+
+    if examen.tiempo_limite_min is not None and intento.fecha_inicio is not None:
+        fi = intento.fecha_inicio
+        if fi.tzinfo is None:
+            fi = fi.replace(tzinfo=timezone.utc)
+        if ahora > fi + timedelta(minutes=examen.tiempo_limite_min):
+            raise ValueError("Se agotó el tiempo del examen")
+
+
 def registrar_respuesta_presentada(
     db: Session,
     intento_id: int,
@@ -180,6 +218,12 @@ def registrar_respuesta_presentada(
     El router solo debe llamar a esta función — nunca a `_reconstruir_mapa_opcion`
     directamente. El mapeo y la lógica de traducción quedan encapsulados aquí.
     """
+    # _reconstruir_mapa_opcion also loads the intento; we need it first for the guard.
+    intento = db.query(IntentoExamen).filter(IntentoExamen.id == intento_id).first()
+    if intento is None:
+        raise ValueError("Intento no encontrado")
+    validar_intento_vigente(db, intento)
+
     opcion_id, indice_pres, indice_orig = _reconstruir_mapa_opcion(
         db, intento_id, pregunta_id, indice_presentado
     )
