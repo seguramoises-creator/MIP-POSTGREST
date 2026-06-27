@@ -7,9 +7,12 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.models.exam_models import (
+    AsignacionExamen,
     Examen,
-    Pregunta,
     IntentoExamen,
+    IntentoRespuesta,
+    Pregunta,
+    PreguntaOpcion,
 )
 
 
@@ -106,4 +109,106 @@ def preparar_intento(db: Session, asignacion, evaluado_tipo, evaluado_id, contex
         })
 
     intento._preguntas_presentadas = presentadas  # transitorio para el router
+    return intento
+
+
+# ---------------------------------------------------------------------------
+# Responder, calcular score y entregar (Task 6)
+# ---------------------------------------------------------------------------
+
+def calcular_score(correctas: int, total: int) -> float:
+    """Porcentaje de respuestas correctas, redondeado a 2 decimales."""
+    if total <= 0:
+        return 0.0
+    return round(correctas / total * 100, 2)
+
+
+def registrar_respuesta(
+    db: Session,
+    intento_id: int,
+    pregunta_id: int,
+    opcion_id: int | None,
+    indice_presentado: int | None,
+    indice_original: int | None,
+    mapa: dict,
+) -> IntentoRespuesta:
+    """Persiste una respuesta del evaluado para una pregunta del intento."""
+    resp = IntentoRespuesta(
+        intento_id=intento_id,
+        pregunta_id=pregunta_id,
+        opcion_elegida_id=opcion_id,
+        indice_opcion_presentada=indice_presentado,
+        indice_original_elegido=indice_original,
+        mapa_opciones_json=json.dumps(mapa),
+        fecha_respuesta=datetime.now(timezone.utc),
+    )
+    db.add(resp)
+    db.commit()
+    db.refresh(resp)
+    return resp
+
+
+def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:
+    """Cierra el intento: corrige respuestas, calcula score/aprobado y aplica RN-06.
+
+    RN-05: la corrección usa la opción original (es_correcta en DimPreguntaOpcion),
+           no el índice presentado — el barajado no afecta la clave de corrección.
+    RN-06: cierra la asignación (estado='completado') si el evaluado aprueba
+           o agota todos sus intentos disponibles.
+    Anti-doble-entrega: lanza ValueError si fecha_fin ya está establecida.
+    """
+    intento = db.query(IntentoExamen).filter(IntentoExamen.id == intento_id).first()
+    if intento is None:
+        raise ValueError("Intento no encontrado")
+    if intento.fecha_fin is not None:
+        raise ValueError("El intento ya fue entregado")  # anti-doble-entrega
+
+    asignacion = db.query(AsignacionExamen).filter(
+        AsignacionExamen.id == intento.asignacion_id
+    ).first()
+    examen = db.query(Examen).filter(Examen.id == asignacion.examen_id).first()
+
+    respuestas = list(
+        db.query(IntentoRespuesta).filter(IntentoRespuesta.intento_id == intento_id).all()
+    )
+    total = db.query(Pregunta).filter(
+        Pregunta.examen_id == examen.id,
+        Pregunta.activo == True,
+    ).count()
+
+    # Corregir cada respuesta consultando la opción original (RN-05)
+    correctas = 0
+    for r in respuestas:
+        opcion = db.query(PreguntaOpcion).filter(
+            PreguntaOpcion.id == r.opcion_elegida_id
+        ).first()
+        r.es_correcta = bool(opcion and opcion.es_correcta)
+        if r.es_correcta:
+            correctas += 1
+
+    intento.score = calcular_score(correctas, total)
+    intento.aprobado = intento.score >= examen.nota_minima
+    intento.fecha_fin = datetime.now(timezone.utc)
+
+    if intento.fecha_inicio is not None:
+        intento.tiempo_usado_seg = int(
+            (intento.fecha_fin - intento.fecha_inicio).total_seconds()
+        )
+
+    asignacion.intentos_usados += 1
+
+    # RN-06: cerrar asignación si aprobó o agotó intentos disponibles
+    if intento.aprobado or (
+        asignacion.intentos_max is not None
+        and asignacion.intentos_usados >= asignacion.intentos_max
+    ):
+        asignacion.estado = "completado"
+
+    db.commit()
+    db.refresh(intento)
+
+    logger.info(
+        f"Intento {intento_id} entregado — score={intento.score} "
+        f"aprobado={intento.aprobado} correctas={correctas}/{total}"
+    )
     return intento

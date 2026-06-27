@@ -165,3 +165,135 @@ def test_preparar_intento_baraja_preguntas_y_opciones():
     for entrada in result._preguntas_presentadas:
         for op in entrada["opciones"]:
             assert "es_correcta" not in op
+
+
+# ---------------------------------------------------------------------------
+# Tests de calcular_score (Task 6 — Step 1)
+# ---------------------------------------------------------------------------
+
+def test_calcular_score():
+    assert svc.calcular_score(8, 10) == 80.0
+    assert svc.calcular_score(0, 0) == 0.0
+    assert svc.calcular_score(1, 3) == 33.33
+
+
+# ---------------------------------------------------------------------------
+# Test anti-doble-entrega (Task 6 — Step 3)
+# ---------------------------------------------------------------------------
+
+def test_entregar_dos_veces_falla(monkeypatch):
+    db = MagicMock()
+    intento = SimpleNamespace(id=1, fecha_fin=datetime.now(timezone.utc))
+    db.query.return_value.filter.return_value.first.return_value = intento
+    with pytest.raises(ValueError):
+        svc.entregar_intento(db, 1)
+
+
+# ---------------------------------------------------------------------------
+# Tests de entregar_intento — happy path (Task 6 — Step 4)
+# ---------------------------------------------------------------------------
+
+def _build_entregar_db(*, aprobado_esperado=True, intentos_max=None, intentos_usados=0,
+                        nota_minima=70, score_esperado=80.0):
+    """Construye un db mock con el orden de queries que entregar_intento realiza."""
+    from tests.conftest import FakeQuery
+
+    db = MagicMock()
+
+    # Intento sin fecha_fin (no entregado aún)
+    intento = SimpleNamespace(
+        id=10, fecha_fin=None, asignacion_id=5,
+        fecha_inicio=datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc),
+        score=None, aprobado=None, tiempo_usado_seg=None,
+    )
+
+    # Asignación
+    asignacion = SimpleNamespace(
+        id=5, examen_id=7,
+        intentos_max=intentos_max, intentos_usados=intentos_usados,
+        estado="pendiente",
+    )
+
+    # Examen con nota_minima configurable
+    examen = SimpleNamespace(id=7, nota_minima=nota_minima)
+
+    # Respuestas: 2 correctas de 2 (score=100) si aprobado_esperado=True,
+    # o 0 de 2 (score=0) si False — pero simplificamos: siempre 2 respuestas.
+    opcion_correcta = SimpleNamespace(id=201, es_correcta=True)
+    opcion_incorrecta = SimpleNamespace(id=202, es_correcta=False)
+
+    respuestas = [
+        SimpleNamespace(id=1, opcion_elegida_id=201, es_correcta=None),
+        SimpleNamespace(id=2, opcion_elegida_id=201, es_correcta=None),
+    ]
+
+    # db.query() se llama en orden:
+    # 1. query(IntentoExamen) → intento
+    # 2. query(AsignacionExamen) → asignacion
+    # 3. query(Examen) → examen
+    # 4. query(IntentoRespuesta) → respuestas list
+    # 5. query(Pregunta).filter(...).count() → 2
+    # 6+7. query(PreguntaOpcion) × 2 → opcion_correcta
+    db.query.side_effect = [
+        FakeQuery(first_result=intento),
+        FakeQuery(first_result=asignacion),
+        FakeQuery(first_result=examen),
+        FakeQuery(all_result=respuestas),
+        FakeQuery(all_result=[SimpleNamespace(), SimpleNamespace()]),  # count() = 2
+        FakeQuery(first_result=opcion_correcta),
+        FakeQuery(first_result=opcion_correcta),
+    ]
+
+    return db, intento, asignacion
+
+
+def test_entregar_intento_happy_path_aprobado():
+    """entregar_intento: 2/2 correctas → score=100 → aprobado=True → asignacion=completado."""
+    db, intento, asignacion = _build_entregar_db(nota_minima=70)
+
+    result = svc.entregar_intento(db, 10)
+
+    assert intento.score == 100.0
+    assert intento.aprobado is True
+    assert intento.fecha_fin is not None
+    assert intento.tiempo_usado_seg is not None and intento.tiempo_usado_seg >= 0
+    assert asignacion.intentos_usados == 1
+    assert asignacion.estado == "completado"
+    db.commit.assert_called()
+
+
+def test_entregar_intento_cierra_asignacion_si_agota_intentos():
+    """RN-06: si no aprueba pero agota intentos_max → asignacion pasa a 'completado'."""
+    from tests.conftest import FakeQuery
+
+    db = MagicMock()
+
+    intento = SimpleNamespace(
+        id=10, fecha_fin=None, asignacion_id=5,
+        fecha_inicio=datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc),
+        score=None, aprobado=None, tiempo_usado_seg=None,
+    )
+    asignacion = SimpleNamespace(
+        id=5, examen_id=7, intentos_max=3, intentos_usados=2,  # este es el 3.° intento
+        estado="pendiente",
+    )
+    examen = SimpleNamespace(id=7, nota_minima=90)  # nota alta → no aprueba con score=0
+    opcion_incorrecta = SimpleNamespace(id=202, es_correcta=False)
+    respuestas = [
+        SimpleNamespace(id=1, opcion_elegida_id=202, es_correcta=None),
+    ]
+
+    db.query.side_effect = [
+        FakeQuery(first_result=intento),
+        FakeQuery(first_result=asignacion),
+        FakeQuery(first_result=examen),
+        FakeQuery(all_result=respuestas),
+        FakeQuery(all_result=[SimpleNamespace()]),  # count=1
+        FakeQuery(first_result=opcion_incorrecta),
+    ]
+
+    result = svc.entregar_intento(db, 10)
+
+    assert intento.aprobado is False
+    assert asignacion.intentos_usados == 3   # 2 + 1
+    assert asignacion.estado == "completado"  # agotó intentos_max
