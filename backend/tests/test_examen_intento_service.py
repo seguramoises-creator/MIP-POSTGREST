@@ -1,5 +1,8 @@
 """Tests para examen_intento_service: Fisher-Yates + preparar_intento."""
+import json
 import random
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -78,7 +81,6 @@ def test_preparar_intento_bloquea_si_estado_no_pendiente():
 
 
 def test_preparar_intento_bloquea_si_examen_no_activo():
-    from datetime import date
     db = MagicMock()
     asig = _asig()
     examen = _examen_mock(estado="borrador")
@@ -117,3 +119,49 @@ def test_preparar_intento_crea_intento_y_preguntas_presentadas():
             assert "_opcion_id" in op
             assert "_indice_original" in op
             assert "indice_presentado" in op
+
+
+def test_preparar_intento_vencido_falla():
+    """RN-06: fecha_limite en el pasado debe levantar ValueError antes de cualquier query."""
+    db = MagicMock()
+    fecha_pasada = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+    asig = _asig(estado="pendiente", fecha_limite=fecha_pasada)
+    with pytest.raises(ValueError, match="vencida"):
+        svc.preparar_intento(db, asig, "RM", 5, {})
+    # El guard dispara antes de tocar la BD
+    db.query.assert_not_called()
+
+
+def test_preparar_intento_baraja_preguntas_y_opciones():
+    """rand_preguntas=True + rand_opciones=True con semilla=7 reordena los IDs de preguntas
+    y ninguna opción expone es_correcta al evaluado."""
+    # Seed=7 transforma [p1,p2,p3] → [p3,p1,p2] con el Fisher-Yates del servicio.
+    SEED = 7
+    db = MagicMock()
+    asig = _asig()
+    examen = _examen_mock(estado="activo", rand_preguntas=True, rand_opciones=True)
+    preguntas = [_pregunta_mock(1), _pregunta_mock(2), _pregunta_mock(3)]
+
+    from tests.conftest import FakeQuery
+
+    db.query.side_effect = [
+        FakeQuery(first_result=examen),
+        FakeQuery(all_result=preguntas),
+    ]
+
+    rng = random.Random(SEED)
+    result = svc.preparar_intento(db, asig, "RM", 5, {}, rng=rng)
+
+    orden_json = json.loads(result.orden_preguntas_json)
+    ids_originales = [p.id for p in preguntas]  # [1, 2, 3]
+
+    # Es una permutación de los IDs originales
+    assert sorted(orden_json) == sorted(ids_originales)
+    # El barajado produjo un orden distinto al original (semilla=7 garantiza esto)
+    assert orden_json != ids_originales
+
+    # Las preguntas presentadas coinciden en cantidad y sin es_correcta expuesto
+    assert len(result._preguntas_presentadas) == len(preguntas)
+    for entrada in result._preguntas_presentadas:
+        for op in entrada["opciones"]:
+            assert "es_correcta" not in op

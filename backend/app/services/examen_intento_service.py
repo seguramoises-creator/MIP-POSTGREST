@@ -9,9 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.exam_models import (
     Examen,
     Pregunta,
-    AsignacionExamen,
     IntentoExamen,
-    IntentoRespuesta,
 )
 
 
@@ -23,7 +21,7 @@ def barajar(items: list, rng: random.Random) -> list:
     return items
 
 
-def preparar_intento(db, asignacion, evaluado_tipo, evaluado_id, contexto, rng=None):
+def preparar_intento(db: Session, asignacion, evaluado_tipo, evaluado_id, contexto, rng=None):
     """Valida que la asignación es tomable, baraja preguntas/opciones según flags
     del examen, persiste el IntentoExamen y adjunta `_preguntas_presentadas`
     como atributo transitorio para el router.
