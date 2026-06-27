@@ -14,6 +14,10 @@ Endpoints de administración (RequireCapacitacion = ADMIN + CAPACITACION):
   PUT  /examenes/{id}/preguntas/orden     — Reordenar preguntas
   POST /examenes/{id}/asignar             — Asignar examen a lista de evaluados (RM/Gerente)
 
+Endpoints de generación con IA (RequireCapacitacion):
+  POST /examenes/generar-ia               — Crea examen borrador vía IA y lanza job background
+  GET  /examenes/generar-ia/{job_id}      — Estado del job + cantidad de preguntas generadas
+
 Endpoints de evaluado (RequireAnyAuth — cualquier usuario activo):
   GET  /examenes/mis-pendientes           — Asignaciones pendientes del evaluado logueado
   GET  /examenes/mi-historial             — Historial de intentos del evaluado logueado
@@ -28,28 +32,45 @@ Scope enforcement:
   - iniciar/responder/entregar/reporte verifican que la asignación/intento pertenezca al evaluado; 403 si no.
   - La opción correcta NUNCA se expone en /iniciar — solo en /reporte tras entregar (RN-07).
 
-ORDERING NOTE: literal-path routes (mis-pendientes, mi-historial) MUST be declared before
-/{examen_id} routes to prevent FastAPI matching the string as an integer path param.
+ORDERING NOTE: literal-path routes (mis-pendientes, mi-historial, generar-ia, generar-ia/{job_id})
+MUST be declared before /{examen_id} routes to prevent FastAPI matching the string as an integer
+path param.  generar-ia/{job_id} is safe even though job_id is an int because FastAPI does not
+confuse it with /{examen_id} — they differ in the literal prefix segment "generar-ia/".
 """
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+import json
+import os
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_active_user, get_db, require_roles
-from app.models.exam_models import AsignacionExamen, Examen, IntentoExamen
+from app.models.exam_models import AsignacionExamen, Examen, FuenteIA, IntentoExamen, Pregunta
 from app.models.usuario import Rol
 from app.schemas.examenes import (
     AsignacionCrear,
     AsignacionResponse,
     ExamenCrear,
     ExamenResponse,
+    GenerarIAResponse,
     IntentoIniciado,
+    JobIAEstado,
     PreguntaCrear,
     PreguntaResponse,
     ReporteIntento,
     RespuestaEnviar,
 )
 from app.services import examen_intento_service as intento_svc
+from app.services import examen_ia_service
 from app.services import examen_service
+
+# Reuse safe-filename + magic-bytes helpers from the ETL router (same security pattern)
+from app.api.v1.routers.etl import _safe_filename, _validar_magic_bytes
+
+# Upload directory (mirrors ETL pattern; created at startup if absent)
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "..", "..", "uploads", "ia_fuentes")
+
+TIPOS_ARCHIVO_IA = {"pdf", "docx", "pptx", "texto"}
+EXTENSIONES_IA = {".pdf", ".docx", ".pptx", ".txt"}
 
 # ---------------------------------------------------------------------------
 # RBAC constants
@@ -165,6 +186,126 @@ def mi_historial(
         }
         for i in intentos
     ]
+
+
+# ===========================================================================
+# /examenes — IA endpoints (literal paths — must come before /{examen_id})
+# ===========================================================================
+
+@router.post("/generar-ia", response_model=GenerarIAResponse, status_code=status.HTTP_202_ACCEPTED)
+async def generar_ia(
+    background_tasks: BackgroundTasks,
+    nombre: str = Form(..., min_length=1, max_length=200),
+    producto: str | None = Form(default=None),
+    n_multi: int = Form(default=5, ge=0, le=50),
+    n_casos: int = Form(default=0, ge=0, le=50),
+    texto_pegado: str | None = Form(default=None),
+    archivo: UploadFile | None = File(default=None),
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Crea un examen en estado borrador y lanza la generación de preguntas con IA en background.
+
+    Acepta opcionalmente un archivo (pdf/docx/pptx/txt) o texto pegado directamente.
+    Devuelve job_id (=FuenteIA.id) y examen_id para consultar el estado luego.
+    El examen permanece en borrador hasta revisión manual — nunca se auto-publica.
+    """
+    if n_multi + n_casos == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="n_multi + n_casos debe ser > 0",
+        )
+
+    ruta_archivo: str | None = None
+    nombre_archivo: str | None = None
+    tipo_archivo: str | None = None
+
+    if archivo and archivo.filename:
+        ext = os.path.splitext(archivo.filename)[1].lower()
+        if ext not in EXTENSIONES_IA:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Extensión no soportada. Permitidas: {EXTENSIONES_IA}",
+            )
+        content = await archivo.read()
+        if not _validar_magic_bytes(content, ext):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El archivo no tiene un formato válido (magic bytes inválidos)",
+            )
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
+        safe_name = _safe_filename(archivo.filename)
+        ruta_archivo = os.path.join(UPLOAD_DIR, safe_name)
+        with open(ruta_archivo, "wb") as f:
+            f.write(content)
+        nombre_archivo = safe_name
+        # Map extension to tipo_archivo used by extraer_texto_fuente
+        tipo_archivo = {".pdf": "pdf", ".docx": "docx", ".pptx": "pptx", ".txt": "texto"}.get(ext, "texto")
+    elif not texto_pegado:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debe proporcionar un archivo o texto_pegado",
+        )
+
+    # Create the exam in borrador state
+    examen = Examen(
+        nombre=nombre,
+        producto=producto,
+        estado="borrador",
+        fuente="ia",
+        creado_por_usuario_id=current_user.id,
+    )
+    db.add(examen)
+    db.flush()  # get examen.id without committing yet
+
+    # Serialize n_multi / n_casos / texto_pegado into prompt_usado JSON
+    # (no migration needed — reuses the existing Text column)
+    params_json = json.dumps({
+        "n_multi": n_multi,
+        "n_casos": n_casos,
+        "texto_pegado": texto_pegado,
+    })
+
+    fuente = FuenteIA(
+        examen_id=examen.id,
+        tipo_archivo=tipo_archivo,
+        nombre_archivo=nombre_archivo,
+        ruta_archivo=ruta_archivo,
+        estado_generacion="pendiente",
+        prompt_usado=params_json,
+        cargado_por_usuario_id=current_user.id,
+    )
+    db.add(fuente)
+    db.commit()
+    db.refresh(fuente)
+
+    background_tasks.add_task(examen_ia_service.procesar_generacion_ia, fuente.id)
+
+    return GenerarIAResponse(job_id=fuente.id, examen_id=examen.id, estado="pendiente")
+
+
+@router.get("/generar-ia/{job_id}", response_model=JobIAEstado)
+def estado_generacion_ia(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Devuelve el estado del job de generación IA y la cantidad de preguntas ya insertadas."""
+    fuente = db.query(FuenteIA).filter(FuenteIA.id == job_id).first()
+    if fuente is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job no encontrado")
+    total = (
+        db.query(Pregunta).filter(Pregunta.examen_id == fuente.examen_id).count()
+        if fuente.examen_id
+        else 0
+    )
+    return JobIAEstado(
+        job_id=fuente.id,
+        estado=fuente.estado_generacion,
+        mensaje_error=fuente.mensaje_error,
+        examen_id=fuente.examen_id,
+        total_preguntas=total,
+    )
 
 
 # ===========================================================================

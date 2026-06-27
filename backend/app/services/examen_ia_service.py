@@ -4,6 +4,18 @@ import json
 from loguru import logger
 from app.core.config import settings
 
+# ---------------------------------------------------------------------------
+# NOTE ON n_multi / n_casos PERSISTENCE
+# ---------------------------------------------------------------------------
+# FuenteIA has no dedicated columns for n_multi / n_casos / texto_pegado.
+# Rather than add a migration, we serialize those values as JSON into the
+# `prompt_usado` field when the endpoint creates the FuenteIA row:
+#   prompt_usado = json.dumps({"n_multi": n, "n_casos": m, "texto_pegado": t})
+# procesar_generacion_ia reads and parses that JSON to recover the values.
+# If `ruta_archivo` is present, text is extracted from disk; otherwise
+# `texto_pegado` from the JSON is used directly.
+# ---------------------------------------------------------------------------
+
 
 def extraer_texto_fuente(ruta: str, tipo_archivo: str) -> str:
     """Extrae texto de un archivo según su tipo (pdf|docx|pptx|texto)."""
@@ -100,3 +112,100 @@ def validar_preguntas_generadas(data: list) -> list[dict]:
             "opciones": [o.strip() for o in ops], "correcta": correcta,
             "explicacion": (q.get("explicacion") or "").strip()})
     return out
+
+
+# ---------------------------------------------------------------------------
+# Persistence
+# ---------------------------------------------------------------------------
+
+def persistir_preguntas(db, examen_id: int, preguntas: list[dict]) -> int:
+    """Inserta preguntas (con 4 opciones cada una) en el examen borrador.
+
+    `indice_original` es 0..3 tal como las devolvió la IA.
+    `es_correcta` se marca solo en la opción cuyo índice coincide con `correcta`.
+    Retorna la cantidad de preguntas insertadas.
+    """
+    from app.models.exam_models import Pregunta, PreguntaOpcion
+
+    base = db.query(Pregunta).filter(Pregunta.examen_id == examen_id).count()
+    for offset, q in enumerate(preguntas):
+        pregunta = Pregunta(
+            examen_id=examen_id,
+            tipo=q["tipo"],
+            escenario=q.get("escenario"),
+            texto=q["texto"],
+            explicacion=q.get("explicacion"),
+            orden=base + offset,
+        )
+        for idx, texto_op in enumerate(q["opciones"]):
+            pregunta.opciones.append(
+                PreguntaOpcion(
+                    texto_opcion=texto_op,
+                    indice_original=idx,
+                    es_correcta=(idx == q["correcta"]),
+                )
+            )
+        db.add(pregunta)
+    db.commit()
+    return len(preguntas)
+
+
+# ---------------------------------------------------------------------------
+# Background job
+# ---------------------------------------------------------------------------
+
+def procesar_generacion_ia(fuente_id: int) -> None:
+    """Job en background: extrae texto, genera preguntas con IA y las persiste.
+
+    Los parámetros n_multi / n_casos / texto_pegado se leen del JSON almacenado
+    en FuenteIA.prompt_usado (no existe columna propia para ellos — decisión de
+    diseño documentada en el módulo para evitar una migración adicional).
+    """
+    from app.db.database import SessionLocal
+    from app.models.exam_models import FuenteIA
+
+    db = SessionLocal()
+    try:
+        fuente = db.query(FuenteIA).filter(FuenteIA.id == fuente_id).first()
+        if fuente is None:
+            logger.warning(f"procesar_generacion_ia: FuenteIA id={fuente_id} no encontrada")
+            return
+
+        fuente.estado_generacion = "procesando"
+        db.commit()
+
+        try:
+            # Recover parameters stored as JSON in prompt_usado
+            params: dict = {}
+            if fuente.prompt_usado:
+                try:
+                    params = json.loads(fuente.prompt_usado)
+                except (json.JSONDecodeError, TypeError):
+                    params = {}
+
+            n_multi: int = int(params.get("n_multi", 5))
+            n_casos: int = int(params.get("n_casos", 0))
+            texto_pegado: str | None = params.get("texto_pegado") or None
+
+            # Extract text: from file on disk, or from the pasted text
+            if fuente.ruta_archivo:
+                texto = extraer_texto_fuente(fuente.ruta_archivo, fuente.tipo_archivo or "texto")
+            elif texto_pegado:
+                texto = texto_pegado
+            else:
+                raise ValueError("No hay fuente de texto: ni archivo ni texto_pegado")
+
+            preguntas = generar_preguntas_ia(texto, n_multi, n_casos)
+            persistir_preguntas(db, fuente.examen_id, preguntas)
+
+            fuente.estado_generacion = "exitoso"
+            fuente.mensaje_error = None
+
+        except Exception as exc:
+            fuente.estado_generacion = "error"
+            fuente.mensaje_error = str(exc)[:1000]
+            logger.error(f"procesar_generacion_ia fuente={fuente_id} falló: {exc}")
+
+        db.commit()
+    finally:
+        db.close()

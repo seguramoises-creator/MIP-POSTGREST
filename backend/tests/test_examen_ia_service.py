@@ -95,3 +95,25 @@ def test_generar_preguntas_ia_json_invalido_falla():
     client.messages.create.return_value = msg
     with pytest.raises(ValueError):
         ia.generar_preguntas_ia("t", 1, 0, client=client)
+
+
+# ── Tests Fase 3 — persistencia de preguntas ────────────────────────────────
+
+def test_persistir_preguntas_marca_correcta(monkeypatch):
+    db = MagicMock()
+    agregados = []
+    db.add.side_effect = lambda obj: agregados.append(obj)
+    # Patch the query for existing count to return 0
+    db.query.return_value.filter.return_value.count.return_value = 0
+    n = ia.persistir_preguntas(db, examen_id=1, preguntas=[
+        {"tipo": "multi", "texto": "¿?", "escenario": None,
+         "opciones": ["a", "b", "c", "d"], "correcta": 2, "explicacion": "e"}])
+    assert n == 1
+    # PreguntaOpcion objects are attached to pregunta.opciones (not added to db directly)
+    # Collect all opciones from all preguntas that were added
+    from app.models.exam_models import Pregunta
+    preguntas_agregadas = [o for o in agregados if isinstance(o, Pregunta)]
+    assert len(preguntas_agregadas) == 1
+    opciones = preguntas_agregadas[0].opciones
+    # la opción en índice 2 es la correcta
+    assert any(getattr(o, "es_correcta", False) and o.indice_original == 2 for o in opciones)
