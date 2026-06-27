@@ -306,6 +306,16 @@ def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:
         f"Intento {intento_id} entregado — score={intento.score} "
         f"aprobado={intento.aprobado} correctas={correctas}/{total}"
     )
+
+    # Puente al motor de Score: si el examen está marcado para EVAL_CONOCIMIENTOS
+    # y el evaluado es RM en un ciclo abierto, alimenta el indicador. Un fallo del
+    # puente no debe romper la entrega del examen.
+    try:
+        from app.services import examen_kpi_service
+        examen_kpi_service.alimentar_eval_conocimientos(db, intento)
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Puente EVAL_CONOCIMIENTOS falló (no bloquea entrega): {e}")
+
     return intento
 
 
