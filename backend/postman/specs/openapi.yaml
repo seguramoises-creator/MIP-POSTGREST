@@ -1,0 +1,1878 @@
+openapi: 3.0.3
+info:
+  title: MSM — Sistema MIP de Productividad y Reconocimiento Comercial
+  description: |
+    API del sistema MSM (Sistema MIP) para medir, gestionar y reconocer el
+    desempeño de la fuerza de ventas farmacéutica.
+
+    **Autenticación**: Bearer JWT. Usar `POST /auth/login` con form-data
+    (`username` + `password`) para obtener el `access_token`.
+
+    **Roles**: ADMIN · PRESIDENCIA · DIR_COMERCIAL · GERENTE_PRODUCTIVIDAD ·
+    GERENTE_DISTRITO · GERENTE_MARCA · REPRESENTANTE_MEDICO · CONSULTA
+  version: 1.0.0
+  contact:
+    email: segura.moises@gmail.com
+
+servers:
+  - url: http://localhost:8000/api/v1
+    description: Desarrollo local
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    TokenResponse:
+      type: object
+      properties:
+        access_token:  { type: string }
+        refresh_token: { type: string }
+        token_type:    { type: string, example: bearer }
+        expires_in:    { type: integer, example: 3600 }
+
+    Msg:
+      type: object
+      properties:
+        message: { type: string }
+
+    Error:
+      type: object
+      properties:
+        detail: { type: string }
+
+    PaisResponse:
+      type: object
+      properties:
+        id:           { type: integer }
+        codigo:       { type: string, example: RD }
+        nombre:       { type: string, example: República Dominicana }
+        moneda:       { type: string, example: DOP }
+        zona_horaria: { type: string, example: America/Santo_Domingo }
+        activo:       { type: boolean }
+
+    PaisCreate:
+      type: object
+      required: [codigo, nombre]
+      properties:
+        codigo:       { type: string }
+        nombre:       { type: string }
+        moneda:       { type: string }
+        zona_horaria: { type: string }
+        activo:       { type: boolean, default: true }
+
+    LineaResponse:
+      type: object
+      properties:
+        id:      { type: integer }
+        pais_id: { type: integer }
+        codigo:  { type: string }
+        nombre:  { type: string }
+        activo:  { type: boolean }
+
+    GerenteResponse:
+      type: object
+      properties:
+        id:      { type: integer }
+        pais_id: { type: integer }
+        linea_id: { type: integer, nullable: true }
+        codigo:  { type: string }
+        nombre:  { type: string }
+        tipo:    { type: string, example: DISTRITO }
+        activo:  { type: boolean }
+
+    RMResponse:
+      type: object
+      properties:
+        id:         { type: integer }
+        pais_id:    { type: integer }
+        linea_id:   { type: integer }
+        gerente_id: { type: integer, nullable: true }
+        codigo:     { type: string }
+        nombre:     { type: string }
+        cedula:     { type: string, nullable: true }
+        email:      { type: string, nullable: true }
+        zona:       { type: string, nullable: true }
+        activo:     { type: boolean }
+
+    IndicadorResponse:
+      type: object
+      properties:
+        id:               { type: integer }
+        pais_id:          { type: integer }
+        codigo:           { type: string, example: COB_MD_F2 }
+        nombre:           { type: string }
+        modulo:           { type: string, example: GESTION }
+        tipo_periodo:     { type: string, example: CICLO }
+        ponderacion_pct:  { type: number }
+        escala:           { type: integer }
+        peso_iup:         { type: number }
+        valor_min:        { type: number, nullable: true }
+        valor_max:        { type: number, nullable: true }
+        activo:           { type: boolean }
+
+    CicloResponse:
+      type: object
+      properties:
+        id:              { type: integer }
+        pais_id:         { type: integer }
+        anio:            { type: integer }
+        numero:          { type: integer }
+        nombre:          { type: string }
+        nombre_canonico: { type: string, nullable: true }
+        fecha_inicio:    { type: string, format: date }
+        fecha_fin:       { type: string, format: date }
+        cerrado:         { type: boolean }
+        activo:          { type: boolean }
+
+    UsuarioResponse:
+      type: object
+      properties:
+        id:              { type: integer }
+        username:        { type: string }
+        email:           { type: string, nullable: true }
+        nombre_completo: { type: string }
+        rol:             { type: string }
+        pais_id:         { type: integer, nullable: true }
+        rm_id:           { type: integer, nullable: true }
+        activo:          { type: boolean }
+
+    ETLJobResponse:
+      type: object
+      properties:
+        id:                { type: integer }
+        nombre_archivo:    { type: string }
+        tipo_archivo:      { type: string }
+        modo:              { type: string }
+        estado:            { type: string, enum: [PENDIENTE, PROCESANDO, EXITOSO, ERROR] }
+        total_filas:       { type: integer }
+        filas_exitosas:    { type: integer }
+        filas_error:       { type: integer }
+        filas_advertencia: { type: integer }
+        duracion_segundos: { type: number, nullable: true }
+        fecha_inicio:      { type: string, format: date-time }
+        fecha_fin:         { type: string, format: date-time, nullable: true }
+
+    RankingItem:
+      type: object
+      properties:
+        posicion:        { type: integer }
+        posicion_linea:  { type: integer, nullable: true }
+        variacion:       { type: number, nullable: true }
+        rm_id:           { type: integer }
+        rm_codigo:       { type: string }
+        rm_nombre:       { type: string }
+        linea_nombre:    { type: string }
+        gerente_nombre:  { type: string }
+        score_total:     { type: number }
+        score_ciclo_actual: { type: number }
+        num_ciclos:      { type: integer }
+        elegible:        { type: boolean }
+        tipo_ranking:    { type: string }
+        ciclo_efectivo:  { type: integer, nullable: true }
+
+    DashboardEjecutivo:
+      type: object
+      properties:
+        total_rms:       { type: integer }
+        score_promedio:  { type: number }
+        score_maximo:    { type: number }
+        score_minimo:    { type: number }
+        iup_promedio:    { type: number }
+        iup_maximo:      { type: number }
+        iup_minimo:      { type: number }
+        total_elegibles: { type: integer }
+        pct_elegibles:   { type: number }
+        ciclo_efectivo:  { type: integer, nullable: true }
+        ciclo_nombre:    { type: string, nullable: true }
+        kpis_indicadores: { type: array, items: { type: object } }
+        top5:            { type: array, items: { type: object } }
+        bottom5:         { type: array, items: { type: object } }
+        top_gerentes:    { type: array, items: { type: object } }
+        tendencia:       { type: array, items: { type: object } }
+        distribucion:    { type: object }
+        componentes_iup: { type: object }
+
+security:
+  - BearerAuth: []
+
+paths:
+
+  # ─── AUTH ─────────────────────────────────────────────────────────────────
+
+  /auth/login:
+    post:
+      tags: [Autenticación]
+      summary: Iniciar sesión
+      description: Autentica con username/password (form-data). Retorna JWT access + refresh token.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, example: admin }
+                password: { type: string, example: Admin1234! }
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+              example:
+                access_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                refresh_token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+                token_type: bearer
+                expires_in: 3600
+        '401':
+          description: Credenciales incorrectas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { detail: Credenciales incorrectas }
+        '422':
+          description: Validación — campos requeridos ausentes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '423':
+          description: Cuenta bloqueada (5 intentos fallidos)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { detail: Cuenta bloqueada temporalmente. Intente más tarde. }
+
+  /auth/logout:
+    post:
+      tags: [Autenticación]
+      summary: Cerrar sesión
+      description: Invalida el refresh_token en la blacklist.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: Sesión cerrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Msg' }
+        '401':
+          description: Token inválido o expirado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/refresh:
+    post:
+      tags: [Autenticación]
+      summary: Renovar access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: Nuevo access_token emitido
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+        '401':
+          description: Refresh token inválido, expirado o revocado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example: { detail: Refresh token revocado. Inicie sesión nuevamente. }
+
+  /auth/me:
+    get:
+      tags: [Autenticación]
+      summary: Datos del usuario actual
+      responses:
+        '200':
+          description: Usuario autenticado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsuarioResponse' }
+        '401':
+          description: No autenticado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /auth/change-password:
+    post:
+      tags: [Autenticación]
+      summary: Cambiar contraseña
+      description: Mínimo 12 caracteres, mayúscula, minúscula y número.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password_actual, password_nuevo]
+              properties:
+                password_actual: { type: string }
+                password_nuevo:  { type: string, minLength: 12 }
+      responses:
+        '200':
+          description: Contraseña cambiada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Msg' }
+        '400':
+          description: Contraseña actual incorrecta o no cumple política
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { description: No autenticado }
+
+  # ─── ADMIN — Países ───────────────────────────────────────────────────────
+
+  /admin/paises:
+    get:
+      tags: [Administración]
+      summary: Listar países activos
+      description: Roles requeridos — ADMIN, GERENTE_PRODUCTIVIDAD
+      responses:
+        '200':
+          description: Lista de países
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PaisResponse' }
+        '401': { description: No autenticado }
+        '403': { description: Sin permiso }
+    post:
+      tags: [Administración]
+      summary: Crear país
+      description: Solo ADMIN
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaisCreate' }
+            example:
+              codigo: RD
+              nombre: República Dominicana
+              moneda: DOP
+              zona_horaria: America/Santo_Domingo
+      responses:
+        '201':
+          description: País creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaisResponse' }
+        '400':
+          description: Código de país ya existe
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { description: No autenticado }
+        '403': { description: Sin permiso (requiere ADMIN) }
+        '422': { description: Datos inválidos }
+
+  /admin/paises/{id}:
+    put:
+      tags: [Administración]
+      summary: Actualizar país
+      description: Solo ADMIN
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaisCreate' }
+      responses:
+        '200':
+          description: País actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaisResponse' }
+        '401': { description: No autenticado }
+        '403': { description: Sin permiso }
+        '404':
+          description: País no encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+    delete:
+      tags: [Administración]
+      summary: Desactivar país
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: País desactivado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Msg' }
+        '401': { description: No autenticado }
+        '403': { description: Sin permiso }
+        '404': { description: País no encontrado }
+
+  # ─── ADMIN — Líneas ───────────────────────────────────────────────────────
+
+  /admin/lineas:
+    get:
+      tags: [Administración]
+      summary: Listar líneas de producto
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Lista de líneas
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/LineaResponse' }
+        '401': { description: No autenticado }
+        '403': { description: Sin permiso }
+    post:
+      tags: [Administración]
+      summary: Crear línea de producto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pais_id, codigo, nombre]
+              properties:
+                pais_id: { type: integer }
+                codigo:  { type: string }
+                nombre:  { type: string }
+                activo:  { type: boolean, default: true }
+      responses:
+        '201':
+          description: Línea creada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LineaResponse' }
+        '401': { description: No autenticado }
+        '403': { description: Sin permiso }
+        '422': { description: Datos inválidos }
+
+  /admin/lineas/{id}:
+    put:
+      tags: [Administración]
+      summary: Actualizar línea
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pais_id, codigo, nombre]
+              properties:
+                pais_id: { type: integer }
+                codigo:  { type: string }
+                nombre:  { type: string }
+      responses:
+        '200':
+          description: Línea actualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LineaResponse' }
+        '404': { description: Línea no encontrada }
+
+  # ─── ADMIN — Gerentes ─────────────────────────────────────────────────────
+
+  /admin/gerentes:
+    get:
+      tags: [Administración]
+      summary: Listar gerentes
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Lista de gerentes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/GerenteResponse' }
+    post:
+      tags: [Administración]
+      summary: Crear gerente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pais_id, codigo, nombre, tipo]
+              properties:
+                pais_id:  { type: integer }
+                linea_id: { type: integer, nullable: true }
+                codigo:   { type: string }
+                nombre:   { type: string }
+                tipo:     { type: string, enum: [DISTRITO, MARCA, REGIONAL] }
+                activo:   { type: boolean, default: true }
+      responses:
+        '201':
+          description: Gerente creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GerenteResponse' }
+        '400': { description: Código de gerente ya existe }
+
+  /admin/gerentes/{id}:
+    put:
+      tags: [Administración]
+      summary: Actualizar gerente
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pais_id, codigo, nombre, tipo]
+              properties:
+                pais_id:  { type: integer }
+                codigo:   { type: string }
+                nombre:   { type: string }
+                tipo:     { type: string }
+      responses:
+        '200':
+          description: Gerente actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GerenteResponse' }
+        '404': { description: Gerente no encontrado }
+
+  # ─── ADMIN — RMs ──────────────────────────────────────────────────────────
+
+  /admin/rms:
+    get:
+      tags: [Administración]
+      summary: Listar Representantes Médicos
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: gerente_id
+          in: query
+          schema: { type: integer }
+        - name: linea_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Lista de RMs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/RMResponse' }
+    post:
+      tags: [Administración]
+      summary: Crear RM
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pais_id, linea_id, codigo, nombre]
+              properties:
+                pais_id:       { type: integer }
+                linea_id:      { type: integer }
+                gerente_id:    { type: integer, nullable: true }
+                codigo:        { type: string }
+                nombre:        { type: string }
+                cedula:        { type: string, nullable: true }
+                email:         { type: string, nullable: true }
+                fecha_ingreso: { type: string, format: date, nullable: true }
+                activo:        { type: boolean, default: true }
+      responses:
+        '201':
+          description: RM creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RMResponse' }
+        '400': { description: Código de RM ya existe }
+
+  /admin/rms/{id}:
+    put:
+      tags: [Administración]
+      summary: Actualizar RM
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pais_id, linea_id, codigo, nombre]
+              properties:
+                pais_id:  { type: integer }
+                linea_id: { type: integer }
+                codigo:   { type: string }
+                nombre:   { type: string }
+      responses:
+        '200':
+          description: RM actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RMResponse' }
+        '404': { description: RM no encontrado }
+
+  # ─── ADMIN — Indicadores ──────────────────────────────────────────────────
+
+  /admin/indicadores:
+    get:
+      tags: [Administración]
+      summary: Listar indicadores de desempeño
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: modulo
+          in: query
+          schema: { type: string, enum: [GESTION, RESULTADOS, COACHING, CAPACITACION] }
+        - name: size
+          in: query
+          schema: { type: integer, default: 100, maximum: 500 }
+      responses:
+        '200':
+          description: Lista de indicadores
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/IndicadorResponse' }
+                  total: { type: integer }
+    post:
+      tags: [Administración]
+      summary: Crear indicador
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pais_id, codigo, nombre, modulo]
+              properties:
+                pais_id:         { type: integer }
+                codigo:          { type: string, example: COB_MD_F2 }
+                nombre:          { type: string }
+                modulo:          { type: string, enum: [GESTION, RESULTADOS, COACHING, CAPACITACION] }
+                tipo_periodo:    { type: string, enum: [CICLO, MES], default: CICLO }
+                ponderacion_pct: { type: number }
+                escala:          { type: integer, enum: [1, 100], default: 100 }
+                peso_iup:        { type: number }
+      responses:
+        '201':
+          description: Indicador creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IndicadorResponse' }
+
+  /admin/indicadores/{id}:
+    put:
+      tags: [Administración]
+      summary: Actualizar indicador
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre:          { type: string }
+                ponderacion_pct: { type: number }
+                peso_iup:        { type: number }
+      responses:
+        '200':
+          description: Indicador actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IndicadorResponse' }
+        '404': { description: Indicador no encontrado }
+    delete:
+      tags: [Administración]
+      summary: Desactivar indicador
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Indicador desactivado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Msg' }
+        '404': { description: Indicador no encontrado }
+
+  /admin/indicadores/{id}/tabla:
+    get:
+      tags: [Administración]
+      summary: Obtener rangos de puntuación del indicador
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Rangos de puntuación
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:          { type: integer }
+                    indicador_id: { type: integer }
+                    pais_id:     { type: integer }
+                    rango_desde: { type: number }
+                    rango_hasta: { type: number }
+                    puntos:      { type: number }
+    post:
+      tags: [Administración]
+      summary: Agregar rango de puntuación
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pais_id, rango_desde, rango_hasta, puntos]
+              properties:
+                pais_id:     { type: integer }
+                rango_desde: { type: number }
+                rango_hasta: { type: number }
+                puntos:      { type: number }
+      responses:
+        '201': { description: Rango creado }
+
+  /admin/indicadores/{id}/tabla/{tabla_id}:
+    put:
+      tags: [Administración]
+      summary: Actualizar rango de puntuación
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: tabla_id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pais_id, rango_desde, rango_hasta, puntos]
+              properties:
+                pais_id:     { type: integer }
+                rango_desde: { type: number }
+                rango_hasta: { type: number }
+                puntos:      { type: number }
+      responses:
+        '200': { description: Rango actualizado }
+        '404': { description: Rango no encontrado }
+    delete:
+      tags: [Administración]
+      summary: Eliminar rango de puntuación
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: tabla_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Rango eliminado }
+        '404': { description: Rango no encontrado }
+
+  # ─── ADMIN — Ciclos ───────────────────────────────────────────────────────
+
+  /admin/ciclos:
+    get:
+      tags: [Administración]
+      summary: Listar ciclos
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: anio
+          in: query
+          schema: { type: integer, example: 2026 }
+      responses:
+        '200':
+          description: Lista de ciclos
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CicloResponse' }
+    post:
+      tags: [Administración]
+      summary: Crear ciclo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pais_id, anio, numero, nombre, fecha_inicio, fecha_fin]
+              properties:
+                pais_id:         { type: integer }
+                anio:            { type: integer, example: 2026 }
+                numero:          { type: integer, example: 1 }
+                nombre:          { type: string, example: C01-2026 }
+                nombre_canonico: { type: string, nullable: true }
+                fecha_inicio:    { type: string, format: date }
+                fecha_fin:       { type: string, format: date }
+      responses:
+        '201':
+          description: Ciclo creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CicloResponse' }
+
+  /admin/ciclos/{id}/cerrar:
+    patch:
+      tags: [Administración]
+      summary: Cerrar un ciclo (no se pueden recalcular ciclos cerrados)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Ciclo cerrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Msg' }
+        '404': { description: Ciclo no encontrado }
+
+  /admin/ciclos/{id}/abrir:
+    patch:
+      tags: [Administración]
+      summary: Reabrir un ciclo cerrado
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Ciclo reabierto
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Msg' }
+        '404': { description: Ciclo no encontrado }
+
+  # ─── ADMIN — Reset ────────────────────────────────────────────────────────
+
+  /admin/reset:
+    post:
+      tags: [Administración]
+      summary: "⚠️ Borrar datos — DESTRUCTIVO"
+      description: |
+        Borra datos en dos fases independientes:
+        - `tipo=facts` → borra DW + ETL + Audit (datos de desempeño)
+        - `tipo=dims` → borra Config (catálogos maestros, requiere que facts estén vacíos)
+      parameters:
+        - name: tipo
+          in: query
+          required: true
+          schema: { type: string, enum: [facts, dims] }
+      responses:
+        '200':
+          description: Datos borrados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tipo:                { type: string }
+                  total_filas_borradas: { type: integer }
+                  tablas:              { type: array, items: { type: object } }
+        '400': { description: Tipo inválido }
+        '401': { description: No autenticado }
+        '403': { description: Solo ADMIN }
+
+  # ─── ADMIN — Reglas de Elegibilidad ──────────────────────────────────────
+
+  /admin/reglas-elegibilidad:
+    get:
+      tags: [Administración]
+      summary: Listar reglas de elegibilidad
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: Lista de reglas }
+    post:
+      tags: [Administración]
+      summary: Crear regla de elegibilidad
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pais_id, ciclo_id, indicador_codigo, umbral_minimo]
+              properties:
+                pais_id:           { type: integer }
+                ciclo_id:          { type: integer }
+                indicador_codigo:  { type: string }
+                umbral_minimo:     { type: number }
+                aplica_ranking:    { type: boolean, default: true }
+                aplica_reconocimiento: { type: boolean, default: true }
+      responses:
+        '201': { description: Regla creada }
+
+  /admin/reglas-elegibilidad/{id}:
+    put:
+      tags: [Administración]
+      summary: Actualizar regla
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                umbral_minimo:         { type: number }
+                aplica_ranking:        { type: boolean }
+                aplica_reconocimiento: { type: boolean }
+      responses:
+        '200': { description: Regla actualizada }
+        '404': { description: Regla no encontrada }
+    delete:
+      tags: [Administración]
+      summary: Desactivar regla
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Regla desactivada }
+        '404': { description: Regla no encontrada }
+
+  # ─── ADMIN — Premios ──────────────────────────────────────────────────────
+
+  /admin/premios:
+    get:
+      tags: [Administración]
+      summary: Listar premios/reconocimientos disponibles
+      responses:
+        '200': { description: Lista de premios }
+    post:
+      tags: [Administración]
+      summary: Crear tipo de premio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [codigo, nombre, categoria, frecuencia]
+              properties:
+                codigo:    { type: string }
+                nombre:    { type: string }
+                categoria: { type: string, enum: [RM, GERENTE] }
+                frecuencia: { type: string, enum: [MENSUAL, TRIMESTRAL, ANUAL] }
+      responses:
+        '201': { description: Premio creado }
+
+  # ─── ADMIN — Usuarios ─────────────────────────────────────────────────────
+
+  /admin/usuarios:
+    get:
+      tags: [Administración]
+      summary: Listar usuarios del sistema
+      description: Solo ADMIN
+      responses:
+        '200':
+          description: Lista de usuarios
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/UsuarioResponse' }
+    post:
+      tags: [Administración]
+      summary: Crear usuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, nombre_completo, rol]
+              properties:
+                username:        { type: string }
+                password:        { type: string, minLength: 12 }
+                nombre_completo: { type: string }
+                rol:
+                  type: string
+                  enum: [ADMIN, PRESIDENCIA, DIR_COMERCIAL, GERENTE_PRODUCTIVIDAD,
+                         GERENTE_DISTRITO, GERENTE_MARCA, REPRESENTANTE_MEDICO, CONSULTA]
+                pais_id: { type: integer, nullable: true }
+                rm_id:   { type: integer, nullable: true }
+                activo:  { type: boolean, default: true }
+      responses:
+        '201':
+          description: Usuario creado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsuarioResponse' }
+        '400': { description: Username ya existe }
+
+  /admin/usuarios/{id}:
+    put:
+      tags: [Administración]
+      summary: Actualizar usuario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre_completo: { type: string }
+                rol:             { type: string }
+                pais_id:         { type: integer }
+                rm_id:           { type: integer }
+                activo:          { type: boolean }
+      responses:
+        '200':
+          description: Usuario actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UsuarioResponse' }
+        '404': { description: Usuario no encontrado }
+    delete:
+      tags: [Administración]
+      summary: Desactivar usuario
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Usuario desactivado }
+        '404': { description: Usuario no encontrado }
+
+  # ─── DIMS — Importación masiva ────────────────────────────────────────────
+
+  /dims/preview:
+    post:
+      tags: [Importación DIMs]
+      summary: Preview de hojas en el Excel de catálogos
+      description: |
+        Sube el archivo DIM_MIP_FINAL.xlsx y retorna las hojas detectadas
+        con su mapeo a tabla del sistema. No escribe en BD.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Archivo Excel (.xlsx) con hojas DIM_*
+      responses:
+        '200':
+          description: Hojas detectadas
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hojas:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        nombre_hoja:    { type: string }
+                        tabla_sistema:  { type: string }
+                        label:          { type: string }
+                        filas:          { type: integer }
+                        columnas:       { type: array, items: { type: string } }
+                        reconocida:     { type: boolean }
+                        orden:          { type: integer }
+                  total_hojas:       { type: integer }
+                  hojas_reconocidas: { type: integer }
+        '400': { description: Formato de archivo inválido }
+        '401': { description: No autenticado }
+        '403': { description: Sin permiso }
+
+  /dims/importar:
+    post:
+      tags: [Importación DIMs]
+      summary: Importar hojas seleccionadas a la BD
+      description: |
+        Hojas disponibles: DIM_PAIS, DIM_LINEA, DIM_GERENTE, DIM_RM,
+        DIM_INDICADOR, DIM_INDICADOR_TABLA, DIM_CICLO, DIM_MES,
+        DIM_RECONOCIMIENTO, DIM_META_INDICADOR, DIM_CATEGORIA_DESEMPENO,
+        DIM_KPI_DASHBOARD. Los registros ya existentes se omiten (no duplica).
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, hojas]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                hojas:
+                  type: string
+                  description: 'JSON array de nombres de hojas. Ej: ["DIM_PAIS","DIM_LINEA"]'
+                  example: '["DIM_PAIS","DIM_LINEA","DIM_GERENTE","DIM_RM","DIM_INDICADOR","DIM_INDICADOR_TABLA","DIM_CICLO","DIM_MES"]'
+      responses:
+        '200':
+          description: Resultados por hoja
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resultados:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        nombre_hoja: { type: string }
+                        label:       { type: string }
+                        exitoso:     { type: boolean }
+                        insertados:  { type: integer }
+                        omitidos:    { type: integer }
+                        errores:     { type: integer }
+                        mensaje:     { type: string }
+                  total_insertados: { type: integer }
+                  total_omitidos:   { type: integer }
+                  total_errores:    { type: integer }
+        '400': { description: Archivo inválido o hojas mal formateadas }
+
+  # ─── ETL ──────────────────────────────────────────────────────────────────
+
+  /etl/cargar:
+    post:
+      tags: [ETL — Carga Excel]
+      summary: Cargar archivo KPI Excel
+      description: |
+        Sube el FACT_KPI_RM.xlsx y lo procesa en background.
+        - SIMULACION → valida sin guardar
+        - PRODUCCION → escribe en DW y recalcula IUP/ranking automáticamente
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo, tipo_archivo, modo]
+              properties:
+                archivo:
+                  type: string
+                  format: binary
+                tipo_archivo:
+                  type: string
+                  enum: [KPI_RM, PRODUCTIVIDAD, COMERCIAL, COACHING, CAPACITACION]
+                  default: KPI_RM
+                modo:
+                  type: string
+                  enum: [SIMULACION, PRODUCCION]
+                  default: SIMULACION
+                pais_id:  { type: integer, nullable: true }
+                ciclo_id: { type: integer, nullable: true }
+      responses:
+        '202':
+          description: Job iniciado en background
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ETLJobResponse' }
+        '400':
+          description: Tipo inválido, extensión incorrecta o magic bytes inválidos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              examples:
+                tipo_invalido:
+                  value: { detail: "Tipo inválido. Permitidos: {'KPI_RM', ...}" }
+                magic_bytes:
+                  value: { detail: El contenido del archivo no corresponde a un Excel válido. }
+        '413': { description: Archivo excede límite de tamaño }
+
+  /etl/status/{job_id}:
+    get:
+      tags: [ETL — Carga Excel]
+      summary: Estado de un job ETL
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Estado del job
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:            { type: integer }
+                  nombre_archivo:    { type: string }
+                  tipo_archivo:      { type: string }
+                  modo:              { type: string }
+                  estado:            { type: string, enum: [PENDIENTE, PROCESANDO, EXITOSO, ERROR] }
+                  progreso_pct:      { type: integer }
+                  total_filas:       { type: integer }
+                  filas_exitosas:    { type: integer }
+                  filas_error:       { type: integer }
+                  filas_advertencia: { type: integer }
+                  duracion_segundos: { type: number }
+                  fecha_inicio:      { type: string, format: date-time }
+                  fecha_fin:         { type: string, format: date-time, nullable: true }
+                  log_errores:       { type: string, nullable: true }
+                  log_advertencias:  { type: string, nullable: true }
+        '404': { description: Job no encontrado }
+
+  /etl/historial:
+    get:
+      tags: [ETL — Carga Excel]
+      summary: Historial de cargas ETL
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: tipo
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: Lista de jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:             { type: integer }
+                    fecha_inicio:   { type: string, format: date-time }
+                    fecha_fin:      { type: string, format: date-time, nullable: true }
+                    tipo_archivo:   { type: string }
+                    estado:         { type: string }
+                    total_filas:    { type: integer }
+                    filas_exitosas: { type: integer }
+                    filas_error:    { type: integer }
+
+  /etl/recalcular/{ciclo_id}:
+    post:
+      tags: [ETL — Carga Excel]
+      summary: Recalcular IUP y ranking de un ciclo
+      description: |
+        Ejecuta el proceso completo de cálculo post-carga:
+        1. Completa resultado_porcentaje y puntos_obtenidos
+        2. Calcula score integral por módulo
+        3. Regenera FACT_RankingRM
+
+        Solo funciona en ciclos ABIERTOS — ciclos cerrados se abortan.
+      parameters:
+        - name: ciclo_id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Resultado del recálculo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ciclo_id:               { type: integer }
+                  filas_kpi_actualizadas: { type: integer }
+                  rankings_generados:     { type: integer }
+                  mensaje:                { type: string }
+        '400': { description: Ciclo cerrado — recálculo abortado }
+
+  # ─── RANKING ──────────────────────────────────────────────────────────────
+
+  /ranking:
+    get:
+      tags: [Ranking]
+      summary: Ranking acumulado paginado
+      description: |
+        Calcula el score promedio acumulado de los ciclos 1..N del año seleccionado.
+        Los RMs con rol REPRESENTANTE_MEDICO solo ven su propio registro.
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+        - name: tipo
+          in: query
+          schema: { type: string, default: MENSUAL, enum: [MENSUAL, TRIMESTRAL, ANUAL, REGIONAL] }
+        - name: top
+          in: query
+          schema: { type: integer, description: Limitar a top N resultados }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: Ranking paginado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/RankingItem' }
+                  total:           { type: integer }
+                  page:            { type: integer }
+                  size:            { type: integer }
+                  pages:           { type: integer }
+                  ciclo_efectivo:  { type: integer, nullable: true }
+                  ciclos_numeros:  { type: array, items: { type: integer } }
+
+  /ranking/regional:
+    get:
+      tags: [Ranking]
+      summary: Ranking regional multipaís
+      description: Solo ADMIN, PRESIDENCIA, DIR_COMERCIAL, GERENTE_PRODUCTIVIDAD
+      parameters:
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+        - name: top
+          in: query
+          schema: { type: integer, default: 10 }
+      responses:
+        '200':
+          description: Top RMs multipaís
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object }
+        '403': { description: Sin permiso }
+
+  /ranking/anual:
+    get:
+      tags: [Ranking]
+      summary: Ranking anual histórico
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Ranking anual
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object }
+
+  /ranking/generar:
+    post:
+      tags: [Ranking]
+      summary: Disparar generación de ranking en background
+      description: Solo ADMIN, GERENTE_PRODUCTIVIDAD
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pais_id, ciclo_id, tipo_ranking]
+              properties:
+                pais_id:      { type: integer }
+                ciclo_id:     { type: integer }
+                tipo_ranking: { type: string, enum: [MENSUAL, TRIMESTRAL, ANUAL, REGIONAL] }
+      responses:
+        '200':
+          description: Cálculo iniciado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:  { type: string }
+                  pais_id:  { type: integer }
+                  ciclo_id: { type: integer }
+
+  # ─── DASHBOARD ────────────────────────────────────────────────────────────
+
+  /dashboard/catalogos:
+    get:
+      tags: [Dashboard]
+      summary: Catálogos para filtros del dashboard
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Países, ciclos, líneas y gerentes disponibles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  paises:   { type: array, items: { type: object } }
+                  ciclos:   { type: array, items: { type: object } }
+                  lineas:   { type: array, items: { type: object } }
+                  gerentes: { type: array, items: { type: object } }
+
+  /dashboard/ejecutivo:
+    get:
+      tags: [Dashboard]
+      summary: Dashboard Ejecutivo — KPIs MIP completos
+      description: |
+        Solo ADMIN, PRESIDENCIA, DIR_COMERCIAL, GERENTE_PRODUCTIVIDAD.
+        Incluye: resumen del ciclo, indicadores MIP con delta vs anterior,
+        Top/Bottom 5 RMs, top gerentes, tendencia histórica,
+        distribución de categorías y componentes del score (radar).
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+        - name: linea_id
+          in: query
+          schema: { type: integer }
+        - name: gerente_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Dashboard ejecutivo completo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardEjecutivo' }
+        '403': { description: Sin permiso }
+
+  /dashboard/productividad:
+    get:
+      tags: [Dashboard]
+      summary: Dashboard de Productividad (cobertura, promedio diario, farmacias)
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: KPIs de productividad }
+
+  /dashboard/comercial:
+    get:
+      tags: [Dashboard]
+      summary: Dashboard Comercial (ventas, cuota, cumplimiento, crecimiento)
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: KPIs comerciales }
+
+  /dashboard/reconocimiento:
+    get:
+      tags: [Dashboard]
+      summary: Dashboard de Reconocimiento (elegibles, premiados, certificados)
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: KPIs de reconocimiento }
+
+  /dashboard/capacitacion:
+    get:
+      tags: [Dashboard]
+      summary: Dashboard de Capacitación (aprobación, asistencia, horas)
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: KPIs de capacitación }
+
+  # ─── PRODUCTIVIDAD ────────────────────────────────────────────────────────
+
+  /productividad:
+    get:
+      tags: [Productividad]
+      summary: KPIs de productividad paginados
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+        - name: linea_id
+          in: query
+          schema: { type: integer }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200': { description: KPIs paginados }
+
+  /productividad/rm/{rm_id}:
+    get:
+      tags: [Productividad]
+      summary: KPIs de un RM específico
+      parameters:
+        - name: rm_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: KPIs del RM }
+        '404': { description: RM no encontrado }
+
+  /productividad/pais/{id}:
+    get:
+      tags: [Productividad]
+      summary: KPIs agregados por país
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: KPIs del país }
+
+  /productividad/resumen:
+    get:
+      tags: [Productividad]
+      summary: Resumen consolidado de productividad
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: Consolidado con total_rms, cumplimiento_promedio y estadísticas de puntaje
+
+  # ─── COMERCIAL ────────────────────────────────────────────────────────────
+
+  /comercial/ventas:
+    get:
+      tags: [Comercial]
+      summary: Datos de ventas paginados
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200': { description: Ventas paginadas }
+
+  /comercial/evoir:
+    get:
+      tags: [Comercial]
+      summary: Evolución de Prescripciones IR paginado
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: Datos EVOIR }
+
+  /comercial/resumen:
+    get:
+      tags: [Comercial]
+      summary: KPIs comerciales consolidados
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: Resumen comercial }
+
+  # ─── COACHING ─────────────────────────────────────────────────────────────
+
+  /coaching:
+    get:
+      tags: [Coaching]
+      summary: Registros de coaching paginados
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+        - name: gerente_id
+          in: query
+          schema: { type: integer }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200': { description: Coaching paginado }
+
+  /coaching/resumen:
+    get:
+      tags: [Coaching]
+      summary: Estadísticas de coaching por gerente
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200': { description: Resumen de coaching }
+
+  # ─── CAPACITACIÓN ─────────────────────────────────────────────────────────
+
+  /capacitacion:
+    get:
+      tags: [Capacitación]
+      summary: Registros de capacitación paginados
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200': { description: Capacitación paginada }
+
+  /capacitacion/resumen:
+    get:
+      tags: [Capacitación]
+      summary: Estadísticas de capacitación
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+      responses:
+        '200':
+          description: "Tasa aprobación, asistencia y horas completadas"
+
+  # ─── RECONOCIMIENTO ───────────────────────────────────────────────────────
+
+  /reconocimiento:
+    get:
+      tags: [Reconocimiento]
+      summary: Reconocimientos otorgados
+      parameters:
+        - name: pais_id
+          in: query
+          schema: { type: integer }
+        - name: ciclo_id
+          in: query
+          schema: { type: integer }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: size
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200': { description: Lista de reconocimientos }
+    post:
+      tags: [Reconocimiento]
+      summary: Registrar nuevo reconocimiento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rm_id, premio_id, ciclo_id]
+              properties:
+                rm_id:     { type: integer }
+                premio_id: { type: integer }
+                ciclo_id:  { type: integer }
+      responses:
+        '201': { description: Reconocimiento registrado }
+        '400': { description: RM no elegible }
+
+  # ─── HEALTH ───────────────────────────────────────────────────────────────
+
+  /health:
+    get:
+      tags: [Sistema]
+      summary: Estado del servidor y conexión a BD
+      security: []
+      responses:
+        '200':
+          description: Sistema saludable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:   { type: string, example: ok }
+                  database: { type: string, example: connected }
+                  version:  { type: string }
+
+tags:
+  - name: Autenticación
+    description: Login, logout y renovación de tokens JWT
+  - name: Administración
+    description: Gestión de catálogos maestros — países, RMs, ciclos, usuarios, etc.
+  - name: Importación DIMs
+    description: Carga masiva de dimensiones desde Excel multi-hoja
+  - name: ETL — Carga Excel
+    description: Procesamiento de archivos de KPIs en background
+  - name: Ranking
+    description: Rankings acumulados, regionales y anuales
+  - name: Dashboard
+    description: 5 dashboards especializados con KPIs por módulo
+  - name: Productividad
+    description: KPIs de cobertura médicos y farmacias
+  - name: Comercial
+    description: Ventas vs cuota y evolución de prescripciones IR
+  - name: Coaching
+    description: Acompañamientos gerenciales
+  - name: Capacitación
+    description: Cursos y evaluaciones
+  - name: Reconocimiento
+    description: Premios otorgados a RMs elegibles
+  - name: Sistema
+    description: Health check y estado general

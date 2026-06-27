@@ -1,0 +1,1520 @@
+/**
+ * Admin.tsx — Página de Administración del Sistema SCGCPR
+ *
+ * Permite gestionar todos los catálogos maestros del sistema:
+ * Países, Líneas, Gerentes, RMs, Indicadores, Ciclos, Usuarios y Rangos de Puntuación.
+ *
+ * Cada pestaña ofrece:
+ * - Listado con columnas relevantes
+ * - Botón Nuevo (con formulario modal)
+ * - Botón Editar por fila
+ * - Botón Eliminar/Desactivar por fila
+ * - Botón Importar (solo en tabs que tienen endpoint de importación en el backend)
+ *
+ * El país siempre se muestra como "CR — Costa Rica" (no como ID numérico).
+ */
+import { useState, useRef, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  Box, Typography, Tabs, Tab, Card, CardContent,
+  Table, TableBody, TableCell, TableContainer, TableFooter, TableHead,
+  TableRow, Paper, Button, Chip, Dialog, DialogTitle,
+  DialogContent, DialogActions, TextField, Grid, Alert,
+  CircularProgress, MenuItem, Select, FormControl, InputLabel, FormHelperText,
+  IconButton, Tooltip,
+} from '@mui/material';
+import { Add, Refresh, TableChart, Edit, Upload, ToggleOn, ToggleOff, LockOpen, Lock, Delete, Psychology, TrendingUp, LocalHospital } from '@mui/icons-material';
+import { api } from '../../services/api';
+import ImportDims from './ImportDims';
+import LsiiAdmin from './LsiiAdmin';
+import CoberturaPredictivaAdmin from './CoberturaPredictivaAdmin';
+import CategorizacionAdmin from './CategorizacionAdmin';
+
+// ── Hook: carga la lista de países y la reutiliza en toda la página ──
+function usePaises() {
+  return useQuery({
+    queryKey: ['paises'],
+    queryFn: () => api.get('/admin/paises').then((r) => {
+      const d = r.data;
+      return (Array.isArray(d) ? d : (d?.items ?? [])) as { id: number; codigo: string; nombre: string }[];
+    }),
+    staleTime: 0, // siempre considera los datos desactualizados → refetch en cada mount
+  });
+}
+
+// ── Hook: líneas filtradas por país — para resolver nombre, nunca ID crudo ──
+function useLineas(paisCodigo: number | string | '') {
+  return useQuery({
+    queryKey: ['lineas', paisCodigo],
+    queryFn: () => api.get('/admin/lineas', { params: paisCodigo ? { pais_codigo: paisCodigo } : {} }).then((r) => {
+      const d = r.data;
+      return (Array.isArray(d) ? d : (d?.items ?? [])) as { id: number; codigo: string; nombre: string; pais_codigo: string }[];
+    }),
+    enabled: paisCodigo !== '' && paisCodigo !== undefined,
+    staleTime: 0,
+  });
+}
+
+// ── Hook: gerentes filtrados por país — para resolver nombre, nunca ID crudo ──
+function useGerentes(paisCodigo: number | string | '') {
+  return useQuery({
+    queryKey: ['gerentes', paisCodigo],
+    queryFn: () => api.get('/admin/gerentes', { params: paisCodigo ? { pais_codigo: paisCodigo } : {} }).then((r) => {
+      const d = r.data;
+      return (Array.isArray(d) ? d : (d?.items ?? [])) as { id: number; codigo: string; nombre: string; tipo: string; pais_codigo: string }[];
+    }),
+    enabled: paisCodigo !== '' && paisCodigo !== undefined,
+    staleTime: 0,
+  });
+}
+
+/**
+ * PaisLabel — Muestra "CR — Costa Rica" dado un pais_codigo numérico.
+ * Usa la lista de países ya cargada para resolver el nombre.
+ */
+function PaisLabel({ paisCodigo, paises }: { paisCodigo: string | null; paises: { id: number; codigo: string; nombre: string }[] | undefined }) {
+  if (!paisCodigo || !paises) return <span style={{ color: '#999' }}>—</span>;
+  const p = paises.find((x) => x.codigo === paisCodigo);
+  return p ? <Chip label={`${p.codigo} — ${p.nombre}`} size="small" variant="outlined" /> : <span>{paisCodigo}</span>;
+}
+
+/**
+ * PaisSelector — Select de país con formato "CR — Costa Rica".
+ * Usado en formularios de creación/edición y en filtros.
+ */
+function PaisSelector({ value, onChange, label = 'País' }: {
+  value: string | number;
+  onChange: (v: string) => void;
+  label?: string;
+}) {
+  const { data: paises } = usePaises();
+  return (
+    <FormControl fullWidth size="small">
+      <InputLabel>{label}</InputLabel>
+      <Select label={label} value={value} onChange={(e) => onChange(String(e.target.value))}>
+        {(paises || []).map((p) => (
+          <MenuItem key={p.id} value={p.codigo}>
+            {p.codigo} — {p.nombre}
+          </MenuItem>
+        ))}
+      </Select>
+    </FormControl>
+  );
+}
+
+/**
+ * LineaSelector — Select de línea con formato "CAR — Cardiovascular".
+ * Se filtra por el país ya elegido en el mismo formulario; nunca pide un ID crudo.
+ */
+function LineaSelector({ value, onChange, paisCodigo, label = 'Línea' }: {
+  value: string | number;
+  onChange: (v: string) => void;
+  paisCodigo: string | number | '';
+  label?: string;
+}) {
+  const { data: lineas } = useLineas(paisCodigo);
+  return (
+    <FormControl fullWidth size="small" disabled={!paisCodigo}>
+      <InputLabel>{label}</InputLabel>
+      <Select label={label} value={value} onChange={(e) => onChange(String(e.target.value))}>
+        {(lineas || []).map((l) => (
+          <MenuItem key={l.id} value={l.id}>
+            {l.codigo} — {l.nombre}
+          </MenuItem>
+        ))}
+      </Select>
+      {!paisCodigo && <FormHelperText>Seleccione primero el país</FormHelperText>}
+    </FormControl>
+  );
+}
+
+/**
+ * GerenteSelector — Select de gerente con formato "GD001 — Juan Pérez (DISTRITO)".
+ * Se filtra por el país ya elegido en el mismo formulario; nunca pide un ID crudo.
+ */
+function GerenteSelector({ value, onChange, paisCodigo, label = 'Gerente' }: {
+  value: string | number;
+  onChange: (v: string) => void;
+  paisCodigo: string | number | '';
+  label?: string;
+}) {
+  const { data: gerentes } = useGerentes(paisCodigo);
+  return (
+    <FormControl fullWidth size="small" disabled={!paisCodigo}>
+      <InputLabel>{label}</InputLabel>
+      <Select label={label} value={value} onChange={(e) => onChange(String(e.target.value))}>
+        {(gerentes || []).map((g) => (
+          <MenuItem key={g.id} value={g.id}>
+            {g.codigo} — {g.nombre} ({g.tipo})
+          </MenuItem>
+        ))}
+      </Select>
+      {!paisCodigo && <FormHelperText>Seleccione primero el país</FormHelperText>}
+    </FormControl>
+  );
+}
+
+// ── Botón de importación desde Excel ──────────────────────────────────
+/**
+ * ImportButton — Botón que abre un selector de archivo Excel.
+ * Al seleccionar el archivo lo sube al endpoint /admin/{endpoint}/importar.
+ * Solo se muestra en tabs que tienen ese endpoint implementado en el backend.
+ */
+function ImportButton({ endpoint, label }: { endpoint: string; label: string }) {
+  const ref = useRef<HTMLInputElement>(null);
+  const [msg, setMsg] = useState('');
+  const qc = useQueryClient();
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const form = new FormData();
+    form.append('file', file);
+    try {
+      await api.post(`/admin/${endpoint}/importar`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setMsg('Importación exitosa');
+      qc.invalidateQueries({ queryKey: [endpoint] });
+    } catch (err: any) {
+      setMsg(`Error: ${err.response?.data?.detail || err.message}`);
+    }
+    e.target.value = '';
+  };
+
+  return (
+    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+      <input type="file" accept=".xlsx,.xls,.csv" ref={ref} style={{ display: 'none' }} onChange={handleFile} />
+      <Tooltip title={`Importar ${label} desde Excel (.xlsx)`}>
+        <Button startIcon={<Upload />} size="small" variant="outlined" color="secondary"
+          onClick={() => ref.current?.click()}>
+          Importar
+        </Button>
+      </Tooltip>
+      {msg && (
+        <Alert severity={msg.startsWith('Error') ? 'error' : 'success'} sx={{ py: 0 }}
+          onClose={() => setMsg('')}>{msg}</Alert>
+      )}
+    </Box>
+  );
+}
+
+// ── Definición de campos de formulario ───────────────────────────────
+type FieldDef = {
+  key: string;
+  label: string;
+  type?: string;
+  options?: string[];
+  isPais?: boolean;    // true = usar PaisSelector en vez de TextField
+  isLinea?: boolean;   // true = usar LineaSelector (filtrado por pais_codigo del mismo form)
+  isGerente?: boolean; // true = usar GerenteSelector (filtrado por pais_codigo del mismo form)
+};
+
+// ── Pestaña genérica de catálogo ──────────────────────────────────────
+/**
+ * CatalogoTab — Componente genérico para mostrar y gestionar cualquier catálogo.
+ *
+ * Props:
+ * - endpoint: ruta relativa de la API (e.g. "paises", "rms")
+ * - columns: columnas a mostrar en la tabla
+ * - title: título del catálogo
+ * - addFields: campos del formulario de creación
+ * - editFields: campos del formulario de edición (si difieren del de creación)
+ * - importable: true si el backend tiene endpoint /importar para este catálogo
+ */
+function CatalogoTab({
+  endpoint, columns, title, addFields, editFields, toggleActive = false, extraActions, paisFilter, showWeightTotal = false,
+}: {
+  endpoint: string;
+  columns: { key: string; label: string; align?: 'left' | 'right' | 'center'; render?: (v: any, row: any) => React.ReactNode }[];
+  title: string;
+  addFields?: FieldDef[];
+  editFields?: FieldDef[];
+  toggleActive?: boolean;
+  extraActions?: (row: any, refetch: () => void) => React.ReactNode;
+  paisFilter?: string | '';
+  showWeightTotal?: boolean;
+}) {
+  const qc = useQueryClient();
+  const { data: paises } = usePaises();
+  const [openNew, setOpenNew] = useState(false);
+  const [openEdit, setOpenEdit] = useState(false);
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [editItem, setEditItem] = useState<any>(null);
+  const [msg, setMsg] = useState('');
+
+  const fields = addFields || [];
+  const eFields = editFields || addFields || [];
+
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: [endpoint, paisFilter],
+    queryFn: () => api.get(`/admin/${endpoint}`, {
+      params: paisFilter ? { pais_codigo: paisFilter } : {},
+    }).then((r) => r.data),
+    retry: 1,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () => api.post(`/admin/${endpoint}`, form),
+    onSuccess: () => { setOpenNew(false); setForm({}); setMsg('Creado correctamente'); qc.invalidateQueries({ queryKey: [endpoint] }); },
+    onError: (e: any) => setMsg(`Error: ${e.response?.data?.detail || e.message}`),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: () => api.put(`/admin/${endpoint}/${editItem?.id}`, form),
+    onSuccess: () => { setOpenEdit(false); setForm({}); setEditItem(null); setMsg('Actualizado'); qc.invalidateQueries({ queryKey: [endpoint] }); },
+    onError: (e: any) => setMsg(`Error: ${e.response?.data?.detail || e.message}`),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: (row: any) => api.put(`/admin/${endpoint}/${row.id}`, { activo: !row.activo }),
+    onSuccess: () => { setMsg('Estado actualizado'); qc.invalidateQueries({ queryKey: [endpoint] }); },
+    onError: (e: any) => setMsg(`Error: ${e.response?.data?.detail || e.message}`),
+  });
+
+  const activarMutation = useMutation({
+    mutationFn: (row: any) => api.put(`/admin/${endpoint}/${row.id}`, { activo: true }),
+    onSuccess: () => { setMsg('Registro activado'); qc.invalidateQueries({ queryKey: [endpoint] }); },
+    onError: (e: any) => setMsg(`Error: ${e.response?.data?.detail || e.message}`),
+  });
+
+  const handleEdit = (row: any) => {
+    setEditItem(row);
+    const f: Record<string, string> = {};
+    eFields.forEach((field) => { f[field.key] = row[field.key] ?? ''; });
+    setForm(f);
+    setOpenEdit(true);
+  };
+
+  const items: any[] = Array.isArray(data) ? data : (data?.items ?? []);
+
+  // Agrega columna de acciones al final
+  const allColumns = [
+    ...columns,
+    {
+      key: '__actions', label: 'Acciones',
+      render: (_: any, row: any) => (
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          {eFields.length > 0 && (
+            <Tooltip title="Editar">
+              <IconButton size="small" color="primary" onClick={() => handleEdit(row)}>
+                <Edit fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+          {toggleActive ? (
+            <Tooltip title={row.activo ? 'Desactivar' : 'Activar'}>
+              <IconButton size="small" color={row.activo ? 'warning' : 'success'}
+                onClick={() => toggleMutation.mutate(row)}>
+                {row.activo ? <ToggleOff fontSize="small" /> : <ToggleOn fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          ) : (
+            !row.activo && (
+              <Tooltip title="Activar">
+                <IconButton size="small" color="success" onClick={() => activarMutation.mutate(row)}>
+                  <ToggleOn fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )
+          )}
+          {extraActions && extraActions(row, refetch)}
+        </Box>
+      ),
+    },
+  ];
+
+  // Renderiza un campo del formulario según su tipo
+  const renderField = (f: FieldDef) => (
+    <Grid item xs={12} sm={6} key={f.key}>
+      {f.isPais ? (
+        // Campo especial: selector de país con formato "CR — Costa Rica"
+        <PaisSelector value={form[f.key] || ''} onChange={(v) => setForm({ ...form, [f.key]: v }) } />
+      ) : f.isLinea ? (
+        // Campo especial: selector de línea con formato "CAR — Cardiovascular" (nunca ID crudo)
+        <LineaSelector
+          value={form[f.key] || ''}
+          paisCodigo={form['pais_codigo'] || ''}
+          onChange={(v) => setForm({ ...form, [f.key]: v })}
+        />
+      ) : f.isGerente ? (
+        // Campo especial: selector de gerente con formato "GD001 — Juan Pérez (DISTRITO)" (nunca ID crudo)
+        <GerenteSelector
+          value={form[f.key] || ''}
+          paisCodigo={form['pais_codigo'] || ''}
+          onChange={(v) => setForm({ ...form, [f.key]: v })}
+        />
+      ) : f.options ? (
+        <FormControl fullWidth size="small">
+          <InputLabel>{f.label}</InputLabel>
+          <Select label={f.label} value={form[f.key] || ''}
+            onChange={(e) => setForm({ ...form, [f.key]: e.target.value })}>
+            {f.options.map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+          </Select>
+        </FormControl>
+      ) : (
+        <TextField fullWidth size="small" label={f.label} type={f.type || 'text'}
+          value={form[f.key] || ''}
+          onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
+      )}
+    </Grid>
+  );
+
+  return (
+    <Box>
+      {/* Barra de título y acciones */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+        <Typography variant="h6" fontWeight={600}>{title}</Typography>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+          <Button startIcon={<Refresh />} size="small" onClick={() => refetch()}>Actualizar</Button>
+          {fields.length > 0 && (
+            <Button variant="contained" startIcon={<Add />} size="small" onClick={() => { setForm({}); setOpenNew(true); }}>
+              Nuevo
+            </Button>
+          )}
+        </Box>
+      </Box>
+
+      {msg && <Alert severity={msg.startsWith('Error') ? 'error' : 'success'} sx={{ mb: 2 }} onClose={() => setMsg('')}>{msg}</Alert>}
+
+      {/* Tabla de datos */}
+      {isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>
+      ) : (
+        <TableContainer component={Paper} elevation={1} sx={{ borderRadius: 2 }}>
+          <Table size="small">
+            <TableHead sx={{ bgcolor: 'primary.main' }}>
+              <TableRow>
+                {allColumns.map((c) => (
+                  <TableCell key={c.key} align={(c as any).align || 'left'} sx={{ color: 'white', fontWeight: 700 }}>{c.label}</TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {items.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={allColumns.length} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                    Sin registros
+                  </TableCell>
+                </TableRow>
+              ) : (
+                items.map((row: any, i: number) => (
+                  <TableRow key={i} hover>
+                    {allColumns.map((c) => (
+                      <TableCell key={c.key} align={(c as any).align || 'left'}>
+                        {c.render
+                          ? c.render(row[c.key], row)
+                          : c.key === 'pais_codigo'
+                            ? <PaisLabel paisCodigo={row.pais_codigo} paises={paises} />
+                            : (row[c.key] ?? '—')}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+            {showWeightTotal && items.length > 0 && (() => {
+              const total = items.reduce((acc: number, r: any) => acc + (Number(r.ponderacion_pct) || 0), 0);
+              const weightColIdx = columns.findIndex((c) => c.key === 'ponderacion_pct');
+              return (
+                <TableFooter>
+                  <TableRow sx={{ bgcolor: 'primary.dark' }}>
+                    {allColumns.map((c, i) => (
+                      <TableCell key={c.key} align={(c as any).align || 'left'} sx={{ color: 'white', fontWeight: 700, py: 0.8 }}>
+                        {i === weightColIdx
+                          ? `Total: ${total} pts`
+                          : i === 0 ? 'TOTAL' : ''}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </TableFooter>
+              );
+            })()}
+          </Table>
+        </TableContainer>
+      )}
+
+      {/* Dialog: Crear nuevo registro */}
+      <Dialog open={openNew} onClose={() => setOpenNew(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Nuevo {title}</DialogTitle>
+        <DialogContent><Grid container spacing={2} sx={{ mt: 0.5 }}>{fields.map(renderField)}</Grid></DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenNew(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>Guardar</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog: Editar registro */}
+      <Dialog open={openEdit} onClose={() => setOpenEdit(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Editar {title}</DialogTitle>
+        <DialogContent><Grid container spacing={2} sx={{ mt: 0.5 }}>{eFields.map(renderField)}</Grid></DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenEdit(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending}>Actualizar</Button>
+        </DialogActions>
+      </Dialog>
+
+    </Box>
+  );
+}
+
+// ── Pestaña especial: Rangos de Puntuación ────────────────────────────
+/**
+ * RangosIndicadorTab — Gestión de rangos KPI→Puntos.
+ *
+ * Permite seleccionar un indicador y un país para ver, agregar
+ * y eliminar los rangos de puntuación configurados.
+ * Los rangos definen cuántos puntos obtiene un RM según su
+ * valor real en ese indicador (e.g. 87% cobertura → 80 puntos).
+ */
+function RangosIndicadorTab() {
+  const [selectedIndicadorId, setSelectedIndicadorId] = useState<number | ''>('');
+  const [selectedPaisId, setSelectedPaisId] = useState<string | ''>('');
+  const [open, setOpen] = useState(false);
+  const [openDel, setOpenDel] = useState(false);
+  const [openEdit, setOpenEdit] = useState(false);
+  const [delItem, setDelItem] = useState<any>(null);
+  const [editItem, setEditItem] = useState<any>(null);
+  const [form, setForm] = useState({ rango_desde: '', rango_hasta: '', puntos: '', descripcion: '' });
+  const [editForm, setEditForm] = useState({ rango_desde: '', rango_hasta: '', puntos: '', descripcion: '' });
+  const [msg, setMsg] = useState('');
+  const qc = useQueryClient();
+
+  const { data: _indRaw } = useQuery({
+    queryKey: ['indicadores-rangos', selectedPaisId],
+    queryFn: () => api.get('/admin/indicadores', {
+      params: { size: 200, ...(selectedPaisId ? { pais_codigo: selectedPaisId } : {}) },
+    }).then((r) => r.data),
+    enabled: !!selectedPaisId,
+  });
+  // El endpoint /admin/indicadores devuelve {items:[...], total:N} — normalizar a array
+  const indicadores: any[] = Array.isArray(_indRaw) ? _indRaw : (_indRaw?.items ?? []);
+
+  const { data: rangos, isLoading, refetch } = useQuery({
+    queryKey: ['rangos', selectedIndicadorId, selectedPaisId],
+    queryFn: () => selectedIndicadorId
+      ? api.get(`/admin/indicadores/${selectedIndicadorId}/tabla`, {
+          params: selectedPaisId ? { pais_codigo: selectedPaisId } : {},
+        }).then((r) => r.data)
+      : Promise.resolve([]),
+    enabled: !!selectedIndicadorId,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () => api.post(`/admin/indicadores/${selectedIndicadorId}/tabla`, {
+      indicador_id: selectedIndicadorId, pais_codigo: selectedPaisId,
+      rango_desde: parseFloat(form.rango_desde), rango_hasta: parseFloat(form.rango_hasta),
+      puntos: parseFloat(form.puntos), descripcion: form.descripcion || null,
+    }),
+    onSuccess: () => {
+      setOpen(false);
+      setForm({ rango_desde: '', rango_hasta: '', puntos: '', descripcion: '' });
+      setMsg('Rango creado');
+      qc.invalidateQueries({ queryKey: ['rangos'] });
+    },
+    onError: (e: any) => setMsg(`Error: ${e.response?.data?.detail || e.message}`),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.delete(`/admin/indicadores/${selectedIndicadorId}/tabla/${delItem?.id}`),
+    onSuccess: () => { setOpenDel(false); setDelItem(null); setMsg('Rango eliminado'); qc.invalidateQueries({ queryKey: ['rangos'] }); },
+    onError: (e: any) => setMsg(`Error: ${e.response?.data?.detail || e.message}`),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: () => api.put(`/admin/indicadores/${selectedIndicadorId}/tabla/${editItem?.id}`, {
+      indicador_id: selectedIndicadorId, pais_codigo: selectedPaisId,
+      rango_desde: parseFloat(editForm.rango_desde), rango_hasta: parseFloat(editForm.rango_hasta),
+      puntos: parseFloat(editForm.puntos), descripcion: editForm.descripcion || null,
+    }),
+    onSuccess: () => {
+      setOpenEdit(false); setEditItem(null);
+      setMsg('Rango actualizado');
+      qc.invalidateQueries({ queryKey: ['rangos'] });
+    },
+    onError: (e: any) => setMsg(`Error: ${e.response?.data?.detail || e.message}`),
+  });
+
+  const handleOpenEdit = (r: any) => {
+    setEditItem(r);
+    setEditForm({
+      rango_desde: String(r.rango_desde),
+      rango_hasta: String(r.rango_hasta),
+      puntos: String(r.puntos),
+      descripcion: r.descripcion ?? '',
+    });
+    setOpenEdit(true);
+  };
+
+  return (
+    <Box>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
+        <Box>
+          <Typography variant="h6" fontWeight={600}>Rangos de Puntuación</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Los rangos se cargan automáticamente al importar los DIMs (hoja DIM_INDICADOR_TABLA)
+          </Typography>
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button startIcon={<Refresh />} size="small" onClick={() => refetch()}>Actualizar</Button>
+          {selectedIndicadorId && selectedPaisId && (
+            <Button variant="contained" startIcon={<Add />} size="small" onClick={() => setOpen(true)}>Nuevo Rango</Button>
+          )}
+        </Box>
+      </Box>
+
+      {msg && <Alert severity={msg.startsWith('Error') ? 'error' : 'success'} sx={{ mb: 2 }} onClose={() => setMsg('')}>{msg}</Alert>}
+
+      {/* Filtros: primero País, luego Indicador filtrado por ese país */}
+      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
+        {/* 1. Selector de país */}
+        <Box sx={{ minWidth: 220 }}>
+          <PaisSelector
+            value={selectedPaisId}
+            onChange={(v) => { setSelectedPaisId(v); setSelectedIndicadorId(''); }}
+          />
+        </Box>
+        {/* 2. Selector de indicador: solo los del país seleccionado, sin duplicados */}
+        <Box sx={{ flex: 1, minWidth: 260 }}>
+          <FormControl fullWidth size="small">
+            <InputLabel>Indicador</InputLabel>
+            <Select
+              label="Indicador"
+              value={selectedIndicadorId}
+              onChange={(e) => setSelectedIndicadorId(e.target.value as number)}
+              disabled={!selectedPaisId}
+            >
+              {indicadores.map((ind: any) => (
+                <MenuItem key={ind.id} value={ind.id}>
+                  {ind.codigo} — {ind.nombre}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
+      </Box>
+
+      <TableContainer component={Paper} elevation={1} sx={{ borderRadius: 2 }}>
+        <Table size="small">
+          <TableHead sx={{ bgcolor: 'primary.main' }}>
+            <TableRow>
+              {['Código Indicador', 'Peso (%)', 'Resultado', 'Factor', ''].map((h) => (
+                <TableCell key={h} align="center" sx={{ color: 'white', fontWeight: 700 }}>{h}</TableCell>
+              ))}
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {!selectedIndicadorId ? (
+              <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                Selecciona un país e indicador para ver los rangos
+              </TableCell></TableRow>
+            ) : isLoading ? (
+              <TableRow><TableCell colSpan={5} align="center"><CircularProgress size={24} /></TableCell></TableRow>
+            ) : (rangos || []).length === 0 ? (
+              <TableRow><TableCell colSpan={5} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                Sin rangos configurados
+              </TableCell></TableRow>
+            ) : (() => {
+              const selInd = indicadores.find((i: any) => i.id === selectedIndicadorId);
+              const rows = [...(rangos || [])].sort((a: any, b: any) => Number(a.rango_desde) - Number(b.rango_desde));
+              return rows.map((r: any, idx: number) => {
+                const isFirst = idx === 0;
+                const resultadoLabel = isFirst
+                  ? `< ${Number(rows[1]?.rango_desde ?? r.rango_hasta).toFixed(0)}`
+                  : Number(r.rango_desde).toFixed(0);
+                return (
+                  <TableRow key={r.id} hover>
+                    <TableCell align="center" sx={{ fontFamily: 'monospace', fontSize: 13 }}>{selInd?.codigo ?? '—'}</TableCell>
+                    <TableCell align="center">{selInd?.ponderacion_pct ?? '—'}</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 600 }}>{resultadoLabel}</TableCell>
+                    <TableCell align="center" sx={{ fontWeight: 700, color: Number(r.puntos) >= 1 ? 'success.main' : 'text.primary' }}>
+                      {Number(r.puntos).toFixed(2)}
+                    </TableCell>
+                    <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
+                      <Tooltip title="Editar rango">
+                        <IconButton size="small" color="primary" onClick={() => handleOpenEdit(r)}>
+                          <Edit fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Eliminar rango">
+                        <IconButton size="small" color="error" onClick={() => { setDelItem(r); setOpenDel(true); }}>
+                          <Delete fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                );
+              });
+            })()}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Nuevo Rango de Puntuación</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            {[
+              { key: 'rango_desde', label: 'Resultado Desde' },
+              { key: 'rango_hasta', label: 'Resultado Hasta' },
+              { key: 'puntos', label: 'Factor' },
+              { key: 'descripcion', label: 'Descripción (opcional)' },
+            ].map((f) => (
+              <Grid item xs={12} sm={6} key={f.key}>
+                <TextField fullWidth size="small" label={f.label}
+                  type={f.key !== 'descripcion' ? 'number' : 'text'}
+                  value={(form as any)[f.key]}
+                  onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
+              </Grid>
+            ))}
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpen(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={() => createMutation.mutate()} disabled={createMutation.isPending}>Guardar</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={openDel} onClose={() => setOpenDel(false)}>
+        <DialogTitle>Confirmar eliminación</DialogTitle>
+        <DialogContent>
+          <Typography>¿Eliminar rango con Resultado <strong>{Number(delItem?.rango_desde ?? 0).toFixed(0)}</strong> → Factor <strong>{Number(delItem?.puntos ?? 0).toFixed(2)}</strong>?</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenDel(false)}>Cancelar</Button>
+          <Button variant="contained" color="error" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>Eliminar</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={openEdit} onClose={() => setOpenEdit(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Editar Rango de Puntuación</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 0.5 }}>
+            {[
+              { key: 'rango_desde', label: 'Resultado Desde' },
+              { key: 'rango_hasta', label: 'Resultado Hasta' },
+              { key: 'puntos', label: 'Factor' },
+              { key: 'descripcion', label: 'Descripción (opcional)' },
+            ].map((f) => (
+              <Grid item xs={12} sm={6} key={f.key}>
+                <TextField fullWidth size="small" label={f.label}
+                  type={f.key !== 'descripcion' ? 'number' : 'text'}
+                  value={(editForm as any)[f.key]}
+                  onChange={(e) => setEditForm({ ...editForm, [f.key]: e.target.value })} />
+              </Grid>
+            ))}
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenEdit(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending}>Guardar Cambios</Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+// ── Botones Cerrar / Abrir ciclo ──────────────────────────────────────
+/**
+ * CicloStateButtons — Renderiza botones Cerrar / Abrir en la fila del ciclo.
+ * Muestra diálogo de confirmación antes de actuar.
+ * Al abrir un ciclo cerrado, lanza automáticamente el recálculo de ese ciclo.
+ */
+function CicloStateButtons({ row, refetch }: { row: any; refetch: () => void }) {
+  const [confirm, setConfirm] = useState<null | 'cerrar' | 'abrir'>(null);
+  const [msg, setMsg] = useState('');
+  const [recalcMsg, setRecalcMsg] = useState('');
+  const qc = useQueryClient();
+
+  const cerrarMutation = useMutation({
+    mutationFn: () => api.patch(`/admin/ciclos/${row.id}/cerrar`),
+    onSuccess: (res: any) => {
+      setConfirm(null);
+      setMsg(res.data?.message || 'Ciclo cerrado');
+      qc.invalidateQueries({ queryKey: ['ciclos'] });
+      refetch();
+    },
+    onError: (e: any) => { setConfirm(null); setMsg(`Error: ${e.response?.data?.detail || e.message}`); },
+  });
+
+  const abrirMutation = useMutation({
+    mutationFn: () => api.patch(`/admin/ciclos/${row.id}/abrir`),
+    onSuccess: async (res: any) => {
+      setConfirm(null);
+      setMsg(res.data?.message || 'Ciclo abierto');
+      qc.invalidateQueries({ queryKey: ['ciclos'] });
+      refetch();
+      // Recalcular automáticamente al reabrir
+      try {
+        const rc = await api.post(`/etl/recalcular/${row.id}`);
+        const d = rc.data;
+        if (d?.abortado) {
+          setRecalcMsg(`⚠ Recálculo abortado: ${d.motivo}`);
+        } else {
+          setRecalcMsg(`✓ Recálculo OK — ${d?.filas_kpi_actualizadas ?? 0} KPI, ${d?.rankings_generados ?? 0} rankings`);
+        }
+      } catch (e: any) {
+        setRecalcMsg(`Aviso: recálculo no se pudo disparar (${e.response?.data?.detail || e.message})`);
+      }
+    },
+    onError: (e: any) => { setConfirm(null); setMsg(`Error: ${e.response?.data?.detail || e.message}`); },
+  });
+
+  return (
+    <>
+      {/* Botón Cerrar (solo si está abierto) */}
+      {!row.cerrado && (
+        <Tooltip title="Cerrar ciclo (snapshot inmutable)">
+          <IconButton size="small" color="error" onClick={() => setConfirm('cerrar')}>
+            <Lock fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
+      {/* Botón Abrir (solo si está cerrado) */}
+      {row.cerrado && (
+        <Tooltip title="Reabrir ciclo para edición y recálculo">
+          <IconButton size="small" color="success" onClick={() => setConfirm('abrir')}>
+            <LockOpen fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
+
+      {/* Alertas inline */}
+      {(msg || recalcMsg) && (
+        <Box sx={{ position: 'fixed', bottom: 24, right: 24, zIndex: 2000, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {msg && (
+            <Alert severity={msg.startsWith('Error') ? 'error' : 'success'} onClose={() => setMsg('')}>
+              {msg}
+            </Alert>
+          )}
+          {recalcMsg && (
+            <Alert severity={recalcMsg.startsWith('⚠') || recalcMsg.startsWith('Aviso') ? 'warning' : 'success'}
+              onClose={() => setRecalcMsg('')}>
+              {recalcMsg}
+            </Alert>
+          )}
+        </Box>
+      )}
+
+      {/* Diálogo de confirmación */}
+      <Dialog open={!!confirm} onClose={() => setConfirm(null)} maxWidth="xs">
+        <DialogTitle>
+          {confirm === 'cerrar' ? '🔒 Cerrar ciclo' : '🔓 Reabrir ciclo'}
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            {confirm === 'cerrar'
+              ? <>¿Cerrar el ciclo <strong>{row.nombre}</strong>? Una vez cerrado quedará como snapshot histórico. Puedes reabrirlo si necesitas corregir datos.</>
+              : <>¿Reabrir el ciclo <strong>{row.nombre}</strong>? Se ejecutará el recálculo automáticamente para actualizar puntajes y rankings.</>
+            }
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirm(null)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            color={confirm === 'cerrar' ? 'error' : 'success'}
+            onClick={() => confirm === 'cerrar' ? cerrarMutation.mutate() : abrirMutation.mutate()}
+            disabled={cerrarMutation.isPending || abrirMutation.isPending}
+          >
+            {confirm === 'cerrar' ? 'Cerrar ciclo' : 'Abrir y recalcular'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
+
+
+// ── Tab genérico de DIM con filtro de País ────────────────────────────
+function DimTabWithPais({ tabConfig }: { tabConfig: (typeof TABS_DIM)[0] }) {
+  const [paisCodigo, setPaisId] = useState<string | ''>('');
+  const { data: paises, isLoading: loadingPaises } = usePaises();
+
+  useEffect(() => {
+    if (!(paises || []).length || paisCodigo) return;
+    const rd = (paises as any[]).find((p: any) =>
+      p.codigo?.toUpperCase() === 'RD' ||
+      p.nombre?.toLowerCase().includes('dominicana')
+    );
+    if (rd) setPaisId(rd.codigo);
+  }, [paises]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <Box>
+      {/* Filtro de país */}
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2,
+                 bgcolor: '#e3f2fd', borderRadius: 2, px: 2, py: 1.5 }}>
+        <FormControl size="small" sx={{ minWidth: 260 }}>
+          <InputLabel>{loadingPaises ? 'Cargando países…' : 'Filtrar por País'}</InputLabel>
+          <Select
+            value={paisCodigo}
+            label={loadingPaises ? 'Cargando países…' : 'Filtrar por País'}
+            onChange={(e) => setPaisId(e.target.value as string | '')}
+            disabled={loadingPaises}
+          >
+            <MenuItem value="">Todos los países</MenuItem>
+            {(paises || []).map((p: any) => (
+              <MenuItem key={p.id} value={p.codigo}>{p.codigo} — {p.nombre}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <Typography variant="body2" color="primary.main" fontWeight={600}>
+          {tabConfig.label} — {paisCodigo
+            ? (paises || []).find((p: any) => p.codigo === paisCodigo)
+              ? `${(paises as any[]).find((p: any) => p.codigo === paisCodigo).codigo} — ${(paises as any[]).find((p: any) => p.codigo === paisCodigo).nombre}`
+              : ''
+            : 'Todos los países'}
+        </Typography>
+      </Box>
+      {/* Tabla del catálogo */}
+      <CatalogoTab
+        key={`${tabConfig.endpoint}-${paisCodigo}`}
+        endpoint={tabConfig.endpoint}
+        columns={tabConfig.columns as any}
+        title={tabConfig.label}
+        addFields={(tabConfig as any).addFields}
+        editFields={(tabConfig as any).editFields}
+        paisFilter={paisCodigo}
+        toggleActive
+        showWeightTotal={tabConfig.endpoint === 'indicadores'}
+      />
+    </Box>
+  );
+}
+
+
+// ── Tab dedicado: Ciclos por País ──────────────────────────────────────
+/**
+ * CiclosPorPaisTab — Vista de ciclos filtrada por país con botones Cerrar/Abrir.
+ * El selector de país al tope permite ver y gestionar los ciclos de cada país
+ * de forma independiente.
+ */
+function CiclosPorPaisTab() {
+  const [paisCodigo, setPaisId] = useState<string | ''>('');
+  const { data: paises, isLoading: loadingPaises } = usePaises();
+  const qc = useQueryClient();
+
+  // Auto-seleccionar República Dominicana al cargar
+  useEffect(() => {
+    if (!(paises || []).length || paisCodigo) return;
+    const rd = (paises as any[]).find((p: any) =>
+      p.codigo?.toUpperCase() === 'RD' ||
+      p.nombre?.toLowerCase().includes('dominicana')
+    );
+    if (rd) setPaisId(rd.codigo);
+  }, [paises]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const { data: ciclos, isLoading, refetch } = useQuery({
+    queryKey: ['ciclos', paisCodigo],
+    queryFn: () =>
+      api.get('/admin/ciclos', { params: { ...(paisCodigo && { pais_codigo: paisCodigo }) } }).then(r => r.data),
+  });
+
+  const rows: any[] = ciclos || [];
+  const paisNombre = (codigo: string) => {
+    const p = (paises || []).find((x: any) => x.codigo === codigo);
+    return p ? `${p.codigo} — ${p.nombre}` : String(codigo);
+  };
+
+  return (
+    <Box>
+      {/* Selector de país */}
+      <Card elevation={1} sx={{ mb: 2, borderRadius: 2 }}>
+        <CardContent sx={{ py: '12px !important' }}>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            <FormControl size="small" sx={{ minWidth: 260 }}>
+              <InputLabel>{loadingPaises ? 'Cargando países…' : 'Filtrar por País'}</InputLabel>
+              <Select
+                value={paisCodigo}
+                label={loadingPaises ? 'Cargando países…' : 'Filtrar por País'}
+                onChange={(e) => setPaisId(e.target.value as string | '')}
+                disabled={loadingPaises}
+              >
+                <MenuItem value="">Todos los países</MenuItem>
+                {(paises || []).map((p: any) => (
+                  <MenuItem key={p.id} value={p.codigo}>{p.codigo} — {p.nombre}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <Typography variant="body2" color="text.secondary">
+              {rows.length} ciclo{rows.length !== 1 ? 's' : ''}
+              {paisCodigo ? ` — ${paisNombre(String(paisCodigo))}` : ' en todos los países'}
+            </Typography>
+          </Box>
+        </CardContent>
+      </Card>
+
+      {/* Tabla de ciclos */}
+      {isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}><CircularProgress /></Box>
+      ) : (
+        <TableContainer component={Paper} elevation={2} sx={{ borderRadius: 2 }}>
+          <Table size="small">
+            <TableHead sx={{ bgcolor: 'primary.main' }}>
+              <TableRow>
+                {['País', 'N°', 'Nombre', 'Inicio', 'Fin', 'Estado', 'Acciones'].map(h => (
+                  <TableCell key={h} sx={{ color: 'white', fontWeight: 700 }}>{h}</TableCell>
+                ))}
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                    No hay ciclos{paisCodigo ? ' para este país' : ''}
+                  </TableCell>
+                </TableRow>
+              ) : rows.map((row: any) => (
+                <TableRow key={row.id} hover sx={{ opacity: row.cerrado ? 0.75 : 1 }}>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>{paisNombre(row.pais_codigo)}</TableCell>
+                  <TableCell align="center">{row.numero}</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>{row.nombre}</TableCell>
+                  <TableCell>{row.fecha_inicio}</TableCell>
+                  <TableCell>{row.fecha_fin}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={row.cerrado ? 'Cerrado' : 'Abierto'}
+                      color={row.cerrado ? 'error' : 'success'}
+                      size="small"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <CicloStateButtons row={row} refetch={refetch} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </Box>
+  );
+}
+
+
+// ── Pestaña Mantenimiento ─────────────────────────────────────────────
+// ── Tabla de resultados de reset ─────────────────────────────────────
+function ResetResultTable({ result }: { result: any }) {
+  return (
+    <Box sx={{ mt: 2, maxHeight: 200, overflowY: 'auto' }}>
+      <TableContainer component={Paper} elevation={0}
+        sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+        <Table size="small">
+          <TableHead sx={{ bgcolor: 'grey.100' }}>
+            <TableRow>
+              <TableCell><strong>Tabla</strong></TableCell>
+              <TableCell align="right"><strong>Filas</strong></TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {(result.tablas || []).map((t: any) => (
+              <TableRow key={t.tabla} hover>
+                <TableCell sx={{ fontFamily: 'monospace', fontSize: 11 }}>{t.tabla}</TableCell>
+                <TableCell align="right">{t.filas}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+}
+
+function MantenimientoTab() {
+  // ── Estado de los dos pasos ──────────────────────────────────────────
+  const [factsBorrados, setFactsBorrados] = useState(false);
+
+  const [confirmFacts, setConfirmFacts] = useState(false);
+  const [confirmDims,  setConfirmDims]  = useState(false);
+
+  const [loadingFacts, setLoadingFacts] = useState(false);
+  const [loadingDims,  setLoadingDims]  = useState(false);
+
+  const [resultFacts, setResultFacts] = useState<any>(null);
+  const [resultDims,  setResultDims]  = useState<any>(null);
+
+  const [msgFacts, setMsgFacts] = useState('');
+  const [msgDims,  setMsgDims]  = useState('');
+
+  const qc = useQueryClient();
+
+  // ── Paso 1: borrar FACTs ─────────────────────────────────────────────
+  const handleResetFacts = async () => {
+    setLoadingFacts(true);
+    setConfirmFacts(false);
+    setResultFacts(null);
+    setMsgFacts('');
+    try {
+      const res = await api.post('/admin/reset?tipo=facts');
+      setResultFacts(res.data);
+      setFactsBorrados(true);
+      setMsgFacts(`✓ Datos borrados — ${res.data.total_filas_borradas} filas eliminadas`);
+    } catch (e: any) {
+      setMsgFacts(`Error: ${e.response?.data?.detail || e.message}`);
+    } finally {
+      setLoadingFacts(false);
+    }
+  };
+
+  // ── Paso 2: borrar DIMs ──────────────────────────────────────────────
+  const handleResetDims = async () => {
+    setLoadingDims(true);
+    setConfirmDims(false);
+    setResultDims(null);
+    setMsgDims('');
+    try {
+      const res = await api.post('/admin/reset?tipo=dims');
+      setResultDims(res.data);
+      setFactsBorrados(false); // reinicia el ciclo
+      setMsgDims(`✓ Catálogos borrados — ${res.data.total_filas_borradas} filas eliminadas`);
+      // Eliminar cache completamente (no solo invalidar) para que no se vean datos viejos
+      ['paises','lineas','gerentes','rms','indicadores','ciclos'].forEach(k =>
+        qc.removeQueries({ queryKey: [k] })
+      );
+    } catch (e: any) {
+      setMsgDims(`Error: ${e.response?.data?.detail || e.message}`);
+    } finally {
+      setLoadingDims(false);
+    }
+  };
+
+  return (
+    <Box>
+      <Typography variant="h6" fontWeight={600} mb={1}>Mantenimiento de Datos</Typography>
+      <Typography variant="body2" color="text.secondary" mb={3}>
+        Borrado en dos pasos. Los usuarios del sistema siempre se conservan.
+      </Typography>
+
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+
+        {/* ── Paso A: Borrar FACTs ─────────────────────────────────── */}
+        <Card variant="outlined"
+          sx={{ borderRadius: 2, borderColor: factsBorrados ? 'grey.300' : 'error.light' }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between',
+                       alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="subtitle1" fontWeight={700}
+                  color={factsBorrados ? 'text.disabled' : 'error.main'}>
+                  Paso 1 — Borrar datos de desempeño (FACT)
+                </Typography>
+                <Typography variant="body2" color="text.secondary" mt={0.5}>
+                  Elimina KPIs, ventas, rankings, cargas ETL y auditoría.
+                  Los catálogos (países, RMs, etc.) se conservan.
+                  {factsBorrados && (
+                    <span style={{ color: '#2e7d32', fontWeight: 600 }}>
+                      {' '}✓ Completado — listo para el Paso 2.
+                    </span>
+                  )}
+                </Typography>
+              </Box>
+              <Button
+                variant="contained" color="error" size="small"
+                disabled={loadingFacts || factsBorrados}
+                onClick={() => setConfirmFacts(true)}
+              >
+                {loadingFacts ? 'Borrando...' : factsBorrados ? 'Ya borrado' : 'Borrar FACTs'}
+              </Button>
+            </Box>
+            {msgFacts && (
+              <Alert
+                severity={msgFacts.startsWith('Error') ? 'error' : 'success'}
+                sx={{ mt: 2 }} onClose={() => setMsgFacts('')}
+              >
+                {msgFacts}
+              </Alert>
+            )}
+            {resultFacts && <ResetResultTable result={resultFacts} />}
+          </CardContent>
+        </Card>
+
+        {/* ── Paso B: Borrar DIMs ──────────────────────────────────── */}
+        <Card variant="outlined"
+          sx={{ borderRadius: 2,
+                borderColor: factsBorrados ? 'warning.main' : 'grey.300',
+                opacity: factsBorrados ? 1 : 0.55 }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between',
+                       alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="subtitle1" fontWeight={700}
+                  color={factsBorrados ? 'warning.dark' : 'text.disabled'}>
+                  Paso 2 — Borrar catálogos (DIM)
+                </Typography>
+                <Typography variant="body2" color="text.secondary" mt={0.5}>
+                  Elimina países, líneas, gerentes, RMs, indicadores y ciclos.
+                  {!factsBorrados && (
+                    <span style={{ color: '#b71c1c' }}>
+                      {' '}Disponible solo después de ejecutar el Paso 1.
+                    </span>
+                  )}
+                </Typography>
+              </Box>
+              <Button
+                variant="contained"
+                sx={{ bgcolor: 'warning.main', '&:hover': { bgcolor: 'warning.dark' } }}
+                size="small"
+                disabled={loadingDims || !factsBorrados}
+                onClick={() => setConfirmDims(true)}
+              >
+                {loadingDims ? 'Borrando...' : 'Borrar DIMs'}
+              </Button>
+            </Box>
+            {msgDims && (
+              <Alert
+                severity={msgDims.startsWith('Error') ? 'error' : 'success'}
+                sx={{ mt: 2 }} onClose={() => setMsgDims('')}
+              >
+                {msgDims}
+              </Alert>
+            )}
+            {resultDims && <ResetResultTable result={resultDims} />}
+          </CardContent>
+        </Card>
+
+        {/* ── Paso C: Importar DIMs ────────────────────────────────── */}
+        <Card variant="outlined" sx={{ borderRadius: 2, borderColor: 'primary.light' }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between',
+                       alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="subtitle1" fontWeight={700} color="primary.main">
+                  Paso 3 — Importar catálogos (DIMs)
+                </Typography>
+                <Typography variant="body2" color="text.secondary" mt={0.5}>
+                  Sube <strong>DIM_MIP_FINAL.xlsx</strong> y selecciona todas las hojas para
+                  repoblar países, líneas, gerentes, RMs, indicadores y ciclos.
+                </Typography>
+              </Box>
+              <Button
+                variant="outlined" color="primary" size="small"
+                onClick={() => {
+                  const event = new CustomEvent('admin-navigate-tab', { detail: 'import' });
+                  window.dispatchEvent(event);
+                }}
+              >
+                Ir a Importar DIMs
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+
+        {/* ── Paso D: Cargar FACTs ─────────────────────────────────── */}
+        <Card variant="outlined" sx={{ borderRadius: 2, borderColor: 'success.light' }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between',
+                       alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <Typography variant="subtitle1" fontWeight={700} color="success.dark">
+                  Paso 4 — Cargar datos KPI (FACT)
+                </Typography>
+                <Typography variant="body2" color="text.secondary" mt={0.5}>
+                  Ve a ETL, sube <strong>FACT_MIP_FINAL.xlsx</strong> con{' '}
+                  <code>tipo_archivo=KPI_RM</code> y <code>modo=PRODUCCION</code>.
+                  El recálculo se dispara automáticamente.
+                </Typography>
+              </Box>
+              <Button
+                variant="outlined" color="success" size="small"
+                onClick={() => window.location.assign('/etl')}
+              >
+                Ir a ETL
+              </Button>
+            </Box>
+          </CardContent>
+        </Card>
+
+      </Box>
+
+      {/* ── Diálogo confirmar Paso 1 ─────────────────────────────── */}
+      <Dialog open={confirmFacts} onClose={() => setConfirmFacts(false)} maxWidth="xs">
+        <DialogTitle sx={{ color: 'error.main' }}>⚠ Confirmar — Borrar datos FACT</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Se eliminarán todos los <strong>datos de desempeño</strong>: KPIs, ventas, rankings,
+            cargas ETL y registros de auditoría.
+          </Typography>
+          <Typography mt={1}>Los catálogos (países, RMs, etc.) <strong>no se tocan</strong>.</Typography>
+          <Typography mt={1} color="error.main" fontWeight={600}>Esta acción es irreversible.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmFacts(false)}>Cancelar</Button>
+          <Button variant="contained" color="error" onClick={handleResetFacts} disabled={loadingFacts}>
+            {loadingFacts ? 'Borrando...' : 'Sí, borrar FACTs'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Diálogo confirmar Paso 2 ─────────────────────────────── */}
+      <Dialog open={confirmDims} onClose={() => setConfirmDims(false)} maxWidth="xs">
+        <DialogTitle sx={{ color: 'warning.dark' }}>⚠ Confirmar — Borrar catálogos DIM</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Se eliminarán todos los <strong>catálogos maestros</strong>: países, líneas, gerentes,
+            RMs, indicadores, ciclos, etc.
+          </Typography>
+          <Typography mt={1}>
+            Los datos FACT ya fueron borrados en el Paso 1.
+          </Typography>
+          <Typography mt={1} color="warning.dark" fontWeight={600}>Esta acción es irreversible.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDims(false)}>Cancelar</Button>
+          <Button variant="contained"
+            sx={{ bgcolor: 'warning.main', '&:hover': { bgcolor: 'warning.dark' } }}
+            onClick={handleResetDims} disabled={loadingDims}>
+            {loadingDims ? 'Borrando...' : 'Sí, borrar DIMs'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+    </Box>
+  );
+}
+
+
+// ── Configuración de cada pestaña ─────────────────────────────────────
+
+const TABS_DIM = [
+  {
+    label: 'Países',
+    endpoint: 'paises',
+    importable: true,
+    columns: [
+      { key: 'id', label: 'ID' },
+      { key: 'codigo', label: 'Código' },
+      { key: 'nombre', label: 'Nombre' },
+      { key: 'moneda', label: 'Moneda' },
+      { key: 'zona_horaria', label: 'Zona Horaria' },
+      { key: 'activo', label: 'Estado', render: (v: boolean) => <Chip label={v ? 'Activo' : 'Inactivo'} color={v ? 'success' : 'default'} size="small" /> },
+    ],
+    addFields: [
+      { key: 'codigo', label: 'Código (CR, GT, HN...)' },
+      { key: 'nombre', label: 'Nombre del País' },
+      { key: 'moneda', label: 'Moneda (CRC, GTQ...)' },
+      { key: 'zona_horaria', label: 'Zona Horaria' },
+    ],
+  },
+  {
+    label: 'Líneas',
+    endpoint: 'lineas',
+    importable: true,
+    hasPaisFilter: true,
+    columns: [
+      { key: 'id', label: 'ID' },
+      { key: 'pais_codigo', label: 'País' },
+      { key: 'codigo', label: 'Código' },
+      { key: 'nombre', label: 'Nombre' },
+      { key: 'activo', label: 'Estado', render: (v: boolean) => <Chip label={v ? 'Activo' : 'Inactivo'} color={v ? 'success' : 'default'} size="small" /> },
+    ],
+    addFields: [
+      { key: 'pais_codigo', label: 'País', isPais: true },
+      { key: 'codigo', label: 'Código (CAR, GAS...)' },
+      { key: 'nombre', label: 'Nombre de la Línea' },
+    ],
+  },
+  {
+    label: 'Gerentes',
+    endpoint: 'gerentes',
+    importable: true,
+    hasPaisFilter: true,
+    columns: [
+      { key: 'id', label: 'ID' },
+      { key: 'pais_codigo', label: 'País' },
+      { key: 'codigo', label: 'Código' },
+      { key: 'nombre', label: 'Nombre' },
+      { key: 'tipo', label: 'Tipo', render: (v: string) => <Chip label={v} size="small" color="info" variant="outlined" /> },
+      { key: 'activo', label: 'Estado', render: (v: boolean) => <Chip label={v ? 'Activo' : 'Inactivo'} color={v ? 'success' : 'default'} size="small" /> },
+    ],
+    addFields: [
+      { key: 'pais_codigo', label: 'País', isPais: true },
+      { key: 'codigo', label: 'Código (GD001...)' },
+      { key: 'nombre', label: 'Nombre Completo' },
+      { key: 'email', label: 'Email' },
+      { key: 'tipo', label: 'Tipo', options: ['DISTRITO', 'MARCA', 'REGIONAL'] },
+    ],
+  },
+  {
+    label: 'RMs',
+    endpoint: 'rms',
+    importable: true,
+    hasPaisFilter: true,
+    columns: [
+      { key: 'id', label: 'ID' },
+      { key: 'pais_codigo', label: 'País' },
+      { key: 'codigo', label: 'Código' },
+      { key: 'nombre', label: 'Nombre' },
+      { key: 'cedula', label: 'Cédula' },
+      { key: 'email', label: 'Email' },
+      { key: 'activo', label: 'Estado', render: (v: boolean) => <Chip label={v ? 'Activo' : 'Inactivo'} color={v ? 'success' : 'default'} size="small" /> },
+    ],
+    addFields: [
+      { key: 'pais_codigo', label: 'País', isPais: true },
+      { key: 'linea_id', label: 'Línea', isLinea: true },
+      { key: 'gerente_id', label: 'Gerente', isGerente: true },
+      { key: 'codigo', label: 'Código RM' },
+      { key: 'nombre', label: 'Nombre Completo' },
+      { key: 'cedula', label: 'Cédula' },
+      { key: 'email', label: 'Email' },
+      { key: 'fecha_ingreso', label: 'Fecha Ingreso', type: 'date' },
+    ],
+  },
+  {
+    label: 'Indicadores',
+    endpoint: 'indicadores',
+    importable: true,
+    hasPaisFilter: true,
+    columns: [
+      { key: 'pais_codigo', label: 'País' },
+      { key: 'codigo', label: 'Código' },
+      { key: 'nombre', label: 'Nombre' },
+      { key: 'modulo', label: 'Módulo', render: (v: string) => <Chip label={v} size="small" color={v === 'GESTION' ? 'primary' : 'warning'} variant="outlined" /> },
+      { key: 'tipo_periodo', label: 'Período', render: (v: string) => <Chip label={v} color={v === 'CICLO' ? 'info' : 'secondary'} size="small" variant="outlined" /> },
+      { key: 'ponderacion_pct', label: 'Peso (pts)', align: 'center', render: (v: number) => `${v}` },
+      { key: 'escala', label: 'Escala', render: (v: number) => v === 1 ? '% (0-100)' : 'Puntos' },
+      { key: 'activo', label: 'Estado', render: (v: boolean) => <Chip label={v ? 'Activo' : 'Inactivo'} color={v ? 'success' : 'default'} size="small" /> },
+    ],
+    addFields: [
+      { key: 'pais_codigo', label: 'País', isPais: true },
+      { key: 'codigo', label: 'Código (COB_MD_F2...)' },
+      { key: 'nombre', label: 'Nombre del Indicador' },
+      { key: 'modulo', label: 'Módulo', options: ['GESTION', 'RESULTADOS'] },
+      { key: 'tipo_periodo', label: 'Tipo Período', options: ['CICLO', 'MES'] },
+      { key: 'ponderacion_pct', label: 'Ponderación %', type: 'number' },
+      { key: 'escala', label: 'Escala (1=% / 100=pts)', type: 'number' },
+      { key: 'valor_min', label: 'Valor Mínimo', type: 'number' },
+      { key: 'valor_max', label: 'Valor Máximo', type: 'number' },
+    ],
+  },
+  {
+    label: 'Ciclos',
+    endpoint: 'ciclos',
+    importable: true,
+    isCiclos: true,
+    columns: [
+      { key: 'id', label: 'ID' },
+      { key: 'pais_codigo', label: 'País' },
+      { key: 'nombre', label: 'Nombre' },
+      { key: 'anio', label: 'Año' },
+      { key: 'numero', label: 'Número' },
+      { key: 'fecha_inicio', label: 'Inicio' },
+      { key: 'fecha_fin', label: 'Fin' },
+      { key: 'cerrado', label: 'Cerrado', render: (v: boolean) => <Chip label={v ? 'Sí' : 'No'} color={v ? 'error' : 'success'} size="small" /> },
+    ],
+    addFields: [
+      { key: 'pais_codigo', label: 'País', isPais: true },
+      { key: 'anio', label: 'Año', type: 'number' },
+      { key: 'numero', label: 'Número de Ciclo', type: 'number' },
+      { key: 'nombre', label: 'Nombre (Ciclo 1...)' },
+      { key: 'nombre_canonico', label: 'Nombre Canónico (CICLO-01-2026)' },
+      { key: 'fecha_inicio', label: 'Fecha Inicio', type: 'date' },
+      { key: 'fecha_fin', label: 'Fecha Fin', type: 'date' },
+      { key: 'dias_laborables', label: 'Días Laborables', type: 'number' },
+    ],
+  },
+];
+
+const TAB_RANGOS_INDEX     = TABS_DIM.length;
+const TAB_IMPORT_INDEX     = TABS_DIM.length + 1;
+const TAB_MANT_INDEX       = TABS_DIM.length + 2;
+const TAB_LSII_INDEX       = TABS_DIM.length + 3;
+const TAB_COBERTURA_INDEX  = TABS_DIM.length + 4;
+const TAB_CATEGORIZACION_INDEX = TABS_DIM.length + 5;
+
+// ── Componente principal ──────────────────────────────────────────────
+export default function Admin() {
+  const [tab, setTab] = useState(0);
+
+  useEffect(() => {
+    const handler = (e: CustomEvent) => {
+      if (e.detail === 'import') setTab(TAB_IMPORT_INDEX);
+    };
+    window.addEventListener('admin-navigate-tab', handler as EventListener);
+    return () => window.removeEventListener('admin-navigate-tab', handler as EventListener);
+  }, []);
+
+  return (
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h5" fontWeight={700} mb={0.5}>Administración del Sistema</Typography>
+      <Typography variant="body2" color="text.secondary" mb={3}>
+        Gestión de catálogos maestros, importación de datos y mantenimiento
+      </Typography>
+
+      <Card elevation={2} sx={{ borderRadius: 2 }}>
+        <CardContent>
+          <Tabs
+            value={tab}
+            onChange={(_, v) => setTab(v)}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{
+              mb: 0,
+              borderBottom: '3px solid #1565c0',
+              '& .MuiTab-root': {
+                bgcolor: '#bbdefb',
+                borderTopLeftRadius: 8,
+                borderTopRightRadius: 8,
+                mr: 0.5,
+                mb: 0,
+                color: '#1565c0',
+                fontWeight: 600,
+                minHeight: 40,
+                fontSize: 13,
+                lineHeight: 1.2,
+                textTransform: 'none',
+                '&.Mui-selected': {
+                  bgcolor: '#1565c0',
+                  color: 'white',
+                  fontWeight: 700,
+                },
+                '&:hover:not(.Mui-selected)': {
+                  bgcolor: '#90caf9',
+                },
+              },
+              '& .MuiTabs-indicator': { display: 'none' },
+            }}
+          >
+            {TABS_DIM.map((t) => <Tab key={t.label} label={t.label} />)}
+            <Tab label="Rangos de Puntuación" icon={<TableChart fontSize="small" />} iconPosition="start" />
+            <Tab label="Importar DIMs" icon={<Upload fontSize="small" />} iconPosition="start" />
+            <Tab label="Mantenimiento" icon={<Delete fontSize="small" />} iconPosition="start" />
+            <Tab label="Matriz LSII" icon={<Psychology fontSize="small" />} iconPosition="start" />
+            <Tab label="Cobertura Predictiva" icon={<TrendingUp fontSize="small" />} iconPosition="start" />
+            <Tab label="Categorización Médica" icon={<LocalHospital fontSize="small" />} iconPosition="start" />
+          </Tabs>
+
+          <Box sx={{ mt: 3 }}>
+            {tab === TAB_MANT_INDEX ? (
+              <MantenimientoTab />
+            ) : tab === TAB_IMPORT_INDEX ? (
+              <ImportDims />
+            ) : tab === TAB_RANGOS_INDEX ? (
+              <RangosIndicadorTab />
+            ) : tab === TAB_LSII_INDEX ? (
+              <LsiiAdmin />
+            ) : tab === TAB_COBERTURA_INDEX ? (
+              <CoberturaPredictivaAdmin />
+            ) : tab === TAB_CATEGORIZACION_INDEX ? (
+              <CategorizacionAdmin />
+            ) : (TABS_DIM[tab] as any).isCiclos ? (
+              <CiclosPorPaisTab />
+            ) : (TABS_DIM[tab] as any).hasPaisFilter ? (
+              <DimTabWithPais tabConfig={TABS_DIM[tab]} />
+            ) : (
+              <CatalogoTab
+                key={TABS_DIM[tab].endpoint}
+                endpoint={TABS_DIM[tab].endpoint}
+                columns={TABS_DIM[tab].columns as any}
+                title={TABS_DIM[tab].label}
+                addFields={(TABS_DIM[tab] as any).addFields}
+                editFields={(TABS_DIM[tab] as any).editFields}
+                toggleActive
+              />
+            )}
+          </Box>
+        </CardContent>
+      </Card>
+    </Box>
+  );
+}

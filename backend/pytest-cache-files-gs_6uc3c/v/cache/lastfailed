@@ -1,0 +1,8 @@
+{
+  "tests/test_iup_service.py::test_consistencia_sin_historial_retorna_base_neutral_cero": true,
+  "tests/test_iup_service.py::test_consistencia_un_solo_ciclo_previo_usa_ese_valor": true,
+  "tests/test_iup_service.py::test_consistencia_dos_ciclos_previos_promedia_los_disponibles": true,
+  "tests/test_iup_service.py::test_consistencia_tres_o_mas_ciclos_promedia_los_3_mas_recientes": true,
+  "tests/test_iup_service.py::test_consistencia_maneja_score_nulo_como_cero": true,
+  "tests/test_iup_service.py": true
+}

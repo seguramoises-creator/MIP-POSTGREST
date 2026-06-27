@@ -1,0 +1,26 @@
+=======================================================
+  SCGCPR — VERSION LOCAL (SIN DOCKER)
+  Conecta a tu SQL Server: HVHVRD06\SQLEXPRESS
+=======================================================
+
+PREREQUISITOS:
+  - Python 3.12 instalado (python.org)
+  - SQL Server HVHVRD06\SQLEXPRESS corriendo
+  - Usuario "Segura" con permisos de creación de BD
+
+PASOS:
+  1. Editar backend\.env si tu contraseña es diferente
+  2. Ejecutar: .\1_INSTALAR.ps1
+  3. Ejecutar: .\2_CREAR_BD.ps1
+  4. Ejecutar: .\3_INICIAR.ps1
+
+URL DEL SISTEMA:
+  http://localhost:8000/api/v1/docs  ← Swagger UI
+  http://localhost:8000/health       ← Estado del servidor
+
+CONFIGURACION EN backend\.env:
+  DB_SERVER=HVHVRD06\SQLEXPRESS
+  DB_USER=Segura
+  DB_PASSWORD=tu_contraseña_aqui
+
+=======================================================

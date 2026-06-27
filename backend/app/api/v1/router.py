@@ -1,0 +1,36 @@
+"""
+SCGCPR — Router principal v1: registra todos los sub-routers.
+"""
+from fastapi import APIRouter
+
+from app.api.v1.routers.setup         import router as setup_router
+from app.api.v1.routers.auth          import router as auth_router
+from app.api.v1.routers.admin         import router as admin_router
+from app.api.v1.routers.productividad import router as productividad_router
+from app.api.v1.routers.coaching      import router as coaching_router
+from app.api.v1.routers.ranking       import router as ranking_router
+from app.api.v1.routers.reconocimiento import router as reconocimiento_router
+from app.api.v1.routers.dashboard     import router as dashboard_router
+from app.api.v1.routers.etl           import router as etl_router
+from app.api.v1.routers.dims          import router as dims_router
+from app.api.v1.routers.exportacion   import router as exportacion_router
+from app.api.v1.routers.lsii          import router as lsii_router
+from app.api.v1.routers.cobertura_predictiva import router as cobertura_predictiva_router
+from app.api.v1.routers.categorizacion import router as categorizacion_router
+
+api_router = APIRouter()
+
+api_router.include_router(setup_router)  # primer arranque — sin auth
+api_router.include_router(auth_router)
+api_router.include_router(admin_router)
+api_router.include_router(productividad_router)
+api_router.include_router(cobertura_predictiva_router)  # sustituye a /comercial (ver comercial.py, no registrado)
+api_router.include_router(coaching_router)
+api_router.include_router(categorizacion_router)  # sustituye a /capacitacion (ver capacitacion.py, no registrado)
+api_router.include_router(ranking_router)
+api_router.include_router(reconocimiento_router)
+api_router.include_router(dashboard_router)
+api_router.include_router(etl_router)
+api_router.include_router(dims_router)
+api_router.include_router(exportacion_router)
+api_router.include_router(lsii_router)

@@ -1,0 +1,22 @@
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     Started parent process [32652]
+INFO:     Started server process [30880]
+INFO:     Waiting for application startup.
+INFO:     Started server process [7484]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Application startup complete.
+INFO:     Shutting down
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [7484]
+INFO:     Finished server process [30880]
+INFO:     Received SIGINT, exiting.
+INFO:     Terminated child process [7484]
+INFO:     Terminated child process [30880]
+INFO:     Waiting for child process [7484]
+INFO:     Waiting for child process [30880]
+INFO:     Stopping parent process [32652]

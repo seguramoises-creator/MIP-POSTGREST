@@ -1,0 +1,11 @@
+{
+  "id": "msm-env-local",
+  "name": "MSM Local",
+  "values": [
+    { "key": "baseUrl",       "value": "http://localhost:8000/api/v1", "enabled": true },
+    { "key": "accessToken",   "value": "",  "enabled": true },
+    { "key": "refreshToken",  "value": "",  "enabled": true },
+    { "key": "adminUser",     "value": "admin",      "enabled": true },
+    { "key": "adminPass",     "value": "Admin1234!", "enabled": true }
+  ]
+}

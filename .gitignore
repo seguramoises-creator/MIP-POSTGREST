@@ -1,0 +1,72 @@
+# ─────────────────────────────────────────────────────────────
+# MSM / SCGCPR — .gitignore raíz
+# ─────────────────────────────────────────────────────────────
+
+# ── Secretos / variables de entorno ──────────────────────────
+# Nunca versionar credenciales. Sí versionar los *.example.
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# ── Python ───────────────────────────────────────────────────
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+pytest-cache-files-*/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ── Backend: datos de runtime (no son código fuente) ─────────
+backend/uploads/
+backend/processed/
+backend/errors/
+backend/logs/
+backend/reports/
+backend/stop/
+logs/
+*.log
+
+# ── Backups de base de datos (¡pesados, fuera del repo!) ──────
+*.bak
+*.bacpac
+*.trn
+
+# ── Archivos de respaldo / temporales de edición ─────────────
+*.bak_pais
+*.orig
+*.tmp
+~$*
+
+# ── Frontend (Node) ──────────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# ── Editores / SO ────────────────────────────────────────────
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# ── Scripts locales con credenciales hardcodeadas ────────────
+# Utilidades de desarrollo/diagnóstico. Versionar SOLO tras parametrizar las
+# credenciales para que lean del .env (ver backend/scripts/README.md).
+backend/scripts/
+/desbloquear_admin.py
+/reset_admin_password.py
+/cargar_lsii_dimensiones.py
+/loto_leidsa_analisis.py
+
+# ── Estado local de herramientas (no compartir) ──────────────
+.serena/
+.remember/
