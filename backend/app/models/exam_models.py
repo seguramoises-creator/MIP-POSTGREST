@@ -81,9 +81,9 @@ class AsignacionExamen(Base):
     __tablename__ = "FactAsignacionExamen"
     __table_args__ = (
         CheckConstraint(
-            "(evaluado_rm_id IS NOT NULL AND evaluado_gerente_id IS NULL) OR "
-            "(evaluado_rm_id IS NULL AND evaluado_gerente_id IS NOT NULL)",
-            name="CK_AsignacionExamen_evaluado_unico",
+            "(evaluado_tipo = 'RM' AND evaluado_rm_id IS NOT NULL AND evaluado_gerente_id IS NULL) OR "
+            "(evaluado_tipo = 'GERENTE' AND evaluado_gerente_id IS NOT NULL AND evaluado_rm_id IS NULL)",
+            name="CK_AsignacionExamen_evaluado_coherente",
         ),
         {"schema": "exam"},
     )
@@ -102,6 +102,9 @@ class AsignacionExamen(Base):
     intentos_usados: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     estado: Mapped[str] = mapped_column(String(15), nullable=False, default="pendiente")
     notif_activa: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    intentos: Mapped[list["IntentoExamen"]] = relationship(
+        "IntentoExamen", back_populates="asignacion", cascade="all, delete-orphan")
 
 
 class IntentoExamen(Base):
@@ -127,6 +130,10 @@ class IntentoExamen(Base):
     plataforma: Mapped[str | None] = mapped_column(String(40), nullable=True)
     ip_cliente: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
+    asignacion: Mapped["AsignacionExamen"] = relationship("AsignacionExamen", back_populates="intentos")
+    respuestas: Mapped[list["IntentoRespuesta"]] = relationship(
+        "IntentoRespuesta", back_populates="intento", cascade="all, delete-orphan")
+
 
 class IntentoRespuesta(Base):
     __tablename__ = "FactIntentoRespuesta"
@@ -144,6 +151,8 @@ class IntentoRespuesta(Base):
     es_correcta: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     mapa_opciones_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     fecha_respuesta: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+
+    intento: Mapped["IntentoExamen"] = relationship("IntentoExamen", back_populates="respuestas")
 
 
 class FuenteIA(Base):
