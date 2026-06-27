@@ -4,6 +4,32 @@ import json
 from loguru import logger
 
 
+def extraer_texto_fuente(ruta: str, tipo_archivo: str) -> str:
+    """Extrae texto de un archivo según su tipo (pdf|docx|pptx|texto)."""
+    tipo = (tipo_archivo or "").lower()
+    if tipo == "pdf":
+        import pdfplumber
+        with pdfplumber.open(ruta) as pdf:
+            return "\n".join((page.extract_text() or "") for page in pdf.pages)
+    if tipo == "docx":
+        import docx
+        d = docx.Document(ruta)
+        return "\n".join(p.text for p in d.paragraphs)
+    if tipo == "pptx":
+        import pptx
+        prs = pptx.Presentation(ruta)
+        partes = []
+        for slide in prs.slides:
+            for shape in slide.shapes:
+                if shape.has_text_frame:
+                    partes.append(shape.text_frame.text)
+        return "\n".join(partes)
+    if tipo == "texto":
+        with open(ruta, "r", encoding="utf-8", errors="ignore") as f:
+            return f.read()
+    raise ValueError(f"Tipo de archivo no soportado: {tipo_archivo}")
+
+
 def validar_preguntas_generadas(data: list) -> list[dict]:
     if not isinstance(data, list) or not data:
         raise ValueError("La IA no devolvió una lista de preguntas")

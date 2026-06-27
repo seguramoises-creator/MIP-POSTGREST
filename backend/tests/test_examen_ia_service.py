@@ -39,3 +39,24 @@ def test_validar_no_lista_falla():
         ia.validar_preguntas_generadas("no soy lista")
     with pytest.raises(ValueError):
         ia.validar_preguntas_generadas([])
+
+
+def test_extraer_texto_docx(tmp_path):
+    from docx import Document
+    doc = Document()
+    doc.add_paragraph("Paracetamol reduce la fiebre.")
+    p = tmp_path / "fuente.docx"
+    doc.save(str(p))
+    texto = ia.extraer_texto_fuente(str(p), "docx")
+    assert "Paracetamol" in texto
+
+
+def test_extraer_texto_plano(tmp_path):
+    p = tmp_path / "f.txt"
+    p.write_text("Contenido de prueba", encoding="utf-8")
+    assert "prueba" in ia.extraer_texto_fuente(str(p), "texto")
+
+
+def test_extraer_tipo_no_soportado_falla(tmp_path):
+    with pytest.raises(ValueError):
+        ia.extraer_texto_fuente("x", "rtf")
