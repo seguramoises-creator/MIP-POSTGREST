@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.models.exam_models import Examen, Pregunta, PreguntaOpcion
-from app.schemas.examenes import ExamenCrear, PreguntaCrear
+from app.models.exam_models import AsignacionExamen, Examen, Pregunta, PreguntaOpcion
+from app.schemas.examenes import AsignacionCrear, EvaluadoRef, ExamenCrear, PreguntaCrear
 
 
 def crear_examen(db: Session, datos: ExamenCrear, creado_por_usuario_id: int) -> Examen:
@@ -94,6 +94,43 @@ def reordenar_preguntas(db: Session, examen_id: int, orden_ids: list[int]) -> No
         ).update({"orden": nuevo_orden})
     db.commit()
     logger.info(f"Preguntas del examen id={examen_id} reordenadas")
+
+
+def asignar_examen(
+    db: Session,
+    examen_id: int,
+    evaluados: list[EvaluadoRef],
+    fecha_limite,
+    intentos_max,
+    notif_activa: bool,
+) -> list[AsignacionExamen]:
+    examen = obtener_examen(db, examen_id)
+    if examen is None:
+        raise ValueError("Examen no encontrado")
+    if examen.estado != "activo":
+        raise ValueError("Solo se asigna un examen activo (publicado)")
+    creadas = []
+    for ev in evaluados:
+        if ev.tipo not in ("RM", "GERENTE"):
+            raise ValueError(f"Tipo de evaluado inválido: {ev.tipo}")
+        asig = AsignacionExamen(
+            examen_id=examen_id,
+            evaluado_tipo=ev.tipo,
+            evaluado_rm_id=ev.id if ev.tipo == "RM" else None,
+            evaluado_gerente_id=ev.id if ev.tipo == "GERENTE" else None,
+            fecha_limite=fecha_limite,
+            intentos_max=intentos_max,
+            intentos_usados=0,
+            estado="pendiente",
+            notif_activa=notif_activa,
+        )
+        db.add(asig)
+        creadas.append(asig)
+    db.commit()
+    for a in creadas:
+        db.refresh(a)
+    logger.info(f"Examen id={examen_id} asignado a {len(creadas)} evaluado(s)")
+    return creadas
 
 
 def publicar_examen(db: Session, examen_id: int) -> Examen:

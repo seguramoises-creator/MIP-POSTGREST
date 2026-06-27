@@ -84,3 +84,29 @@ def test_reordenar_preguntas_valida_ids_exactos():
     db.query.return_value.filter.return_value.all.return_value = [(1,), (2,)]
     with pytest.raises(ValueError, match="orden_ids debe contener exactamente"):
         examen_service.reordenar_preguntas(db, examen_id=1, orden_ids=[1, 99])
+
+
+# ---------------------------------------------------------------------------
+# Task 4: Asignar examen a evaluados
+# ---------------------------------------------------------------------------
+
+from app.schemas.examenes import EvaluadoRef
+
+
+def test_asignar_requiere_examen_activo(monkeypatch):
+    db = MagicMock()
+    examen = SimpleNamespace(id=1, estado="borrador")
+    monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: examen)
+    with pytest.raises(ValueError):
+        examen_service.asignar_examen(db, 1, [EvaluadoRef(tipo="RM", id=5)], None, None, False)
+
+
+def test_asignar_crea_una_por_evaluado(monkeypatch):
+    db = MagicMock()
+    examen = SimpleNamespace(id=1, estado="activo")
+    monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: examen)
+    res = examen_service.asignar_examen(
+        db, 1, [EvaluadoRef(tipo="RM", id=5), EvaluadoRef(tipo="GERENTE", id=9)], None, None, False)
+    assert len(res) == 2
+    assert res[0].evaluado_tipo == "RM" and res[0].evaluado_rm_id == 5
+    assert res[1].evaluado_tipo == "GERENTE" and res[1].evaluado_gerente_id == 9

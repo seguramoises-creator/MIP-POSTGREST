@@ -7,6 +7,7 @@ POST /examenes/{id}/publicar            — Publicar examen (RN-02: debe tener �
 POST /examenes/{id}/preguntas           — Agregar pregunta (RN-01: solo borrador, 1 correcta)
 DELETE /examenes/{id}/preguntas/{pid}   — Eliminar pregunta
 PUT  /examenes/{id}/preguntas/orden     — Reordenar preguntas
+POST /examenes/{id}/asignar             — Asignar examen a lista de evaluados (RM/Gerente)
 
 RBAC: RequireCapacitacion = ADMIN + CAPACITACION.
 """
@@ -15,7 +16,14 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles
 from app.models.usuario import Rol
-from app.schemas.examenes import ExamenCrear, ExamenResponse, PreguntaCrear, PreguntaResponse
+from app.schemas.examenes import (
+    AsignacionCrear,
+    AsignacionResponse,
+    ExamenCrear,
+    ExamenResponse,
+    PreguntaCrear,
+    PreguntaResponse,
+)
 from app.services import examen_service
 
 router = APIRouter(prefix="/examenes", tags=["Exámenes"])
@@ -99,5 +107,20 @@ def reordenar_preguntas(
 ):
     try:
         examen_service.reordenar_preguntas(db, examen_id, orden_ids)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/{examen_id}/asignar", response_model=list[AsignacionResponse], status_code=status.HTTP_201_CREATED)
+def asignar(
+    examen_id: int,
+    datos: AsignacionCrear,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    try:
+        return examen_service.asignar_examen(
+            db, examen_id, datos.evaluados, datos.fecha_limite, datos.intentos_max, datos.notif_activa
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
