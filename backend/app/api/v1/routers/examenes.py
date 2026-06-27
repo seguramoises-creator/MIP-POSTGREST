@@ -220,6 +220,16 @@ def mi_historial(
     ]
 
 
+@router.get("/resumen", response_model=list[dict])
+def resumen_capacitacion(
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Dashboard de capacitación: tabla de exámenes con sus KPIs principales."""
+    from app.services import examen_resultados_service
+    return examen_resultados_service.resumen_capacitacion(db)
+
+
 # ===========================================================================
 # /examenes — IA endpoints (literal paths — must come before /{examen_id})
 # ===========================================================================
@@ -466,6 +476,31 @@ def iniciar(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     return resultado
+
+
+@router.get("/{examen_id}/resultados", response_model=dict)
+def resultados_examen(
+    examen_id: int,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """KPIs consolidados del examen: completitud, promedio, %aprobación, ranking (último intento)."""
+    from app.services import examen_resultados_service
+    try:
+        return examen_resultados_service.resumen_examen(db, examen_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get("/{examen_id}/analisis-preguntas", response_model=list[dict])
+def analisis_preguntas_examen(
+    examen_id: int,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """% de error por pregunta sobre todos los intentos (RN-08)."""
+    from app.services import examen_resultados_service
+    return examen_resultados_service.analisis_preguntas(db, examen_id)
 
 
 # ===========================================================================
