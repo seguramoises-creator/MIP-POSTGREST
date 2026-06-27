@@ -145,7 +145,15 @@ def registrar_respuesta(
     indice_original: int | None,
     mapa: dict,
 ) -> IntentoRespuesta:
-    """Persiste una respuesta del evaluado para una pregunta del intento."""
+    """Persiste una respuesta del evaluado para una pregunta del intento.
+
+    Idempotente: si ya existe una respuesta para (intento_id, pregunta_id),
+    la elimina antes de insertar la nueva. Última respuesta gana.
+    """
+    db.query(IntentoRespuesta).filter(
+        IntentoRespuesta.intento_id == intento_id,
+        IntentoRespuesta.pregunta_id == pregunta_id,
+    ).delete()
     resp = IntentoRespuesta(
         intento_id=intento_id,
         pregunta_id=pregunta_id,
@@ -159,6 +167,32 @@ def registrar_respuesta(
     db.commit()
     db.refresh(resp)
     return resp
+
+
+def registrar_respuesta_presentada(
+    db: Session,
+    intento_id: int,
+    pregunta_id: int,
+    indice_presentado: int,
+) -> IntentoRespuesta:
+    """Fachada pública: reconstruye el mapeo presentado→original y persiste la respuesta.
+
+    El router solo debe llamar a esta función — nunca a `_reconstruir_mapa_opcion`
+    directamente. El mapeo y la lógica de traducción quedan encapsulados aquí.
+    """
+    opcion_id, indice_pres, indice_orig = _reconstruir_mapa_opcion(
+        db, intento_id, pregunta_id, indice_presentado
+    )
+    mapa = {str(indice_pres): {"opcion_id": opcion_id, "indice_original": indice_orig}}
+    return registrar_respuesta(
+        db,
+        intento_id=intento_id,
+        pregunta_id=pregunta_id,
+        opcion_id=opcion_id,
+        indice_presentado=indice_pres,
+        indice_original=indice_orig,
+        mapa=mapa,
+    )
 
 
 def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:

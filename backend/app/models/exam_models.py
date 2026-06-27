@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     Integer, String, Boolean, DateTime, Numeric, Text, ForeignKey, CheckConstraint,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -141,7 +142,13 @@ class IntentoExamen(Base):
 
 class IntentoRespuesta(Base):
     __tablename__ = "FactIntentoRespuesta"
-    __table_args__ = {"schema": "exam"}
+    __table_args__ = (
+        UniqueConstraint(
+            "intento_id", "pregunta_id",
+            name="UQ_IntentoRespuesta_intento_pregunta",
+        ),
+        {"schema": "exam"},
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     intento_id: Mapped[int] = mapped_column(

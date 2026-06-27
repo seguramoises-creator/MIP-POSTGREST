@@ -168,6 +168,42 @@ def test_preparar_intento_baraja_preguntas_y_opciones():
 
 
 # ---------------------------------------------------------------------------
+# Tests de registrar_respuesta — idempotencia (Task 8)
+# ---------------------------------------------------------------------------
+
+def test_registrar_respuesta_es_idempotente():
+    """registrar_respuesta borra cualquier fila previa del mismo (intento, pregunta)
+    antes de insertar la nueva — la segunda llamada no acumula duplicados."""
+    db = MagicMock()
+
+    # FakeQuery para el DELETE: filter(...).delete() debe ser llamado
+    delete_query = MagicMock()
+    delete_query.filter.return_value = delete_query
+    delete_query.delete.return_value = 1  # simula 1 fila borrada
+
+    # Stub de refresh: no-op
+    db.refresh.return_value = None
+
+    db.query.return_value = delete_query
+
+    svc.registrar_respuesta(
+        db,
+        intento_id=1,
+        pregunta_id=10,
+        opcion_id=42,
+        indice_presentado=0,
+        indice_original=2,
+        mapa={"0": {"opcion_id": 42, "indice_original": 2}},
+    )
+
+    # El DELETE fue invocado con los filtros correctos antes del INSERT
+    delete_query.delete.assert_called_once()
+    # db.add fue llamado una sola vez (la nueva fila)
+    db.add.assert_called_once()
+    db.commit.assert_called()
+
+
+# ---------------------------------------------------------------------------
 # Tests de calcular_score (Task 6 — Step 1)
 # ---------------------------------------------------------------------------
 

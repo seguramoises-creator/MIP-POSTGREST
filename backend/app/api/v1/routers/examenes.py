@@ -319,19 +319,11 @@ def responder(
         )
 
     try:
-        opcion_id, indice_pres, indice_orig = intento_svc._reconstruir_mapa_opcion(
-            db, intento_id, payload.pregunta_id, payload.indice_presentado
-        )
-        # Persist the per-pregunta option map alongside the response for auditability
-        mapa = {str(payload.indice_presentado): {"opcion_id": opcion_id, "indice_original": indice_orig}}
-        intento_svc.registrar_respuesta(
+        intento_svc.registrar_respuesta_presentada(
             db,
             intento_id=intento_id,
             pregunta_id=payload.pregunta_id,
-            opcion_id=opcion_id,
-            indice_presentado=indice_pres,
-            indice_original=indice_orig,
-            mapa=mapa,
+            indice_presentado=payload.indice_presentado,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
