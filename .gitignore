@@ -70,3 +70,9 @@ backend/scripts/
 # ── Estado local de herramientas (no compartir) ──────────────
 .serena/
 .remember/
+
+# Cache de build TypeScript
+*.tsbuildinfo
+
+# Scratch del flujo subagent-driven (skill superpowers)
+.superpowers/
