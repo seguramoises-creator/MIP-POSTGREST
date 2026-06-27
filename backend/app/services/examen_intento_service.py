@@ -88,25 +88,38 @@ def preparar_intento(db: Session, asignacion, evaluado_tipo, evaluado_id, contex
     # _opcion_id y _indice_original son internos: el router los usa para el mapa
     # de respuestas pero NO deben exponerse al evaluado en la respuesta pública.
     presentadas = []
+    mapa_presentacion: dict = {}  # { str(pregunta_id): { str(indice_pres): {opcion_id, indice_original} } }
     for p in preguntas:
         ops = list(p.opciones)
         if examen.rand_opciones:
             barajar(ops, rng)
+        opciones_con_mapa = [
+            {
+                "indice_presentado": i,
+                "texto_opcion": o.texto_opcion,
+                "_opcion_id": o.id,
+                "_indice_original": o.indice_original,
+            }
+            for i, o in enumerate(ops)
+        ]
         presentadas.append({
             "pregunta_id": p.id,
             "tipo": p.tipo,
             "escenario": p.escenario,
             "texto": p.texto,
-            "opciones": [
-                {
-                    "indice_presentado": i,
-                    "texto_opcion": o.texto_opcion,
-                    "_opcion_id": o.id,
-                    "_indice_original": o.indice_original,
-                }
-                for i, o in enumerate(ops)
-            ],
+            "opciones": opciones_con_mapa,
         })
+        mapa_presentacion[str(p.id)] = {
+            str(op["indice_presentado"]): {
+                "opcion_id": op["_opcion_id"],
+                "indice_original": op["_indice_original"],
+            }
+            for op in opciones_con_mapa
+        }
+
+    # Persist the shuffle map so responder can reconstruct opcion_id from indice_presentado
+    intento.mapa_presentacion_json = json.dumps(mapa_presentacion)
+    db.commit()
 
     intento._preguntas_presentadas = presentadas  # transitorio para el router
     return intento
@@ -216,3 +229,206 @@ def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:
         f"aprobado={intento.aprobado} correctas={correctas}/{total}"
     )
     return intento
+
+
+# ---------------------------------------------------------------------------
+# Reporte post-entrega, pendientes, historial e iniciar (Task 7)
+# ---------------------------------------------------------------------------
+
+def generar_reporte(db: Session, intento_id: int) -> dict:
+    """Genera el reporte completo de un intento ya entregado (RN-07: siempre feedback).
+
+    Incluye por cada respuesta: texto de la pregunta, explicación, opción elegida,
+    opción correcta y si acertó. La opción correcta SOLO se expone aquí, no en iniciar.
+    """
+    intento = db.query(IntentoExamen).filter(IntentoExamen.id == intento_id).first()
+    if intento is None:
+        raise ValueError("Intento no encontrado")
+    if intento.fecha_fin is None:
+        raise ValueError("El intento aún no ha sido entregado")
+
+    asignacion = db.query(AsignacionExamen).filter(
+        AsignacionExamen.id == intento.asignacion_id
+    ).first()
+    if asignacion is None:
+        raise ValueError("Asignación del intento no encontrada")
+
+    examen = db.query(Examen).filter(Examen.id == asignacion.examen_id).first()
+    if examen is None:
+        raise ValueError("Examen del intento no encontrado")
+
+    respuestas = list(
+        db.query(IntentoRespuesta)
+        .filter(IntentoRespuesta.intento_id == intento_id)
+        .all()
+    )
+    total = db.query(Pregunta).filter(
+        Pregunta.examen_id == examen.id,
+        Pregunta.activo == True,
+    ).count()
+
+    detalle = []
+    correctas = 0
+    for r in respuestas:
+        pregunta = db.query(Pregunta).filter(Pregunta.id == r.pregunta_id).first()
+        elegida = (
+            db.query(PreguntaOpcion).filter(PreguntaOpcion.id == r.opcion_elegida_id).first()
+            if r.opcion_elegida_id
+            else None
+        )
+        correcta = db.query(PreguntaOpcion).filter(
+            PreguntaOpcion.pregunta_id == r.pregunta_id,
+            PreguntaOpcion.es_correcta == True,
+        ).first()
+        if r.es_correcta:
+            correctas += 1
+        detalle.append({
+            "pregunta_texto": pregunta.texto if pregunta else "",
+            "explicacion": pregunta.explicacion if pregunta else None,
+            "indice_elegido_presentado": r.indice_opcion_presentada,
+            "texto_elegido": elegida.texto_opcion if elegida else None,
+            "texto_correcto": correcta.texto_opcion if correcta else "",
+            "es_correcta": bool(r.es_correcta),
+        })
+
+    return {
+        "intento_id": intento.id,
+        "examen_nombre": examen.nombre,
+        "producto": examen.producto,
+        "score": float(intento.score or 0),
+        "aprobado": bool(intento.aprobado),
+        "nota_minima": examen.nota_minima,
+        "correctas": correctas,
+        "total": total,
+        "fecha_fin": intento.fecha_fin,
+        "respuestas": detalle,
+    }
+
+
+def listar_pendientes(db: Session, evaluado_tipo: str, evaluado_id: int) -> list:
+    """Devuelve las asignaciones en estado 'pendiente' para el evaluado dado."""
+    q = db.query(AsignacionExamen).filter(AsignacionExamen.estado == "pendiente")
+    if evaluado_tipo == "RM":
+        q = q.filter(
+            AsignacionExamen.evaluado_tipo == "RM",
+            AsignacionExamen.evaluado_rm_id == evaluado_id,
+        )
+    else:  # GERENTE
+        q = q.filter(
+            AsignacionExamen.evaluado_tipo == "GERENTE",
+            AsignacionExamen.evaluado_gerente_id == evaluado_id,
+        )
+    return q.all()
+
+
+def listar_historial(db: Session, evaluado_tipo: str, evaluado_id: int) -> list:
+    """Devuelve todos los intentos (en cualquier estado) del evaluado, del más reciente al más antiguo."""
+    q = db.query(IntentoExamen)
+    if evaluado_tipo == "RM":
+        q = q.filter(
+            IntentoExamen.evaluado_tipo == "RM",
+            IntentoExamen.evaluado_rm_id == evaluado_id,
+        )
+    else:  # GERENTE
+        q = q.filter(
+            IntentoExamen.evaluado_tipo == "GERENTE",
+            IntentoExamen.evaluado_gerente_id == evaluado_id,
+        )
+    return q.order_by(IntentoExamen.fecha_inicio.desc()).all()
+
+
+def iniciar_para_evaluado(
+    db: Session,
+    examen_id: int,
+    evaluado_tipo: str,
+    evaluado_id: int,
+    contexto: dict,
+) -> dict:
+    """Localiza la asignación pendiente del evaluado para el examen, crea el intento
+    y construye el payload IntentoIniciado SIN exponer la opción correcta.
+
+    Scope enforcement: 403 si no existe una asignación pendiente para este evaluado
+    exacto en este examen.
+    """
+    # Buscar asignación pendiente que pertenezca a este evaluado
+    q = db.query(AsignacionExamen).filter(
+        AsignacionExamen.examen_id == examen_id,
+        AsignacionExamen.estado == "pendiente",
+    )
+    if evaluado_tipo == "RM":
+        q = q.filter(
+            AsignacionExamen.evaluado_tipo == "RM",
+            AsignacionExamen.evaluado_rm_id == evaluado_id,
+        )
+    else:
+        q = q.filter(
+            AsignacionExamen.evaluado_tipo == "GERENTE",
+            AsignacionExamen.evaluado_gerente_id == evaluado_id,
+        )
+    asignacion = q.first()
+    if asignacion is None:
+        raise PermissionError("Sin asignación pendiente para este evaluado en el examen indicado")
+
+    # preparar_intento levanta ValueError si la asignación no es tomable (RN-06, RN-01)
+    intento = preparar_intento(db, asignacion, evaluado_tipo, evaluado_id, contexto)
+
+    # Obtener el examen para el nombre y tiempo_limite_min
+    examen = db.query(Examen).filter(Examen.id == examen_id).first()
+
+    # Construir payload público: opciones sin _opcion_id ni _indice_original (no-leak)
+    preguntas_publicas = []
+    for p in intento._preguntas_presentadas:
+        opciones_publicas = [
+            {
+                "indice_presentado": op["indice_presentado"],
+                "texto_opcion": op["texto_opcion"],
+            }
+            for op in p["opciones"]
+        ]
+        preguntas_publicas.append({
+            "pregunta_id": p["pregunta_id"],
+            "tipo": p["tipo"],
+            "escenario": p["escenario"],
+            "texto": p["texto"],
+            "opciones": opciones_publicas,
+        })
+
+    return {
+        "intento_id": intento.id,
+        "examen_nombre": examen.nombre if examen else "",
+        "tiempo_limite_min": examen.tiempo_limite_min if examen else None,
+        "preguntas": preguntas_publicas,
+    }
+
+
+def _reconstruir_mapa_opcion(db: Session, intento_id: int, pregunta_id: int, indice_presentado: int):
+    """Reconstruye indice_presentado → (opcion_id, indice_original) desde el mapa persistido en el intento.
+
+    El mapa se persiste en IntentoExamen.mapa_presentacion_json durante preparar_intento,
+    lo que garantiza que la traducción sea correcta incluso si rand_opciones=True barajó
+    las opciones de una forma no repetible.
+
+    Fallback: si el mapa no existe (intentos creados antes de esta columna), busca por
+    indice_original == indice_presentado (equivalente a sin-barajado).
+
+    Retorna (opcion_id, indice_presentado, indice_original).
+    """
+    intento = db.query(IntentoExamen).filter(IntentoExamen.id == intento_id).first()
+    if intento is None:
+        raise ValueError("Intento no encontrado")
+
+    if intento.mapa_presentacion_json:
+        mapa = json.loads(intento.mapa_presentacion_json)
+        pregunta_mapa = mapa.get(str(pregunta_id), {})
+        entrada = pregunta_mapa.get(str(indice_presentado))
+        if entrada:
+            return entrada["opcion_id"], indice_presentado, entrada["indice_original"]
+
+    # Fallback: sin rand_opciones → indice_presentado == indice_original
+    opcion = db.query(PreguntaOpcion).filter(
+        PreguntaOpcion.pregunta_id == pregunta_id,
+        PreguntaOpcion.indice_original == indice_presentado,
+    ).first()
+    if opcion is None:
+        raise ValueError(f"Índice presentado {indice_presentado} no válido para pregunta {pregunta_id}")
+    return opcion.id, indice_presentado, opcion.indice_original

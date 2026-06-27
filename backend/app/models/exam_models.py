@@ -125,6 +125,10 @@ class IntentoExamen(Base):
     aprobado: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     tiempo_usado_seg: Mapped[int | None] = mapped_column(Integer, nullable=True)
     orden_preguntas_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Persists the per-pregunta option shuffle map so responder can reconstruct
+    # indice_presentado → opcion_id without replaying the RNG.
+    # Format: { str(pregunta_id): { str(indice_presentado): {"opcion_id": int, "indice_original": int} } }
+    mapa_presentacion_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(400), nullable=True)
     device_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     plataforma: Mapped[str | None] = mapped_column(String(40), nullable=True)
