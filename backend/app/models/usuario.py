@@ -16,6 +16,7 @@ class Rol(str, PyEnum):
     GERENTE_MARCA          = "GERENTE_MARCA"
     REPRESENTANTE_MEDICO   = "REPRESENTANTE_MEDICO"
     CONSULTA               = "CONSULTA"
+    CAPACITACION           = "CAPACITACION"
 
 class Usuario(Base):
     __tablename__ = "DIM_Usuario"
