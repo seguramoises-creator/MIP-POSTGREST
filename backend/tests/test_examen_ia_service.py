@@ -27,3 +27,15 @@ def test_validar_correcta_fuera_de_rango_falla():
 def test_validar_caso_sin_escenario_falla():
     with pytest.raises(ValueError):
         ia.validar_preguntas_generadas([_q(tipo="caso")])
+
+
+def test_validar_correcta_booleano_falla():
+    with pytest.raises(ValueError):
+        ia.validar_preguntas_generadas([_q(correcta=True)])
+
+
+def test_validar_no_lista_falla():
+    with pytest.raises(ValueError):
+        ia.validar_preguntas_generadas("no soy lista")
+    with pytest.raises(ValueError):
+        ia.validar_preguntas_generadas([])
