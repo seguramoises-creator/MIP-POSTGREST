@@ -85,7 +85,7 @@ def eliminar_pregunta(
     current_user=RequireCapacitacion,
 ):
     try:
-        examen_service.eliminar_pregunta(db, pregunta_id)
+        examen_service.eliminar_pregunta(db, examen_id, pregunta_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
@@ -97,4 +97,7 @@ def reordenar_preguntas(
     db: Session = Depends(get_db),
     current_user=RequireCapacitacion,
 ):
-    examen_service.reordenar_preguntas(db, examen_id, orden_ids)
+    try:
+        examen_service.reordenar_preguntas(db, examen_id, orden_ids)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

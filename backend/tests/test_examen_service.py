@@ -3,7 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from app.models.usuario import Rol
-from app.schemas.examenes import ExamenCrear
+from app.schemas.examenes import ExamenCrear, PreguntaCrear, PreguntaOpcionCrear
 from app.services import examen_service
 
 
@@ -52,7 +52,6 @@ def test_publicar_examen_no_borrador_falla(monkeypatch):
 # ---------------------------------------------------------------------------
 # Task 3: CRUD de preguntas/opciones
 # ---------------------------------------------------------------------------
-from app.schemas.examenes import PreguntaCrear, PreguntaOpcionCrear
 
 
 def _pcrear(n_correctas=1):
@@ -76,3 +75,12 @@ def test_agregar_pregunta_exige_una_correcta(monkeypatch):
         examen_service.agregar_pregunta(db, 1, _pcrear(n_correctas=0))
     with pytest.raises(ValueError):
         examen_service.agregar_pregunta(db, 1, _pcrear(n_correctas=2))
+
+
+def test_reordenar_preguntas_valida_ids_exactos():
+    """reordenar_preguntas debe alzar ValueError si orden_ids no coincide exactamente."""
+    db = MagicMock()
+    # Stub: el examen 1 tiene las preguntas con id 1 y 2
+    db.query.return_value.filter.return_value.all.return_value = [(1,), (2,)]
+    with pytest.raises(ValueError, match="orden_ids debe contener exactamente"):
+        examen_service.reordenar_preguntas(db, examen_id=1, orden_ids=[1, 99])
