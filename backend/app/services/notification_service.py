@@ -220,3 +220,50 @@ def notificar_reconocimiento_otorgado(
 
     asunto = f"¡Felicitaciones! Recibiste el premio {premio.nombre}"
     return _enviar(rm.email, asunto, cuerpo)
+
+
+def notificar_resultado_examen(
+    destinatario: str,
+    nombre_visitador: str,
+    examen_nombre: str,
+    producto: Optional[str],
+    score,
+    aprobado: bool,
+    correctas: int,
+    total: int,
+    fecha_fin: Optional[str] = None,
+    link: Optional[str] = None,
+) -> bool:
+    """
+    Notifica al evaluado el resultado de un examen entregado (spec §8).
+
+    Retorna True si el correo se envió; False si las notificaciones están
+    deshabilitadas o no hay destinatario. Nunca lanza — el llamador no debe
+    interrumpir la entrega del examen por un fallo de notificación.
+    """
+    if not _habilitado() or not destinatario:
+        return False
+
+    estado = "APROBADO" if aprobado else "REPROBADO"
+    color = "#2e7d32" if aprobado else "#c62828"
+    prod = f"<li>Producto: <strong>{producto}</strong></li>" if producto else ""
+    enlace = (f"<p><a href='{link}'>Ver el reporte en la plataforma</a></p>" if link else "")
+    fecha = f"<li>Fecha: <strong>{fecha_fin}</strong></li>" if fecha_fin else ""
+
+    cuerpo = f"""<html><body style="font-family:Arial,sans-serif;color:#333;">
+  <h2>Resultado de Examen</h2>
+  <p>Hola <strong>{nombre_visitador}</strong>, este es el resultado de tu examen:</p>
+  <ul>
+    <li>Examen: <strong>{examen_nombre}</strong></li>
+    {prod}
+    <li>Score: <strong>{score}%</strong></li>
+    <li>Estado: <strong style="color:{color};">{estado}</strong></li>
+    <li>Respuestas correctas: <strong>{correctas} de {total}</strong></li>
+    {fecha}
+  </ul>
+  {enlace}
+  {_pie_pagina()}
+</body></html>"""
+
+    asunto = f"Resultado de Examen - {examen_nombre} - {score}%"
+    return _enviar(destinatario, asunto, cuerpo)

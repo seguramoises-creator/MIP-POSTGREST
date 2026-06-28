@@ -4,10 +4,16 @@ import {
   RadioGroup, FormControlLabel, Radio, Divider, Alert, CircularProgress,
 } from '@mui/material';
 import { AccessTime, CheckCircle, Cancel, Assignment } from '@mui/icons-material';
+import { History } from '@mui/icons-material';
 import {
-  misPendientes, iniciarExamen, responder, entregar,
+  misPendientes, iniciarExamen, responder, entregar, miHistorial,
   type Asignacion, type IntentoIniciado, type ReporteIntento,
 } from '../../services/examenes.service';
+
+interface IntentoHistorial {
+  intento_id: number; fecha_fin: string | null;
+  score: number | null; aprobado: boolean | null; tiempo_usado_seg: number | null;
+}
 
 type Vista = 'lista' | 'tomando' | 'reporte';
 
@@ -26,6 +32,7 @@ export default function MisExamenes() {
   const [segRestantes, setSegRestantes] = useState<number | null>(null);
   const [reporte, setReporte] = useState<ReporteIntento | null>(null);
   const [enviando, setEnviando] = useState(false);
+  const [historial, setHistorial] = useState<IntentoHistorial[] | null>(null);
 
   const cargarPendientes = useCallback(() => {
     setCargando(true);
@@ -143,6 +150,38 @@ export default function MisExamenes() {
             </Card>
           ))}
         </Stack>
+
+        {!noEvaluado && (
+          <Box sx={{ mt: 3 }}>
+            <Button startIcon={<History />} onClick={() => {
+              if (historial === null) miHistorial().then(setHistorial).catch(() => setHistorial([]));
+              else setHistorial(null);
+            }}>
+              {historial === null ? 'Ver mi historial' : 'Ocultar historial'}
+            </Button>
+            {historial !== null && (
+              <Stack spacing={1} sx={{ mt: 1.5 }}>
+                {historial.length === 0 && <Alert severity="info">Aún no has tomado exámenes.</Alert>}
+                {historial.map((h) => (
+                  <Card key={h.intento_id} variant="outlined">
+                    <CardContent sx={{ py: 1, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                      <Chip
+                        label={h.score != null ? `${h.score}%` : '—'}
+                        color={h.aprobado ? 'success' : h.aprobado === false ? 'error' : 'default'}
+                      />
+                      <Typography variant="body2" sx={{ flex: 1 }}>
+                        Intento #{h.intento_id} · {h.aprobado ? 'Aprobado' : h.aprobado === false ? 'Reprobado' : 'En curso'}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {h.fecha_fin ? new Date(h.fecha_fin).toLocaleString() : 'sin entregar'}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                ))}
+              </Stack>
+            )}
+          </Box>
+        )}
       </Box>
     );
   }

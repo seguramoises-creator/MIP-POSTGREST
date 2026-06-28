@@ -319,7 +319,40 @@ def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:
     except Exception as e:  # noqa: BLE001
         logger.error(f"Puente EVAL_CONOCIMIENTOS falló (no bloquea entrega): {e}")
 
+    # Correo de resultado si la asignación lo pide (spec §8). No-op si MAIL_SERVER
+    # está vacío o el evaluado no tiene email. Nunca rompe la entrega.
+    if asignacion is not None and getattr(asignacion, "notif_activa", False):
+        try:
+            _notificar_resultado_examen(db, intento, examen, correctas, total)
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Correo de resultado falló (no bloquea entrega): {e}")
+
     return intento
+
+
+def _notificar_resultado_examen(db, intento, examen, correctas: int, total: int) -> None:
+    """Resuelve el email del evaluado (vía su usuario) y envía el correo de resultado."""
+    from app.models.usuario import Usuario
+    from app.services import notification_service
+
+    q = db.query(Usuario)
+    if intento.evaluado_tipo == "RM":
+        usuario = q.filter(Usuario.rm_id == intento.evaluado_rm_id).first()
+    else:
+        usuario = q.filter(Usuario.gerente_id == intento.evaluado_gerente_id).first()
+    if usuario is None or not usuario.email:
+        return
+    notification_service.notificar_resultado_examen(
+        destinatario=usuario.email,
+        nombre_visitador=usuario.nombre_completo or usuario.username,
+        examen_nombre=examen.nombre,
+        producto=examen.producto,
+        score=float(intento.score) if intento.score is not None else 0,
+        aprobado=bool(intento.aprobado),
+        correctas=correctas,
+        total=total,
+        fecha_fin=str(intento.fecha_fin) if intento.fecha_fin else None,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -2,12 +2,12 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Divider,
   Table, TableHead, TableRow, TableCell, TableBody, Tabs, Tab, Alert, Checkbox,
-  FormControlLabel, CircularProgress, Divider as MuiDivider,
+  FormControlLabel, CircularProgress, Divider as MuiDivider, IconButton,
 } from '@mui/material';
-import { Add, AutoAwesome, UploadFile, CheckCircle } from '@mui/icons-material';
+import { Add, AutoAwesome, UploadFile, CheckCircle, DeleteOutline } from '@mui/icons-material';
 import {
   listarExamenes, crearExamen, agregarPregunta, publicarExamen, asignarExamen,
-  resultadosExamen, analisisPreguntas, listarPreguntasExamen,
+  resultadosExamen, analisisPreguntas, listarPreguntasExamen, eliminarPregunta,
   generarExamenIA, jobEstadoIA,
   type Examen, type OpcionCrear, type EvaluadoRef, type ResultadosExamen,
   type AnalisisPregunta, type PreguntaConOpciones,
@@ -89,6 +89,11 @@ export default function Examenes() {
   const cargarPreguntas = useCallback((id: number) => {
     listarPreguntasExamen(id).then(setPreguntasEx).catch(() => setPreguntasEx([]));
   }, []);
+  async function handleEliminarPregunta(preguntaId: number) {
+    if (!sel) return;
+    try { await eliminarPregunta(sel.id, preguntaId); cargarPreguntas(sel.id); }
+    catch { setMsg({ tipo: 'error', texto: 'No se pudo eliminar la pregunta.' }); }
+  }
   useEffect(() => { if (sel && tab === 0) cargarPreguntas(sel.id); }, [sel, tab, cargarPreguntas]);
 
   // Pregunta
@@ -266,10 +271,17 @@ export default function Examenes() {
                     {preguntasEx.map((p, i) => (
                       <Card key={p.id} variant="outlined">
                         <CardContent sx={{ py: 1.25 }}>
-                          <Typography variant="body2" fontWeight={600}>
-                            {i + 1}. {p.texto}
-                            {p.tipo === 'caso' && <Chip size="small" label="caso" sx={{ ml: 1 }} />}
-                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                            <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
+                              {i + 1}. {p.texto}
+                              {p.tipo === 'caso' && <Chip size="small" label="caso" sx={{ ml: 1 }} />}
+                            </Typography>
+                            {sel.estado === 'borrador' && (
+                              <IconButton size="small" color="error" onClick={() => handleEliminarPregunta(p.id)} title="Eliminar pregunta">
+                                <DeleteOutline fontSize="small" />
+                              </IconButton>
+                            )}
+                          </Box>
                           {p.escenario && (
                             <Typography variant="caption" color="text.secondary" display="block">{p.escenario}</Typography>
                           )}
