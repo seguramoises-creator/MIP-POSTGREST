@@ -76,6 +76,19 @@ export interface AnalisisPregunta {
   total_respuestas: number; incorrectas: number; error_pct: number;
 }
 
+export interface OpcionRevision {
+  id: number; texto_opcion: string; indice_original: number; es_correcta: boolean;
+}
+export interface PreguntaConOpciones {
+  id: number; examen_id: number; tipo: string; escenario: string | null;
+  texto: string; explicacion: string | null; orden: number; opciones: OpcionRevision[];
+}
+export interface GenerarIAResp { job_id: number; examen_id: number; estado: string; }
+export interface JobIAEstado {
+  job_id: number; estado: string; mensaje_error: string | null;
+  examen_id: number | null; total_preguntas: number;
+}
+
 // ── Capacitación ──────────────────────────────────────────────────────
 export const listarExamenes = () => api.get<Examen[]>('/examenes').then(r => r.data);
 export const crearExamen = (d: ExamenCrear) => api.post<Examen>('/examenes', d).then(r => r.data);
@@ -91,6 +104,28 @@ export const resultadosExamen = (examenId: number) =>
   api.get<ResultadosExamen>(`/examenes/${examenId}/resultados`).then(r => r.data);
 export const analisisPreguntas = (examenId: number) =>
   api.get<AnalisisPregunta[]>(`/examenes/${examenId}/analisis-preguntas`).then(r => r.data);
+export const listarPreguntasExamen = (examenId: number) =>
+  api.get<PreguntaConOpciones[]>(`/examenes/${examenId}/preguntas`).then(r => r.data);
+
+// ── Generación con IA ─────────────────────────────────────────────────
+export interface GenerarIAParams {
+  nombre: string; producto?: string; n_multi: number; n_casos: number;
+  texto_pegado?: string; archivo?: File | null;
+}
+export const generarExamenIA = (p: GenerarIAParams) => {
+  const fd = new FormData();
+  fd.append('nombre', p.nombre);
+  if (p.producto) fd.append('producto', p.producto);
+  fd.append('n_multi', String(p.n_multi));
+  fd.append('n_casos', String(p.n_casos));
+  if (p.texto_pegado) fd.append('texto_pegado', p.texto_pegado);
+  if (p.archivo) fd.append('archivo', p.archivo);
+  return api.post<GenerarIAResp>('/examenes/generar-ia', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }).then(r => r.data);
+};
+export const jobEstadoIA = (jobId: number) =>
+  api.get<JobIAEstado>(`/examenes/generar-ia/${jobId}`).then(r => r.data);
 
 // ── Evaluado (visitador / gerente) ────────────────────────────────────
 export const misPendientes = () => api.get<Asignacion[]>('/examenes/mis-pendientes').then(r => r.data);

@@ -56,6 +56,7 @@ from app.schemas.examenes import (
     JobIAEstado,
     PreguntaCrear,
     PreguntaResponse,
+    PreguntaConOpcionesResponse,
     ReporteIntento,
     RespuestaEnviar,
 )
@@ -501,6 +502,23 @@ def analisis_preguntas_examen(
     """% de error por pregunta sobre todos los intentos (RN-08)."""
     from app.services import examen_resultados_service
     return examen_resultados_service.analisis_preguntas(db, examen_id)
+
+
+@router.get("/{examen_id}/preguntas", response_model=list[PreguntaConOpcionesResponse])
+def listar_preguntas_examen(
+    examen_id: int,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Lista las preguntas (con sus opciones) del examen — para revisión/edición
+    por Capacitación, incluidas las generadas por IA antes de publicar."""
+    from app.models.exam_models import Pregunta
+    return (
+        db.query(Pregunta)
+        .filter(Pregunta.examen_id == examen_id, Pregunta.activo == True)
+        .order_by(Pregunta.orden)
+        .all()
+    )
 
 
 # ===========================================================================

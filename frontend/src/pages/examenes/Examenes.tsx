@@ -2,14 +2,15 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Divider,
   Table, TableHead, TableRow, TableCell, TableBody, Tabs, Tab, Alert, Checkbox,
-  FormControlLabel,
+  FormControlLabel, CircularProgress, Divider as MuiDivider,
 } from '@mui/material';
-import { Add } from '@mui/icons-material';
+import { Add, AutoAwesome, UploadFile, CheckCircle } from '@mui/icons-material';
 import {
   listarExamenes, crearExamen, agregarPregunta, publicarExamen, asignarExamen,
-  resultadosExamen, analisisPreguntas,
+  resultadosExamen, analisisPreguntas, listarPreguntasExamen,
+  generarExamenIA, jobEstadoIA,
   type Examen, type OpcionCrear, type EvaluadoRef, type ResultadosExamen,
-  type AnalisisPregunta,
+  type AnalisisPregunta, type PreguntaConOpciones,
 } from '../../services/examenes.service';
 
 const opcionesVacias = (): OpcionCrear[] =>
@@ -39,6 +40,57 @@ export default function Examenes() {
     } catch { setMsg({ tipo: 'error', texto: 'No se pudo crear el examen.' }); }
   }
 
+  // Crear con IA
+  const [ia, setIa] = useState({ nombre: '', producto: '', n_multi: 5, n_casos: 0, texto_pegado: '' });
+  const [iaArchivo, setIaArchivo] = useState<File | null>(null);
+  const [iaJob, setIaJob] = useState<{ estado: string; mensaje?: string | null; total?: number } | null>(null);
+
+  function pollIA(jobId: number, examenId: number, intentos = 0) {
+    jobEstadoIA(jobId).then((j) => {
+      setIaJob({ estado: j.estado, mensaje: j.mensaje_error, total: j.total_preguntas });
+      if (j.estado === 'exitoso') {
+        setMsg({ tipo: 'success', texto: `IA generó ${j.total_preguntas} pregunta(s). Revísalas en la pestaña Preguntas y publica.` });
+        cargar();
+        listarExamenes().then((exs) => { const ex = exs.find((e) => e.id === examenId); if (ex) { setSel(ex); setTab(0); } });
+      } else if (j.estado === 'error') {
+        setMsg({ tipo: 'error', texto: `La generación con IA falló: ${j.mensaje_error || 'error desconocido'}` });
+      } else if (intentos < 40) {
+        setTimeout(() => pollIA(jobId, examenId, intentos + 1), 2500);
+      }
+    }).catch(() => setMsg({ tipo: 'error', texto: 'No se pudo consultar el estado de la generación IA.' }));
+  }
+
+  async function handleGenerarIA() {
+    if (!ia.nombre) return;
+    if (!iaArchivo && !ia.texto_pegado.trim()) {
+      setMsg({ tipo: 'error', texto: 'Sube un documento (PDF/Word/PPT) o pega texto fuente.' }); return;
+    }
+    setIaJob({ estado: 'enviando' });
+    try {
+      const resp = await generarExamenIA({
+        nombre: ia.nombre, producto: ia.producto || undefined,
+        n_multi: Number(ia.n_multi), n_casos: Number(ia.n_casos),
+        texto_pegado: ia.texto_pegado || undefined, archivo: iaArchivo,
+      });
+      setIaJob({ estado: 'procesando' });
+      setMsg({ tipo: 'success', texto: 'Documento recibido. La IA está generando las preguntas…' });
+      pollIA(resp.job_id, resp.examen_id);
+      setIa({ nombre: '', producto: '', n_multi: 5, n_casos: 0, texto_pegado: '' });
+      setIaArchivo(null);
+    } catch (e: unknown) {
+      const detalle = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setIaJob(null);
+      setMsg({ tipo: 'error', texto: `No se pudo iniciar la generación con IA. ${detalle || ''}` });
+    }
+  }
+
+  // Listado de preguntas del examen (revisión)
+  const [preguntasEx, setPreguntasEx] = useState<PreguntaConOpciones[]>([]);
+  const cargarPreguntas = useCallback((id: number) => {
+    listarPreguntasExamen(id).then(setPreguntasEx).catch(() => setPreguntasEx([]));
+  }, []);
+  useEffect(() => { if (sel && tab === 0) cargarPreguntas(sel.id); }, [sel, tab, cargarPreguntas]);
+
   // Pregunta
   const [preg, setPreg] = useState({ texto: '', explicacion: '', opciones: opcionesVacias() });
   function setOpcion(i: number, campo: keyof OpcionCrear, valor: string | boolean) {
@@ -56,6 +108,7 @@ export default function Examenes() {
       await agregarPregunta(sel.id, { tipo: 'multi', texto: preg.texto, explicacion: preg.explicacion || null, opciones: preg.opciones });
       setPreg({ texto: '', explicacion: '', opciones: opcionesVacias() });
       setMsg({ tipo: 'success', texto: 'Pregunta agregada.' });
+      cargarPreguntas(sel.id);
     } catch { setMsg({ tipo: 'error', texto: 'Revisa que haya exactamente 1 opción correcta y el examen esté en borrador.' }); }
   }
   async function handlePublicar() {
@@ -115,6 +168,49 @@ export default function Examenes() {
             </CardContent>
           </Card>
 
+          <Card variant="outlined" sx={{ mb: 2, borderColor: 'secondary.main' }}>
+            <CardContent>
+              <Typography fontWeight={600} gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AutoAwesome color="secondary" fontSize="small" /> Crear examen con IA
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Sube el manual/documento (PDF, Word o PPT) o pega el texto, y la IA elabora las preguntas (quedan en borrador para tu revisión).
+              </Typography>
+              <Stack spacing={1.5}>
+                <TextField label="Nombre del examen" size="small" value={ia.nombre} onChange={(e) => setIa({ ...ia, nombre: e.target.value })} />
+                <TextField label="Producto" size="small" value={ia.producto} onChange={(e) => setIa({ ...ia, producto: e.target.value })} />
+                <Stack direction="row" spacing={1.5}>
+                  <TextField label="Opción múltiple" type="number" size="small" value={ia.n_multi} onChange={(e) => setIa({ ...ia, n_multi: Number(e.target.value) })} />
+                  <TextField label="Casos clínicos" type="number" size="small" value={ia.n_casos} onChange={(e) => setIa({ ...ia, n_casos: Number(e.target.value) })} />
+                </Stack>
+                <Button component="label" variant="outlined" startIcon={<UploadFile />} size="small">
+                  {iaArchivo ? iaArchivo.name : 'Subir documento (PDF/Word/PPT)'}
+                  <input hidden type="file" accept=".pdf,.docx,.pptx,.txt"
+                         onChange={(e) => setIaArchivo(e.target.files?.[0] ?? null)} />
+                </Button>
+                <TextField label="…o pega el texto fuente" size="small" multiline minRows={2}
+                           value={ia.texto_pegado} onChange={(e) => setIa({ ...ia, texto_pegado: e.target.value })} />
+                <Button variant="contained" color="secondary" startIcon={<AutoAwesome />}
+                        onClick={handleGenerarIA}
+                        disabled={!ia.nombre || iaJob?.estado === 'procesando' || iaJob?.estado === 'enviando'}>
+                  Generar con IA
+                </Button>
+                {iaJob && (iaJob.estado === 'enviando' || iaJob.estado === 'procesando') && (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <CircularProgress size={18} />
+                    <Typography variant="body2">Generando preguntas… (esto puede tardar unos segundos)</Typography>
+                  </Stack>
+                )}
+                {iaJob?.estado === 'exitoso' && (
+                  <Alert severity="success">Generadas {iaJob.total} pregunta(s). Revísalas en la pestaña Preguntas.</Alert>
+                )}
+                {iaJob?.estado === 'error' && (
+                  <Alert severity="error">Falló: {iaJob.mensaje || 'error desconocido'}</Alert>
+                )}
+              </Stack>
+            </CardContent>
+          </Card>
+
           <Card variant="outlined">
             <CardContent>
               <Typography fontWeight={600} gutterBottom>Exámenes</Typography>
@@ -159,6 +255,41 @@ export default function Examenes() {
                       <Button variant="contained" color="success" onClick={handlePublicar} disabled={sel.estado !== 'borrador'}>Publicar</Button>
                     </Stack>
                     {sel.estado !== 'borrador' && <Alert severity="info">El examen ya no está en borrador; no se pueden editar preguntas.</Alert>}
+
+                    <MuiDivider sx={{ my: 1 }} />
+                    <Typography fontWeight={600}>
+                      Preguntas del examen ({preguntasEx.length})
+                    </Typography>
+                    {preguntasEx.length === 0 && (
+                      <Alert severity="info">Aún no hay preguntas. Agrégalas manualmente o genéralas con IA.</Alert>
+                    )}
+                    {preguntasEx.map((p, i) => (
+                      <Card key={p.id} variant="outlined">
+                        <CardContent sx={{ py: 1.25 }}>
+                          <Typography variant="body2" fontWeight={600}>
+                            {i + 1}. {p.texto}
+                            {p.tipo === 'caso' && <Chip size="small" label="caso" sx={{ ml: 1 }} />}
+                          </Typography>
+                          {p.escenario && (
+                            <Typography variant="caption" color="text.secondary" display="block">{p.escenario}</Typography>
+                          )}
+                          <Stack sx={{ mt: 0.5 }}>
+                            {p.opciones.map((o) => (
+                              <Typography key={o.id} variant="body2"
+                                          sx={{ display: 'flex', alignItems: 'center', gap: 0.5,
+                                                color: o.es_correcta ? 'success.main' : 'text.secondary' }}>
+                                {o.es_correcta && <CheckCircle fontSize="inherit" />} {o.texto_opcion}
+                              </Typography>
+                            ))}
+                          </Stack>
+                          {p.explicacion && (
+                            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, fontStyle: 'italic' }}>
+                              {p.explicacion}
+                            </Typography>
+                          )}
+                        </CardContent>
+                      </Card>
+                    ))}
                   </Stack>
                 )}
 

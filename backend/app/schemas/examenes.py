@@ -67,6 +67,19 @@ class PreguntaResponse(BaseModel):
     orden: int
 
 
+class PreguntaConOpcionesResponse(BaseModel):
+    """Pregunta + sus opciones (incluye es_correcta) — para revisión de Capacitación."""
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    examen_id: int
+    tipo: str
+    escenario: str | None
+    texto: str
+    explicacion: str | None
+    orden: int
+    opciones: list[OpcionResponse]
+
+
 # EvaluadoRef must be defined BEFORE AsignacionCrear to avoid forward references
 class EvaluadoRef(BaseModel):
     tipo: str  # RM | GERENTE
