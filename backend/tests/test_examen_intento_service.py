@@ -230,7 +230,7 @@ def test_entregar_dos_veces_falla(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def _build_entregar_db(*, aprobado_esperado=True, intentos_max=None, intentos_usados=0,
-                        nota_minima=70, score_esperado=80.0):
+                        nota_minima=70, score_esperado=80.0, fecha_inicio=None):
     """Construye un db mock con el orden de queries que entregar_intento realiza."""
     from tests.conftest import FakeQuery
 
@@ -239,7 +239,8 @@ def _build_entregar_db(*, aprobado_esperado=True, intentos_max=None, intentos_us
     # Intento sin fecha_fin (no entregado aún)
     intento = SimpleNamespace(
         id=10, fecha_fin=None, asignacion_id=5,
-        fecha_inicio=datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc),
+        fecha_inicio=(fecha_inicio if fecha_inicio is not None
+                      else datetime(2026, 6, 27, 10, 0, 0, tzinfo=timezone.utc)),
         score=None, aprobado=None, tiempo_usado_seg=None,
     )
 
@@ -296,6 +297,15 @@ def test_entregar_intento_happy_path_aprobado():
     assert asignacion.intentos_usados == 1
     assert asignacion.estado == "completado"
     db.commit.assert_called()
+
+
+def test_entregar_intento_fecha_inicio_naive_no_rompe():
+    """Regresión: fecha_inicio naive (como viene de SQL Server) no debe romper la
+    resta con fecha_fin (aware) al calcular tiempo_usado_seg."""
+    naive = datetime(2026, 6, 27, 10, 0, 0)  # sin tzinfo, como lo devuelve la BD
+    db, intento, _ = _build_entregar_db(nota_minima=70, fecha_inicio=naive)
+    result = svc.entregar_intento(db, 10)  # no debe lanzar TypeError
+    assert result.tiempo_usado_seg is not None and result.tiempo_usado_seg >= 0
 
 
 # ---------------------------------------------------------------------------

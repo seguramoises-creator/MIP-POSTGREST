@@ -286,9 +286,12 @@ def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:
     intento.fecha_fin = datetime.now(timezone.utc)
 
     if intento.fecha_inicio is not None:
-        intento.tiempo_usado_seg = int(
-            (intento.fecha_fin - intento.fecha_inicio).total_seconds()
-        )
+        # fecha_inicio viene de SQL Server como naive; normalizar a UTC aware
+        # antes de restar (fecha_fin es aware) para evitar TypeError.
+        ini = intento.fecha_inicio
+        if ini.tzinfo is None:
+            ini = ini.replace(tzinfo=timezone.utc)
+        intento.tiempo_usado_seg = int((intento.fecha_fin - ini).total_seconds())
 
     asignacion.intentos_usados += 1
 
