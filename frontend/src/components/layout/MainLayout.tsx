@@ -2,22 +2,45 @@ import { Outlet, useNavigate } from 'react-router-dom';
 import {
   Box, AppBar, Toolbar, Typography, IconButton,
   Tooltip, Avatar, Menu, MenuItem, Divider,
+  Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Alert, Stack,
 } from '@mui/material';
-import { Logout, AccountCircle } from '@mui/icons-material';
+import { Logout, AccountCircle, LockReset } from '@mui/icons-material';
 import { useState } from 'react';
 import Sidebar, { DRAWER_WIDTH } from './Sidebar';
 import { useAuthStore } from '../../store/auth.store';
 import { authService } from '../../services/auth.service';
+import { api } from '../../services/api';
 
 export default function MainLayout() {
   const navigate = useNavigate();
   const { nombreCompleto, accessToken, logout } = useAuthStore();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwActual, setPwActual] = useState('');
+  const [pwNueva, setPwNueva] = useState('');
+  const [pwMsg, setPwMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
+  const [pwSaving, setPwSaving] = useState(false);
+
   const handleLogout = async () => {
     await authService.logout(accessToken || '');
     logout();
     navigate('/login');
+  };
+
+  const abrirCambioPassword = () => { setAnchorEl(null); setPwMsg(null); setPwActual(''); setPwNueva(''); setPwOpen(true); };
+
+  const handleCambiarPassword = async () => {
+    setPwSaving(true); setPwMsg(null);
+    try {
+      await api.post('/auth/change-password', { password_actual: pwActual, password_nuevo: pwNueva });
+      setPwMsg({ tipo: 'success', texto: 'Contraseña actualizada correctamente.' });
+      setPwActual(''); setPwNueva('');
+    } catch (e: unknown) {
+      const detalle = (e as { response?: { data?: { detail?: string | { msg?: string }[] } } })?.response?.data?.detail;
+      const texto = Array.isArray(detalle) ? (detalle[0]?.msg || 'Datos inválidos') : (detalle || 'No se pudo cambiar la contraseña.');
+      setPwMsg({ tipo: 'error', texto: String(texto) });
+    } finally { setPwSaving(false); }
   };
 
   return (
@@ -64,10 +87,34 @@ export default function MainLayout() {
             <AccountCircle sx={{ mr: 1 }} /> {nombreCompleto}
           </MenuItem>
           <Divider />
+          <MenuItem onClick={abrirCambioPassword}>
+            <LockReset sx={{ mr: 1 }} /> Cambiar contraseña
+          </MenuItem>
           <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
             <Logout sx={{ mr: 1 }} /> Cerrar sesión
           </MenuItem>
         </Menu>
+
+        <Dialog open={pwOpen} onClose={() => setPwOpen(false)} maxWidth="xs" fullWidth>
+          <DialogTitle>Cambiar contraseña</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              {pwMsg && <Alert severity={pwMsg.tipo}>{pwMsg.texto}</Alert>}
+              <TextField label="Contraseña actual" type="password" value={pwActual}
+                         onChange={(e) => setPwActual(e.target.value)} fullWidth autoComplete="current-password" />
+              <TextField label="Contraseña nueva" type="password" value={pwNueva}
+                         onChange={(e) => setPwNueva(e.target.value)} fullWidth autoComplete="new-password"
+                         helperText="Mín. 12 caracteres, con mayúscula, minúscula y número." />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setPwOpen(false)}>Cerrar</Button>
+            <Button variant="contained" onClick={handleCambiarPassword}
+                    disabled={pwSaving || !pwActual || !pwNueva}>
+              {pwSaving ? 'Guardando…' : 'Cambiar'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         <Box sx={{ flexGrow: 1, p: 3, bgcolor: '#f5f6fa' }}>
           <Outlet />
