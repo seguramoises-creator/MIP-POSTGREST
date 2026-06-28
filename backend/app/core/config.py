@@ -1,12 +1,12 @@
 """
 SCGCPR — Configuración Central
 Carga y valida todas las variables de entorno usando Pydantic Settings.
-FIX C-09: field_validator corregido a sintaxis Pydantic v2 (FieldValidationInfo).
+FIX C-09: field_validator corregido a sintaxis Pydantic v2 (ValidationInfo).
 FIX C-05: JWT_SECRET_KEY validado en startup — no permite el valor por defecto en producción.
 """
 from functools import lru_cache
 from typing import List
-from pydantic import field_validator, FieldValidationInfo
+from pydantic import field_validator, ValidationInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,11 +35,11 @@ class Settings(BaseSettings):
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
-    def build_db_url(cls, v: str, info: FieldValidationInfo) -> str:
+    def build_db_url(cls, v: str, info: ValidationInfo) -> str:
         """FIX C-09: usa info.data (Pydantic v2) en lugar de values.data (v1)."""
         if v:
             return v
-        data = info.data  # Pydantic v2: FieldValidationInfo.data
+        data = info.data  # Pydantic v2: ValidationInfo.data
         return (
             f"mssql+pymssql://{data.get('DB_USER')}:{data.get('DB_PASSWORD')}"
             f"@{data.get('DB_SERVER')}:{data.get('DB_PORT')}/{data.get('DB_NAME')}"
@@ -53,7 +53,7 @@ class Settings(BaseSettings):
 
     @field_validator("JWT_SECRET_KEY")
     @classmethod
-    def validate_secret_key(cls, v: str, info: FieldValidationInfo) -> str:
+    def validate_secret_key(cls, v: str, info: ValidationInfo) -> str:
         """FIX C-05: Rechaza el secreto por defecto en producción."""
         env = info.data.get("APP_ENV", "development")
         if env == "production" and v in ("change-me-in-production", "", "secret"):

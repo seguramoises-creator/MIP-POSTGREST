@@ -203,3 +203,22 @@ def refresh_token_endpoint(
 def get_me(current_user: Usuario = Depends(get_current_active_user)):
     """Retorna los datos del usuario autenticado."""
     return current_user
+
+
+@router.post("/change-password", response_model=Msg, summary="Cambiar contraseña")
+def change_password(
+    datos: PasswordChange,
+    request: Request,
+    current_user: Usuario = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Cambia la contraseña del usuario autenticado. Valida la contraseña actual y
+    aplica la política de complejidad (mín. 12, mayúscula, minúscula, número)."""
+    if not verify_password(datos.password_actual, current_user.hashed_password):
+        _registrar_auditoria(db, current_user, "CHANGE_PASSWORD", request, False,
+                             "Contraseña actual incorrecta")
+        raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
+    current_user.hashed_password = hash_password(datos.password_nuevo)
+    db.commit()
+    _registrar_auditoria(db, current_user, "CHANGE_PASSWORD", request, True)
+    return Msg(message="Contraseña actualizada correctamente")
