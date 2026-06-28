@@ -1,10 +1,10 @@
 import { useEffect, useState, Fragment } from 'react';
 import {
   Box, Typography, Card, CardContent, Table, TableHead, TableRow, TableCell,
-  TableBody, Chip, Alert, CircularProgress, Stack, Collapse, IconButton,
+  TableBody, Chip, Alert, CircularProgress, Stack, Collapse, IconButton, Button,
 } from '@mui/material';
-import { KeyboardArrowDown, KeyboardArrowRight, CheckCircle, Cancel } from '@mui/icons-material';
-import { resumenEquipo, type EquipoRM } from '../../services/examenes.service';
+import { KeyboardArrowDown, KeyboardArrowRight, CheckCircle, Cancel, FileDownload } from '@mui/icons-material';
+import { resumenEquipo, exportarEquipoExcel, type EquipoRM } from '../../services/examenes.service';
 
 export default function EquipoExamenes() {
   const [equipo, setEquipo] = useState<EquipoRM[] | null>(null);
@@ -31,7 +31,14 @@ export default function EquipoExamenes() {
 
   return (
     <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
-      <Typography variant="h5" fontWeight={700} gutterBottom>Exámenes — Mi Equipo</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+        <Typography variant="h5" fontWeight={700} gutterBottom>Exámenes — Mi Equipo</Typography>
+        {equipo && equipo.length > 0 && (
+          <Button startIcon={<FileDownload />} variant="outlined" onClick={() => exportarEquipoExcel()}>
+            Exportar a Excel
+          </Button>
+        )}
+      </Box>
       {error && <Alert severity="info" sx={{ mb: 2 }}>{error}</Alert>}
 
       {equipo && equipo.length > 0 && (

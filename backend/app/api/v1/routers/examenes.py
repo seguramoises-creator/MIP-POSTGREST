@@ -41,6 +41,7 @@ import json
 import os
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, UploadFile, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_active_user, get_db, require_roles
@@ -232,14 +233,11 @@ def resumen_capacitacion(
     return examen_resultados_service.resumen_capacitacion(db)
 
 
-@router.get("/equipo/resumen", response_model=list[dict])
-def resumen_equipo_examenes(
-    gerente_id: int | None = None,
-    db: Session = Depends(get_db),
-    current_user=RequireEquipo,
-):
-    """Resultados del equipo. Un GERENTE_DISTRITO ve solo su equipo (vía su
-    gerente_id); ADMIN/CAPACITACION pueden pasar ?gerente_id=."""
+_XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _resolver_gid_equipo(current_user, gerente_id: int | None) -> int:
+    """Resuelve el gerente_id del equipo: un GD se fuerza al suyo; ADMIN/CAPACITACION lo pasan."""
     rol = current_user.rol.value if hasattr(current_user.rol, "value") else str(current_user.rol)
     gid = gerente_id
     if rol == "GERENTE_DISTRITO":
@@ -248,8 +246,50 @@ def resumen_equipo_examenes(
             raise HTTPException(status_code=403, detail="Tu usuario no está vinculado a un gerente (gerente_id).")
     if not gid:
         raise HTTPException(status_code=400, detail="Indica el gerente_id del equipo.")
+    return gid
+
+
+@router.get("/equipo/resumen", response_model=list[dict])
+def resumen_equipo_examenes(
+    gerente_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user=RequireEquipo,
+):
+    """Resultados del equipo. Un GERENTE_DISTRITO ve solo su equipo (vía su
+    gerente_id); ADMIN/CAPACITACION pueden pasar ?gerente_id=."""
+    gid = _resolver_gid_equipo(current_user, gerente_id)
     from app.services import examen_resultados_service
     return examen_resultados_service.resumen_equipo(db, gid)
+
+
+@router.get("/equipo/resumen.xlsx")
+def exportar_equipo_excel(
+    gerente_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user=RequireEquipo,
+):
+    """Exporta a Excel los resultados de exámenes del equipo (una fila por examen de cada visitador)."""
+    gid = _resolver_gid_equipo(current_user, gerente_id)
+    from app.services import examen_resultados_service, exportacion_service
+    data = examen_resultados_service.resumen_equipo(db, gid)
+    filas = []
+    for rm in data:
+        prom = rm["promedio"] if rm["promedio"] is not None else ""
+        if not rm["examenes"]:
+            filas.append([rm["nombre"], "(sin exámenes)", "", "", "", prom])
+        for ex in rm["examenes"]:
+            filas.append([
+                rm["nombre"], ex["examen_nombre"],
+                ex["ultimo_score"] if ex["ultimo_score"] is not None else "",
+                "Sí" if ex["aprobado"] else "No", ex["estado"], prom,
+            ])
+    buf = exportacion_service._construir_workbook(
+        "Equipo - Exámenes",
+        ["Visitador", "Examen", "Último score", "Aprobado", "Estado", "Promedio RM"],
+        filas,
+    )
+    return StreamingResponse(buf, media_type=_XLSX_MEDIA,
+                             headers={"Content-Disposition": 'attachment; filename="examenes_equipo.xlsx"'})
 
 
 # ===========================================================================
@@ -512,6 +552,36 @@ def resultados_examen(
         return examen_resultados_service.resumen_examen(db, examen_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.get("/{examen_id}/resultados.xlsx")
+def exportar_resultados_excel(
+    examen_id: int,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Exporta a Excel el ranking de resultados del examen (último intento por evaluado)."""
+    from app.services import examen_resultados_service, exportacion_service
+    try:
+        res = examen_resultados_service.resumen_examen(db, examen_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    filas = [
+        [
+            f"{r['evaluado_tipo']} #{r['evaluado_rm_id'] or r['evaluado_gerente_id']}",
+            r["ultimo_score"] if r["ultimo_score"] is not None else "",
+            "Sí" if r["aprobado"] else "No",
+            r["intentos_usados"], r["estado"],
+        ]
+        for r in res["ranking"]
+    ]
+    buf = exportacion_service._construir_workbook(
+        f"Resultados - {res['nombre'][:25]}",
+        ["Evaluado", "Último score", "Aprobado", "Intentos", "Estado"],
+        filas,
+    )
+    return StreamingResponse(buf, media_type=_XLSX_MEDIA,
+                             headers={"Content-Disposition": f'attachment; filename="resultados_examen_{examen_id}.xlsx"'})
 
 
 @router.get("/{examen_id}/analisis-preguntas", response_model=list[dict])

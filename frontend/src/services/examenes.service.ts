@@ -142,6 +142,21 @@ export const resumenEquipo = (gerenteId?: number) =>
   api.get<EquipoRM[]>('/examenes/equipo/resumen', { params: gerenteId ? { gerente_id: gerenteId } : {} })
     .then(r => r.data);
 
+// ── Exportación a Excel ───────────────────────────────────────────────
+function descargarBlob(data: Blob, filename: string) {
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+export const exportarResultadosExcel = (examenId: number) =>
+  api.get(`/examenes/${examenId}/resultados.xlsx`, { responseType: 'blob' })
+    .then(r => descargarBlob(r.data as Blob, `resultados_examen_${examenId}.xlsx`));
+export const exportarEquipoExcel = () =>
+  api.get('/examenes/equipo/resumen.xlsx', { responseType: 'blob' })
+    .then(r => descargarBlob(r.data as Blob, 'examenes_equipo.xlsx'));
+
 // ── Evaluado (visitador / gerente) ────────────────────────────────────
 export const misPendientes = () => api.get<Asignacion[]>('/examenes/mis-pendientes').then(r => r.data);
 export const miHistorial = () => api.get<any[]>('/examenes/mi-historial').then(r => r.data);

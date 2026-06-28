@@ -4,11 +4,11 @@ import {
   Table, TableHead, TableRow, TableCell, TableBody, Tabs, Tab, Alert, Checkbox,
   FormControlLabel, CircularProgress, Divider as MuiDivider, IconButton,
 } from '@mui/material';
-import { Add, AutoAwesome, UploadFile, CheckCircle, DeleteOutline } from '@mui/icons-material';
+import { Add, AutoAwesome, UploadFile, CheckCircle, DeleteOutline, FileDownload } from '@mui/icons-material';
 import {
   listarExamenes, crearExamen, agregarPregunta, publicarExamen, asignarExamen,
   resultadosExamen, analisisPreguntas, listarPreguntasExamen, eliminarPregunta,
-  generarExamenIA, jobEstadoIA,
+  generarExamenIA, jobEstadoIA, exportarResultadosExcel,
   type Examen, type OpcionCrear, type EvaluadoRef, type ResultadosExamen,
   type AnalisisPregunta, type PreguntaConOpciones,
 } from '../../services/examenes.service';
@@ -326,7 +326,12 @@ export default function Examenes() {
                         <Kpi label="Asignados" valor={`${resultados.asignados}`} />
                       </Stack>
                     )}
-                    <Typography fontWeight={600} gutterBottom>Ranking (último intento)</Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography fontWeight={600}>Ranking (último intento)</Typography>
+                      <Button size="small" startIcon={<FileDownload />} onClick={() => exportarResultadosExcel(sel.id)}>
+                        Exportar a Excel
+                      </Button>
+                    </Box>
                     <Table size="small">
                       <TableHead><TableRow><TableCell>Evaluado</TableCell><TableCell>Score</TableCell><TableCell>Estado</TableCell></TableRow></TableHead>
                       <TableBody>
