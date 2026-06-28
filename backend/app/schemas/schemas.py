@@ -21,6 +21,7 @@ class UsuarioCreate(BaseModel):
     rol: str
     pais_codigo: Optional[str] = None
     rm_id: Optional[int] = None
+    gerente_id: Optional[int] = None
 
 class UsuarioResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -39,6 +40,8 @@ class UsuarioUpdate(BaseModel):
     rol: Optional[str] = None
     activo: Optional[bool] = None
     pais_codigo: Optional[str] = None
+    rm_id: Optional[int] = None
+    gerente_id: Optional[int] = None
 
 class PasswordChange(BaseModel):
     password_actual: str
