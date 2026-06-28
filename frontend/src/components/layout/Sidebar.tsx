@@ -30,7 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Exámenes',              path: '/examenes',      icon: <Quiz />,               roles: ['ADMIN', 'CAPACITACION', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO'] },
   { label: 'Mis Exámenes',          path: '/mis-examenes',  icon: <AssignmentTurnedIn />, roles: ['ADMIN', 'CAPACITACION', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'REPRESENTANTE_MEDICO'] },
   { label: 'Cobertura Predictiva',  path: '/cobertura-predictiva', icon: <TrackChanges />, roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA'] },
-  { label: 'Categorización Médica', path: '/categorizacion',icon: <LocalHospital />,      roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
+  { label: 'Categorización Médica', path: '/categorizacion',icon: <LocalHospital />,      roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'CONSULTA'] },
   { label: 'Reconocimiento',        path: '/reconocimiento',icon: <EmojiEvents />,        roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },
   { label: 'Carga Excel (ETL)',      path: '/etl',           icon: <CloudUpload />,        roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
   { label: 'Reportes',              path: '/reportes',      icon: <Assessment />,         roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },

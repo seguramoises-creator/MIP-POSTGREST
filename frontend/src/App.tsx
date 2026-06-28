@@ -66,7 +66,7 @@ function AppRoutes() {
         <Route path="productividad" element={<Productividad />} />
         <Route path="cobertura-predictiva" element={<CoberturaPredictiva />} />
         <Route path="coaching" element={<Coaching />} />
-        <Route path="categorizacion" element={<Categorizacion />} />
+        <Route path="categorizacion" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','CONSULTA']}><Categorizacion /></ProtectedRoute>} />
         <Route path="ranking" element={<Ranking />} />
         <Route path="reconocimiento" element={<Reconocimiento />} />
         <Route path="lsii" element={<Lsii />} />
