@@ -100,6 +100,50 @@ def analisis_preguntas(db: Session, examen_id: int) -> list[dict]:
     return salida
 
 
+def resumen_equipo(db: Session, gerente_id: int) -> list[dict]:
+    """Resultados de exámenes del equipo de un GD: cada RM (cuyo DIM_RM.gerente_id
+    coincide) con sus exámenes asignados, último score, aprobación y promedio."""
+    from app.models.dimensiones import RepresentanteMedico
+
+    rms = db.query(RepresentanteMedico).filter(
+        RepresentanteMedico.gerente_id == gerente_id).all()
+    salida = []
+    for rm in rms:
+        asigns = db.query(AsignacionExamen).filter(
+            AsignacionExamen.evaluado_tipo == "RM",
+            AsignacionExamen.evaluado_rm_id == rm.id,
+        ).all()
+        examenes_rm = []
+        scores = []
+        for a in asigns:
+            ex = db.query(Examen).filter(Examen.id == a.examen_id).first()
+            ultimo = (
+                db.query(IntentoExamen)
+                .filter(IntentoExamen.asignacion_id == a.id, IntentoExamen.fecha_fin.isnot(None))
+                .order_by(IntentoExamen.fecha_fin.desc())
+                .first()
+            )
+            sc = float(ultimo.score) if ultimo and ultimo.score is not None else None
+            if sc is not None:
+                scores.append(sc)
+            examenes_rm.append({
+                "examen_id": a.examen_id,
+                "examen_nombre": ex.nombre if ex else f"#{a.examen_id}",
+                "ultimo_score": sc,
+                "aprobado": bool(ultimo.aprobado) if ultimo else False,
+                "estado": a.estado,
+            })
+        salida.append({
+            "rm_id": rm.id,
+            "nombre": rm.nombre,
+            "asignados": len(asigns),
+            "completados": sum(1 for e in examenes_rm if e["estado"] == "completado"),
+            "promedio": round(sum(scores) / len(scores), 2) if scores else None,
+            "examenes": examenes_rm,
+        })
+    return salida
+
+
 def resumen_capacitacion(db: Session) -> list[dict]:
     """Tabla de exámenes con sus KPIs principales (dashboard de capacitación)."""
     examenes = db.query(Examen).filter(Examen.activo == True).order_by(Examen.id.desc()).all()

@@ -129,6 +129,19 @@ export const generarExamenIA = (p: GenerarIAParams) => {
 export const jobEstadoIA = (jobId: number) =>
   api.get<JobIAEstado>(`/examenes/generar-ia/${jobId}`).then(r => r.data);
 
+// ── GD: resultados de equipo ──────────────────────────────────────────
+export interface ExamenDeRM {
+  examen_id: number; examen_nombre: string; ultimo_score: number | null;
+  aprobado: boolean; estado: string;
+}
+export interface EquipoRM {
+  rm_id: number; nombre: string; asignados: number; completados: number;
+  promedio: number | null; examenes: ExamenDeRM[];
+}
+export const resumenEquipo = (gerenteId?: number) =>
+  api.get<EquipoRM[]>('/examenes/equipo/resumen', { params: gerenteId ? { gerente_id: gerenteId } : {} })
+    .then(r => r.data);
+
 // ── Evaluado (visitador / gerente) ────────────────────────────────────
 export const misPendientes = () => api.get<Asignacion[]>('/examenes/mis-pendientes').then(r => r.data);
 export const miHistorial = () => api.get<any[]>('/examenes/mi-historial').then(r => r.data);

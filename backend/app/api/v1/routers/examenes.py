@@ -110,6 +110,7 @@ def _validar_magic_bytes_ia(content: bytes, ext: str) -> bool:
 # ---------------------------------------------------------------------------
 
 RequireCapacitacion = Depends(require_roles(Rol.ADMIN, Rol.CAPACITACION))
+RequireEquipo = Depends(require_roles(Rol.ADMIN, Rol.CAPACITACION, Rol.GERENTE_DISTRITO))
 RequireAnyAuth = Depends(get_current_active_user)
 
 # ---------------------------------------------------------------------------
@@ -229,6 +230,26 @@ def resumen_capacitacion(
     """Dashboard de capacitación: tabla de exámenes con sus KPIs principales."""
     from app.services import examen_resultados_service
     return examen_resultados_service.resumen_capacitacion(db)
+
+
+@router.get("/equipo/resumen", response_model=list[dict])
+def resumen_equipo_examenes(
+    gerente_id: int | None = None,
+    db: Session = Depends(get_db),
+    current_user=RequireEquipo,
+):
+    """Resultados del equipo. Un GERENTE_DISTRITO ve solo su equipo (vía su
+    gerente_id); ADMIN/CAPACITACION pueden pasar ?gerente_id=."""
+    rol = current_user.rol.value if hasattr(current_user.rol, "value") else str(current_user.rol)
+    gid = gerente_id
+    if rol == "GERENTE_DISTRITO":
+        gid = getattr(current_user, "gerente_id", None)
+        if not gid:
+            raise HTTPException(status_code=403, detail="Tu usuario no está vinculado a un gerente (gerente_id).")
+    if not gid:
+        raise HTTPException(status_code=400, detail="Indica el gerente_id del equipo.")
+    from app.services import examen_resultados_service
+    return examen_resultados_service.resumen_equipo(db, gid)
 
 
 # ===========================================================================
