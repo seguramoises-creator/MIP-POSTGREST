@@ -18,6 +18,7 @@ export default function MisExamenes() {
   const [pendientes, setPendientes] = useState<Asignacion[]>([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [noEvaluado, setNoEvaluado] = useState(false);
 
   const [intento, setIntento] = useState<IntentoIniciado | null>(null);
   const [idx, setIdx] = useState(0);
@@ -28,9 +29,13 @@ export default function MisExamenes() {
 
   const cargarPendientes = useCallback(() => {
     setCargando(true);
+    setNoEvaluado(false);
     misPendientes()
       .then(setPendientes)
-      .catch(() => setError('No se pudieron cargar tus exámenes asignados.'))
+      .catch((err: { response?: { status?: number } }) => {
+        if (err?.response?.status === 403) setNoEvaluado(true);
+        else setError('No se pudieron cargar tus exámenes asignados.');
+      })
       .finally(() => setCargando(false));
   }, []);
 
@@ -110,7 +115,15 @@ export default function MisExamenes() {
       <Box sx={{ maxWidth: 760, mx: 'auto', p: { xs: 1.5, sm: 3 } }}>
         <Typography variant="h5" fontWeight={700} gutterBottom>Mis Exámenes</Typography>
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
-        {pendientes.length === 0 && <Alert severity="info">No tienes exámenes pendientes.</Alert>}
+        {noEvaluado ? (
+          <Alert severity="info">
+            Esta sección es para <strong>visitadores médicos</strong> o <strong>gerentes</strong> evaluados.
+            Tu usuario no está vinculado a un representante (rm_id) ni a un gerente, por lo que no tiene
+            exámenes asignados. Inicia sesión con un usuario evaluado para tomar exámenes.
+          </Alert>
+        ) : (
+          pendientes.length === 0 && <Alert severity="info">No tienes exámenes pendientes.</Alert>
+        )}
         <Stack spacing={1.5}>
           {pendientes.map((a) => (
             <Card key={a.id} variant="outlined">
