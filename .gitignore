@@ -58,10 +58,9 @@ dist-ssr/
 .DS_Store
 Thumbs.db
 
-# ── Scripts locales con credenciales hardcodeadas ────────────
-# Utilidades de desarrollo/diagnóstico. Versionar SOLO tras parametrizar las
-# credenciales para que lean del .env (ver backend/scripts/README.md).
-backend/scripts/
+# ── Scripts sueltos de la raíz con credenciales hardcodeadas ─
+# (backend/scripts/ ya está parametrizado y SÍ se versiona — ver su README).
+# Estos de la raíz aún tienen secretos en texto plano: mantenerlos fuera del repo.
 /desbloquear_admin.py
 /reset_admin_password.py
 /cargar_lsii_dimensiones.py
