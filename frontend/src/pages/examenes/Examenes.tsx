@@ -137,7 +137,7 @@ export default function Examenes() {
   }
   async function handlePublicar() {
     if (!sel) return;
-    try { await publicarExamen(sel.id); setMsg({ tipo: 'success', texto: 'Examen publicado.' }); cargar(); }
+    try { const ex = await publicarExamen(sel.id); setSel(ex); setMsg({ tipo: 'success', texto: 'Examen publicado. Ya puedes asignarlo.' }); cargar(); }
     catch { setMsg({ tipo: 'error', texto: 'No se pudo publicar (¿tiene al menos 1 pregunta?).' }); }
   }
 
@@ -338,6 +338,14 @@ export default function Examenes() {
 
                 {tab === 1 && (
                   <Stack spacing={1.5}>
+                    {sel.estado !== 'activo' && (
+                      <Alert severity="warning"
+                             action={sel.estado === 'borrador'
+                               ? <Button color="inherit" size="small" onClick={handlePublicar}>Publicar ahora</Button>
+                               : undefined}>
+                        Este examen está en <b>{sel.estado}</b>. Debes <b>publicarlo</b> (requiere al menos 1 pregunta) antes de poder asignarlo.
+                      </Alert>
+                    )}
                     <Autocomplete
                       multiple
                       options={evalOpts}
