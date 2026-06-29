@@ -110,3 +110,39 @@ def test_asignar_crea_una_por_evaluado(monkeypatch):
     assert len(res) == 2
     assert res[0].evaluado_tipo == "RM" and res[0].evaluado_rm_id == 5
     assert res[1].evaluado_tipo == "GERENTE" and res[1].evaluado_gerente_id == 9
+
+
+# ---------------------------------------------------------------------------
+# Eliminar examen — regla: solo si NO ha sido tomado (sin intentos)
+# ---------------------------------------------------------------------------
+
+
+def _db_para_eliminar(examen, n_intentos):
+    db = MagicMock()
+    q = db.query.return_value
+    q.filter.return_value.first.return_value = examen          # obtener el examen
+    q.join.return_value.filter.return_value.count.return_value = n_intentos  # contar intentos
+    q.filter.return_value.delete.return_value = None           # bulk delete asignaciones/fuentes
+    return db
+
+
+def test_eliminar_examen_no_encontrado():
+    db = _db_para_eliminar(None, 0)
+    with pytest.raises(ValueError):
+        examen_service.eliminar_examen(db, 99)
+
+
+def test_eliminar_examen_con_intentos_se_preserva():
+    examen = SimpleNamespace(id=1)
+    db = _db_para_eliminar(examen, 2)
+    with pytest.raises(examen_service.ExamenConIntentosError):
+        examen_service.eliminar_examen(db, 1)
+    assert not db.delete.called  # no se borró nada
+
+
+def test_eliminar_examen_sin_intentos_borra():
+    examen = SimpleNamespace(id=1)
+    db = _db_para_eliminar(examen, 0)
+    examen_service.eliminar_examen(db, 1)
+    db.delete.assert_called_once_with(examen)
+    assert db.commit.called

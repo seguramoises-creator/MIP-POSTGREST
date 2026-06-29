@@ -490,6 +490,22 @@ def eliminar_pregunta(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
+@router.delete("/{examen_id}", status_code=status.HTTP_204_NO_CONTENT)
+def eliminar_examen(
+    examen_id: int,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Elimina un examen. Solo si NO ha sido tomado (sin intentos); si ya tiene
+    intentos, se preserva y devuelve 409."""
+    try:
+        examen_service.eliminar_examen(db, examen_id)
+    except examen_service.ExamenConIntentosError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
 @router.put("/{examen_id}/preguntas/orden", status_code=status.HTTP_204_NO_CONTENT)
 def reordenar_preguntas(
     examen_id: int,

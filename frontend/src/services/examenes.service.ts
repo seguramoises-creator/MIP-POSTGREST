@@ -108,6 +108,8 @@ export const listarPreguntasExamen = (examenId: number) =>
   api.get<PreguntaConOpciones[]>(`/examenes/${examenId}/preguntas`).then(r => r.data);
 export const eliminarPregunta = (examenId: number, preguntaId: number) =>
   api.delete(`/examenes/${examenId}/preguntas/${preguntaId}`);
+export const eliminarExamen = (examenId: number) =>
+  api.delete(`/examenes/${examenId}`);
 
 // ── Generación con IA ─────────────────────────────────────────────────
 export interface GenerarIAParams {

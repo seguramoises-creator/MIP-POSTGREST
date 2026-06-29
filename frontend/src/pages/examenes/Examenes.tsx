@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, type MouseEvent } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Divider,
   Table, TableHead, TableRow, TableCell, TableBody, Tabs, Tab, Alert, Checkbox,
@@ -8,7 +8,7 @@ import { Add, AutoAwesome, UploadFile, CheckCircle, DeleteOutline, FileDownload 
 import {
   listarExamenes, crearExamen, agregarPregunta, publicarExamen, asignarExamen,
   resultadosExamen, analisisPreguntas, listarPreguntasExamen, eliminarPregunta,
-  generarExamenIA, jobEstadoIA, exportarResultadosExcel,
+  generarExamenIA, jobEstadoIA, exportarResultadosExcel, eliminarExamen,
   type Examen, type OpcionCrear, type EvaluadoRef, type ResultadosExamen,
   type AnalisisPregunta, type PreguntaConOpciones,
 } from '../../services/examenes.service';
@@ -23,6 +23,23 @@ export default function Examenes() {
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
   const cargar = useCallback(() => { listarExamenes().then(setExamenes).catch(() => {}); }, []);
+
+  const handleEliminarExamen = async (ex: Examen, e: MouseEvent) => {
+    e.stopPropagation();
+    if (!window.confirm(`¿Eliminar el examen "${ex.nombre}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await eliminarExamen(ex.id);
+      setMsg({ tipo: 'success', texto: 'Examen eliminado.' });
+      if (sel?.id === ex.id) setSel(null);
+      cargar();
+    } catch (err: unknown) {
+      const detalle = (err as { response?: { status?: number; data?: { detail?: string } } })?.response;
+      const texto = detalle?.status === 409
+        ? (detalle.data?.detail || 'El examen ya fue tomado; no se puede eliminar.')
+        : 'No se pudo eliminar el examen.';
+      setMsg({ tipo: 'error', texto });
+    }
+  };
   useEffect(() => { cargar(); }, [cargar]);
 
   // Crear examen
@@ -220,12 +237,17 @@ export default function Examenes() {
             <CardContent>
               <Typography fontWeight={600} gutterBottom>Exámenes</Typography>
               <Table size="small">
-                <TableHead><TableRow><TableCell>Nombre</TableCell><TableCell>Estado</TableCell></TableRow></TableHead>
+                <TableHead><TableRow><TableCell>Nombre</TableCell><TableCell>Estado</TableCell><TableCell align="right">Acciones</TableCell></TableRow></TableHead>
                 <TableBody>
                   {examenes.map((ex) => (
                     <TableRow key={ex.id} hover selected={sel?.id === ex.id} sx={{ cursor: 'pointer' }} onClick={() => { setSel(ex); setTab(0); }}>
                       <TableCell>{ex.nombre}</TableCell>
                       <TableCell><Chip size="small" label={ex.estado} color={ex.estado === 'activo' ? 'success' : 'default'} /></TableCell>
+                      <TableCell align="right">
+                        <IconButton size="small" color="error" onClick={(e) => handleEliminarExamen(ex, e)} title="Eliminar examen">
+                          <DeleteOutline fontSize="small" />
+                        </IconButton>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

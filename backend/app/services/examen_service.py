@@ -83,6 +83,43 @@ def eliminar_pregunta(db: Session, examen_id: int, pregunta_id: int) -> None:
     logger.info(f"Pregunta id={pregunta_id} eliminada")
 
 
+class ExamenConIntentosError(Exception):
+    """El examen ya fue tomado (tiene intentos) y por regla de negocio no se borra."""
+
+
+def eliminar_examen(db: Session, examen_id: int) -> None:
+    """Elimina un examen SOLO si no ha sido tomado (sin intentos).
+
+    Regla de negocio: si el examen tiene al menos un intento, se preserva
+    (levanta ExamenConIntentosError → 409). Si no tiene intentos, borra en
+    cascada: asignaciones, fuentes IA, y el examen (que arrastra preguntas y
+    opciones vía cascade delete-orphan del modelo).
+    """
+    from app.models.exam_models import IntentoExamen, FuenteIA
+
+    examen = db.query(Examen).filter(Examen.id == examen_id).first()
+    if examen is None:
+        raise ValueError("Examen no encontrado")
+
+    intentos = (
+        db.query(IntentoExamen)
+        .join(AsignacionExamen, IntentoExamen.asignacion_id == AsignacionExamen.id)
+        .filter(AsignacionExamen.examen_id == examen_id)
+        .count()
+    )
+    if intentos > 0:
+        raise ExamenConIntentosError(
+            f"El examen ya fue tomado ({intentos} intento(s)); no se puede eliminar."
+        )
+
+    # Sin intentos: limpiar referencias que no cuelgan del cascade del Examen
+    db.query(AsignacionExamen).filter(AsignacionExamen.examen_id == examen_id).delete(synchronize_session=False)
+    db.query(FuenteIA).filter(FuenteIA.examen_id == examen_id).delete(synchronize_session=False)
+    db.delete(examen)  # cascade → preguntas → opciones
+    db.commit()
+    logger.info(f"Examen id={examen_id} eliminado (sin intentos)")
+
+
 def reordenar_preguntas(db: Session, examen_id: int, orden_ids: list[int]) -> None:
     filas = db.query(Pregunta.id).filter(Pregunta.examen_id == examen_id).all()
     ids_actuales = {fila[0] for fila in filas}
