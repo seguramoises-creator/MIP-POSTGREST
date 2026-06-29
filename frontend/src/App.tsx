@@ -89,9 +89,9 @@ function AppRoutes() {
         <Route path="ranking" element={<Ranking />} />
         <Route path="reconocimiento" element={<Reconocimiento />} />
         <Route path="lsii" element={<ProtectedRoute allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','GERENTE_MARCA','CONSULTA']}><Lsii /></ProtectedRoute>} />
-        <Route path="mis-examenes" element={<MisExamenes />} />
+        <Route path="mis-examenes" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_MARCA','REPRESENTANTE_MEDICO']}><MisExamenes /></ProtectedRoute>} />
         <Route path="examenes" element={<ProtectedRoute allowedRoles={['ADMIN','CAPACITACION','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO']}><Examenes /></ProtectedRoute>} />
-        <Route path="examenes-equipo" element={<ProtectedRoute allowedRoles={['ADMIN','CAPACITACION','GERENTE_DISTRITO']}><EquipoExamenes /></ProtectedRoute>} />
+        <Route path="examenes-equipo" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_DISTRITO']}><EquipoExamenes /></ProtectedRoute>} />
         <Route path="etl" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><ETL /></ProtectedRoute>} />
         <Route path="admin" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><Admin /></ProtectedRoute>} />
         <Route path="usuarios" element={<ProtectedRoute allowedRoles={['ADMIN']}><Usuarios /></ProtectedRoute>} />
