@@ -43,7 +43,7 @@ def extraer_texto_fuente(ruta: str, tipo_archivo: str) -> str:
     raise ValueError(f"Tipo de archivo no soportado: {tipo_archivo}")
 
 
-def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | None = None) -> str:
+def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | None = None, n_vf: int = 0) -> str:
     """Construye el prompt base para la generación de preguntas con Claude.
 
     El texto de entrada se trunca a _TEXTO_MAX_CHARS para acotar el tamaño del
@@ -54,14 +54,17 @@ def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | Non
     como ficha técnica o estudio clínico, y las preguntas deben sostenerse solas.
     """
     texto_acotado = texto[:_TEXTO_MAX_CHARS]
-    total = n_multi + n_casos
+    total = n_multi + n_casos + n_vf
     ref = f"sobre el producto {producto}" if producto else "sobre el producto / tema correspondiente"
     return (
         "Eres un experto en capacitación farmacéutica. A partir de la siguiente "
         "información —que debes tomar como VERDADERA y VÁLIDA, pues proviene de la "
         "ficha técnica de un producto y/o de estudios clínicos— genera exactamente "
         f"{total} preguntas de evaluación profesional {ref}:\n"
-        f"- {n_multi} de opción múltiple\n- {n_casos} casos clínicos\n\n"
+        f"- {n_multi} de opción múltiple (tipo 'multi', 4 opciones, 1 correcta)\n"
+        f"- {n_casos} casos clínicos (tipo 'caso', con 'escenario', 4 opciones, 1 correcta)\n"
+        f"- {n_vf} de Verdadero/Falso (tipo 'vf', EXACTAMENTE 2 opciones [\"Verdadero\",\"Falso\"] en ese orden; "
+        "'correcta'=0 si la afirmación es verdadera, 1 si es falsa)\n\n"
         "REGLAS DE REDACCIÓN (obligatorias):\n"
         "- Formula cada pregunta como conocimiento profesional sobre el producto, el "
         "principio activo, la indicación, la dosis, las contraindicaciones, los efectos "
@@ -71,8 +74,8 @@ def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | Non
         "- Trata la información provista como un hecho establecido; no la cuestiones ni "
         "la relativices ('según el documento', 'el texto indica', etc. están prohibidos).\n\n"
         "Devuelve SOLO un arreglo JSON. Cada pregunta con este esquema:\n"
-        "tipo: 'multi'|'caso'; escenario: string (solo caso); texto: string; "
-        "opciones: [string,string,string,string] (exactamente 4); correcta: 0|1|2|3; "
+        "tipo: 'multi'|'caso'|'vf'; escenario: string (solo caso); texto: string; "
+        "opciones: array de strings (4 para multi/caso, 2 para vf); correcta: índice 0-based de la opción correcta; "
         "explicacion: string.\n\nINFORMACIÓN DE REFERENCIA:\n" + texto_acotado)
 
 
@@ -123,7 +126,7 @@ def _extraer_json(texto_respuesta: str):
         raise ValueError(f"La IA no devolvió JSON válido: {e}")
 
 
-def _generar_demo(texto: str, n_multi: int, n_casos: int, producto: str | None = None) -> list[dict]:
+def _generar_demo(texto: str, n_multi: int, n_casos: int, producto: str | None = None, n_vf: int = 0) -> list[dict]:
     """Genera preguntas localmente (MODO DEMO), sin llamar a Claude ni gastar API.
 
     Las preguntas se formulan SOBRE el producto / la información (tratada como
@@ -157,8 +160,17 @@ def _generar_demo(texto: str, n_multi: int, n_casos: int, producto: str | None =
             "correcta": 0,
             "explicacion": f"La afirmación correcta corresponde a la información clínica de {prod}. (Generada en MODO DEMO, sin IA real.)",
         })
+    for i in range(max(0, n_vf)):
+        frase = frases[(n_multi + i) % len(frases)][:170]
+        preguntas.append({
+            "tipo": "vf",
+            "texto": f"[DEMO] {frase}.",   # afirmación verdadera tomada del contenido
+            "opciones": ["Verdadero", "Falso"],
+            "correcta": 0,
+            "explicacion": f"Afirmación correcta según la información de {prod}. (Generada en MODO DEMO, sin IA real.)",
+        })
     for i in range(max(0, n_casos)):
-        frase = frases[(n_multi + i) % len(frases)][:160]
+        frase = frases[(n_multi + n_vf + i) % len(frases)][:160]
         preguntas.append({
             "tipo": "caso",
             "escenario": (f"[DEMO] Un médico solicita información sobre {prod}. "
@@ -178,7 +190,7 @@ def _generar_demo(texto: str, n_multi: int, n_casos: int, producto: str | None =
 
 def generar_preguntas_ia(texto: str, n_multi: int, n_casos: int,
                          client=None, model: str | None = None,
-                         producto: str | None = None) -> list[dict]:
+                         producto: str | None = None, n_vf: int = 0) -> list[dict]:
     """Genera preguntas llamando a Claude. El cliente se inyecta para testing.
 
     `producto` ancla las preguntas al producto/tema (en vez de a "el documento").
@@ -188,12 +200,12 @@ def generar_preguntas_ia(texto: str, n_multi: int, n_casos: int,
     """
     if client is None and settings.EXAMEN_IA_DEMO:
         logger.info("generar_preguntas_ia: MODO DEMO activo — generación local sin Claude")
-        return _generar_demo(texto, n_multi, n_casos, producto)
+        return _generar_demo(texto, n_multi, n_casos, producto, n_vf)
     if client is None:
         import anthropic
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     model = model or settings.EXAM_AI_MODEL
-    prompt = construir_prompt(texto, n_multi, n_casos, producto)
+    prompt = construir_prompt(texto, n_multi, n_casos, producto, n_vf)
     respuesta = client.messages.create(
         model=model, max_tokens=4096,
         messages=[{"role": "user", "content": prompt}])
@@ -210,16 +222,17 @@ def validar_preguntas_generadas(data: list) -> list[dict]:
         if not isinstance(q, dict):
             raise ValueError(f"Pregunta {i}: formato inválido")
         tipo = q.get("tipo")
-        if tipo not in ("multi", "caso"):
+        if tipo not in ("multi", "caso", "vf"):
             raise ValueError(f"Pregunta {i}: tipo inválido {tipo!r}")
         if not (q.get("texto") or "").strip():
             raise ValueError(f"Pregunta {i}: texto vacío")
         ops = q.get("opciones")
-        if not isinstance(ops, list) or len(ops) != 4 or not all(isinstance(o, str) and o.strip() for o in ops):
-            raise ValueError(f"Pregunta {i}: debe tener exactamente 4 opciones no vacías")
+        n_ops = 2 if tipo == "vf" else 4  # vf: Verdadero/Falso; multi/caso: 4 opciones
+        if not isinstance(ops, list) or len(ops) != n_ops or not all(isinstance(o, str) and o.strip() for o in ops):
+            raise ValueError(f"Pregunta {i}: debe tener exactamente {n_ops} opciones no vacías")
         correcta = q.get("correcta")
-        if not isinstance(correcta, int) or isinstance(correcta, bool) or not (0 <= correcta <= 3):
-            raise ValueError(f"Pregunta {i}: 'correcta' debe ser 0..3")
+        if not isinstance(correcta, int) or isinstance(correcta, bool) or not (0 <= correcta < n_ops):
+            raise ValueError(f"Pregunta {i}: 'correcta' debe ser 0..{n_ops - 1}")
         if tipo == "caso" and not (q.get("escenario") or "").strip():
             raise ValueError(f"Pregunta {i}: caso clínico requiere 'escenario'")
         out.append({
@@ -301,6 +314,7 @@ def procesar_generacion_ia(fuente_id: int) -> None:
 
             n_multi: int = int(params.get("n_multi", 5))
             n_casos: int = int(params.get("n_casos", 0))
+            n_vf: int = int(params.get("n_vf", 0))
             texto_pegado: str | None = params.get("texto_pegado") or None
 
             # Extract text: from file on disk, or from the pasted text
@@ -313,7 +327,7 @@ def procesar_generacion_ia(fuente_id: int) -> None:
 
             examen = db.query(Examen).filter(Examen.id == fuente.examen_id).first()
             producto = examen.producto if examen else None
-            preguntas = generar_preguntas_ia(texto, n_multi, n_casos, producto=producto)
+            preguntas = generar_preguntas_ia(texto, n_multi, n_casos, producto=producto, n_vf=n_vf)
             persistir_preguntas(db, fuente.examen_id, preguntas)
 
             fuente.estado_generacion = "exitoso"

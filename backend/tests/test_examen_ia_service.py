@@ -29,6 +29,22 @@ def test_validar_caso_sin_escenario_falla():
         ia.validar_preguntas_generadas([_q(tipo="caso")])
 
 
+def test_validar_vf_ok_con_2_opciones():
+    out = ia.validar_preguntas_generadas([_q(tipo="vf", opciones=["Verdadero", "Falso"], correcta=0)])
+    assert out[0]["tipo"] == "vf" and len(out[0]["opciones"]) == 2
+
+
+def test_validar_vf_con_4_opciones_falla():
+    # un vf DEBE tener exactamente 2 opciones
+    with pytest.raises(ValueError):
+        ia.validar_preguntas_generadas([_q(tipo="vf", opciones=["a", "b", "c", "d"], correcta=0)])
+
+
+def test_validar_vf_correcta_fuera_de_rango_falla():
+    with pytest.raises(ValueError):
+        ia.validar_preguntas_generadas([_q(tipo="vf", opciones=["Verdadero", "Falso"], correcta=2)])
+
+
 def test_validar_correcta_booleano_falla():
     with pytest.raises(ValueError):
         ia.validar_preguntas_generadas([_q(correcta=True)])

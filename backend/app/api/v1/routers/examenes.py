@@ -324,6 +324,7 @@ async def generar_ia(
     producto: str | None = Form(default=None),
     n_multi: int = Form(default=5, ge=0, le=50),
     n_casos: int = Form(default=0, ge=0, le=50),
+    n_vf: int = Form(default=0, ge=0, le=50),
     texto_pegado: str | None = Form(default=None),
     archivo: UploadFile | None = File(default=None),
     db: Session = Depends(get_db),
@@ -335,10 +336,10 @@ async def generar_ia(
     Devuelve job_id (=FuenteIA.id) y examen_id para consultar el estado luego.
     El examen permanece en borrador hasta revisión manual — nunca se auto-publica.
     """
-    if n_multi + n_casos == 0:
+    if n_multi + n_casos + n_vf == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="n_multi + n_casos debe ser > 0",
+            detail="n_multi + n_casos + n_vf debe ser > 0",
         )
 
     ruta_archivo: str | None = None
@@ -395,6 +396,7 @@ async def generar_ia(
     params_json = json.dumps({
         "n_multi": n_multi,
         "n_casos": n_casos,
+        "n_vf": n_vf,
         "texto_pegado": texto_pegado,
     })
 
