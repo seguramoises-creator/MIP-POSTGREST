@@ -108,9 +108,60 @@ def _extraer_json(texto_respuesta: str):
         raise ValueError(f"La IA no devolvió JSON válido: {e}")
 
 
+def _generar_demo(texto: str, n_multi: int, n_casos: int) -> list[dict]:
+    """Genera preguntas localmente (MODO DEMO), sin llamar a Claude ni gastar API.
+
+    Las preguntas referencian frases reales del documento subido y se marcan con
+    el prefijo [DEMO] para que en la revisión sea obvio que no son salida de IA real.
+    Pasan por validar_preguntas_generadas para garantizar el mismo esquema.
+    """
+    import re
+    frases = [s.strip() for s in re.split(r"[.\n]", texto) if len(s.strip()) >= 25]
+    if not frases:
+        frases = ["el contenido del documento proporcionado"]
+    preguntas: list[dict] = []
+    for i in range(max(0, n_multi)):
+        frase = frases[i % len(frases)][:160]
+        preguntas.append({
+            "tipo": "multi",
+            "texto": f'[DEMO] Según el documento, ¿qué afirmación es correcta? (ref.: "{frase}")',
+            "opciones": [
+                frase,
+                "Ninguna de las anteriores se menciona en el documento.",
+                "El documento no aborda este tema.",
+                "Es lo contrario de lo que indica el documento.",
+            ],
+            "correcta": 0,
+            "explicacion": "Pregunta generada en MODO DEMO (sin IA real); la opción correcta proviene del texto del documento.",
+        })
+    for i in range(max(0, n_casos)):
+        frase = frases[(n_multi + i) % len(frases)][:160]
+        preguntas.append({
+            "tipo": "caso",
+            "escenario": f'[DEMO] Un representante médico consulta el material sobre: "{frase}".',
+            "texto": "¿Cuál es la acción recomendada según el documento?",
+            "opciones": [
+                "Aplicar lo descrito en el documento.",
+                "Ignorar la información del documento.",
+                "Contradecir las indicaciones del documento.",
+                "Posponer indefinidamente la decisión.",
+            ],
+            "correcta": 0,
+            "explicacion": "Caso generado en MODO DEMO (sin IA real).",
+        })
+    return validar_preguntas_generadas(preguntas)
+
+
 def generar_preguntas_ia(texto: str, n_multi: int, n_casos: int,
                          client=None, model: str | None = None) -> list[dict]:
-    """Genera preguntas llamando a Claude. El cliente se inyecta para testing."""
+    """Genera preguntas llamando a Claude. El cliente se inyecta para testing.
+
+    Si EXAMEN_IA_DEMO está activo y no se inyectó cliente, usa el generador local
+    (sin consumir API) — permite probar el flujo completo sin créditos.
+    """
+    if client is None and settings.EXAMEN_IA_DEMO:
+        logger.info("generar_preguntas_ia: MODO DEMO activo — generación local sin Claude")
+        return _generar_demo(texto, n_multi, n_casos)
     if client is None:
         import anthropic
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)

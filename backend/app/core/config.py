@@ -147,6 +147,9 @@ class Settings(BaseSettings):
     # ── Módulo de Exámenes — IA (Fase 3)
     ANTHROPIC_API_KEY: str = ""
     EXAM_AI_MODEL: str = "claude-sonnet-4-6"
+    # Modo DEMO: genera preguntas localmente (sin llamar a Claude ni gastar API).
+    # Útil para probar el flujo completo sin créditos. Apagar (false) en producción.
+    EXAMEN_IA_DEMO: bool = False
 
     @property
     def is_production(self) -> bool:
