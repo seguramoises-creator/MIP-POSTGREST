@@ -74,8 +74,9 @@ export default function MisExamenes() {
       setRespuestas(guardado ? JSON.parse(guardado) : {});
       setSegRestantes(data.tiempo_limite_min ? data.tiempo_limite_min * 60 : null);
       setVista('tomando');
-    } catch {
-      setError('No se pudo iniciar el examen. Verifica que tengas una asignación pendiente.');
+    } catch (err: unknown) {
+      const detalle = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setError(detalle || 'No se pudo iniciar el examen. Verifica que tengas una asignación pendiente.');
     }
   }
 
@@ -132,23 +133,32 @@ export default function MisExamenes() {
           pendientes.length === 0 && <Alert severity="info">No tienes exámenes pendientes.</Alert>
         )}
         <Stack spacing={1.5}>
-          {pendientes.map((a) => (
-            <Card key={a.id} variant="outlined">
-              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                <Assignment color="primary" />
-                <Box sx={{ flex: 1, minWidth: 180 }}>
-                  <Typography fontWeight={600}>Examen #{a.examen_id}</Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {a.fecha_limite ? `Fecha límite: ${a.fecha_limite}` : 'Sin fecha límite'}
-                    {a.intentos_max != null && ` · Intentos: ${a.intentos_usados}/${a.intentos_max}`}
-                  </Typography>
-                </Box>
-                <Button variant="contained" size="large" onClick={() => iniciar(a.examen_id)}>
-                  Tomar examen
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
+          {pendientes.map((a) => {
+            const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+            const vencido = a.fecha_limite ? new Date(a.fecha_limite) < hoy : false;
+            const fechaTxt = a.fecha_limite ? new Date(a.fecha_limite).toLocaleDateString() : null;
+            return (
+              <Card key={a.id} variant="outlined" sx={vencido ? { opacity: 0.7 } : undefined}>
+                <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                  <Assignment color={vencido ? 'disabled' : 'primary'} />
+                  <Box sx={{ flex: 1, minWidth: 180 }}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography fontWeight={600}>Examen #{a.examen_id}</Typography>
+                      {vencido && <Chip size="small" color="error" label="Vencido" />}
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary">
+                      {fechaTxt ? `Fecha límite: ${fechaTxt}` : 'Sin fecha límite'}
+                      {a.intentos_max != null && ` · Intentos: ${a.intentos_usados}/${a.intentos_max}`}
+                    </Typography>
+                  </Box>
+                  <Button variant="contained" size="large" disabled={vencido}
+                          onClick={() => iniciar(a.examen_id)}>
+                    {vencido ? 'Vencido' : 'Tomar examen'}
+                  </Button>
+                </CardContent>
+              </Card>
+            );
+          })}
         </Stack>
 
         {!noEvaluado && (
