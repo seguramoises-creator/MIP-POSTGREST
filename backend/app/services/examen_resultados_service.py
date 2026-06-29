@@ -105,10 +105,12 @@ def analisis_preguntas(db: Session, examen_id: int) -> list[dict]:
             IntentoRespuesta.pregunta_id == p.id).all()
         total = len(respuestas)
         incorrectas = sum(1 for r in respuestas if r.es_correcta is False)
+        correcta = next((o.texto_opcion for o in p.opciones if o.es_correcta), None)
         salida.append({
             "pregunta_id": p.id,
             "texto": p.texto,
             "orden": p.orden,
+            "respuesta_correcta": correcta,
             "total_respuestas": total,
             "incorrectas": incorrectas,
             "error_pct": _porcentaje(incorrectas, total),

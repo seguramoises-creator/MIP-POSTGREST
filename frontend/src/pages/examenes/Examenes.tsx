@@ -450,14 +450,22 @@ export default function Examenes() {
                     </Stack>
                     <Divider sx={{ my: 2 }} />
                     <Typography fontWeight={600} gutterBottom>% Error por pregunta</Typography>
-                    <Table size="small">
-                      <TableHead><TableRow><TableCell>Pregunta</TableCell><TableCell>Respuestas</TableCell><TableCell>% Error</TableCell></TableRow></TableHead>
+                    <Table size="small" sx={{ '& thead th': { fontWeight: 700, color: 'primary.main', bgcolor: 'rgba(26,35,126,0.04)' } }}>
+                      <TableHead><TableRow>
+                        <TableCell>Pregunta</TableCell><TableCell>Respuesta correcta</TableCell>
+                        <TableCell align="center">Respuestas</TableCell><TableCell align="center">% Error</TableCell>
+                      </TableRow></TableHead>
                       <TableBody>
                         {analisis.map((a) => (
-                          <TableRow key={a.pregunta_id}>
+                          <TableRow key={a.pregunta_id} hover>
                             <TableCell>{a.texto}</TableCell>
-                            <TableCell>{a.total_respuestas}</TableCell>
-                            <TableCell>{a.error_pct}%</TableCell>
+                            <TableCell sx={{ color: 'success.main', fontWeight: 600 }}>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <CheckCircle fontSize="small" /> {a.respuesta_correcta ?? '—'}
+                              </Box>
+                            </TableCell>
+                            <TableCell align="center">{a.total_respuestas}</TableCell>
+                            <TableCell align="center">{a.error_pct}%</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

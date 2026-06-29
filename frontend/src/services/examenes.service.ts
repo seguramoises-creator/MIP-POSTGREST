@@ -74,6 +74,7 @@ export interface ResultadosExamen {
 }
 export interface AnalisisPregunta {
   pregunta_id: number; texto: string; orden: number;
+  respuesta_correcta?: string | null;
   total_respuestas: number; incorrectas: number; error_pct: number;
 }
 
