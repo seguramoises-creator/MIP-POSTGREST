@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, LinearProgress, Chip, Stack,
-  RadioGroup, FormControlLabel, Radio, Divider, Alert, CircularProgress,
+  RadioGroup, FormControlLabel, Radio, Divider, Alert, CircularProgress, TextField,
 } from '@mui/material';
 import { AccessTime, CheckCircle, Cancel, Assignment } from '@mui/icons-material';
 import { History } from '@mui/icons-material';
 import {
-  misPendientes, iniciarExamen, responder, entregar, miHistorial,
+  misPendientes, iniciarExamen, responder, responderTexto, entregar, miHistorial,
   type Asignacion, type IntentoIniciado, type ReporteIntento,
 } from '../../services/examenes.service';
 
@@ -29,6 +29,7 @@ export default function MisExamenes() {
   const [intento, setIntento] = useState<IntentoIniciado | null>(null);
   const [idx, setIdx] = useState(0);
   const [respuestas, setRespuestas] = useState<Record<number, number>>({});
+  const [respuestasTexto, setRespuestasTexto] = useState<Record<number, string>>({});
   const [segRestantes, setSegRestantes] = useState<number | null>(null);
   const [reporte, setReporte] = useState<ReporteIntento | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -58,7 +59,8 @@ export default function MisExamenes() {
   }, [vista, segRestantes]);
 
   const totalPreguntas = intento?.preguntas.length ?? 0;
-  const respondidas = Object.keys(respuestas).length;
+  const respondidas = Object.keys(respuestas).length
+    + Object.keys(respuestasTexto).filter((k) => respuestasTexto[Number(k)]?.trim()).length;
   const progreso = totalPreguntas ? (respondidas / totalPreguntas) * 100 : 0;
   const preguntaActual = intento?.preguntas[idx];
 
@@ -87,6 +89,14 @@ export default function MisExamenes() {
     localStorage.setItem(lsKey(intento.intento_id), JSON.stringify(nuevas)); // autosave
     // envío al backend (no bloquea la UI)
     void responder(intento.intento_id, preguntaId, indicePresentado).catch(() => {});
+  }
+  function escribirTexto(preguntaId: number, texto: string) {
+    setRespuestasTexto((prev) => ({ ...prev, [preguntaId]: texto }));
+  }
+  function guardarTexto(preguntaId: number) {
+    if (!intento) return;
+    const texto = respuestasTexto[preguntaId] ?? '';
+    void responderTexto(intento.intento_id, preguntaId, texto).catch(() => {});
   }
 
   async function handleEntregar() {
@@ -216,23 +226,32 @@ export default function MisExamenes() {
               <Alert severity="info" sx={{ mb: 2 }}>{preguntaActual.escenario}</Alert>
             )}
             <Typography variant="h6" sx={{ mb: 2 }}>{preguntaActual.texto}</Typography>
-            <RadioGroup
-              value={elegida ?? -1}
-              onChange={(e) => elegir(preguntaActual.pregunta_id, Number(e.target.value))}
-            >
-              {preguntaActual.opciones.map((op) => (
-                <FormControlLabel
-                  key={op.indice_presentado}
-                  value={op.indice_presentado}
-                  control={<Radio />}
-                  label={op.texto_opcion}
-                  sx={{
-                    border: '1px solid', borderColor: elegida === op.indice_presentado ? 'primary.main' : 'divider',
-                    borderRadius: 2, m: 0.5, px: 1, py: 1.25, alignItems: 'flex-start',
-                  }}
-                />
-              ))}
-            </RadioGroup>
+            {preguntaActual.opciones.length === 0 ? (
+              <TextField
+                fullWidth multiline minRows={4} placeholder="Escribe tu respuesta…"
+                value={respuestasTexto[preguntaActual.pregunta_id] ?? ''}
+                onChange={(e) => escribirTexto(preguntaActual.pregunta_id, e.target.value)}
+                onBlur={() => guardarTexto(preguntaActual.pregunta_id)}
+              />
+            ) : (
+              <RadioGroup
+                value={elegida ?? -1}
+                onChange={(e) => elegir(preguntaActual.pregunta_id, Number(e.target.value))}
+              >
+                {preguntaActual.opciones.map((op) => (
+                  <FormControlLabel
+                    key={op.indice_presentado}
+                    value={op.indice_presentado}
+                    control={<Radio />}
+                    label={op.texto_opcion}
+                    sx={{
+                      border: '1px solid', borderColor: elegida === op.indice_presentado ? 'primary.main' : 'divider',
+                      borderRadius: 2, m: 0.5, px: 1, py: 1.25, alignItems: 'flex-start',
+                    }}
+                  />
+                ))}
+              </RadioGroup>
+            )}
           </CardContent>
         </Card>
 

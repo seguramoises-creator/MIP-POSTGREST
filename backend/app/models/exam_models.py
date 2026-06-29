@@ -163,6 +163,10 @@ class IntentoRespuesta(Base):
     indice_opcion_presentada: Mapped[int | None] = mapped_column(Integer, nullable=True)
     indice_original_elegido: Mapped[int | None] = mapped_column(Integer, nullable=True)
     es_correcta: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Pregunta abierta / caso-abierto: respuesta de texto libre del evaluado y los
+    # puntos otorgados manualmente por el Gerente (NULL = pendiente de calificar).
+    respuesta_texto: Mapped[str | None] = mapped_column(Text, nullable=True)
+    puntos: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
     mapa_opciones_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     fecha_respuesta: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
 

@@ -111,6 +111,39 @@ def test_agregar_pregunta_multi_requiere_5_opciones(monkeypatch):
         examen_service.agregar_pregunta(db, 1, PreguntaCrear(tipo="multi", texto="¿?", opciones=ops))
 
 
+def _examen_borrador(monkeypatch):
+    db = MagicMock()
+    examen = SimpleNamespace(id=1, estado="borrador", preguntas=[])
+    monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: examen)
+    return db
+
+
+def test_agregar_pregunta_abierta_sin_opciones_ok(monkeypatch):
+    db = _examen_borrador(monkeypatch)
+    p = examen_service.agregar_pregunta(db, 1, PreguntaCrear(tipo="abierta", texto="Explica", opciones=[]))
+    assert p.tipo == "abierta"
+
+
+def test_agregar_pregunta_abierta_con_opciones_falla(monkeypatch):
+    db = _examen_borrador(monkeypatch)
+    ops = [PreguntaOpcionCrear(texto_opcion=f"o{i}", es_correcta=(i == 0)) for i in range(5)]
+    with pytest.raises(ValueError, match="no lleva opciones"):
+        examen_service.agregar_pregunta(db, 1, PreguntaCrear(tipo="abierta", texto="x", opciones=ops))
+
+
+def test_agregar_pregunta_caso_abierto_ok(monkeypatch):
+    db = _examen_borrador(monkeypatch)
+    p = examen_service.agregar_pregunta(db, 1, PreguntaCrear(tipo="caso", escenario="ctx", texto="consigna", opciones=[]))
+    assert p.tipo == "caso" and p.escenario == "ctx"
+
+
+def test_agregar_pregunta_caso_3_opciones_falla(monkeypatch):
+    db = _examen_borrador(monkeypatch)
+    ops = [PreguntaOpcionCrear(texto_opcion=f"o{i}", es_correcta=(i == 0)) for i in range(3)]
+    with pytest.raises(ValueError, match="5 opciones .* o ninguna"):
+        examen_service.agregar_pregunta(db, 1, PreguntaCrear(tipo="caso", texto="x", opciones=ops))
+
+
 def test_reordenar_preguntas_valida_ids_exactos():
     """reordenar_preguntas debe alzar ValueError si orden_ids no coincide exactamente."""
     db = MagicMock()

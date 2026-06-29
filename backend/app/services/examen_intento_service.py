@@ -284,21 +284,31 @@ def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:
     peso_igual = (100.0 / total) if total else 0.0
     peso_map = {q.id: (float(q.peso) if q.peso is not None else peso_igual) for q in preguntas}
 
-    # Corregir cada respuesta consultando la opción original (RN-05) y sumar el
-    # peso de las correctas.
+    # Corregir cada respuesta (RN-05) y sumar el peso de las correctas. Las
+    # preguntas abiertas/caso-abierto (respuesta de texto) quedan pendientes de
+    # calificación manual: no se autocalifican y no suman hasta que el Gerente
+    # les asigne puntos.
     correctas = 0
     puntos = 0.0
+    pendiente = False
     for r in respuestas:
+        if r.opcion_elegida_id is None and r.respuesta_texto is not None:
+            if r.puntos is None:
+                pendiente = True
+            else:
+                puntos += float(r.puntos)
+            continue
         opcion = db.query(PreguntaOpcion).filter(
             PreguntaOpcion.id == r.opcion_elegida_id
         ).first()
         r.es_correcta = bool(opcion and opcion.es_correcta)
+        r.puntos = peso_map.get(r.pregunta_id, peso_igual) if r.es_correcta else 0
         if r.es_correcta:
             correctas += 1
-            puntos += peso_map.get(r.pregunta_id, peso_igual)
+            puntos += float(r.puntos)
 
     intento.score = round(min(puntos, 100.0), 2)
-    intento.aprobado = intento.score >= examen.nota_minima
+    intento.aprobado = (not pendiente) and intento.score >= examen.nota_minima
     intento.fecha_fin = datetime.now(timezone.utc)
 
     if intento.fecha_inicio is not None:
@@ -323,26 +333,117 @@ def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:
 
     logger.info(
         f"Intento {intento_id} entregado — score={intento.score} "
-        f"aprobado={intento.aprobado} correctas={correctas}/{total}"
+        f"aprobado={intento.aprobado} correctas={correctas}/{total} pendiente={pendiente}"
     )
 
-    # Puente al motor de Score: si el examen está marcado para EVAL_CONOCIMIENTOS
-    # y el evaluado es RM en un ciclo abierto, alimenta el indicador. Un fallo del
-    # puente no debe romper la entrega del examen.
+    # Si quedan preguntas abiertas sin calificar, el resultado es provisional: el
+    # puente al indicador y el correo se disparan al completar la calificación.
+    if not pendiente:
+        _finalizar_resultado(db, intento, examen, asignacion, correctas, total)
+
+    return intento
+
+
+def _finalizar_resultado(db, intento, examen, asignacion, correctas: int, total: int) -> None:
+    """Dispara el puente EVAL_CONOCIMIENTOS y el correo de resultado. Solo se invoca
+    cuando el resultado es definitivo (sin preguntas abiertas pendientes). Ningún
+    fallo aquí debe romper la entrega/calificación."""
     try:
         from app.services import examen_kpi_service
         examen_kpi_service.alimentar_eval_conocimientos(db, intento)
     except Exception as e:  # noqa: BLE001
-        logger.error(f"Puente EVAL_CONOCIMIENTOS falló (no bloquea entrega): {e}")
-
-    # Correo de resultado si la asignación lo pide (spec §8). No-op si MAIL_SERVER
-    # está vacío o el evaluado no tiene email. Nunca rompe la entrega.
+        logger.error(f"Puente EVAL_CONOCIMIENTOS falló (no bloquea): {e}")
     if asignacion is not None and getattr(asignacion, "notif_activa", False):
         try:
             _notificar_resultado_examen(db, intento, examen, correctas, total)
         except Exception as e:  # noqa: BLE001
-            logger.error(f"Correo de resultado falló (no bloquea entrega): {e}")
+            logger.error(f"Correo de resultado falló (no bloquea): {e}")
 
+
+def registrar_respuesta_abierta(db: Session, intento_id: int, pregunta_id: int, texto: str) -> IntentoRespuesta:
+    """Persiste la respuesta de texto libre de una pregunta abierta / caso-abierto.
+
+    Idempotente (última respuesta gana). Queda pendiente de calificación manual
+    (`puntos=None`) hasta que el Gerente le asigne puntos.
+    """
+    intento = db.query(IntentoExamen).filter(IntentoExamen.id == intento_id).first()
+    if intento is None:
+        raise ValueError("Intento no encontrado")
+    validar_intento_vigente(db, intento)
+    db.query(IntentoRespuesta).filter(
+        IntentoRespuesta.intento_id == intento_id,
+        IntentoRespuesta.pregunta_id == pregunta_id,
+    ).delete()
+    resp = IntentoRespuesta(
+        intento_id=intento_id,
+        pregunta_id=pregunta_id,
+        respuesta_texto=(texto or "").strip(),
+        fecha_respuesta=datetime.now(timezone.utc),
+    )
+    db.add(resp)
+    db.commit()
+    db.refresh(resp)
+    return resp
+
+
+def calificar_respuesta(db: Session, intento_id: int, respuesta_id: int, puntos: float) -> IntentoExamen:
+    """El Gerente asigna puntos a una respuesta abierta (0..peso de la pregunta).
+
+    Recalcula el score del intento; si ya no quedan abiertas pendientes, finaliza
+    (puente EVAL_CONOCIMIENTOS + correo). Devuelve el intento actualizado.
+    """
+    if puntos is None or puntos < 0:
+        raise ValueError("Los puntos deben ser un número >= 0")
+    resp = db.query(IntentoRespuesta).filter(
+        IntentoRespuesta.id == respuesta_id,
+        IntentoRespuesta.intento_id == intento_id,
+    ).first()
+    if resp is None:
+        raise ValueError("Respuesta no encontrada para este intento")
+
+    intento = db.query(IntentoExamen).filter(IntentoExamen.id == intento_id).first()
+    if intento is None:
+        raise ValueError("Intento no encontrado")
+    asignacion = db.query(AsignacionExamen).filter(AsignacionExamen.id == intento.asignacion_id).first()
+    examen = db.query(Examen).filter(Examen.id == asignacion.examen_id).first()
+
+    preguntas = db.query(Pregunta).filter(
+        Pregunta.examen_id == examen.id, Pregunta.activo == True,
+    ).all()
+    total = len(preguntas)
+    peso_igual = (100.0 / total) if total else 0.0
+    peso_map = {q.id: (float(q.peso) if q.peso is not None else peso_igual) for q in preguntas}
+
+    # Acota los puntos al peso de la pregunta (no se puede otorgar más que su peso).
+    tope = peso_map.get(resp.pregunta_id, peso_igual)
+    resp.puntos = round(min(float(puntos), tope), 2)
+    db.flush()
+
+    # Recalcular el score del intento con todas las respuestas.
+    respuestas = db.query(IntentoRespuesta).filter(IntentoRespuesta.intento_id == intento_id).all()
+    total_puntos = 0.0
+    pendiente = False
+    correctas = 0
+    for r in respuestas:
+        if r.opcion_elegida_id is None and r.respuesta_texto is not None:
+            if r.puntos is None:
+                pendiente = True
+            else:
+                total_puntos += float(r.puntos)
+        elif r.es_correcta:
+            correctas += 1
+            total_puntos += float(r.puntos or 0)
+
+    intento.score = round(min(total_puntos, 100.0), 2)
+    intento.aprobado = (not pendiente) and intento.score >= examen.nota_minima
+    if intento.aprobado and asignacion.estado != "completado":
+        asignacion.estado = "completado"
+    db.commit()
+    db.refresh(intento)
+    logger.info(f"Respuesta {respuesta_id} calificada — intento {intento_id} score={intento.score} pendiente={pendiente}")
+
+    if not pendiente:
+        _finalizar_resultado(db, intento, examen, asignacion, correctas, total)
     return intento
 
 

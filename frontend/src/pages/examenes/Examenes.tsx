@@ -10,8 +10,9 @@ import {
   listarExamenes, crearExamen, agregarPregunta, publicarExamen, asignarExamen,
   resultadosExamen, analisisPreguntas, listarPreguntasExamen, eliminarPregunta,
   generarExamenIA, jobEstadoIA, exportarResultadosExcel, eliminarExamen, listarEvaluados,
+  respuestasAbiertas, calificarRespuesta,
   type Examen, type OpcionCrear, type EvaluadoRef, type ResultadosExamen,
-  type AnalisisPregunta, type PreguntaConOpciones,
+  type AnalisisPregunta, type PreguntaConOpciones, type RespuestaAbierta,
 } from '../../services/examenes.service';
 
 type EvalOpt = { tipo: 'RM' | 'GERENTE'; id: number; nombre: string; grupo: string };
@@ -133,8 +134,9 @@ export default function Examenes() {
   useEffect(() => { if (sel && tab === 0) cargarPreguntas(sel.id); }, [sel, tab, cargarPreguntas]);
 
   // Pregunta
+  type TipoPreg = 'multi' | 'vf' | 'abierta' | 'caso' | 'caso_abierto';
   const [preg, setPreg] = useState({
-    tipo: 'multi' as 'multi' | 'vf', texto: '', explicacion: '', peso: '',
+    tipo: 'multi' as TipoPreg, texto: '', escenario: '', explicacion: '', peso: '',
     opciones: opcionesVacias(), vfCorrecta: 'V' as 'V' | 'F',
   });
   function setOpcion(i: number, campo: keyof OpcionCrear, valor: string | boolean) {
@@ -152,18 +154,26 @@ export default function Examenes() {
     if (RE_NEGACION.test(preg.texto)) {
       if (!window.confirm('El enunciado contiene términos negativos (no, nunca, excepto, falso…). Se recomienda redactar en positivo. ¿Continuar de todas formas?')) return;
     }
-    if (preg.tipo === 'multi' && preg.opciones.some((o) => RE_TODAS_NINGUNA.test(o.texto_opcion))) {
+    if ((preg.tipo === 'multi' || preg.tipo === 'caso') && preg.opciones.some((o) => RE_TODAS_NINGUNA.test(o.texto_opcion))) {
       if (!window.confirm('Una opción usa "todas/ninguna de las anteriores". Se recomienda evitarlas. ¿Continuar de todas formas?')) return;
     }
+    const esCaso = preg.tipo === 'caso' || preg.tipo === 'caso_abierto';
+    const esAbierta = preg.tipo === 'abierta' || preg.tipo === 'caso_abierto';
+    const tipoBackend = esCaso ? 'caso' : preg.tipo;  // 'multi' | 'vf' | 'abierta' | 'caso'
     const opciones = preg.tipo === 'vf'
       ? [
           { texto_opcion: 'Verdadero', es_correcta: preg.vfCorrecta === 'V' },
           { texto_opcion: 'Falso', es_correcta: preg.vfCorrecta === 'F' },
         ]
-      : preg.opciones;
+      : esAbierta ? [] : preg.opciones;
     try {
-      await agregarPregunta(sel.id, { tipo: preg.tipo, texto: preg.texto, explicacion: preg.explicacion || null, peso: preg.peso ? Number(preg.peso) : null, opciones });
-      setPreg({ tipo: preg.tipo, texto: '', explicacion: '', peso: '', opciones: opcionesVacias(), vfCorrecta: 'V' });
+      await agregarPregunta(sel.id, {
+        tipo: tipoBackend, texto: preg.texto,
+        escenario: esCaso ? (preg.escenario || null) : null,
+        explicacion: preg.explicacion || null,
+        peso: preg.peso ? Number(preg.peso) : null, opciones,
+      });
+      setPreg({ tipo: preg.tipo, texto: '', escenario: '', explicacion: '', peso: '', opciones: opcionesVacias(), vfCorrecta: 'V' });
       setMsg({ tipo: 'success', texto: 'Pregunta agregada.' });
       cargarPreguntas(sel.id);
     } catch { setMsg({ tipo: 'error', texto: 'Revisa que haya exactamente 1 opción correcta y el examen esté en borrador.' }); }
@@ -198,6 +208,23 @@ export default function Examenes() {
       setMsg({ tipo: 'success', texto: `Asignado a ${evaluados.length} evaluado(s).` });
       setEvalSel([]); setAsig({ fecha_limite: '', intentos_max: '1' });
     } catch { setMsg({ tipo: 'error', texto: 'No se pudo asignar (el examen debe estar publicado).' }); }
+  }
+
+  // Calificar (preguntas abiertas)
+  const [abiertas, setAbiertas] = useState<RespuestaAbierta[]>([]);
+  const [puntosInput, setPuntosInput] = useState<Record<number, string>>({});
+  const cargarAbiertas = useCallback((id: number) => {
+    respuestasAbiertas(id).then(setAbiertas).catch(() => setAbiertas([]));
+  }, []);
+  useEffect(() => { if (sel && tab === 3) cargarAbiertas(sel.id); }, [sel, tab, cargarAbiertas]);
+  async function handleCalificar(r: RespuestaAbierta) {
+    if (!sel) return;
+    const v = Number(puntosInput[r.respuesta_id] ?? r.puntos ?? 0);
+    try {
+      await calificarRespuesta(r.intento_id, r.respuesta_id, v);
+      setMsg({ tipo: 'success', texto: `Calificada: ${v} pts.` });
+      cargarAbiertas(sel.id);
+    } catch { setMsg({ tipo: 'error', texto: 'No se pudo calificar.' }); }
   }
 
   // Resultados
@@ -316,7 +343,7 @@ export default function Examenes() {
               <CardContent>
                 <Typography variant="h6">{sel.nombre} <Chip size="small" label={sel.estado} sx={{ ml: 1 }} /></Typography>
                 <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
-                  <Tab label="Preguntas" /><Tab label="Asignar" /><Tab label="Resultados" />
+                  <Tab label="Preguntas" /><Tab label="Asignar" /><Tab label="Resultados" /><Tab label="Calificar" />
                 </Tabs>
 
                 {tab === 0 && (
@@ -333,20 +360,34 @@ export default function Examenes() {
                       </Typography>
                     </Alert>
                     <TextField select size="small" label="Tipo de pregunta" value={preg.tipo}
-                               onChange={(e) => setPreg({ ...preg, tipo: e.target.value as 'multi' | 'vf' })}
-                               sx={{ maxWidth: 280 }}>
-                      <MenuItem value="multi">Opción múltiple (elegir la correcta)</MenuItem>
+                               onChange={(e) => setPreg({ ...preg, tipo: e.target.value as TipoPreg })}
+                               sx={{ maxWidth: 320 }}>
+                      <MenuItem value="multi">Opción múltiple (5 opciones)</MenuItem>
                       <MenuItem value="vf">Verdadero / Falso</MenuItem>
+                      <MenuItem value="abierta">Abierta (respuesta libre)</MenuItem>
+                      <MenuItem value="caso">Caso — consigna de opción múltiple</MenuItem>
+                      <MenuItem value="caso_abierto">Caso — consigna abierta</MenuItem>
                     </TextField>
-                    <TextField label={preg.tipo === 'vf' ? 'Afirmación' : 'Enunciado'} multiline minRows={2}
+                    {(preg.tipo === 'caso' || preg.tipo === 'caso_abierto') && (
+                      <TextField label="Escenario (contexto de la visita médica)" multiline minRows={2}
+                                 value={preg.escenario} onChange={(e) => setPreg({ ...preg, escenario: e.target.value })} />
+                    )}
+                    <TextField label={preg.tipo === 'vf' ? 'Afirmación'
+                                       : (preg.tipo === 'caso' || preg.tipo === 'caso_abierto') ? 'Consigna'
+                                       : 'Enunciado'} multiline minRows={2}
                                value={preg.texto} onChange={(e) => setPreg({ ...preg, texto: e.target.value })} />
-                    {preg.tipo === 'multi' ? (
+                    {(preg.tipo === 'multi' || preg.tipo === 'caso') ? (
                       preg.opciones.map((op, i) => (
                         <Stack key={i} direction="row" spacing={1} alignItems="center">
                           <TextField fullWidth size="small" label={`Opción ${LETRAS[i] ?? i + 1}`} value={op.texto_opcion} onChange={(e) => setOpcion(i, 'texto_opcion', e.target.value)} />
                           <FormControlLabel control={<Checkbox checked={op.es_correcta} onChange={(e) => setOpcion(i, 'es_correcta', e.target.checked)} />} label="Correcta" />
                         </Stack>
                       ))
+                    ) : (preg.tipo === 'abierta' || preg.tipo === 'caso_abierto') ? (
+                      <Alert severity="info" variant="outlined">
+                        El evaluado responderá en <b>texto libre</b>. Tú la calificarás manualmente
+                        (pestaña <b>Calificar</b>) hasta el peso de la pregunta.
+                      </Alert>
                     ) : (
                       <Box>
                         <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
@@ -384,8 +425,12 @@ export default function Examenes() {
                             <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
                               {i + 1}. {p.texto}
                               <Chip size="small" variant="outlined" sx={{ ml: 1 }}
-                                    color={p.tipo === 'vf' ? 'secondary' : p.tipo === 'caso' ? 'warning' : 'primary'}
-                                    label={p.tipo === 'vf' ? 'Verdadero/Falso' : p.tipo === 'caso' ? 'Caso clínico' : 'Opción múltiple'} />
+                                    color={p.tipo === 'vf' ? 'secondary' : p.tipo === 'caso' ? 'warning' : p.tipo === 'abierta' ? 'info' : 'primary'}
+                                    label={
+                                      p.tipo === 'vf' ? 'Verdadero/Falso'
+                                      : p.tipo === 'abierta' ? 'Abierta'
+                                      : p.tipo === 'caso' ? (p.opciones.length === 0 ? 'Caso abierto' : 'Caso')
+                                      : 'Opción múltiple'} />
                               <Chip size="small" variant="outlined" sx={{ ml: 0.5 }}
                                     label={p.peso != null ? `peso ${p.peso}` : 'peso auto'} />
                             </Typography>
@@ -543,6 +588,40 @@ export default function Examenes() {
                       </TableBody>
                     </Table>
                   </Box>
+                )}
+
+                {tab === 3 && (
+                  <Stack spacing={1.5}>
+                    <Typography variant="caption" color="text.secondary">
+                      Califica las respuestas de preguntas abiertas / caso-abierto (hasta el peso de cada pregunta).
+                    </Typography>
+                    {abiertas.length === 0 && (
+                      <Alert severity="info">No hay respuestas abiertas para calificar en este examen.</Alert>
+                    )}
+                    {abiertas.map((r) => (
+                      <Card key={r.respuesta_id} variant="outlined">
+                        <CardContent sx={{ py: 1.25 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Typography fontWeight={600}>{r.evaluado_nombre}</Typography>
+                            <Chip size="small" color={r.calificada ? 'success' : 'warning'}
+                                  label={r.calificada ? `${r.puntos} pts` : 'pendiente'} />
+                          </Box>
+                          {r.escenario && (
+                            <Typography variant="caption" color="text.secondary" display="block">{r.escenario}</Typography>
+                          )}
+                          <Typography variant="body2" fontWeight={600} sx={{ mt: 0.5 }}>{r.pregunta_texto}</Typography>
+                          <Alert severity="info" variant="outlined" sx={{ my: 1 }}>{r.respuesta_texto}</Alert>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <TextField size="small" type="number" label={`Puntos (máx ${r.peso ?? '—'})`} sx={{ maxWidth: 170 }}
+                                       inputProps={{ min: 0, max: r.peso ?? undefined }}
+                                       value={puntosInput[r.respuesta_id] ?? (r.puntos ?? '')}
+                                       onChange={(e) => setPuntosInput({ ...puntosInput, [r.respuesta_id]: e.target.value })} />
+                            <Button variant="contained" size="small" onClick={() => handleCalificar(r)}>Guardar</Button>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </Stack>
                 )}
               </CardContent>
             </Card>

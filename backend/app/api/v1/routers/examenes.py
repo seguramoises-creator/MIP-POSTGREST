@@ -60,6 +60,7 @@ from app.schemas.examenes import (
     PreguntaConOpcionesResponse,
     ReporteIntento,
     RespuestaEnviar,
+    CalificarRespuesta,
 )
 from app.services import examen_intento_service as intento_svc
 from app.services import examen_ia_service
@@ -636,6 +637,17 @@ def analisis_preguntas_examen(
     return examen_resultados_service.analisis_preguntas(db, examen_id)
 
 
+@router.get("/{examen_id}/abiertas", response_model=list[dict])
+def respuestas_abiertas_examen(
+    examen_id: int,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Respuestas de preguntas abiertas / caso-abierto para calificación manual del Gerente."""
+    from app.services import examen_resultados_service
+    return examen_resultados_service.respuestas_abiertas(db, examen_id)
+
+
 @router.get("/{examen_id}/preguntas", response_model=list[PreguntaConOpcionesResponse])
 def listar_preguntas_examen(
     examen_id: int,
@@ -684,14 +696,44 @@ def responder(
         )
 
     try:
-        intento_svc.registrar_respuesta_presentada(
-            db,
-            intento_id=intento_id,
-            pregunta_id=payload.pregunta_id,
-            indice_presentado=payload.indice_presentado,
-        )
+        if payload.respuesta_texto is not None:
+            # Pregunta abierta / caso-abierto: respuesta de texto libre.
+            intento_svc.registrar_respuesta_abierta(
+                db,
+                intento_id=intento_id,
+                pregunta_id=payload.pregunta_id,
+                texto=payload.respuesta_texto,
+            )
+        elif payload.indice_presentado is not None:
+            intento_svc.registrar_respuesta_presentada(
+                db,
+                intento_id=intento_id,
+                pregunta_id=payload.pregunta_id,
+                indice_presentado=payload.indice_presentado,
+            )
+        else:
+            raise ValueError("Debe enviar indice_presentado (opción) o respuesta_texto (abierta)")
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@intentos_router.post("/{intento_id}/calificar", response_model=dict)
+def calificar(
+    intento_id: int,
+    payload: CalificarRespuesta,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """El Gerente (Capacitación) asigna puntos a una respuesta abierta y recalcula el score."""
+    try:
+        intento = intento_svc.calificar_respuesta(db, intento_id, payload.respuesta_id, payload.puntos)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return {
+        "intento_id": intento.id,
+        "score": float(intento.score) if intento.score is not None else None,
+        "aprobado": bool(intento.aprobado),
+    }
 
 
 @intentos_router.post("/{intento_id}/entregar", response_model=ReporteIntento)

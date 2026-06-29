@@ -47,8 +47,9 @@ class PreguntaCrear(BaseModel):
     explicacion: str | None = None
     # Peso sobre base 100. None = reparto automático igual (100 ÷ N).
     peso: float | None = Field(default=None, ge=0, le=100)
-    # 2 opciones (Verdadero/Falso) hasta 5 (opción múltiple a–e, estándar VISTA).
-    opciones: list[PreguntaOpcionCrear] = Field(min_length=2, max_length=5)
+    # 0 opciones (abierta / caso-abierto), 2 (Verdadero/Falso) o 5 (opción múltiple
+    # a–e). La cantidad exacta por tipo se valida en el servicio.
+    opciones: list[PreguntaOpcionCrear] = Field(default_factory=list, max_length=5)
 
 
 class OpcionResponse(BaseModel):
@@ -134,7 +135,14 @@ class IntentoIniciado(BaseModel):
 
 class RespuestaEnviar(BaseModel):
     pregunta_id: int
-    indice_presentado: int
+    # Opción múltiple/VF: índice presentado. Abierta/caso-abierto: respuesta_texto.
+    indice_presentado: int | None = None
+    respuesta_texto: str | None = None
+
+
+class CalificarRespuesta(BaseModel):
+    respuesta_id: int
+    puntos: float = Field(ge=0)
 
 
 class ReporteRespuesta(BaseModel):

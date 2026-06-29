@@ -43,16 +43,23 @@ def agregar_pregunta(db: Session, examen_id: int, datos: PreguntaCrear) -> Pregu
         raise ValueError("Examen no encontrado")
     if examen.estado != "borrador":
         raise ValueError("Solo se editan preguntas de un examen en borrador")  # RN-01
-    # Cantidad de opciones por tipo (estándar VISTA): opción múltiple = 5 (a–e),
-    # Verdadero/Falso = 2. (La pregunta abierta —sin opciones— se maneja aparte.)
+    # Cantidad de opciones por tipo (estándar VISTA):
+    #   multi → 5 (a–e); vf → 2; abierta → 0; caso → 5 (consigna múltiple) o 0 (abierta).
     n_ops = len(datos.opciones)
-    if datos.tipo in ("multi", "caso") and n_ops != 5:
+    abierta = datos.tipo == "abierta" or (datos.tipo == "caso" and n_ops == 0)
+    if datos.tipo == "multi" and n_ops != 5:
         raise ValueError("La pregunta de opción múltiple debe tener exactamente 5 opciones (a–e)")
     if datos.tipo == "vf" and n_ops != 2:
         raise ValueError("La pregunta Verdadero/Falso debe tener exactamente 2 opciones")
-    n_correctas = sum(1 for o in datos.opciones if o.es_correcta)
-    if n_correctas != 1:
-        raise ValueError("La pregunta debe tener exactamente 1 opción correcta")
+    if datos.tipo == "abierta" and n_ops != 0:
+        raise ValueError("La pregunta abierta no lleva opciones")
+    if datos.tipo == "caso" and n_ops not in (0, 5):
+        raise ValueError("El caso debe tener 5 opciones (a–e) o ninguna (consigna abierta)")
+    # Las preguntas con opciones exigen exactamente 1 correcta; las abiertas no.
+    if not abierta:
+        n_correctas = sum(1 for o in datos.opciones if o.es_correcta)
+        if n_correctas != 1:
+            raise ValueError("La pregunta debe tener exactamente 1 opción correcta")
     orden = len(examen.preguntas)
     pregunta = Pregunta(
         examen_id=examen_id,

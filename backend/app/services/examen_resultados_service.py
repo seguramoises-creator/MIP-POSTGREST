@@ -175,3 +175,68 @@ def resumen_capacitacion(db: Session) -> list[dict]:
             "aprobacion_pct": r["aprobacion_pct"],
         })
     return filas
+
+
+def respuestas_abiertas(db: Session, examen_id: int) -> list[dict]:
+    """Lista las respuestas de preguntas abiertas / caso-abierto de un examen para que
+    el Gerente las califique manualmente (entregadas, con texto y sin opción)."""
+    from app.models.dimensiones import RepresentanteMedico, Gerente
+
+    asig_ids = [a.id for a in db.query(AsignacionExamen.id).filter(
+        AsignacionExamen.examen_id == examen_id).all()]
+    if not asig_ids:
+        return []
+    intentos = db.query(IntentoExamen).filter(
+        IntentoExamen.asignacion_id.in_(asig_ids),
+        IntentoExamen.fecha_fin.isnot(None),
+    ).all()
+    if not intentos:
+        return []
+    int_ids = [it.id for it in intentos]
+
+    # Nombre del evaluado por intento (resuelto en lote)
+    rm_ids = {it.evaluado_rm_id for it in intentos if it.evaluado_rm_id}
+    ger_ids = {it.evaluado_gerente_id for it in intentos if it.evaluado_gerente_id}
+    rm_nom = dict(db.query(RepresentanteMedico.id, RepresentanteMedico.nombre)
+                  .filter(RepresentanteMedico.id.in_(rm_ids)).all()) if rm_ids else {}
+    ger_nom = dict(db.query(Gerente.id, Gerente.nombre)
+                   .filter(Gerente.id.in_(ger_ids)).all()) if ger_ids else {}
+
+    def _nom(it):
+        if it.evaluado_tipo == "RM":
+            return rm_nom.get(it.evaluado_rm_id) or f"RM #{it.evaluado_rm_id}"
+        return ger_nom.get(it.evaluado_gerente_id) or f"Gerente #{it.evaluado_gerente_id}"
+    nombre_por_intento = {it.id: _nom(it) for it in intentos}
+
+    respuestas = db.query(IntentoRespuesta).filter(
+        IntentoRespuesta.intento_id.in_(int_ids),
+        IntentoRespuesta.opcion_elegida_id.is_(None),
+        IntentoRespuesta.respuesta_texto.isnot(None),
+    ).all()
+    if not respuestas:
+        return []
+    preg = {p.id: p for p in db.query(Pregunta).filter(
+        Pregunta.id.in_({r.pregunta_id for r in respuestas})).all()}
+    # Peso efectivo (máximo de puntos otorgables): el peso manual o el reparto igual.
+    n_preg = db.query(Pregunta).filter(
+        Pregunta.examen_id == examen_id, Pregunta.activo == True).count()
+    peso_igual = round(100.0 / n_preg, 2) if n_preg else 0.0
+
+    salida = []
+    for r in respuestas:
+        p = preg.get(r.pregunta_id)
+        peso_efectivo = float(p.peso) if (p and p.peso is not None) else peso_igual
+        salida.append({
+            "intento_id": r.intento_id,
+            "respuesta_id": r.id,
+            "evaluado_nombre": nombre_por_intento.get(r.intento_id, "?"),
+            "escenario": p.escenario if p else None,
+            "pregunta_texto": p.texto if p else "",
+            "respuesta_texto": r.respuesta_texto,
+            "peso": peso_efectivo,
+            "puntos": float(r.puntos) if r.puntos is not None else None,
+            "calificada": r.puntos is not None,
+        })
+    # Pendientes primero
+    salida.sort(key=lambda x: x["calificada"])
+    return salida

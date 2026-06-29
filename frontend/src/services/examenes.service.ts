@@ -174,6 +174,19 @@ export const iniciarExamen = (examenId: number) =>
   api.post<IntentoIniciado>(`/examenes/${examenId}/iniciar`).then(r => r.data);
 export const responder = (intentoId: number, pregunta_id: number, indice_presentado: number) =>
   api.post(`/intentos/${intentoId}/responder`, { pregunta_id, indice_presentado });
+export const responderTexto = (intentoId: number, pregunta_id: number, respuesta_texto: string) =>
+  api.post(`/intentos/${intentoId}/responder`, { pregunta_id, respuesta_texto });
+
+// ── Calificación manual de preguntas abiertas (Gerente) ───────────────
+export interface RespuestaAbierta {
+  intento_id: number; respuesta_id: number; evaluado_nombre: string;
+  escenario: string | null; pregunta_texto: string; respuesta_texto: string;
+  peso: number | null; puntos: number | null; calificada: boolean;
+}
+export const respuestasAbiertas = (examenId: number) =>
+  api.get<RespuestaAbierta[]>(`/examenes/${examenId}/abiertas`).then(r => r.data);
+export const calificarRespuesta = (intentoId: number, respuesta_id: number, puntos: number) =>
+  api.post(`/intentos/${intentoId}/calificar`, { respuesta_id, puntos }).then(r => r.data);
 export const entregar = (intentoId: number) =>
   api.post<ReporteIntento>(`/intentos/${intentoId}/entregar`).then(r => r.data);
 export const reporteIntento = (intentoId: number) =>
