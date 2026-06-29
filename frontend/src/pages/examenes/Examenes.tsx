@@ -134,7 +134,7 @@ export default function Examenes() {
 
   // Pregunta
   const [preg, setPreg] = useState({
-    tipo: 'multi' as 'multi' | 'vf', texto: '', explicacion: '',
+    tipo: 'multi' as 'multi' | 'vf', texto: '', explicacion: '', peso: '',
     opciones: opcionesVacias(), vfCorrecta: 'V' as 'V' | 'F',
   });
   function setOpcion(i: number, campo: keyof OpcionCrear, valor: string | boolean) {
@@ -162,8 +162,8 @@ export default function Examenes() {
         ]
       : preg.opciones;
     try {
-      await agregarPregunta(sel.id, { tipo: preg.tipo, texto: preg.texto, explicacion: preg.explicacion || null, opciones });
-      setPreg({ tipo: preg.tipo, texto: '', explicacion: '', opciones: opcionesVacias(), vfCorrecta: 'V' });
+      await agregarPregunta(sel.id, { tipo: preg.tipo, texto: preg.texto, explicacion: preg.explicacion || null, peso: preg.peso ? Number(preg.peso) : null, opciones });
+      setPreg({ tipo: preg.tipo, texto: '', explicacion: '', peso: '', opciones: opcionesVacias(), vfCorrecta: 'V' });
       setMsg({ tipo: 'success', texto: 'Pregunta agregada.' });
       cargarPreguntas(sel.id);
     } catch { setMsg({ tipo: 'error', texto: 'Revisa que haya exactamente 1 opción correcta y el examen esté en borrador.' }); }
@@ -360,6 +360,10 @@ export default function Examenes() {
                       </Box>
                     )}
                     <TextField label="Explicación (retroalimentación)" value={preg.explicacion} onChange={(e) => setPreg({ ...preg, explicacion: e.target.value })} />
+                    <TextField label="Peso (base 100)" type="number" size="small" sx={{ maxWidth: 220 }}
+                               inputProps={{ min: 0, max: 100 }}
+                               value={preg.peso} onChange={(e) => setPreg({ ...preg, peso: e.target.value })}
+                               helperText="Opcional. Vacío = reparto automático (100 ÷ N). Si pones pesos, deben sumar 100." />
                     <Stack direction="row" spacing={1.5}>
                       <Button variant="outlined" startIcon={<Add />} onClick={handleAgregarPregunta} disabled={sel.estado !== 'borrador'}>Agregar pregunta</Button>
                       <Button variant="contained" color="success" onClick={handlePublicar} disabled={sel.estado !== 'borrador'}>Publicar</Button>
@@ -382,6 +386,8 @@ export default function Examenes() {
                               <Chip size="small" variant="outlined" sx={{ ml: 1 }}
                                     color={p.tipo === 'vf' ? 'secondary' : p.tipo === 'caso' ? 'warning' : 'primary'}
                                     label={p.tipo === 'vf' ? 'Verdadero/Falso' : p.tipo === 'caso' ? 'Caso clínico' : 'Opción múltiple'} />
+                              <Chip size="small" variant="outlined" sx={{ ml: 0.5 }}
+                                    label={p.peso != null ? `peso ${p.peso}` : 'peso auto'} />
                             </Typography>
                             {sel.estado === 'borrador' && (
                               <IconButton size="small" color="error" onClick={() => handleEliminarPregunta(p.id)} title="Eliminar pregunta">

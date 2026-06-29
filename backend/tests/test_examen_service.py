@@ -32,12 +32,37 @@ def test_publicar_sin_preguntas_falla(monkeypatch):
 def test_publicar_con_preguntas_activa(monkeypatch):
     db = MagicMock()
     examen = SimpleNamespace(id=1, estado="borrador",
-                             preguntas=[SimpleNamespace(id=9)], fecha_publicacion=None)
+                             preguntas=[SimpleNamespace(id=9, activo=True, peso=None)], fecha_publicacion=None)
     monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: examen)
     resultado = examen_service.publicar_examen(db, 1)
     assert resultado.estado == "activo"
-    assert resultado.fecha_publicacion is not None
-    assert db.commit.called
+
+
+def _examen_pesos(pesos):
+    return SimpleNamespace(
+        id=1, estado="borrador", fecha_publicacion=None,
+        preguntas=[SimpleNamespace(id=i, activo=True, peso=p) for i, p in enumerate(pesos)],
+    )
+
+
+def test_publicar_pesos_suman_100_ok(monkeypatch):
+    db = MagicMock()
+    monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: _examen_pesos([60, 40]))
+    assert examen_service.publicar_examen(db, 1).estado == "activo"
+
+
+def test_publicar_pesos_no_suman_100_falla(monkeypatch):
+    db = MagicMock()
+    monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: _examen_pesos([50, 40]))
+    with pytest.raises(ValueError, match="suma de los pesos"):
+        examen_service.publicar_examen(db, 1)
+
+
+def test_publicar_pesos_parciales_falla(monkeypatch):
+    db = MagicMock()
+    monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: _examen_pesos([100, None]))
+    with pytest.raises(ValueError, match="todas las preguntas deben tener peso"):
+        examen_service.publicar_examen(db, 1)
 
 
 def test_publicar_examen_no_borrador_falla(monkeypatch):

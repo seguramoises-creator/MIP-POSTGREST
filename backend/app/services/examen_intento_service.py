@@ -274,13 +274,20 @@ def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:
     respuestas = list(
         db.query(IntentoRespuesta).filter(IntentoRespuesta.intento_id == intento_id).all()
     )
-    total = db.query(Pregunta).filter(
+    preguntas = db.query(Pregunta).filter(
         Pregunta.examen_id == examen.id,
         Pregunta.activo == True,
-    ).count()
+    ).all()
+    total = len(preguntas)
+    # Peso efectivo (base 100): el peso manual de la pregunta, o el reparto igual
+    # 100÷N cuando no se asignó peso. Si todos son NULL, equivale al % de correctas.
+    peso_igual = (100.0 / total) if total else 0.0
+    peso_map = {q.id: (float(q.peso) if q.peso is not None else peso_igual) for q in preguntas}
 
-    # Corregir cada respuesta consultando la opción original (RN-05)
+    # Corregir cada respuesta consultando la opción original (RN-05) y sumar el
+    # peso de las correctas.
     correctas = 0
+    puntos = 0.0
     for r in respuestas:
         opcion = db.query(PreguntaOpcion).filter(
             PreguntaOpcion.id == r.opcion_elegida_id
@@ -288,8 +295,9 @@ def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:
         r.es_correcta = bool(opcion and opcion.es_correcta)
         if r.es_correcta:
             correctas += 1
+            puntos += peso_map.get(r.pregunta_id, peso_igual)
 
-    intento.score = calcular_score(correctas, total)
+    intento.score = round(min(puntos, 100.0), 2)
     intento.aprobado = intento.score >= examen.nota_minima
     intento.fecha_fin = datetime.now(timezone.utc)
 

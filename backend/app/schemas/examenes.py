@@ -45,6 +45,8 @@ class PreguntaCrear(BaseModel):
     escenario: str | None = None
     texto: str = Field(min_length=1)
     explicacion: str | None = None
+    # Peso sobre base 100. None = reparto automático igual (100 ÷ N).
+    peso: float | None = Field(default=None, ge=0, le=100)
     # 2 opciones (Verdadero/Falso) hasta 5 (opción múltiple a–e, estándar VISTA).
     opciones: list[PreguntaOpcionCrear] = Field(min_length=2, max_length=5)
 
@@ -66,6 +68,7 @@ class PreguntaResponse(BaseModel):
     texto: str
     explicacion: str | None
     orden: int
+    peso: float | None = None
 
 
 class PreguntaConOpcionesResponse(BaseModel):
@@ -78,6 +81,7 @@ class PreguntaConOpcionesResponse(BaseModel):
     texto: str
     explicacion: str | None
     orden: int
+    peso: float | None = None
     opciones: list[OpcionResponse]
 
 

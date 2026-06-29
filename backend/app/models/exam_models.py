@@ -56,6 +56,9 @@ class Pregunta(Base):
     texto: Mapped[str] = mapped_column(Text, nullable=False)
     explicacion: Mapped[str | None] = mapped_column(Text, nullable=True)
     orden: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Peso sobre base 100 (estándar VISTA). NULL = reparto automático igual (100 ÷ N).
+    # Si se asignan pesos manuales, su suma por examen debe ser 100 (validado al publicar).
+    peso: Mapped[float | None] = mapped_column(Numeric(6, 2), nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
 
     examen: Mapped["Examen"] = relationship("Examen", back_populates="preguntas")

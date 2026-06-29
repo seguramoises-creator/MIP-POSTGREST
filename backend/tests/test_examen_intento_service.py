@@ -291,8 +291,8 @@ def _build_entregar_db(*, aprobado_esperado=True, intentos_max=None, intentos_us
     opcion_incorrecta = SimpleNamespace(id=202, es_correcta=False)
 
     respuestas = [
-        SimpleNamespace(id=1, opcion_elegida_id=201, es_correcta=None),
-        SimpleNamespace(id=2, opcion_elegida_id=201, es_correcta=None),
+        SimpleNamespace(id=1, pregunta_id=1, opcion_elegida_id=201, es_correcta=None),
+        SimpleNamespace(id=2, pregunta_id=2, opcion_elegida_id=201, es_correcta=None),
     ]
 
     # db.query() se llama en orden:
@@ -307,7 +307,7 @@ def _build_entregar_db(*, aprobado_esperado=True, intentos_max=None, intentos_us
         FakeQuery(first_result=asignacion),
         FakeQuery(first_result=examen),
         FakeQuery(all_result=respuestas),
-        FakeQuery(all_result=[SimpleNamespace(), SimpleNamespace()]),  # count() = 2
+        FakeQuery(all_result=[SimpleNamespace(id=1, peso=None), SimpleNamespace(id=2, peso=None)]),  # 2 preguntas, peso auto
         FakeQuery(first_result=opcion_correcta),
         FakeQuery(first_result=opcion_correcta),
     ]
@@ -420,7 +420,7 @@ def test_entregar_intento_cierra_asignacion_si_agota_intentos():
         FakeQuery(first_result=asignacion),
         FakeQuery(first_result=examen),
         FakeQuery(all_result=respuestas),
-        FakeQuery(all_result=[SimpleNamespace()]),  # count=1
+        FakeQuery(all_result=[SimpleNamespace(id=99, peso=None)]),  # 1 pregunta, peso auto
         FakeQuery(first_result=opcion_incorrecta),
     ]
 

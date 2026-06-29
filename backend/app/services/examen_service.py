@@ -60,6 +60,7 @@ def agregar_pregunta(db: Session, examen_id: int, datos: PreguntaCrear) -> Pregu
         escenario=datos.escenario,
         texto=datos.texto,
         explicacion=datos.explicacion,
+        peso=datos.peso,
         orden=orden,
     )
     for idx, op in enumerate(datos.opciones):
@@ -190,6 +191,15 @@ def publicar_examen(db: Session, examen_id: int) -> Examen:
         raise ValueError(f"Solo se publica un examen en borrador (estado actual: {examen.estado})")
     if not examen.preguntas:  # RN-02
         raise ValueError("El examen debe tener al menos 1 pregunta para publicarse")
+    # Validación de pesos (estándar VISTA): si se asignaron pesos manuales a alguna
+    # pregunta, la suma de TODOS los pesos del examen debe ser exactamente 100.
+    pesos = [p.peso for p in examen.preguntas if p.activo]
+    if any(w is not None for w in pesos):
+        if any(w is None for w in pesos):
+            raise ValueError("Si asignas pesos manuales, todas las preguntas deben tener peso (no dejes ninguna en automático)")
+        suma = round(sum(float(w) for w in pesos), 2)
+        if suma != 100:
+            raise ValueError(f"La suma de los pesos debe ser 100 (actual: {suma})")
     examen.estado = "activo"
     examen.fecha_publicacion = datetime.now(timezone.utc)
     db.commit()

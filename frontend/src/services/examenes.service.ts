@@ -20,7 +20,7 @@ export interface Examen {
 export interface OpcionCrear { texto_opcion: string; es_correcta: boolean; }
 export interface PreguntaCrear {
   tipo: string; escenario?: string | null; texto: string;
-  explicacion?: string | null; opciones: OpcionCrear[];
+  explicacion?: string | null; peso?: number | null; opciones: OpcionCrear[];
 }
 export interface ExamenCrear {
   nombre: string; producto?: string | null; nota_minima?: number;
@@ -83,7 +83,7 @@ export interface OpcionRevision {
 }
 export interface PreguntaConOpciones {
   id: number; examen_id: number; tipo: string; escenario: string | null;
-  texto: string; explicacion: string | null; orden: number; opciones: OpcionRevision[];
+  texto: string; explicacion: string | null; orden: number; peso?: number | null; opciones: OpcionRevision[];
 }
 export interface GenerarIAResp { job_id: number; examen_id: number; estado: string; }
 export interface JobIAEstado {
