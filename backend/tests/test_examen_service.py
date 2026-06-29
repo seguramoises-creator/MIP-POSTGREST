@@ -55,7 +55,7 @@ def test_publicar_examen_no_borrador_falla(monkeypatch):
 
 
 def _pcrear(n_correctas=1):
-    ops = [PreguntaOpcionCrear(texto_opcion=f"o{i}", es_correcta=(i < n_correctas)) for i in range(4)]
+    ops = [PreguntaOpcionCrear(texto_opcion=f"o{i}", es_correcta=(i < n_correctas)) for i in range(5)]
     return PreguntaCrear(texto="¿?", opciones=ops)
 
 
@@ -75,6 +75,15 @@ def test_agregar_pregunta_exige_una_correcta(monkeypatch):
         examen_service.agregar_pregunta(db, 1, _pcrear(n_correctas=0))
     with pytest.raises(ValueError):
         examen_service.agregar_pregunta(db, 1, _pcrear(n_correctas=2))
+
+
+def test_agregar_pregunta_multi_requiere_5_opciones(monkeypatch):
+    db = MagicMock()
+    examen = SimpleNamespace(id=1, estado="borrador", preguntas=[])
+    monkeypatch.setattr(examen_service, "obtener_examen", lambda d, i: examen)
+    ops = [PreguntaOpcionCrear(texto_opcion=f"o{i}", es_correcta=(i == 0)) for i in range(4)]
+    with pytest.raises(ValueError, match="5 opciones"):
+        examen_service.agregar_pregunta(db, 1, PreguntaCrear(tipo="multi", texto="¿?", opciones=ops))
 
 
 def test_reordenar_preguntas_valida_ids_exactos():

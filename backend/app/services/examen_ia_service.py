@@ -61,8 +61,8 @@ def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | Non
         "información —que debes tomar como VERDADERA y VÁLIDA, pues proviene de la "
         "ficha técnica de un producto y/o de estudios clínicos— genera exactamente "
         f"{total} preguntas de evaluación profesional {ref}:\n"
-        f"- {n_multi} de opción múltiple (tipo 'multi', 4 opciones, 1 correcta)\n"
-        f"- {n_casos} casos clínicos (tipo 'caso', con 'escenario', 4 opciones, 1 correcta)\n"
+        f"- {n_multi} de opción múltiple (tipo 'multi', EXACTAMENTE 5 opciones a–e, 1 correcta)\n"
+        f"- {n_casos} casos clínicos (tipo 'caso', con 'escenario', EXACTAMENTE 5 opciones a–e, 1 correcta)\n"
         f"- {n_vf} de Verdadero/Falso (tipo 'vf', EXACTAMENTE 2 opciones [\"Verdadero\",\"Falso\"] en ese orden; "
         "'correcta'=0 si la afirmación es verdadera, 1 si es falsa)\n\n"
         "REGLAS DE REDACCIÓN (obligatorias):\n"
@@ -75,7 +75,7 @@ def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | Non
         "la relativices ('según el documento', 'el texto indica', etc. están prohibidos).\n\n"
         "Devuelve SOLO un arreglo JSON. Cada pregunta con este esquema:\n"
         "tipo: 'multi'|'caso'|'vf'; escenario: string (solo caso); texto: string; "
-        "opciones: array de strings (4 para multi/caso, 2 para vf); correcta: índice 0-based de la opción correcta; "
+        "opciones: array de strings (5 para multi/caso, 2 para vf); correcta: índice 0-based de la opción correcta; "
         "explicacion: string.\n\nINFORMACIÓN DE REFERENCIA:\n" + texto_acotado)
 
 
@@ -156,6 +156,7 @@ def _generar_demo(texto: str, n_multi: int, n_casos: int, producto: str | None =
                 distractores[i % len(distractores)],
                 distractores[(i + 1) % len(distractores)],
                 distractores[(i + 2) % len(distractores)],
+                distractores[(i + 3) % len(distractores)],
             ],
             "correcta": 0,
             "explicacion": f"La afirmación correcta corresponde a la información clínica de {prod}. (Generada en MODO DEMO, sin IA real.)",
@@ -181,6 +182,7 @@ def _generar_demo(texto: str, n_multi: int, n_casos: int, producto: str | None =
                 distractores[i % len(distractores)],
                 distractores[(i + 1) % len(distractores)],
                 distractores[(i + 2) % len(distractores)],
+                distractores[(i + 3) % len(distractores)],
             ],
             "correcta": 0,
             "explicacion": f"La respuesta correcta refleja la evidencia clínica de {prod}. (Generada en MODO DEMO, sin IA real.)",
@@ -227,7 +229,7 @@ def validar_preguntas_generadas(data: list) -> list[dict]:
         if not (q.get("texto") or "").strip():
             raise ValueError(f"Pregunta {i}: texto vacío")
         ops = q.get("opciones")
-        n_ops = 2 if tipo == "vf" else 4  # vf: Verdadero/Falso; multi/caso: 4 opciones
+        n_ops = 2 if tipo == "vf" else 5  # vf: Verdadero/Falso; multi/caso: 5 opciones (a–e)
         if not isinstance(ops, list) or len(ops) != n_ops or not all(isinstance(o, str) and o.strip() for o in ops):
             raise ValueError(f"Pregunta {i}: debe tener exactamente {n_ops} opciones no vacías")
         correcta = q.get("correcta")

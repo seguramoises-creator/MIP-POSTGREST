@@ -45,8 +45,8 @@ class PreguntaCrear(BaseModel):
     escenario: str | None = None
     texto: str = Field(min_length=1)
     explicacion: str | None = None
-    # 2 opciones (Verdadero/Falso) hasta 4 (opción múltiple).
-    opciones: list[PreguntaOpcionCrear] = Field(min_length=2, max_length=4)
+    # 2 opciones (Verdadero/Falso) hasta 5 (opción múltiple a–e, estándar VISTA).
+    opciones: list[PreguntaOpcionCrear] = Field(min_length=2, max_length=5)
 
 
 class OpcionResponse(BaseModel):

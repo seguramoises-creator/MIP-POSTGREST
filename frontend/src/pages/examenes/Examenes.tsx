@@ -26,8 +26,14 @@ function colorPorNota(score: number): string {
   return '#b71c1c';                  // rojo
 }
 
+// Opción múltiple: 5 opciones (a–e) según el estándar VISTA.
 const opcionesVacias = (): OpcionCrear[] =>
-  [0, 1, 2, 3].map(() => ({ texto_opcion: '', es_correcta: false }));
+  [0, 1, 2, 3, 4].map(() => ({ texto_opcion: '', es_correcta: false }));
+const LETRAS = ['a', 'b', 'c', 'd', 'e'];
+
+// Detección para advertencias de redacción (sección 5.3 del spec).
+const RE_NEGACION = /\b(no|nunca|jam[aá]s|tampoco|excepto|incorrecto|falso|falsa)\b/i;
+const RE_TODAS_NINGUNA = /\b(todas|ninguna)\b.*\banteriores\b/i;
 
 export default function Examenes() {
   const [examenes, setExamenes] = useState<Examen[]>([]);
@@ -142,6 +148,13 @@ export default function Examenes() {
   }
   async function handleAgregarPregunta() {
     if (!sel) return;
+    // Advertencias de redacción (sección 5.3): avisar y pedir confirmación.
+    if (RE_NEGACION.test(preg.texto)) {
+      if (!window.confirm('El enunciado contiene términos negativos (no, nunca, excepto, falso…). Se recomienda redactar en positivo. ¿Continuar de todas formas?')) return;
+    }
+    if (preg.tipo === 'multi' && preg.opciones.some((o) => RE_TODAS_NINGUNA.test(o.texto_opcion))) {
+      if (!window.confirm('Una opción usa "todas/ninguna de las anteriores". Se recomienda evitarlas. ¿Continuar de todas formas?')) return;
+    }
     const opciones = preg.tipo === 'vf'
       ? [
           { texto_opcion: 'Verdadero', es_correcta: preg.vfCorrecta === 'V' },
@@ -308,6 +321,17 @@ export default function Examenes() {
 
                 {tab === 0 && (
                   <Stack spacing={1.5}>
+                    <Alert severity="info" icon={false} sx={{ '& .MuiAlert-message': { width: '100%' } }}>
+                      <Typography variant="caption" fontWeight={700} display="block" gutterBottom>
+                        Guía de redacción (estándar VISTA):
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" component="div">
+                        • Clara y sin ambigüedad — una sola interpretación.<br />
+                        • Redacta en <b>positivo</b> (evita "no", "nunca", "excepto").<br />
+                        • Un solo concepto por pregunta.<br />
+                        • Opción múltiple: <b>5 opciones (a–e)</b> homogéneas y plausibles; sin "todas/ninguna de las anteriores".
+                      </Typography>
+                    </Alert>
                     <TextField select size="small" label="Tipo de pregunta" value={preg.tipo}
                                onChange={(e) => setPreg({ ...preg, tipo: e.target.value as 'multi' | 'vf' })}
                                sx={{ maxWidth: 280 }}>
@@ -319,7 +343,7 @@ export default function Examenes() {
                     {preg.tipo === 'multi' ? (
                       preg.opciones.map((op, i) => (
                         <Stack key={i} direction="row" spacing={1} alignItems="center">
-                          <TextField fullWidth size="small" label={`Opción ${i + 1}`} value={op.texto_opcion} onChange={(e) => setOpcion(i, 'texto_opcion', e.target.value)} />
+                          <TextField fullWidth size="small" label={`Opción ${LETRAS[i] ?? i + 1}`} value={op.texto_opcion} onChange={(e) => setOpcion(i, 'texto_opcion', e.target.value)} />
                           <FormControlLabel control={<Checkbox checked={op.es_correcta} onChange={(e) => setOpcion(i, 'es_correcta', e.target.checked)} />} label="Correcta" />
                         </Stack>
                       ))

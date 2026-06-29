@@ -3,7 +3,7 @@ from app.services import examen_ia_service as ia
 
 
 def _q(**kw):
-    base = {"tipo": "multi", "texto": "¿?", "opciones": ["a", "b", "c", "d"],
+    base = {"tipo": "multi", "texto": "¿?", "opciones": ["a", "b", "c", "d", "e"],
             "correcta": 1, "explicacion": "porque"}
     base.update(kw)
     return base
@@ -94,7 +94,7 @@ def _mock_client(payload):
 
 
 def test_generar_preguntas_ia_parsea_y_valida():
-    payload = [{"tipo": "multi", "texto": "¿?", "opciones": ["a", "b", "c", "d"],
+    payload = [{"tipo": "multi", "texto": "¿?", "opciones": ["a", "b", "c", "d", "e"],
                 "correcta": 0, "explicacion": "e"}]
     client = _mock_client(payload)
     out = ia.generar_preguntas_ia("texto fuente", n_multi=1, n_casos=0, client=client)

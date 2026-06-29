@@ -43,6 +43,13 @@ def agregar_pregunta(db: Session, examen_id: int, datos: PreguntaCrear) -> Pregu
         raise ValueError("Examen no encontrado")
     if examen.estado != "borrador":
         raise ValueError("Solo se editan preguntas de un examen en borrador")  # RN-01
+    # Cantidad de opciones por tipo (estándar VISTA): opción múltiple = 5 (a–e),
+    # Verdadero/Falso = 2. (La pregunta abierta —sin opciones— se maneja aparte.)
+    n_ops = len(datos.opciones)
+    if datos.tipo in ("multi", "caso") and n_ops != 5:
+        raise ValueError("La pregunta de opción múltiple debe tener exactamente 5 opciones (a–e)")
+    if datos.tipo == "vf" and n_ops != 2:
+        raise ValueError("La pregunta Verdadero/Falso debe tener exactamente 2 opciones")
     n_correctas = sum(1 for o in datos.opciones if o.es_correcta)
     if n_correctas != 1:
         raise ValueError("La pregunta debe tener exactamente 1 opción correcta")
