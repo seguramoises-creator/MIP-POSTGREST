@@ -230,10 +230,13 @@ export default function Examenes() {
               <Stack spacing={1.5}>
                 <TextField label="Nombre del examen" size="small" value={ia.nombre} onChange={(e) => setIa({ ...ia, nombre: e.target.value })} />
                 <TextField label="Producto" size="small" value={ia.producto} onChange={(e) => setIa({ ...ia, producto: e.target.value })} />
+                <Typography variant="caption" color="text.secondary">
+                  ¿Cuántas preguntas de cada tipo quieres que genere la IA? (escribe la cantidad)
+                </Typography>
                 <Stack direction="row" spacing={1.5}>
-                  <TextField label="Opción múltiple" type="number" size="small" inputProps={{ min: 0 }} value={ia.n_multi} onChange={(e) => setIa({ ...ia, n_multi: Number(e.target.value) })} />
-                  <TextField label="Verdadero/Falso" type="number" size="small" inputProps={{ min: 0 }} value={ia.n_vf} onChange={(e) => setIa({ ...ia, n_vf: Number(e.target.value) })} />
-                  <TextField label="Casos clínicos" type="number" size="small" inputProps={{ min: 0 }} value={ia.n_casos} onChange={(e) => setIa({ ...ia, n_casos: Number(e.target.value) })} />
+                  <TextField label="N.° opción múltiple" type="number" size="small" inputProps={{ min: 0 }} helperText="cantidad" value={ia.n_multi} onChange={(e) => setIa({ ...ia, n_multi: Number(e.target.value) })} />
+                  <TextField label="N.° verdadero/falso" type="number" size="small" inputProps={{ min: 0 }} helperText="cantidad" value={ia.n_vf} onChange={(e) => setIa({ ...ia, n_vf: Number(e.target.value) })} />
+                  <TextField label="N.° casos clínicos" type="number" size="small" inputProps={{ min: 0 }} helperText="cantidad" value={ia.n_casos} onChange={(e) => setIa({ ...ia, n_casos: Number(e.target.value) })} />
                 </Stack>
                 <Button component="label" variant="outlined" startIcon={<UploadFile />} size="small">
                   {iaArchivo ? iaArchivo.name : 'Subir documento (PDF/Word/PPT)'}
