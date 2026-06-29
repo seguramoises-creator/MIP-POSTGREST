@@ -3,6 +3,7 @@ import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Divider,
   Table, TableHead, TableRow, TableCell, TableBody, Tabs, Tab, Alert, Checkbox,
   FormControlLabel, CircularProgress, Divider as MuiDivider, IconButton, Autocomplete,
+  MenuItem, RadioGroup, Radio,
 } from '@mui/material';
 import { Add, AutoAwesome, UploadFile, CheckCircle, DeleteOutline, FileDownload } from '@mui/icons-material';
 import {
@@ -126,7 +127,10 @@ export default function Examenes() {
   useEffect(() => { if (sel && tab === 0) cargarPreguntas(sel.id); }, [sel, tab, cargarPreguntas]);
 
   // Pregunta
-  const [preg, setPreg] = useState({ texto: '', explicacion: '', opciones: opcionesVacias() });
+  const [preg, setPreg] = useState({
+    tipo: 'multi' as 'multi' | 'vf', texto: '', explicacion: '',
+    opciones: opcionesVacias(), vfCorrecta: 'V' as 'V' | 'F',
+  });
   function setOpcion(i: number, campo: keyof OpcionCrear, valor: string | boolean) {
     setPreg((p) => {
       const ops = p.opciones.map((o, j) => {
@@ -138,9 +142,15 @@ export default function Examenes() {
   }
   async function handleAgregarPregunta() {
     if (!sel) return;
+    const opciones = preg.tipo === 'vf'
+      ? [
+          { texto_opcion: 'Verdadero', es_correcta: preg.vfCorrecta === 'V' },
+          { texto_opcion: 'Falso', es_correcta: preg.vfCorrecta === 'F' },
+        ]
+      : preg.opciones;
     try {
-      await agregarPregunta(sel.id, { tipo: 'multi', texto: preg.texto, explicacion: preg.explicacion || null, opciones: preg.opciones });
-      setPreg({ texto: '', explicacion: '', opciones: opcionesVacias() });
+      await agregarPregunta(sel.id, { tipo: preg.tipo, texto: preg.texto, explicacion: preg.explicacion || null, opciones });
+      setPreg({ tipo: preg.tipo, texto: '', explicacion: '', opciones: opcionesVacias(), vfCorrecta: 'V' });
       setMsg({ tipo: 'success', texto: 'Pregunta agregada.' });
       cargarPreguntas(sel.id);
     } catch { setMsg({ tipo: 'error', texto: 'Revisa que haya exactamente 1 opción correcta y el examen esté en borrador.' }); }
@@ -288,13 +298,33 @@ export default function Examenes() {
 
                 {tab === 0 && (
                   <Stack spacing={1.5}>
-                    <TextField label="Enunciado" multiline minRows={2} value={preg.texto} onChange={(e) => setPreg({ ...preg, texto: e.target.value })} />
-                    {preg.opciones.map((op, i) => (
-                      <Stack key={i} direction="row" spacing={1} alignItems="center">
-                        <TextField fullWidth size="small" label={`Opción ${i + 1}`} value={op.texto_opcion} onChange={(e) => setOpcion(i, 'texto_opcion', e.target.value)} />
-                        <FormControlLabel control={<Checkbox checked={op.es_correcta} onChange={(e) => setOpcion(i, 'es_correcta', e.target.checked)} />} label="Correcta" />
-                      </Stack>
-                    ))}
+                    <TextField select size="small" label="Tipo de pregunta" value={preg.tipo}
+                               onChange={(e) => setPreg({ ...preg, tipo: e.target.value as 'multi' | 'vf' })}
+                               sx={{ maxWidth: 280 }}>
+                      <MenuItem value="multi">Opción múltiple (elegir la correcta)</MenuItem>
+                      <MenuItem value="vf">Verdadero / Falso</MenuItem>
+                    </TextField>
+                    <TextField label={preg.tipo === 'vf' ? 'Afirmación' : 'Enunciado'} multiline minRows={2}
+                               value={preg.texto} onChange={(e) => setPreg({ ...preg, texto: e.target.value })} />
+                    {preg.tipo === 'multi' ? (
+                      preg.opciones.map((op, i) => (
+                        <Stack key={i} direction="row" spacing={1} alignItems="center">
+                          <TextField fullWidth size="small" label={`Opción ${i + 1}`} value={op.texto_opcion} onChange={(e) => setOpcion(i, 'texto_opcion', e.target.value)} />
+                          <FormControlLabel control={<Checkbox checked={op.es_correcta} onChange={(e) => setOpcion(i, 'es_correcta', e.target.checked)} />} label="Correcta" />
+                        </Stack>
+                      ))
+                    ) : (
+                      <Box>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                          ¿La afirmación es verdadera o falsa? (marca la respuesta correcta)
+                        </Typography>
+                        <RadioGroup row value={preg.vfCorrecta}
+                                    onChange={(e) => setPreg({ ...preg, vfCorrecta: e.target.value as 'V' | 'F' })}>
+                          <FormControlLabel value="V" control={<Radio color="success" />} label="Verdadero" />
+                          <FormControlLabel value="F" control={<Radio color="success" />} label="Falso" />
+                        </RadioGroup>
+                      </Box>
+                    )}
                     <TextField label="Explicación (retroalimentación)" value={preg.explicacion} onChange={(e) => setPreg({ ...preg, explicacion: e.target.value })} />
                     <Stack direction="row" spacing={1.5}>
                       <Button variant="outlined" startIcon={<Add />} onClick={handleAgregarPregunta} disabled={sel.estado !== 'borrador'}>Agregar pregunta</Button>

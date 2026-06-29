@@ -41,11 +41,12 @@ class PreguntaOpcionCrear(BaseModel):
 
 
 class PreguntaCrear(BaseModel):
-    tipo: str = Field(default="multi")  # multi | caso
+    tipo: str = Field(default="multi")  # multi | caso | vf (verdadero/falso)
     escenario: str | None = None
     texto: str = Field(min_length=1)
     explicacion: str | None = None
-    opciones: list[PreguntaOpcionCrear] = Field(min_length=4, max_length=4)
+    # 2 opciones (Verdadero/Falso) hasta 4 (opción múltiple).
+    opciones: list[PreguntaOpcionCrear] = Field(min_length=2, max_length=4)
 
 
 class OpcionResponse(BaseModel):
