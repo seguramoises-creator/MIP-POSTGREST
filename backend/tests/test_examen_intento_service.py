@@ -124,7 +124,7 @@ def test_preparar_intento_crea_intento_y_preguntas_presentadas():
 def test_preparar_intento_vencido_falla():
     """RN-06: fecha_limite en el pasado debe levantar ValueError antes de cualquier query."""
     db = MagicMock()
-    fecha_pasada = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+    fecha_pasada = (datetime.now() - timedelta(days=2)).date()
     asig = _asig(estado="pendiente", fecha_limite=fecha_pasada)
     with pytest.raises(ValueError, match="vencida"):
         svc.preparar_intento(db, asig, "RM", 5, {})
@@ -138,7 +138,7 @@ def test_preparar_intento_fecha_limite_datetime_no_rompe():
     from tests.conftest import FakeQuery
     # Futura (datetime): procede a crear el intento sin TypeError
     db = MagicMock()
-    asig = _asig(estado="pendiente", fecha_limite=datetime.now(timezone.utc) + timedelta(days=3))
+    asig = _asig(estado="pendiente", fecha_limite=datetime.now() + timedelta(days=3))
     db.query.side_effect = [
         FakeQuery(first_result=_examen_mock(estado="activo")),
         FakeQuery(all_result=[_pregunta_mock(1)]),
@@ -146,9 +146,19 @@ def test_preparar_intento_fecha_limite_datetime_no_rompe():
     result = svc.preparar_intento(db, asig, "RM", 5, {}, rng=random.Random(0))
     assert hasattr(result, "_preguntas_presentadas")
 
+    # Hoy (datetime, día local): el plazo es inclusivo → NO debe vencer
+    db_hoy = MagicMock()
+    asig_hoy = _asig(estado="pendiente", fecha_limite=datetime.now())
+    db_hoy.query.side_effect = [
+        FakeQuery(first_result=_examen_mock(estado="activo")),
+        FakeQuery(all_result=[_pregunta_mock(1)]),
+    ]
+    assert hasattr(svc.preparar_intento(db_hoy, asig_hoy, "RM", 5, {}, rng=random.Random(0)),
+                   "_preguntas_presentadas")
+
     # Pasada (datetime): debe levantar 'vencida'
     db2 = MagicMock()
-    asig2 = _asig(estado="pendiente", fecha_limite=datetime.now(timezone.utc) - timedelta(days=1))
+    asig2 = _asig(estado="pendiente", fecha_limite=datetime.now() - timedelta(days=2))
     with pytest.raises(ValueError, match="vencida"):
         svc.preparar_intento(db2, asig2, "RM", 5, {})
 
