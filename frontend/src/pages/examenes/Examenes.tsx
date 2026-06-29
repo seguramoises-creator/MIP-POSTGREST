@@ -2,16 +2,18 @@ import { useEffect, useState, useCallback, type MouseEvent } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Divider,
   Table, TableHead, TableRow, TableCell, TableBody, Tabs, Tab, Alert, Checkbox,
-  FormControlLabel, CircularProgress, Divider as MuiDivider, IconButton,
+  FormControlLabel, CircularProgress, Divider as MuiDivider, IconButton, Autocomplete,
 } from '@mui/material';
 import { Add, AutoAwesome, UploadFile, CheckCircle, DeleteOutline, FileDownload } from '@mui/icons-material';
 import {
   listarExamenes, crearExamen, agregarPregunta, publicarExamen, asignarExamen,
   resultadosExamen, analisisPreguntas, listarPreguntasExamen, eliminarPregunta,
-  generarExamenIA, jobEstadoIA, exportarResultadosExcel, eliminarExamen,
+  generarExamenIA, jobEstadoIA, exportarResultadosExcel, eliminarExamen, listarEvaluados,
   type Examen, type OpcionCrear, type EvaluadoRef, type ResultadosExamen,
   type AnalisisPregunta, type PreguntaConOpciones,
 } from '../../services/examenes.service';
+
+type EvalOpt = { tipo: 'RM' | 'GERENTE'; id: number; nombre: string; grupo: string };
 
 const opcionesVacias = (): OpcionCrear[] =>
   [0, 1, 2, 3].map(() => ({ texto_opcion: '', es_correcta: false }));
@@ -140,13 +142,20 @@ export default function Examenes() {
   }
 
   // Asignar
-  const [asig, setAsig] = useState({ evaluados: '', fecha_limite: '', intentos_max: '' });
+  const [asig, setAsig] = useState({ fecha_limite: '', intentos_max: '' });
+  const [evalOpts, setEvalOpts] = useState<EvalOpt[]>([]);
+  const [evalSel, setEvalSel] = useState<EvalOpt[]>([]);
+  useEffect(() => {
+    listarEvaluados().then((cat) => {
+      setEvalOpts([
+        ...cat.rms.map((r) => ({ tipo: 'RM' as const, id: r.id, nombre: r.nombre, grupo: 'Representantes Médicos' })),
+        ...cat.gerentes.map((g) => ({ tipo: 'GERENTE' as const, id: g.id, nombre: g.nombre, grupo: 'Gerentes de Distrito' })),
+      ]);
+    }).catch(() => {});
+  }, []);
   async function handleAsignar() {
-    if (!sel) return;
-    const evaluados: EvaluadoRef[] = asig.evaluados.split(',').map((s) => s.trim()).filter(Boolean).map((tok) => {
-      const [tipo, id] = tok.split(':');
-      return { tipo: (tipo.toUpperCase() as 'RM' | 'GERENTE'), id: Number(id) };
-    });
+    if (!sel || evalSel.length === 0) return;
+    const evaluados: EvaluadoRef[] = evalSel.map((o) => ({ tipo: o.tipo, id: o.id }));
     try {
       await asignarExamen(sel.id, {
         examen_id: sel.id, evaluados,
@@ -154,7 +163,7 @@ export default function Examenes() {
         intentos_max: asig.intentos_max ? Number(asig.intentos_max) : null,
       });
       setMsg({ tipo: 'success', texto: `Asignado a ${evaluados.length} evaluado(s).` });
-      setAsig({ evaluados: '', fecha_limite: '', intentos_max: '' });
+      setEvalSel([]); setAsig({ fecha_limite: '', intentos_max: '' });
     } catch { setMsg({ tipo: 'error', texto: 'No se pudo asignar (el examen debe estar publicado).' }); }
   }
 
@@ -329,12 +338,34 @@ export default function Examenes() {
 
                 {tab === 1 && (
                   <Stack spacing={1.5}>
-                    <TextField label="Evaluados (ej: RM:5, GERENTE:9)" value={asig.evaluados} onChange={(e) => setAsig({ ...asig, evaluados: e.target.value })} helperText="Formato tipo:id separados por coma" />
+                    <Autocomplete
+                      multiple
+                      options={evalOpts}
+                      value={evalSel}
+                      onChange={(_, v) => setEvalSel(v)}
+                      groupBy={(o) => o.grupo}
+                      getOptionLabel={(o) => o.nombre}
+                      isOptionEqualToValue={(a, b) => a.tipo === b.tipo && a.id === b.id}
+                      renderTags={(value, getTagProps) =>
+                        value.map((o, index) => (
+                          <Chip {...getTagProps({ index })} key={`${o.tipo}-${o.id}`} size="small"
+                                color={o.tipo === 'RM' ? 'primary' : 'secondary'}
+                                label={`${o.tipo === 'RM' ? 'Rep. Médico' : 'Gerente Distrito'} · ${o.nombre}`} />
+                        ))
+                      }
+                      renderInput={(params) => (
+                        <TextField {...params} label="Asignar a (Representantes Médicos / Gerentes de Distrito)"
+                                   placeholder="Buscar por nombre…"
+                                   helperText="Elige por nombre; el grupo indica si es Representante Médico o Gerente de Distrito." />
+                      )}
+                    />
                     <Stack direction="row" spacing={1.5}>
                       <TextField label="Fecha límite" type="date" InputLabelProps={{ shrink: true }} value={asig.fecha_limite} onChange={(e) => setAsig({ ...asig, fecha_limite: e.target.value })} />
                       <TextField label="Intentos máx" type="number" value={asig.intentos_max} onChange={(e) => setAsig({ ...asig, intentos_max: e.target.value })} />
                     </Stack>
-                    <Button variant="contained" onClick={handleAsignar} disabled={sel.estado !== 'activo' || !asig.evaluados}>Asignar</Button>
+                    <Button variant="contained" onClick={handleAsignar} disabled={sel.estado !== 'activo' || evalSel.length === 0}>
+                      Asignar {evalSel.length > 0 ? `(${evalSel.length})` : ''}
+                    </Button>
                   </Stack>
                 )}
 

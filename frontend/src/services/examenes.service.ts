@@ -111,6 +111,11 @@ export const eliminarPregunta = (examenId: number, preguntaId: number) =>
 export const eliminarExamen = (examenId: number) =>
   api.delete(`/examenes/${examenId}`);
 
+export interface EvaluadoOpcion { id: number; nombre: string; tipo?: string; }
+export interface EvaluadosCatalogo { rms: EvaluadoOpcion[]; gerentes: EvaluadoOpcion[]; }
+export const listarEvaluados = () =>
+  api.get<EvaluadosCatalogo>('/examenes/evaluados').then(r => r.data);
+
 // ── Generación con IA ─────────────────────────────────────────────────
 export interface GenerarIAParams {
   nombre: string; producto?: string; n_multi: number; n_casos: number;

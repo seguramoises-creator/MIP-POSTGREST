@@ -43,22 +43,37 @@ def extraer_texto_fuente(ruta: str, tipo_archivo: str) -> str:
     raise ValueError(f"Tipo de archivo no soportado: {tipo_archivo}")
 
 
-def construir_prompt(texto: str, n_multi: int, n_casos: int) -> str:
+def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | None = None) -> str:
     """Construye el prompt base para la generación de preguntas con Claude.
 
     El texto de entrada se trunca a _TEXTO_MAX_CHARS para acotar el tamaño del
     prompt y el costo de tokens, independientemente del tamaño del archivo fuente.
+
+    Las preguntas se formulan SOBRE el producto / la información (tratada como
+    verdadera y válida), nunca "sobre el documento": la fuente se da por buena
+    como ficha técnica o estudio clínico, y las preguntas deben sostenerse solas.
     """
     texto_acotado = texto[:_TEXTO_MAX_CHARS]
     total = n_multi + n_casos
+    ref = f"sobre el producto {producto}" if producto else "sobre el producto / tema correspondiente"
     return (
-        "Eres un experto en capacitación farmacéutica. Analiza el siguiente documento "
-        f"y genera exactamente {total} preguntas de evaluación:\n"
+        "Eres un experto en capacitación farmacéutica. A partir de la siguiente "
+        "información —que debes tomar como VERDADERA y VÁLIDA, pues proviene de la "
+        "ficha técnica de un producto y/o de estudios clínicos— genera exactamente "
+        f"{total} preguntas de evaluación profesional {ref}:\n"
         f"- {n_multi} de opción múltiple\n- {n_casos} casos clínicos\n\n"
+        "REGLAS DE REDACCIÓN (obligatorias):\n"
+        "- Formula cada pregunta como conocimiento profesional sobre el producto, el "
+        "principio activo, la indicación, la dosis, las contraindicaciones, los efectos "
+        "adversos o el estudio clínico correspondiente.\n"
+        "- NUNCA menciones 'el documento', 'este documento', 'el texto', 'el material' "
+        "ni la fuente. La pregunta debe entenderse por sí sola, como en un examen real.\n"
+        "- Trata la información provista como un hecho establecido; no la cuestiones ni "
+        "la relativices ('según el documento', 'el texto indica', etc. están prohibidos).\n\n"
         "Devuelve SOLO un arreglo JSON. Cada pregunta con este esquema:\n"
         "tipo: 'multi'|'caso'; escenario: string (solo caso); texto: string; "
         "opciones: [string,string,string,string] (exactamente 4); correcta: 0|1|2|3; "
-        "explicacion: string.\n\nDOCUMENTO:\n" + texto_acotado)
+        "explicacion: string.\n\nINFORMACIÓN DE REFERENCIA:\n" + texto_acotado)
 
 
 # Maximum characters fed into the prompt to bound token cost.
@@ -108,65 +123,77 @@ def _extraer_json(texto_respuesta: str):
         raise ValueError(f"La IA no devolvió JSON válido: {e}")
 
 
-def _generar_demo(texto: str, n_multi: int, n_casos: int) -> list[dict]:
+def _generar_demo(texto: str, n_multi: int, n_casos: int, producto: str | None = None) -> list[dict]:
     """Genera preguntas localmente (MODO DEMO), sin llamar a Claude ni gastar API.
 
-    Las preguntas referencian frases reales del documento subido y se marcan con
-    el prefijo [DEMO] para que en la revisión sea obvio que no son salida de IA real.
-    Pasan por validar_preguntas_generadas para garantizar el mismo esquema.
+    Las preguntas se formulan SOBRE el producto / la información (tratada como
+    verdadera y válida), nunca "sobre el documento". Se marca [DEMO] solo como
+    indicador de modo. Pasan por validar_preguntas_generadas para validar el esquema.
     """
     import re
     frases = [s.strip() for s in re.split(r"[.\n]", texto) if len(s.strip()) >= 25]
     if not frases:
-        frases = ["el contenido del documento proporcionado"]
+        frases = ["la información clínica del producto"]
+    prod = (producto or "el producto").strip()
+    # Distractores genéricos, plausibles y SIN referencia a la fuente/documento.
+    distractores = [
+        "No existe evidencia clínica que respalde esa afirmación.",
+        "Está contraindicado en la totalidad de los pacientes.",
+        "Carece de eficacia terapéutica demostrada.",
+        "Corresponde a una indicación distinta a la establecida.",
+    ]
     preguntas: list[dict] = []
     for i in range(max(0, n_multi)):
         frase = frases[i % len(frases)][:160]
         preguntas.append({
             "tipo": "multi",
-            "texto": f'[DEMO] Según el documento, ¿qué afirmación es correcta? (ref.: "{frase}")',
+            "texto": f"[DEMO] Respecto a {prod}, ¿cuál de las siguientes afirmaciones es correcta?",
             "opciones": [
                 frase,
-                "Ninguna de las anteriores se menciona en el documento.",
-                "El documento no aborda este tema.",
-                "Es lo contrario de lo que indica el documento.",
+                distractores[i % len(distractores)],
+                distractores[(i + 1) % len(distractores)],
+                distractores[(i + 2) % len(distractores)],
             ],
             "correcta": 0,
-            "explicacion": "Pregunta generada en MODO DEMO (sin IA real); la opción correcta proviene del texto del documento.",
+            "explicacion": f"La afirmación correcta corresponde a la información clínica de {prod}. (Generada en MODO DEMO, sin IA real.)",
         })
     for i in range(max(0, n_casos)):
         frase = frases[(n_multi + i) % len(frases)][:160]
         preguntas.append({
             "tipo": "caso",
-            "escenario": f'[DEMO] Un representante médico consulta el material sobre: "{frase}".',
-            "texto": "¿Cuál es la acción recomendada según el documento?",
+            "escenario": (f"[DEMO] Un médico solicita información sobre {prod}. "
+                          f"De acuerdo con la evidencia clínica disponible: {frase}."),
+            "texto": f"¿Cuál es la información correcta que debe transmitir el representante sobre {prod}?",
             "opciones": [
-                "Aplicar lo descrito en el documento.",
-                "Ignorar la información del documento.",
-                "Contradecir las indicaciones del documento.",
-                "Posponer indefinidamente la decisión.",
+                frase,
+                distractores[i % len(distractores)],
+                distractores[(i + 1) % len(distractores)],
+                distractores[(i + 2) % len(distractores)],
             ],
             "correcta": 0,
-            "explicacion": "Caso generado en MODO DEMO (sin IA real).",
+            "explicacion": f"La respuesta correcta refleja la evidencia clínica de {prod}. (Generada en MODO DEMO, sin IA real.)",
         })
     return validar_preguntas_generadas(preguntas)
 
 
 def generar_preguntas_ia(texto: str, n_multi: int, n_casos: int,
-                         client=None, model: str | None = None) -> list[dict]:
+                         client=None, model: str | None = None,
+                         producto: str | None = None) -> list[dict]:
     """Genera preguntas llamando a Claude. El cliente se inyecta para testing.
+
+    `producto` ancla las preguntas al producto/tema (en vez de a "el documento").
 
     Si EXAMEN_IA_DEMO está activo y no se inyectó cliente, usa el generador local
     (sin consumir API) — permite probar el flujo completo sin créditos.
     """
     if client is None and settings.EXAMEN_IA_DEMO:
         logger.info("generar_preguntas_ia: MODO DEMO activo — generación local sin Claude")
-        return _generar_demo(texto, n_multi, n_casos)
+        return _generar_demo(texto, n_multi, n_casos, producto)
     if client is None:
         import anthropic
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     model = model or settings.EXAM_AI_MODEL
-    prompt = construir_prompt(texto, n_multi, n_casos)
+    prompt = construir_prompt(texto, n_multi, n_casos, producto)
     respuesta = client.messages.create(
         model=model, max_tokens=4096,
         messages=[{"role": "user", "content": prompt}])
@@ -251,7 +278,7 @@ def procesar_generacion_ia(fuente_id: int) -> None:
     diseño documentada en el módulo para evitar una migración adicional).
     """
     from app.db.database import SessionLocal
-    from app.models.exam_models import FuenteIA
+    from app.models.exam_models import Examen, FuenteIA
 
     db = SessionLocal()
     try:
@@ -284,7 +311,9 @@ def procesar_generacion_ia(fuente_id: int) -> None:
             else:
                 raise ValueError("No hay fuente de texto: ni archivo ni texto_pegado")
 
-            preguntas = generar_preguntas_ia(texto, n_multi, n_casos)
+            examen = db.query(Examen).filter(Examen.id == fuente.examen_id).first()
+            producto = examen.producto if examen else None
+            preguntas = generar_preguntas_ia(texto, n_multi, n_casos, producto=producto)
             persistir_preguntas(db, fuente.examen_id, preguntas)
 
             fuente.estado_generacion = "exitoso"

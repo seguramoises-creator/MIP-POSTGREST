@@ -233,6 +233,27 @@ def resumen_capacitacion(
     return examen_resultados_service.resumen_capacitacion(db)
 
 
+@router.get("/evaluados", response_model=dict)
+def listar_evaluados(
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Catálogo para el selector de asignación: Representantes Médicos y Gerentes
+    de Distrito activos (id + nombre), para elegir el evaluado por nombre en vez
+    de escribir 'tipo:id' a mano."""
+    from app.models.dimensiones import RepresentanteMedico, Gerente
+    rms = (db.query(RepresentanteMedico.id, RepresentanteMedico.nombre)
+           .filter(RepresentanteMedico.activo == True)  # noqa: E712
+           .order_by(RepresentanteMedico.nombre).all())
+    gers = (db.query(Gerente.id, Gerente.nombre, Gerente.tipo)
+            .filter(Gerente.activo == True)  # noqa: E712
+            .order_by(Gerente.nombre).all())
+    return {
+        "rms": [{"id": r.id, "nombre": r.nombre} for r in rms],
+        "gerentes": [{"id": g.id, "nombre": g.nombre, "tipo": g.tipo} for g in gers],
+    }
+
+
 _XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
 
