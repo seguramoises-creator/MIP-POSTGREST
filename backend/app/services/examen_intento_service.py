@@ -39,8 +39,14 @@ def preparar_intento(db: Session, asignacion, evaluado_tipo, evaluado_id, contex
     if asignacion.intentos_max is not None and asignacion.intentos_usados >= asignacion.intentos_max:
         raise ValueError("Se agotaron los intentos permitidos")
 
-    if asignacion.fecha_limite is not None and datetime.now(timezone.utc).date() > asignacion.fecha_limite:
-        raise ValueError("La asignación está vencida")
+    if asignacion.fecha_limite is not None:
+        # fecha_limite se persiste como DateTime (naive en SQL Server); comparar por
+        # fecha de calendario evita el TypeError date>datetime y hace el plazo
+        # inclusivo del propio día límite.
+        limite = asignacion.fecha_limite
+        limite_date = limite.date() if isinstance(limite, datetime) else limite
+        if datetime.now(timezone.utc).date() > limite_date:
+            raise ValueError("La asignación está vencida")
 
     rng = rng or random.Random()
 

@@ -132,6 +132,27 @@ def test_preparar_intento_vencido_falla():
     db.query.assert_not_called()
 
 
+def test_preparar_intento_fecha_limite_datetime_no_rompe():
+    """Regresión: fecha_limite llega como DATETIME (lo que devuelve SQL Server), no
+    como date. La comparación no debe romper (antes: TypeError date>datetime)."""
+    from tests.conftest import FakeQuery
+    # Futura (datetime): procede a crear el intento sin TypeError
+    db = MagicMock()
+    asig = _asig(estado="pendiente", fecha_limite=datetime.now(timezone.utc) + timedelta(days=3))
+    db.query.side_effect = [
+        FakeQuery(first_result=_examen_mock(estado="activo")),
+        FakeQuery(all_result=[_pregunta_mock(1)]),
+    ]
+    result = svc.preparar_intento(db, asig, "RM", 5, {}, rng=random.Random(0))
+    assert hasattr(result, "_preguntas_presentadas")
+
+    # Pasada (datetime): debe levantar 'vencida'
+    db2 = MagicMock()
+    asig2 = _asig(estado="pendiente", fecha_limite=datetime.now(timezone.utc) - timedelta(days=1))
+    with pytest.raises(ValueError, match="vencida"):
+        svc.preparar_intento(db2, asig2, "RM", 5, {})
+
+
 def test_preparar_intento_baraja_preguntas_y_opciones():
     """rand_preguntas=True + rand_opciones=True con semilla=7 reordena los IDs de preguntas
     y ninguna opción expone es_correcta al evaluado."""
