@@ -15,6 +15,16 @@ import {
 
 type EvalOpt = { tipo: 'RM' | 'GERENTE'; id: number; nombre: string; grupo: string };
 
+// Color del score según la escala del indicador EVAL_CONOCIMIENTOS (nota /10):
+//  nota < 8  → factor 0      → rojo  (no aporta al indicador)
+//  nota 8–8.9 → factor 0.8–0.89 → ámbar (aprobado, bajo)
+//  nota 9–10 → factor 0.9–1.0  → verde (excelente)
+function colorPorNota(score: number): string {
+  if (score >= 90) return '#1b5e20'; // verde
+  if (score >= 80) return '#e65100'; // ámbar/naranja
+  return '#b71c1c';                  // rojo
+}
+
 const opcionesVacias = (): OpcionCrear[] =>
   [0, 1, 2, 3].map(() => ({ texto_opcion: '', es_correcta: false }));
 
@@ -401,14 +411,14 @@ export default function Examenes() {
                         Exportar a Excel
                       </Button>
                     </Box>
-                    <Table size="small">
+                    <Table size="small" sx={{ '& thead th': { fontWeight: 700, color: 'primary.main', bgcolor: 'rgba(26,35,126,0.04)' } }}>
                       <TableHead><TableRow>
                         <TableCell>Evaluado</TableCell><TableCell>Tipo</TableCell>
-                        <TableCell>Fecha del examen</TableCell><TableCell>Score</TableCell><TableCell>Estado</TableCell>
+                        <TableCell>Fecha del examen</TableCell><TableCell align="center">Score</TableCell><TableCell>Estado</TableCell>
                       </TableRow></TableHead>
                       <TableBody>
                         {resultados?.ranking.map((r, i) => (
-                          <TableRow key={i}>
+                          <TableRow key={i} hover>
                             <TableCell>{r.evaluado_nombre ?? `${r.evaluado_tipo} #${r.evaluado_rm_id ?? r.evaluado_gerente_id}`}</TableCell>
                             <TableCell>
                               <Chip size="small" variant="outlined"
@@ -416,12 +426,28 @@ export default function Examenes() {
                                     label={r.evaluado_tipo === 'RM' ? 'Rep. Médico' : 'Gerente Distrito'} />
                             </TableCell>
                             <TableCell>{r.fecha_limite ? new Date(r.fecha_limite).toLocaleDateString() : '—'}</TableCell>
-                            <TableCell>{r.ultimo_score ?? '—'}{r.aprobado ? ' ✓' : ''}</TableCell>
-                            <TableCell>{r.estado}</TableCell>
+                            <TableCell align="center">
+                              {r.ultimo_score == null
+                                ? <Typography variant="body2" color="text.secondary">—</Typography>
+                                : <Chip size="small" label={`${r.ultimo_score}%`}
+                                        sx={{ fontWeight: 700, color: '#fff', minWidth: 64,
+                                              bgcolor: colorPorNota(Number(r.ultimo_score)) }} />}
+                            </TableCell>
+                            <TableCell>
+                              <Chip size="small" variant="outlined"
+                                    color={r.estado === 'completado' ? 'success' : 'default'}
+                                    label={r.estado} />
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
+                    <Stack direction="row" spacing={1.5} sx={{ mt: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                      <Typography variant="caption" color="text.secondary">Escala (EVAL_CONOCIMIENTOS):</Typography>
+                      <Chip size="small" sx={{ bgcolor: '#1b5e20', color: '#fff', height: 18 }} label="≥ 90% excelente" />
+                      <Chip size="small" sx={{ bgcolor: '#e65100', color: '#fff', height: 18 }} label="80–89% aprobado" />
+                      <Chip size="small" sx={{ bgcolor: '#b71c1c', color: '#fff', height: 18 }} label="< 80% no aporta" />
+                    </Stack>
                     <Divider sx={{ my: 2 }} />
                     <Typography fontWeight={600} gutterBottom>% Error por pregunta</Typography>
                     <Table size="small">
