@@ -142,7 +142,7 @@ export default function Examenes() {
   }
 
   // Asignar
-  const [asig, setAsig] = useState({ fecha_limite: '', intentos_max: '' });
+  const [asig, setAsig] = useState({ fecha_limite: '', intentos_max: '1' });
   const [evalOpts, setEvalOpts] = useState<EvalOpt[]>([]);
   const [evalSel, setEvalSel] = useState<EvalOpt[]>([]);
   useEffect(() => {
@@ -163,7 +163,7 @@ export default function Examenes() {
         intentos_max: asig.intentos_max ? Number(asig.intentos_max) : null,
       });
       setMsg({ tipo: 'success', texto: `Asignado a ${evaluados.length} evaluado(s).` });
-      setEvalSel([]); setAsig({ fecha_limite: '', intentos_max: '' });
+      setEvalSel([]); setAsig({ fecha_limite: '', intentos_max: '1' });
     } catch { setMsg({ tipo: 'error', texto: 'No se pudo asignar (el examen debe estar publicado).' }); }
   }
 
@@ -360,10 +360,18 @@ export default function Examenes() {
                       )}
                     />
                     <Stack direction="row" spacing={1.5}>
-                      <TextField label="Fecha límite" type="date" InputLabelProps={{ shrink: true }} value={asig.fecha_limite} onChange={(e) => setAsig({ ...asig, fecha_limite: e.target.value })} />
-                      <TextField label="Intentos máx" type="number" value={asig.intentos_max} onChange={(e) => setAsig({ ...asig, intentos_max: e.target.value })} />
+                      <TextField label="Fecha para tomar el examen" type="date" required
+                                 InputLabelProps={{ shrink: true }} value={asig.fecha_limite}
+                                 onChange={(e) => setAsig({ ...asig, fecha_limite: e.target.value })}
+                                 error={!asig.fecha_limite}
+                                 helperText={!asig.fecha_limite ? 'Obligatoria' : ' '} fullWidth />
+                      <TextField label="Intentos" type="number" value={asig.intentos_max}
+                                 inputProps={{ min: 1 }}
+                                 onChange={(e) => setAsig({ ...asig, intentos_max: e.target.value })}
+                                 helperText="Por defecto 1" />
                     </Stack>
-                    <Button variant="contained" onClick={handleAsignar} disabled={sel.estado !== 'activo' || evalSel.length === 0}>
+                    <Button variant="contained" onClick={handleAsignar}
+                            disabled={sel.estado !== 'activo' || evalSel.length === 0 || !asig.fecha_limite}>
                       Asignar {evalSel.length > 0 ? `(${evalSel.length})` : ''}
                     </Button>
                   </Stack>
@@ -386,11 +394,20 @@ export default function Examenes() {
                       </Button>
                     </Box>
                     <Table size="small">
-                      <TableHead><TableRow><TableCell>Evaluado</TableCell><TableCell>Score</TableCell><TableCell>Estado</TableCell></TableRow></TableHead>
+                      <TableHead><TableRow>
+                        <TableCell>Evaluado</TableCell><TableCell>Tipo</TableCell>
+                        <TableCell>Fecha del examen</TableCell><TableCell>Score</TableCell><TableCell>Estado</TableCell>
+                      </TableRow></TableHead>
                       <TableBody>
                         {resultados?.ranking.map((r, i) => (
                           <TableRow key={i}>
-                            <TableCell>{r.evaluado_tipo} #{r.evaluado_rm_id ?? r.evaluado_gerente_id}</TableCell>
+                            <TableCell>{r.evaluado_nombre ?? `${r.evaluado_tipo} #${r.evaluado_rm_id ?? r.evaluado_gerente_id}`}</TableCell>
+                            <TableCell>
+                              <Chip size="small" variant="outlined"
+                                    color={r.evaluado_tipo === 'RM' ? 'primary' : 'secondary'}
+                                    label={r.evaluado_tipo === 'RM' ? 'Rep. Médico' : 'Gerente Distrito'} />
+                            </TableCell>
+                            <TableCell>{r.fecha_limite ? new Date(r.fecha_limite).toLocaleDateString() : '—'}</TableCell>
                             <TableCell>{r.ultimo_score ?? '—'}{r.aprobado ? ' ✓' : ''}</TableCell>
                             <TableCell>{r.estado}</TableCell>
                           </TableRow>

@@ -146,6 +146,11 @@ def asignar_examen(
         raise ValueError("Examen no encontrado")
     if examen.estado != "activo":
         raise ValueError("Solo se asigna un examen activo (publicado)")
+    # Regla de negocio: la fecha límite (cuándo debe tomarse) es obligatoria.
+    if not fecha_limite:
+        raise ValueError("La fecha límite es obligatoria para asignar el examen")
+    # Intentos por defecto = 1 si no se especifica.
+    intentos = intentos_max if intentos_max else 1
     creadas = []
     for ev in evaluados:
         if ev.tipo not in ("RM", "GERENTE"):
@@ -156,7 +161,7 @@ def asignar_examen(
             evaluado_rm_id=ev.id if ev.tipo == "RM" else None,
             evaluado_gerente_id=ev.id if ev.tipo == "GERENTE" else None,
             fecha_limite=fecha_limite,
-            intentos_max=intentos_max,
+            intentos_max=intentos,
             intentos_usados=0,
             estado="pendiente",
             notif_activa=notif_activa,

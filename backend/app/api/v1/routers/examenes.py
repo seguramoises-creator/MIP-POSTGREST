@@ -605,7 +605,9 @@ def exportar_resultados_excel(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     filas = [
         [
-            f"{r['evaluado_tipo']} #{r['evaluado_rm_id'] or r['evaluado_gerente_id']}",
+            r.get("evaluado_nombre") or f"{r['evaluado_tipo']} #{r['evaluado_rm_id'] or r['evaluado_gerente_id']}",
+            "Rep. Médico" if r["evaluado_tipo"] == "RM" else "Gerente Distrito",
+            r.get("fecha_limite") or "",
             r["ultimo_score"] if r["ultimo_score"] is not None else "",
             "Sí" if r["aprobado"] else "No",
             r["intentos_usados"], r["estado"],
@@ -614,7 +616,7 @@ def exportar_resultados_excel(
     ]
     buf = exportacion_service._construir_workbook(
         f"Resultados - {res['nombre'][:25]}",
-        ["Evaluado", "Último score", "Aprobado", "Intentos", "Estado"],
+        ["Evaluado", "Tipo", "Fecha límite", "Último score", "Aprobado", "Intentos", "Estado"],
         filas,
     )
     return StreamingResponse(buf, media_type=_XLSX_MEDIA,

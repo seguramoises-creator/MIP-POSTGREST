@@ -30,6 +30,24 @@ const theme = createTheme({
   palette: { primary: { main: '#1a237e' }, secondary: { main: '#0d47a1' }, background: { default: '#f5f6fa' } },
   typography: { fontFamily: '"Inter","Roboto","Helvetica","Arial",sans-serif' },
   shape: { borderRadius: 8 },
+  components: {
+    // Elegancia: las tarjetas "outlined" llevan un borde azul oscuro y una
+    // sombra sutil del mismo tono, consistente en toda la app.
+    MuiCard: {
+      styleOverrides: {
+        root: ({ ownerState }: { ownerState: { variant?: string } }) =>
+          ownerState.variant === 'outlined'
+            ? {
+                borderColor: 'rgba(26,35,126,0.45)',
+                borderWidth: 1.5,
+                boxShadow: '0 2px 10px rgba(26,35,126,0.06)',
+                transition: 'box-shadow .2s ease, border-color .2s ease',
+                '&:hover': { borderColor: '#1a237e', boxShadow: '0 4px 16px rgba(26,35,126,0.12)' },
+              }
+            : {},
+      },
+    },
+  },
 });
 
 function SinAcceso() {

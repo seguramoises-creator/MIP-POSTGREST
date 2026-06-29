@@ -49,6 +49,20 @@ def resumen_examen(db: Session, examen_id: int) -> dict:
     aprobados = sum(1 for it in ultimos.values() if it.aprobado)
     promedio = round(sum(scores) / len(scores), 2) if scores else 0.0
 
+    # Nombres de evaluados resueltos en lote (evita N+1)
+    from app.models.dimensiones import RepresentanteMedico, Gerente
+    rm_ids = {a.evaluado_rm_id for a in asignaciones if a.evaluado_rm_id}
+    ger_ids = {a.evaluado_gerente_id for a in asignaciones if a.evaluado_gerente_id}
+    rm_nombres = dict(db.query(RepresentanteMedico.id, RepresentanteMedico.nombre)
+                      .filter(RepresentanteMedico.id.in_(rm_ids)).all()) if rm_ids else {}
+    ger_nombres = dict(db.query(Gerente.id, Gerente.nombre)
+                       .filter(Gerente.id.in_(ger_ids)).all()) if ger_ids else {}
+
+    def _nombre(a):
+        if a.evaluado_tipo == "RM":
+            return rm_nombres.get(a.evaluado_rm_id) or f"RM #{a.evaluado_rm_id}"
+        return ger_nombres.get(a.evaluado_gerente_id) or f"Gerente #{a.evaluado_gerente_id}"
+
     # Ranking por último score desc (RN-09)
     ranking = []
     for asig in asignaciones:
@@ -57,6 +71,8 @@ def resumen_examen(db: Session, examen_id: int) -> dict:
             "evaluado_tipo": asig.evaluado_tipo,
             "evaluado_rm_id": asig.evaluado_rm_id,
             "evaluado_gerente_id": asig.evaluado_gerente_id,
+            "evaluado_nombre": _nombre(asig),
+            "fecha_limite": asig.fecha_limite.isoformat() if asig.fecha_limite else None,
             "ultimo_score": float(it.score) if it and it.score is not None else None,
             "aprobado": bool(it.aprobado) if it else False,
             "intentos_usados": asig.intentos_usados,

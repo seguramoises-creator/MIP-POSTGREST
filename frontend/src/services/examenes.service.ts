@@ -63,6 +63,7 @@ export interface ReporteIntento {
 
 export interface RankingFila {
   evaluado_tipo: string; evaluado_rm_id: number | null; evaluado_gerente_id: number | null;
+  evaluado_nombre?: string; fecha_limite?: string | null;
   ultimo_score: number | null; aprobado: boolean; intentos_usados: number; estado: string;
 }
 export interface ResultadosExamen {
