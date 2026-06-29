@@ -345,7 +345,9 @@ export default function Examenes() {
                           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                             <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
                               {i + 1}. {p.texto}
-                              {p.tipo === 'caso' && <Chip size="small" label="caso" sx={{ ml: 1 }} />}
+                              <Chip size="small" variant="outlined" sx={{ ml: 1 }}
+                                    color={p.tipo === 'vf' ? 'secondary' : p.tipo === 'caso' ? 'warning' : 'primary'}
+                                    label={p.tipo === 'vf' ? 'Verdadero/Falso' : p.tipo === 'caso' ? 'Caso clínico' : 'Opción múltiple'} />
                             </Typography>
                             {sel.estado === 'borrador' && (
                               <IconButton size="small" color="error" onClick={() => handleEliminarPregunta(p.id)} title="Eliminar pregunta">
