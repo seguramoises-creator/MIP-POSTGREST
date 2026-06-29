@@ -3,7 +3,7 @@ import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Divider,
   Table, TableHead, TableRow, TableCell, TableBody, Tabs, Tab, Alert, Checkbox,
   FormControlLabel, CircularProgress, Divider as MuiDivider, IconButton, Autocomplete,
-  MenuItem, RadioGroup, Radio,
+  MenuItem, RadioGroup, Radio, InputAdornment,
 } from '@mui/material';
 import { Add, AutoAwesome, UploadFile, CheckCircle, DeleteOutline, FileDownload } from '@mui/icons-material';
 import {
@@ -231,12 +231,18 @@ export default function Examenes() {
                 <TextField label="Nombre del examen" size="small" value={ia.nombre} onChange={(e) => setIa({ ...ia, nombre: e.target.value })} />
                 <TextField label="Producto" size="small" value={ia.producto} onChange={(e) => setIa({ ...ia, producto: e.target.value })} />
                 <Typography variant="body2" fontWeight={600} sx={{ mt: 0.5 }}>
-                  Cuántas preguntas generar de cada tipo:
+                  Escribe CUÁNTAS preguntas de cada tipo debe crear la IA:
                 </Typography>
                 <Stack direction="row" spacing={1.5}>
-                  <TextField label="Opción múltiple" type="number" size="small" inputProps={{ min: 0 }} value={ia.n_multi} onChange={(e) => setIa({ ...ia, n_multi: Number(e.target.value) })} />
-                  <TextField label="Verdadero / Falso" type="number" size="small" inputProps={{ min: 0 }} value={ia.n_vf} onChange={(e) => setIa({ ...ia, n_vf: Number(e.target.value) })} />
-                  <TextField label="Casos clínicos" type="number" size="small" inputProps={{ min: 0 }} value={ia.n_casos} onChange={(e) => setIa({ ...ia, n_casos: Number(e.target.value) })} />
+                  <TextField label="Opción múltiple" type="number" size="small" inputProps={{ min: 0 }}
+                             InputProps={{ endAdornment: <InputAdornment position="end">preg.</InputAdornment> }}
+                             value={ia.n_multi} onChange={(e) => setIa({ ...ia, n_multi: Number(e.target.value) })} />
+                  <TextField label="Verdadero / Falso" type="number" size="small" inputProps={{ min: 0 }}
+                             InputProps={{ endAdornment: <InputAdornment position="end">preg.</InputAdornment> }}
+                             value={ia.n_vf} onChange={(e) => setIa({ ...ia, n_vf: Number(e.target.value) })} />
+                  <TextField label="Casos clínicos" type="number" size="small" inputProps={{ min: 0 }}
+                             InputProps={{ endAdornment: <InputAdornment position="end">preg.</InputAdornment> }}
+                             value={ia.n_casos} onChange={(e) => setIa({ ...ia, n_casos: Number(e.target.value) })} />
                 </Stack>
                 <Button component="label" variant="outlined" startIcon={<UploadFile />} size="small">
                   {iaArchivo ? iaArchivo.name : 'Subir documento (PDF/Word/PPT)'}
