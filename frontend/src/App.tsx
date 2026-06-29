@@ -9,6 +9,17 @@ import MainLayout from './components/layout/MainLayout';
 import Login from './pages/auth/Login';
 import Setup from './pages/setup/Setup';
 import DashboardEjecutivo from './pages/dashboard/DashboardEjecutivo';
+import { NAV_ITEMS } from './components/layout/Sidebar';
+import { Rol } from './types';
+
+// Página de inicio según el rol = primer ítem del menú al que tiene acceso.
+// Evita aterrizar a roles sin dashboard (Asesor de Capacitación, RM, etc.) en el
+// Dashboard Ejecutivo, que les daría error de "sin datos / sin acceso".
+function rutaInicial(rol: Rol | null): string {
+  if (!rol) return '/login';
+  const item = NAV_ITEMS.find((i) => i.roles.includes(rol));
+  return item ? item.path : '/sin-acceso';
+}
 import Productividad from './pages/productividad/Productividad';
 import CoberturaPredictiva from './pages/cobertura-predictiva/CoberturaPredictiva';
 import Coaching from './pages/coaching/Coaching';
@@ -60,7 +71,8 @@ function SinAcceso() {
 }
 
 function AppRoutes() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, rol } = useAuthStore();
+  const inicio = rutaInicial(rol);
   const navigate = useNavigate();
   const [checking, setChecking] = useState(true);
 
@@ -77,11 +89,11 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/setup" element={<Setup />} />
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" /> : <Login />} />
+      <Route path="/login" element={isAuthenticated ? <Navigate to={inicio} /> : <Login />} />
       <Route path="/sin-acceso" element={<SinAcceso />} />
       <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
-        <Route index element={<Navigate to="/dashboard" />} />
-        <Route path="dashboard" element={<DashboardEjecutivo />} />
+        <Route index element={<Navigate to={inicio} />} />
+        <Route path="dashboard" element={<ProtectedRoute allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD']}><DashboardEjecutivo /></ProtectedRoute>} />
         <Route path="productividad" element={<Productividad />} />
         <Route path="cobertura-predictiva" element={<CoberturaPredictiva />} />
         <Route path="coaching" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO']}><Coaching /></ProtectedRoute>} />
@@ -97,7 +109,7 @@ function AppRoutes() {
         <Route path="usuarios" element={<ProtectedRoute allowedRoles={['ADMIN']}><Usuarios /></ProtectedRoute>} />
         <Route path="reportes" element={<Reportes />} />
       </Route>
-      <Route path="*" element={<Navigate to="/dashboard" />} />
+      <Route path="*" element={<Navigate to={inicio} />} />
     </Routes>
   );
 }
