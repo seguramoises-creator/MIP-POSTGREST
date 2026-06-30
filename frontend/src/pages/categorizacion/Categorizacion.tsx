@@ -328,7 +328,7 @@ export default function Categorizacion() {
       {tab === 0 && (
       <Box>
       {/* KPI cards */}
-      <Grid container spacing={2} mb={3}>
+      <Grid container spacing={2.5} mb={3}>
         {[
           { label: 'Total médicos', value: resumen?.total_medicos ?? 0, color: 'primary.main' },
           { label: 'Categoría A', value: resumen?.categoria_a ?? 0, color: CAT_COLORS.A },
@@ -339,11 +339,11 @@ export default function Categorizacion() {
         ].map((k) => (
           <Grid item xs={6} sm={4} md={2} key={k.label}>
             <Card variant="outlined" sx={{ height: '100%' }}>
-              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                <Typography variant="h5" fontWeight={700} color={k.color}>
+              <CardContent sx={{ p: 2.5, minHeight: 96, '&:last-child': { pb: 2.5 } }}>
+                <Typography variant="h4" fontWeight={700} color={k.color} lineHeight={1.1}>
                   {loadingResumen ? '…' : k.value}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">{k.label}</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{k.label}</Typography>
               </CardContent>
             </Card>
           </Grid>
@@ -352,7 +352,7 @@ export default function Categorizacion() {
 
       <Grid container spacing={3} mb={3}>
         {/* Gráfico de distribución */}
-        <Grid item xs={12} md={5}>
+        <Grid item xs={12} md={6}>
           <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
             <Typography variant="subtitle1" fontWeight={600} mb={1}>Distribución por Categoría</Typography>
             {pieData.length > 0 ? (
@@ -374,7 +374,7 @@ export default function Categorizacion() {
         </Grid>
 
         {/* Componentes y Pesos */}
-        <Grid item xs={12} md={7}>
+        <Grid item xs={12} md={6}>
           <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
             <Typography variant="subtitle1" fontWeight={600} mb={1}>Componentes y Pesos</Typography>
             {componentes.map((c) => (
