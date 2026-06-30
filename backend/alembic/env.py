@@ -29,6 +29,7 @@ from app.db.database import Base  # noqa: E402
 from app.models import usuario, dimensiones, hechos  # noqa: F401,E402
 from app.models import cat_models  # noqa: F401,E402  ← cat.* / stg.* (Categorización Médica jun-2026)
 from app.models import exam_models  # noqa: F401,E402  ← esquema exam (Módulo de Exámenes)
+from app.models import visita  # noqa: F401,E402  ← esquema Visita (Módulo de Visita Médica)
 
 target_metadata = Base.metadata
 

@@ -6,7 +6,7 @@ import {
 import {
   Dashboard, TrendingUp, TrackChanges, LocalHospital, EmojiEvents,
   CloudUpload, Settings, AdminPanelSettings, Assessment,
-  SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn, Groups,
+  SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn, Groups, MedicalServices,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { Rol } from '../../types';
@@ -30,6 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Exámenes',              path: '/examenes',      icon: <Quiz />,               roles: ['ADMIN', 'CAPACITACION', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO'] },
   { label: 'Mis Exámenes',          path: '/mis-examenes',  icon: <AssignmentTurnedIn />, roles: ['GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
   { label: 'Exámenes — Equipo',     path: '/examenes-equipo', icon: <Groups />,           roles: ['GERENTE_DISTRITO'] },
+  { label: 'Panel Médico',          path: '/visita/panel-medico', icon: <MedicalServices />, roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
   { label: 'Cobertura Predictiva',  path: '/cobertura-predictiva', icon: <TrackChanges />, roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA'] },
   { label: 'Categorización Médica', path: '/categorizacion',icon: <LocalHospital />,      roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'CONSULTA'] },
   { label: 'Reconocimiento',        path: '/reconocimiento',icon: <EmojiEvents />,        roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },

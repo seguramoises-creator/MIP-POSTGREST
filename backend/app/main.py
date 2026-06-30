@@ -119,11 +119,17 @@ async def audit_middleware(request: Request, call_next):
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # exc.errors() puede incluir objetos no serializables (p. ej. el ValueError
+    # original en `ctx` cuando un field_validator lo lanza). default=str los
+    # convierte a texto para que la respuesta 422 sea JSON-safe (si no, json.dumps
+    # falla y se degrada a un 500 engañoso).
+    import json as _json
+    errores = _json.loads(_json.dumps(exc.errors(), default=str))
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "error": "Error de validación",
-            "detalle": exc.errors(),
+            "detalle": errores,
             "body": str(exc.body)[:500] if exc.body else None,
         },
     )
