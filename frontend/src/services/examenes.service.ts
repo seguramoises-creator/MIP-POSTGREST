@@ -185,6 +185,12 @@ export interface RespuestaAbierta {
 }
 export const respuestasAbiertas = (examenId: number) =>
   api.get<RespuestaAbierta[]>(`/examenes/${examenId}/abiertas`).then(r => r.data);
+
+// ── Config admin: modo de generación con IA (DEMO vs real) ────────────
+export const getIaDemo = () =>
+  api.get<{ demo: boolean }>('/admin/config/examen-ia-demo').then(r => r.data.demo);
+export const setIaDemo = (demo: boolean) =>
+  api.put<{ demo: boolean }>('/admin/config/examen-ia-demo', { demo }).then(r => r.data.demo);
 export const calificarRespuesta = (intentoId: number, respuesta_id: number, puntos: number) =>
   api.post(`/intentos/${intentoId}/calificar`, { respuesta_id, puntos }).then(r => r.data);
 export const entregar = (intentoId: number) =>

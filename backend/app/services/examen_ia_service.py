@@ -192,7 +192,8 @@ def _generar_demo(texto: str, n_multi: int, n_casos: int, producto: str | None =
 
 def generar_preguntas_ia(texto: str, n_multi: int, n_casos: int,
                          client=None, model: str | None = None,
-                         producto: str | None = None, n_vf: int = 0) -> list[dict]:
+                         producto: str | None = None, n_vf: int = 0,
+                         demo: bool | None = None) -> list[dict]:
     """Genera preguntas llamando a Claude. El cliente se inyecta para testing.
 
     `producto` ancla las preguntas al producto/tema (en vez de a "el documento").
@@ -200,7 +201,8 @@ def generar_preguntas_ia(texto: str, n_multi: int, n_casos: int,
     Si EXAMEN_IA_DEMO está activo y no se inyectó cliente, usa el generador local
     (sin consumir API) — permite probar el flujo completo sin créditos.
     """
-    if client is None and settings.EXAMEN_IA_DEMO:
+    usar_demo = settings.EXAMEN_IA_DEMO if demo is None else demo
+    if client is None and usar_demo:
         logger.info("generar_preguntas_ia: MODO DEMO activo — generación local sin Claude")
         return _generar_demo(texto, n_multi, n_casos, producto, n_vf)
     if client is None:
@@ -329,7 +331,10 @@ def procesar_generacion_ia(fuente_id: int) -> None:
 
             examen = db.query(Examen).filter(Examen.id == fuente.examen_id).first()
             producto = examen.producto if examen else None
-            preguntas = generar_preguntas_ia(texto, n_multi, n_casos, producto=producto, n_vf=n_vf)
+            # Flag DEMO en runtime (Config.DIM_Parametro), con fallback al .env.
+            from app.services import config_service
+            demo = config_service.obtener_bool(db, "EXAMEN_IA_DEMO", settings.EXAMEN_IA_DEMO)
+            preguntas = generar_preguntas_ia(texto, n_multi, n_casos, producto=producto, n_vf=n_vf, demo=demo)
             persistir_preguntas(db, fuente.examen_id, preguntas)
 
             fuente.estado_generacion = "exitoso"

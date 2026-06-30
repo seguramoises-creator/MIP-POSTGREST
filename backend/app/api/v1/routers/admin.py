@@ -610,3 +610,22 @@ def delete_usuario(id: int, db: Session = Depends(get_db), _=AdminOnly):
     obj.activo = False
     db.commit()
     return Msg(message="Usuario desactivado")
+
+
+# ── Parámetros de sistema en runtime (solo ADMIN) ─────────────────────────────
+from app.core.config import settings as _settings   # noqa: E402
+from app.services import config_service as _cfg      # noqa: E402
+
+
+@router.get("/config/examen-ia-demo", summary="Estado del modo de generación con IA (DEMO/real)")
+def get_examen_ia_demo(db: Session = Depends(get_db), _=AdminOnly):
+    """True = modo DEMO (genera local, sin gastar API). False = IA real (Claude)."""
+    return {"demo": _cfg.obtener_bool(db, "EXAMEN_IA_DEMO", _settings.EXAMEN_IA_DEMO)}
+
+
+@router.put("/config/examen-ia-demo", summary="Alternar modo DEMO / IA real de generación")
+def set_examen_ia_demo(body: dict, db: Session = Depends(get_db), _=AdminOnly):
+    """Cambia en vivo el modo de generación de exámenes con IA (sin reiniciar)."""
+    demo = bool(body.get("demo"))
+    _cfg.fijar(db, "EXAMEN_IA_DEMO", "true" if demo else "false")
+    return {"demo": demo}

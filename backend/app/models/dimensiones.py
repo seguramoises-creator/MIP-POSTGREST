@@ -721,3 +721,15 @@ class Medico(Base):
     cedula: Mapped[str | None]          = mapped_column(String(30),  nullable=True)
     email: Mapped[str | None]           = mapped_column(String(200), nullable=True)
     activo: Mapped[bool]                = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+
+
+class ParametroSistema(Base):
+    """Parámetros de sistema clave-valor, editables en runtime (sin reiniciar).
+    Ej.: EXAMEN_IA_DEMO ('true'/'false') para alternar la generación de exámenes
+    entre el modo DEMO (local, sin gastar API) y la IA real de Claude."""
+    __tablename__ = "DIM_Parametro"
+    __table_args__ = {"schema": "Config"}
+
+    clave: Mapped[str] = mapped_column(String(80), primary_key=True)
+    valor: Mapped[str] = mapped_column(String(400), nullable=False)
+    actualizado: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

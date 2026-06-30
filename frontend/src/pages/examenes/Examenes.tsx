@@ -3,14 +3,15 @@ import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Divider,
   Table, TableHead, TableRow, TableCell, TableBody, Tabs, Tab, Alert, Checkbox,
   FormControlLabel, CircularProgress, Divider as MuiDivider, IconButton, Autocomplete,
-  MenuItem, RadioGroup, Radio, InputAdornment,
+  MenuItem, RadioGroup, Radio, InputAdornment, Switch,
 } from '@mui/material';
 import { Add, AutoAwesome, UploadFile, CheckCircle, DeleteOutline, FileDownload } from '@mui/icons-material';
+import { useAuthStore } from '../../store/auth.store';
 import {
   listarExamenes, crearExamen, agregarPregunta, publicarExamen, asignarExamen,
   resultadosExamen, analisisPreguntas, listarPreguntasExamen, eliminarPregunta,
   generarExamenIA, jobEstadoIA, exportarResultadosExcel, eliminarExamen, listarEvaluados,
-  respuestasAbiertas, calificarRespuesta,
+  respuestasAbiertas, calificarRespuesta, getIaDemo, setIaDemo,
   type Examen, type OpcionCrear, type EvaluadoRef, type ResultadosExamen,
   type AnalisisPregunta, type PreguntaConOpciones, type RespuestaAbierta,
 } from '../../services/examenes.service';
@@ -75,6 +76,20 @@ export default function Examenes() {
       setMsg({ tipo: 'success', texto: `Examen "${ex.nombre}" creado en borrador.` });
       cargar(); setSel(ex);
     } catch { setMsg({ tipo: 'error', texto: 'No se pudo crear el examen.' }); }
+  }
+
+  // Modo de generación con IA (DEMO vs real) — solo lo alterna el ADMIN
+  const rol = useAuthStore((s) => s.rol);
+  const esAdmin = rol === 'ADMIN';
+  const [iaDemo, setIaDemoState] = useState<boolean | null>(null);
+  useEffect(() => { if (esAdmin) getIaDemo().then(setIaDemoState).catch(() => {}); }, [esAdmin]);
+  async function toggleIaDemo() {
+    if (iaDemo === null) return;
+    try {
+      const nuevo = await setIaDemo(!iaDemo);
+      setIaDemoState(nuevo);
+      setMsg({ tipo: 'success', texto: `Generación con IA: ${nuevo ? 'modo DEMO (sin gastar API)' : 'Claude real'}.` });
+    } catch { setMsg({ tipo: 'error', texto: 'No se pudo cambiar el modo de IA.' }); }
   }
 
   // Crear con IA
@@ -267,6 +282,27 @@ export default function Examenes() {
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 Sube el manual/documento (PDF, Word o PPT) o pega el texto, y la IA elabora las preguntas (quedan en borrador para tu revisión).
               </Typography>
+              {esAdmin && (
+                <Box sx={{ mb: 1.5, p: 1, borderRadius: 1, bgcolor: iaDemo ? 'rgba(255,152,0,0.08)' : 'rgba(27,94,32,0.08)',
+                           display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
+                  <Box>
+                    <Typography variant="caption" fontWeight={700} display="block">
+                      Modo de generación (solo admin)
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {iaDemo === null ? 'cargando…'
+                        : iaDemo ? 'DEMO — preguntas locales [DEMO], sin gastar API'
+                        : 'IA real — usa Claude (consume créditos de la API)'}
+                    </Typography>
+                  </Box>
+                  <FormControlLabel
+                    control={<Switch color="success" checked={iaDemo === false} disabled={iaDemo === null} onChange={toggleIaDemo} />}
+                    label={<Chip size="small" color={iaDemo === false ? 'success' : 'warning'}
+                                 label={iaDemo === false ? 'IA REAL' : 'DEMO'} />}
+                    labelPlacement="start"
+                  />
+                </Box>
+              )}
               <Stack spacing={1.5}>
                 <TextField label="Nombre del examen" size="small" value={ia.nombre} onChange={(e) => setIa({ ...ia, nombre: e.target.value })} />
                 <TextField label="Producto" size="small" value={ia.producto} onChange={(e) => setIa({ ...ia, producto: e.target.value })} />
