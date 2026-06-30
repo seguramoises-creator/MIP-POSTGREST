@@ -352,7 +352,7 @@ export default function Categorizacion() {
 
       <Grid container spacing={3} mb={3}>
         {/* Gráfico de distribución */}
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={5}>
           <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
             <Typography variant="subtitle1" fontWeight={600} mb={1}>Distribución por Categoría</Typography>
             {pieData.length > 0 ? (
@@ -374,7 +374,7 @@ export default function Categorizacion() {
         </Grid>
 
         {/* Componentes y Pesos */}
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={7}>
           <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
             <Typography variant="subtitle1" fontWeight={600} mb={1}>Componentes y Pesos</Typography>
             {componentes.map((c) => (
@@ -469,7 +469,7 @@ export default function Categorizacion() {
       <Grid container spacing={3} mt={1}>
 
         {/* ── Tabla por Representante ── */}
-        <Grid item xs={12} xl={7}>
+        <Grid item xs={12} xl={6}>
           <Paper elevation={3} sx={{ display: 'flex', flexDirection: 'column', height: 560, overflow: 'hidden', borderRadius: 2, border: '1px solid #e0e0e0' }}>
             {/* Encabezado */}
             <Box sx={{ background: 'linear-gradient(135deg,#1a237e 0%,#283593 100%)', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
@@ -493,7 +493,7 @@ export default function Categorizacion() {
                     </TableCell>
                     {CATS.map(c => (
                       <TableCell key={c} align="center"
-                        sx={{ bgcolor: CAT_PAL[c].dark, color: '#fff', fontWeight: 800, fontSize: '0.9rem', width: 70, py: 1 }}>
+                        sx={{ bgcolor: CAT_PAL[c].dark, color: '#fff', fontWeight: 800, fontSize: '0.9rem', width: 88, py: 1 }}>
                         {c}
                       </TableCell>
                     ))}
@@ -568,7 +568,7 @@ export default function Categorizacion() {
         </Grid>
 
         {/* ── Tabla por Especialidad ── */}
-        <Grid item xs={12} xl={5}>
+        <Grid item xs={12} xl={6}>
           <Paper elevation={3} sx={{ display: 'flex', flexDirection: 'column', height: 560, overflow: 'hidden', borderRadius: 2, border: '1px solid #e0e0e0' }}>
             <Box sx={{ background: 'linear-gradient(135deg,#004d40 0%,#00695c 100%)', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
               <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.92rem', letterSpacing: 1, flexGrow: 1 }}>
@@ -591,7 +591,7 @@ export default function Categorizacion() {
                     </TableCell>
                     {CATS.map(c => (
                       <TableCell key={c} align="center"
-                        sx={{ bgcolor: CAT_PAL[c].dark, color: '#fff', fontWeight: 800, fontSize: '0.9rem', width: 55, py: 1 }}>
+                        sx={{ bgcolor: CAT_PAL[c].dark, color: '#fff', fontWeight: 800, fontSize: '0.9rem', width: 84, py: 1 }}>
                         {c}
                       </TableCell>
                     ))}
