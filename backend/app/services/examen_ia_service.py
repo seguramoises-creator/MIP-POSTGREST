@@ -73,7 +73,8 @@ def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | Non
         "ni la fuente. La pregunta debe entenderse por sí sola, como en un examen real.\n"
         "- Trata la información provista como un hecho establecido; no la cuestiones ni "
         "la relativices ('según el documento', 'el texto indica', etc. están prohibidos).\n\n"
-        "Devuelve SOLO un arreglo JSON. Cada pregunta con este esquema:\n"
+        "Devuelve SOLO el arreglo JSON, sin envolverlo en bloques de código markdown "
+        "(nada de ```), sin texto antes ni después. Cada pregunta con este esquema:\n"
         "tipo: 'multi'|'caso'|'vf'; escenario: string (solo caso); texto: string; "
         "opciones: array de strings (5 para multi/caso, 2 para vf); correcta: índice 0-based de la opción correcta; "
         "explicacion: string.\n\nINFORMACIÓN DE REFERENCIA:\n" + texto_acotado)
@@ -95,6 +96,14 @@ def _extraer_json(texto_respuesta: str):
     4. Lanza ValueError si todo falla.
     """
     t = texto_respuesta.strip()
+
+    # Pre-limpieza: quitar fences markdown envolventes (```json … ``` o ``` … ```),
+    # incluso si falta el cierre (respuesta truncada). Así las estrategias siguientes
+    # ven el arreglo JSON directamente.
+    if t.startswith("```"):
+        import re as _re
+        t = _re.sub(r"^```(?:json)?\s*", "", t)
+        t = _re.sub(r"\s*```$", "", t).strip()
 
     # Strategy 1: fenced code block
     if "```" in t:
@@ -210,8 +219,13 @@ def generar_preguntas_ia(texto: str, n_multi: int, n_casos: int,
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     model = model or settings.EXAM_AI_MODEL
     prompt = construir_prompt(texto, n_multi, n_casos, producto, n_vf)
+    # max_tokens proporcional a la cantidad pedida: cada pregunta en JSON ocupa
+    # ~600-800 tokens. Con un tope fijo bajo (4096) los exámenes grandes se truncaban
+    # y devolvían JSON inválido. Escalamos con un techo de seguridad.
+    total = max(1, n_multi + n_casos + n_vf)
+    max_tokens = min(16000, 2000 + total * 800)
     respuesta = client.messages.create(
-        model=model, max_tokens=4096,
+        model=model, max_tokens=max_tokens,
         messages=[{"role": "user", "content": prompt}])
     texto_resp = "".join(getattr(b, "text", "") for b in respuesta.content)
     data = _extraer_json(texto_resp)
