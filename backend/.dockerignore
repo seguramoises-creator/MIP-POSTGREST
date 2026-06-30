@@ -1,0 +1,33 @@
+# No copiar al contexto de build (secretos, dependencias locales, datos runtime)
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Secretos — se inyectan en runtime vía env_file, nunca dentro de la imagen
+.env
+.env.*
+!.env.example
+
+# Datos de runtime (se persisten como volúmenes, no van en la imagen)
+uploads/
+processed/
+errors/
+reports/
+logs/
+stop/
+*.log
+
+# Otros
+SCGCPR_Local/
+.git
+tests/
+*.bak
+*.bacpac

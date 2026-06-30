@@ -1,0 +1,61 @@
+# ═══════════════════════════════════════════════════════════════
+# MSM / VISTA (SCGCPR) — orquestación Docker
+# ───────────────────────────────────────────────────────────────
+# App (backend + frontend), usando una BD SQL Server EXTERNA/gestionada
+# (configurada en backend/.env):
+#     docker compose up -d --build
+#
+# Incluyendo un SQL Server en contenedor (perfil "with-db"):
+#     export MSSQL_SA_PASSWORD='Una.Clave.Fuerte123'
+#     docker compose --profile with-db up -d --build
+#     # y en backend/.env: DB_SERVER=db  DB_USER=sa  DB_PASSWORD=$MSSQL_SA_PASSWORD
+#
+# Abrir:  http://<servidor>/         (frontend)
+#         http://<servidor>/api/v1/docs  (Swagger vía proxy)
+# ═══════════════════════════════════════════════════════════════
+services:
+  backend:
+    build: ./backend
+    image: msm-backend:latest
+    env_file: ./backend/.env          # toda la config de la app (DB_*, JWT, MAIL, ANTHROPIC, CORS)
+    environment:
+      RUN_MIGRATIONS: "${RUN_MIGRATIONS:-1}"   # 1 = corre alembic upgrade head al arrancar
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_reports:/app/reports
+      - backend_logs:/app/logs
+    expose:
+      - "8000"                        # solo visible dentro de la red Docker (no se publica)
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api/v1         # same-origin: nginx del frontend hace proxy al backend
+    image: msm-frontend:latest
+    ports:
+      - "80:80"                       # punto de entrada público (poner TLS delante, ver DOCKER.md)
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # SQL Server OPCIONAL (perfil "with-db"). Para producción real conviene una BD
+  # gestionada con respaldos; este servicio es para entornos self-hosted/prueba.
+  db:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    profiles: ["with-db"]
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${MSSQL_SA_PASSWORD:?Define MSSQL_SA_PASSWORD (clave fuerte) para el perfil with-db}"
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+    restart: unless-stopped
+
+volumes:
+  backend_uploads:
+  backend_reports:
+  backend_logs:
+  mssql_data:

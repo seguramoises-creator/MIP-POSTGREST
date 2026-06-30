@@ -1,0 +1,8 @@
+# Forzar fin de línea LF en archivos que se ejecutan/leen en Linux/Docker.
+# (CRLF rompe el shebang de los .sh y confunde a nginx/Docker.)
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.dockerignore  text eol=lf
+*.conf          text eol=lf
+docker-entrypoint.sh text eol=lf
+docker-compose*.yml  text eol=lf
