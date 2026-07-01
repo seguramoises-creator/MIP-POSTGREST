@@ -6,6 +6,8 @@ export interface MedicoVisita {
   nombre_completo: string;
   especialidad_id: number | null;
   especialidad_nombre: string | null;
+  linea_id?: number | null;
+  linea_nombre?: string | null;
   categoria: string;
   tipo_consultorio: string | null;
   direccion: string | null;

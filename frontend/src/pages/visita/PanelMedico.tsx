@@ -45,6 +45,8 @@ export default function PanelMedico() {
   const [vmFiltro, setVmFiltro] = useState<number | ''>('');
   const [busqueda, setBusqueda] = useState('');
   const [catFiltro, setCatFiltro] = useState('');
+  const [lineaFiltro, setLineaFiltro] = useState('');
+  const [espFiltro, setEspFiltro] = useState('');
   const [cargando, setCargando] = useState(true);
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
@@ -73,12 +75,24 @@ export default function PanelMedico() {
     return { total, visitados, sin: total - visitados, ruptura };
   }, [medicos]);
 
+  // Opciones de los selectores, derivadas de los médicos presentes.
+  const opcLineas = useMemo(
+    () => Array.from(new Set(medicos.map((m) => m.linea_nombre).filter(Boolean) as string[])).sort(),
+    [medicos]);
+  const opcEspecialidades = useMemo(
+    () => Array.from(new Set(medicos.map((m) => m.especialidad_nombre).filter(Boolean) as string[])).sort(),
+    [medicos]);
+
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toUpperCase();
     return medicos.filter((m) =>
       (!catFiltro || m.categoria === catFiltro) &&
-      (!q || m.nombre_completo.toUpperCase().includes(q) || (m.especialidad_nombre ?? '').toUpperCase().includes(q)));
-  }, [medicos, busqueda, catFiltro]);
+      (!lineaFiltro || m.linea_nombre === lineaFiltro) &&
+      (!espFiltro || m.especialidad_nombre === espFiltro) &&
+      (!q || m.nombre_completo.toUpperCase().includes(q)
+          || (m.especialidad_nombre ?? '').toUpperCase().includes(q)
+          || (m.linea_nombre ?? '').toUpperCase().includes(q)));
+  }, [medicos, busqueda, catFiltro, lineaFiltro, espFiltro]);
 
   const abrirNuevo = () => { setForm({ ...vacio, vm_id: esVM ? 0 : (vmFiltro || 0) }); setDuplicados(null); setAbierto(true); };
 
@@ -117,7 +131,9 @@ export default function PanelMedico() {
         <Box>
           <Typography variant="h5" fontWeight={700}>Panel Médico</Typography>
           <Typography variant="body2" color="text.secondary">
-            {medicos.length} médicos registrados · Ciclo actual
+            {filtrados.length === medicos.length
+              ? `${medicos.length} médicos registrados · Ciclo actual`
+              : `${filtrados.length} de ${medicos.length} médicos · filtro activo`}
           </Typography>
         </Box>
         <Stack direction="row" spacing={1.5} flexWrap="wrap" alignItems="center">
@@ -128,12 +144,22 @@ export default function PanelMedico() {
               {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
             </TextField>
           )}
-          <TextField size="small" placeholder="Buscar médico…" value={busqueda} sx={{ minWidth: 220 }}
+          <TextField size="small" placeholder="Buscar médico…" value={busqueda} sx={{ minWidth: 200 }}
                      onChange={(e) => setBusqueda(e.target.value)}
                      InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }} />
-          <TextField select size="small" value={catFiltro} sx={{ minWidth: 170 }}
+          <TextField select size="small" label="Línea" value={lineaFiltro} sx={{ minWidth: 160 }}
+                     onChange={(e) => setLineaFiltro(e.target.value)}>
+            <MenuItem value="">Todas las líneas</MenuItem>
+            {opcLineas.map((l) => <MenuItem key={l} value={l}>{l}</MenuItem>)}
+          </TextField>
+          <TextField select size="small" label="Especialidad" value={espFiltro} sx={{ minWidth: 180 }}
+                     onChange={(e) => setEspFiltro(e.target.value)}>
+            <MenuItem value="">Todas las especialidades</MenuItem>
+            {opcEspecialidades.map((e) => <MenuItem key={e} value={e}>{e}</MenuItem>)}
+          </TextField>
+          <TextField select size="small" label="Categoría" value={catFiltro} sx={{ minWidth: 150 }}
                      onChange={(e) => setCatFiltro(e.target.value)}>
-            <MenuItem value="">Todas las Categorías</MenuItem>
+            <MenuItem value="">Todas</MenuItem>
             {['A', 'B', 'C'].map((c) => <MenuItem key={c} value={c}>Categoría {c}</MenuItem>)}
           </TextField>
           <Button variant="contained" startIcon={<PersonAddAlt1 />} onClick={abrirNuevo}>Agregar Médico</Button>

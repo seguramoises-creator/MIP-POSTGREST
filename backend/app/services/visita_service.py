@@ -7,7 +7,7 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.models.visita import MedicoVisita
-from app.models.dimensiones import Especialidad
+from app.models.dimensiones import Especialidad, RepresentanteMedico, Linea
 from app.schemas.visita import MedicoVisitaCrear
 
 
@@ -81,6 +81,13 @@ def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None =
     esp_nom = dict(db.query(Especialidad.id, Especialidad.nombre)
                    .filter(Especialidad.id.in_(esp_ids)).all()) if esp_ids else {}
 
+    # Línea de cada médico (vía su visitador: DIM_RM.linea_id → DIM_Linea.nombre).
+    vm_ids = {m.vm_id for m in medicos}
+    rm_linea = dict(db.query(RepresentanteMedico.id, RepresentanteMedico.linea_id)
+                    .filter(RepresentanteMedico.id.in_(vm_ids)).all()) if vm_ids else {}
+    linea_nom = dict(db.query(Linea.id, Linea.nombre)
+                     .filter(Linea.id.in_(set(rm_linea.values()))).all()) if rm_linea else {}
+
     ciclo_id = ciclo_id or ciclo_por_defecto(db)
     mapa = _mapa_visitas(db, ciclo_id, vm_id) if ciclo_id else {}
 
@@ -93,10 +100,12 @@ def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None =
             estado = "v"
         else:
             estado = "sin"
+        lid = rm_linea.get(m.vm_id)
         salida.append({
             "id": m.id, "vm_id": m.vm_id, "nombre_completo": m.nombre_completo,
             "especialidad_id": m.especialidad_id,
             "especialidad_nombre": esp_nom.get(m.especialidad_id),
+            "linea_id": lid, "linea_nombre": linea_nom.get(lid),
             "categoria": m.categoria, "tipo_consultorio": m.tipo_consultorio,
             "direccion": m.direccion, "telefono": m.telefono,
             "ciclos_sin_visita": m.ciclos_sin_visita, "activo": m.activo,
