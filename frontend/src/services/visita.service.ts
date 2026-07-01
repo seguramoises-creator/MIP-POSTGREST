@@ -128,6 +128,29 @@ export const previsualizarCierre = () =>
 export const cerrarCiclo = () => api.post<CierrePreview>('/visita/cierre').then(r => r.data);
 export const historialCierres = () => api.get<CierreHist[]>('/visita/cierre/historial').then(r => r.data);
 
+// ── Parrilla promocional / Muestras ───────────────────────────────────
+export interface ParrillaItem {
+  id?: number; producto: string; mensaje_clave?: string | null;
+  prioridad: number; meta_muestras: number;
+}
+export interface MuestraResumenProducto {
+  producto: string; mensaje_clave: string | null; entregadas: number;
+  medicos_alcanzados: number; meta: number; cobertura_meta_pct: number | null; en_parrilla: boolean;
+}
+export interface MuestrasResumen {
+  ciclo_id: number; total_entregadas: number; productos_con_muestras: number;
+  productos: MuestraResumenProducto[];
+}
+export const listarLineasVisita = () => api.get<Catalogo[]>('/visita/lineas').then(r => r.data);
+export const obtenerParrilla = (lineaId?: number) =>
+  api.get<ParrillaItem[]>('/visita/parrilla', { params: lineaId ? { linea_id: lineaId } : {} }).then(r => r.data);
+export const guardarParrilla = (linea_id: number, items: ParrillaItem[]) =>
+  api.post<{ guardados: number }>('/visita/parrilla', { linea_id, items }).then(r => r.data);
+export const registrarMuestras = (medico_id: number, entregas: { producto: string; cantidad: number }[]) =>
+  api.post<{ registradas: number }>('/visita/muestras', { medico_id, entregas }).then(r => r.data);
+export const muestrasResumen = (vmId?: number) =>
+  api.get<MuestrasResumen>('/visita/muestras/resumen', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+
 // Devuelve { medico } si se creó, o { duplicados } si el backend respondió 409.
 export const crearMedico = async (
   datos: MedicoCrear,

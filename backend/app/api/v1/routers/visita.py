@@ -11,7 +11,7 @@ from app.core.deps import get_db, require_roles, get_current_active_user
 from app.models.usuario import Rol
 from app.schemas.visita import (
     MedicoVisitaCrear, MedicoVisitaResponse, VisitaRegistrar, VisitaNoVisita,
-    PlaneacionGuardar, _CAUSAS_NO_VISITA,
+    PlaneacionGuardar, ParrillaGuardar, MuestrasRegistrar, _CAUSAS_NO_VISITA,
 )
 from app.services import visita_service
 
@@ -230,3 +230,58 @@ def historial_cierres(db: Session = Depends(get_db), current_user=RequireCierre)
     """Historial de cierres de ciclo de visita, del más reciente al más antiguo."""
     from app.services import visita_cierre_service
     return visita_cierre_service.historial_cierres(db)
+
+
+# ── Parrilla promocional / Muestras (Parte 6) ─────────────────────────────────
+@router.get("/lineas", response_model=list[dict])
+def listar_lineas(db: Session = Depends(get_db), current_user=RequireVisita):
+    """Líneas de producto (para el selector de la parrilla)."""
+    from app.services import visita_parrilla_service
+    return visita_parrilla_service.listar_lineas(db)
+
+
+@router.get("/parrilla", response_model=list[dict])
+def obtener_parrilla(linea_id: int | None = None, ciclo_id: int | None = None,
+                     db: Session = Depends(get_db), current_user=RequireVisita):
+    """Parrilla del ciclo para una línea. El VM usa su propia línea si no se indica."""
+    from app.services import visita_parrilla_service
+    if linea_id is None:
+        vm = _scope_vm(current_user, None)
+        linea_id = visita_parrilla_service.linea_de_vm(db, vm) if vm else None
+    if linea_id is None:
+        raise HTTPException(status_code=400, detail="Indica la línea (linea_id).")
+    return visita_parrilla_service.listar_parrilla(db, ciclo_id, linea_id)
+
+
+@router.post("/parrilla", response_model=dict, status_code=status.HTTP_201_CREATED)
+def guardar_parrilla(datos: ParrillaGuardar, db: Session = Depends(get_db), current_user=RequireCierre):
+    """Guarda (reemplaza) la parrilla de una línea en el ciclo. Solo gestión."""
+    from app.services import visita_parrilla_service
+    try:
+        n = visita_parrilla_service.guardar_parrilla(
+            db, datos.ciclo_id, datos.linea_id, datos.items, getattr(current_user, "id", None))
+        return {"guardados": n}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/muestras", response_model=dict, status_code=status.HTTP_201_CREATED)
+def registrar_muestras(datos: MuestrasRegistrar, vm_id: int | None = None,
+                       db: Session = Depends(get_db), current_user=RequireVisita):
+    """Registra muestras entregadas a un médico del panel. El VM va contra su panel."""
+    from app.services import visita_parrilla_service
+    try:
+        n = visita_parrilla_service.registrar_muestras(
+            db, _vm_registro(current_user, vm_id), datos.ciclo_id, datos.medico_id,
+            datos.entregas, getattr(current_user, "id", None))
+        return {"registradas": n}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/muestras/resumen", response_model=dict)
+def resumen_muestras(vm_id: int | None = None, ciclo_id: int | None = None,
+                     db: Session = Depends(get_db), current_user=RequireVisita):
+    """Resumen de muestras por producto: entregadas, médicos alcanzados, meta y cobertura."""
+    from app.services import visita_parrilla_service
+    return visita_parrilla_service.resumen_muestras(db, ciclo_id, _scope_vm(current_user, vm_id))

@@ -122,3 +122,41 @@ class PlaneacionItem(BaseModel):
 
 class PlaneacionGuardar(BaseModel):
     items: list[PlaneacionItem] = Field(default_factory=list)
+
+
+# ── Parrilla promocional / Muestras (Parte 6) ─────────────────────────
+class ParrillaItem(BaseModel):
+    producto: str = Field(min_length=2, max_length=120)
+    mensaje_clave: str | None = Field(default=None, max_length=300)
+    prioridad: int = Field(default=1, ge=1, le=20)
+    meta_muestras: int = Field(default=0, ge=0)
+
+    @field_validator("producto")
+    @classmethod
+    def _producto(cls, v: str) -> str:
+        v = " ".join(v.strip().split())
+        if len(v) < 2:
+            raise ValueError("El producto debe tener al menos 2 caracteres")
+        return v
+
+
+class ParrillaGuardar(BaseModel):
+    ciclo_id: int | None = None
+    linea_id: int
+    items: list[ParrillaItem] = Field(default_factory=list)
+
+
+class MuestraItem(BaseModel):
+    producto: str = Field(min_length=2, max_length=120)
+    cantidad: int = Field(ge=1, le=9999)
+
+    @field_validator("producto")
+    @classmethod
+    def _producto(cls, v: str) -> str:
+        return " ".join(v.strip().split())
+
+
+class MuestrasRegistrar(BaseModel):
+    medico_id: int
+    ciclo_id: int | None = None
+    entregas: list[MuestraItem] = Field(min_length=1)

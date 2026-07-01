@@ -191,3 +191,40 @@ def test_cierre_bloquea_si_ya_cerrado(monkeypatch):
     db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(fecha_cierre=None)
     with pytest.raises(cs.CicloVisitaYaCerradoError):
         cs.cerrar_ciclo(db, ciclo_id=10, usuario_id=1)
+
+
+# ── Parrilla promocional / Muestras ───────────────────────────────────
+from app.schemas.visita import ParrillaItem, MuestraItem, MuestrasRegistrar
+from app.services import visita_parrilla_service as ps
+
+
+def test_parrilla_item_normaliza_producto():
+    p = ParrillaItem(producto="  amox   500 ")
+    assert p.producto == "amox 500"
+
+
+def test_muestra_item_cantidad_minima_falla():
+    with pytest.raises(ValueError):
+        MuestraItem(producto="X1", cantidad=0)
+
+
+def test_muestras_requiere_al_menos_una_entrega():
+    with pytest.raises(ValueError):
+        MuestrasRegistrar(medico_id=1, entregas=[])
+
+
+def test_parrilla_producto_duplicado_falla(monkeypatch):
+    monkeypatch.setattr(ps, "ciclo_por_defecto", lambda db: 5)
+    db = MagicMock()
+    items = [ParrillaItem(producto="Amoxicilina"), ParrillaItem(producto="AMOXICILINA")]
+    with pytest.raises(ValueError):
+        ps.guardar_parrilla(db, 5, 1, items, usuario_id=1)
+
+
+def test_muestras_medico_de_otro_panel_falla(monkeypatch):
+    monkeypatch.setattr(ps, "ciclo_por_defecto", lambda db: 5)
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(id=9, vm_id=2)
+    with pytest.raises(ValueError):
+        ps.registrar_muestras(db, vm_id=1, ciclo_id=5, medico_id=9,
+                              entregas=[MuestraItem(producto="X1", cantidad=2)], usuario_id=1)

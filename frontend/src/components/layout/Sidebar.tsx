@@ -6,7 +6,7 @@ import {
 import {
   Dashboard, TrendingUp, TrackChanges, LocalHospital, EmojiEvents,
   CloudUpload, Settings, AdminPanelSettings, Assessment,
-  SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn, Groups, MedicalServices, EditNote, Insights, EventNote, ReportProblem,
+  SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn, Groups, MedicalServices, EditNote, Insights, EventNote, ReportProblem, Campaign,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { Rol } from '../../types';
@@ -36,6 +36,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Registrar Visita',      path: '/visita/registrar', icon: <EditNote />,           roles: ['ADMIN', 'REPRESENTANTE_MEDICO'] },
   { label: 'Proyección Visita',     path: '/visita/proyeccion', icon: <Insights />,          roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
   { label: 'Ruptura / Cierre',      path: '/visita/ruptura', icon: <ReportProblem />,         roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
+  { label: 'Parrilla & Muestras',   path: '/visita/parrilla', icon: <Campaign />,             roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
   { label: 'Cobertura Predictiva',  path: '/cobertura-predictiva', icon: <TrackChanges />, roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA'] },
   { label: 'Categorización Médica', path: '/categorizacion',icon: <LocalHospital />,      roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'CONSULTA'] },
   { label: 'Reconocimiento',        path: '/reconocimiento',icon: <EmojiEvents />,        roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },

@@ -121,3 +121,51 @@ class CierreCicloVisita(Base):
     ruptura_critica: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # quedaron con ≥3 ciclos sin visita
     cerrado_por: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+
+
+class ParrillaPromocional(Base):
+    """Parrilla promocional del ciclo (Parte 6 del spec): qué productos y mensaje
+    clave debe promover cada línea en el ciclo, con prioridad y meta de muestras.
+
+    `producto` es texto libre (no hay catálogo de productos estable en el sistema,
+    igual que `producto_foco` en otras tablas). La mantiene gestión (ADMIN/GER PROD)
+    con patrón delete-then-insert por (ciclo, línea)."""
+    __tablename__ = "ParrillaPromocional"
+    __table_args__ = (
+        Index("IX_Parrilla_ciclo_linea", "ciclo_id", "linea_id"),
+        {"schema": "Visita"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
+    linea_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Linea.id"), nullable=False)
+    producto: Mapped[str] = mapped_column(String(120), nullable=False)
+    mensaje_clave: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    prioridad: Mapped[int] = mapped_column(Integer, nullable=False, default=1)   # 1 = mayor
+    meta_muestras: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # objetivo del ciclo
+    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+    modificado_por: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+
+
+class MuestraEntregada(Base):
+    """Muestra médica entregada en una visita (Parte 6 del spec). El VM registra la
+    entrega de un producto (por nombre, alineado con la parrilla) a un médico de su
+    panel; alimenta el reporte de muestras vs meta."""
+    __tablename__ = "MuestraEntregada"
+    __table_args__ = (
+        Index("IX_Muestra_vm_ciclo", "vm_id", "ciclo_id"),
+        Index("IX_Muestra_medico", "medico_id"),
+        {"schema": "Visita"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    vm_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_RM.id"), nullable=False)
+    ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
+    medico_id: Mapped[int] = mapped_column(Integer, ForeignKey("Visita.DIM_MedicoVisita.id"), nullable=False)
+    producto: Mapped[str] = mapped_column(String(120), nullable=False)
+    cantidad: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    fecha_entrega: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+    registrado_por: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
