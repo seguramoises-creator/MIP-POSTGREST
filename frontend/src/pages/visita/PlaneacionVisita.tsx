@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Stack, Chip, Alert, MenuItem,
   Select, FormControl, CircularProgress, Table, TableHead, TableRow, TableCell,
-  TableBody, Grid, Tooltip,
+  TableBody, Grid, Tooltip, TextField,
 } from '@mui/material';
 import { Save, EventNote, Warning, CheckCircle } from '@mui/icons-material';
+import { useAuthStore } from '../../store/auth.store';
 import {
-  listarMedicos, obtenerPlaneacion, planeacionResumen, guardarPlaneacion,
-  type MedicoVisita, type PlaneacionItem, type PlaneacionResumen,
+  listarMedicos, obtenerPlaneacion, planeacionResumen, guardarPlaneacion, listarVMs,
+  type MedicoVisita, type PlaneacionItem, type PlaneacionResumen, type Catalogo,
 } from '../../services/visita.service';
 
 function msgError(e: unknown, fallback: string): string {
@@ -22,6 +23,11 @@ interface Fila { vSemana: number; rSemana: number; }
 const SEMANAS = [1, 2, 3, 4];
 
 export default function PlaneacionVisita() {
+  const rol = useAuthStore((s) => s.rol);
+  const esVM = rol === 'REPRESENTANTE_MEDICO';
+
+  const [vms, setVms] = useState<Catalogo[]>([]);
+  const [vmId, setVmId] = useState<number | ''>('');        // solo ADMIN/GERENTE
   const [medicos, setMedicos] = useState<MedicoVisita[]>([]);
   const [plan, setPlan] = useState<Record<number, Fila>>({});
   const [resumen, setResumen] = useState<PlaneacionResumen | null>(null);
@@ -29,10 +35,19 @@ export default function PlaneacionVisita() {
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
+  // El RM planifica su propio panel (backend fuerza rm_id); ADMIN/GERENTE eligen un VM.
+  const vmParam = esVM ? undefined : (vmId || undefined);
+  const listo = esVM || !!vmId;
+
+  // Lista de visitadores (solo para ADMIN/GERENTE).
+  useEffect(() => { if (!esVM) listarVMs().then(setVms).catch(() => {}); }, [esVM]);
+
   const cargar = useCallback(async () => {
+    if (!listo) { setMedicos([]); setPlan({}); setResumen(null); setCargando(false); return; }
     setCargando(true);
     try {
-      const [m, p, r] = await Promise.all([listarMedicos(), obtenerPlaneacion(), planeacionResumen()]);
+      const [m, p, r] = await Promise.all([
+        listarMedicos(vmParam), obtenerPlaneacion(vmParam), planeacionResumen(vmParam)]);
       setMedicos(m);
       setResumen(r);
       const mapa: Record<number, Fila> = {};
@@ -46,7 +61,7 @@ export default function PlaneacionVisita() {
     } catch {
       setMsg({ tipo: 'error', texto: 'No se pudo cargar la planeación.' });
     } finally { setCargando(false); }
-  }, []);
+  }, [listo, vmParam]);
   useEffect(() => { cargar(); }, [cargar]);
 
   const setV = (id: number, v: number) =>
@@ -77,9 +92,9 @@ export default function PlaneacionVisita() {
       if (f.rSemana > 0) items.push({ medico_id: id, tipo_visita: 'R', semana: f.rSemana });
     }
     try {
-      const res = await guardarPlaneacion(items);
+      const res = await guardarPlaneacion(items, vmParam);
       setMsg({ tipo: 'success', texto: `Planeación guardada (${res.guardadas} ítems).` });
-      const r = await planeacionResumen();
+      const r = await planeacionResumen(vmParam);
       setResumen(r);
     } catch (e) {
       setMsg({ tipo: 'error', texto: msgError(e, 'No se pudo guardar la planeación.') });
@@ -108,6 +123,20 @@ export default function PlaneacionVisita() {
 
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
 
+      {/* Selector de visitador: solo ADMIN/GERENTE. El RM planifica su propio panel. */}
+      {!esVM && (
+        <TextField select fullWidth size="small" label="Visitador (VM)" value={vmId} sx={{ mb: 2, maxWidth: 420 }}
+                   helperText="Elige el visitador cuyo ciclo vas a planificar"
+                   onChange={(e) => setVmId(e.target.value === '' ? '' : Number(e.target.value))}>
+          <MenuItem value=""><em>— Selecciona un visitador —</em></MenuItem>
+          {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
+        </TextField>
+      )}
+
+      {!listo ? (
+        <Alert severity="info">Selecciona un visitador para planificar su ciclo.</Alert>
+      ) : (
+      <>
       <Grid container spacing={2} sx={{ mb: 2 }}>
         <Grid item xs={6} sm={3}>{kpi('Panel', vivo.panel)}</Grid>
         <Grid item xs={6} sm={3}>{kpi('Cobertura planeada', `${vivo.cobertura}%`, 'primary.main')}</Grid>
@@ -191,6 +220,8 @@ export default function PlaneacionVisita() {
           </Stack>
         )}
       </Stack>
+      </>
+      )}
     </Box>
   );
 }
