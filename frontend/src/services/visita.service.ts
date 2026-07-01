@@ -67,11 +67,12 @@ export interface VisitaHoy {
   ejecutada: boolean; causa_no_visita: string | null; comentario: string | null; hora: string | null;
 }
 export const listarCausas = () => api.get<string[]>('/visita/causas').then(r => r.data);
-export const misVisitasHoy = () => api.get<VisitaHoy[]>('/visita/mis-visitas-hoy').then(r => r.data);
-export const registrarVisita = (medico_id: number, tipo_visita: string, comentario: string, hace_minutos = 0) =>
-  api.post('/visita/registrar', { medico_id, tipo_visita, comentario, hace_minutos }).then(r => r.data);
-export const registrarNoVisita = (medico_id: number, causa: string, comentario?: string) =>
-  api.post('/visita/no-visita', { medico_id, causa, comentario }).then(r => r.data);
+export const misVisitasHoy = (vmId?: number) =>
+  api.get<VisitaHoy[]>('/visita/mis-visitas-hoy', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export const registrarVisita = (medico_id: number, tipo_visita: string, comentario: string, hace_minutos = 0, vmId?: number) =>
+  api.post('/visita/registrar', { medico_id, tipo_visita, comentario, hace_minutos }, { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export const registrarNoVisita = (medico_id: number, causa: string, comentario?: string, vmId?: number) =>
+  api.post('/visita/no-visita', { medico_id, causa, comentario }, { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 
 // ── Proyección ────────────────────────────────────────────────────────
 export interface Proyeccion {
