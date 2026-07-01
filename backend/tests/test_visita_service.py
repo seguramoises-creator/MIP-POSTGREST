@@ -91,3 +91,14 @@ def test_no_visita_causa_valida():
 def test_no_visita_causa_invalida_falla():
     with pytest.raises(ValueError):
         VisitaNoVisita(medico_id=1, causa="porque sí")
+
+
+# ── Proyección ────────────────────────────────────────────────────────
+from datetime import date
+from app.services.visita_cobertura_service import _dias_habiles
+
+
+def test_dias_habiles():
+    assert _dias_habiles(date(2026, 6, 1), date(2026, 6, 5)) == 5   # lun→vie
+    assert _dias_habiles(date(2026, 6, 1), date(2026, 6, 8)) == 6   # incluye finde
+    assert _dias_habiles(None, None) == 19                          # fallback

@@ -73,6 +73,19 @@ export const registrarVisita = (medico_id: number, tipo_visita: string, comentar
 export const registrarNoVisita = (medico_id: number, causa: string, comentario?: string) =>
   api.post('/visita/no-visita', { medico_id, causa, comentario }).then(r => r.data);
 
+// ── Proyección ────────────────────────────────────────────────────────
+export interface Proyeccion {
+  ciclo_dias: number; dia_actual: number; dias_restantes: number;
+  panel: number; visitados: number; objetivo_pct: number; obj_medicos: number;
+  ritmo_actual: number; proyeccion_final: number; gap_al_objetivo: number;
+  ritmo_requerido: number | null; cumple_proyeccion: boolean;
+  categorias: Record<string, { panel: number; visitados: number; proyeccion: number }>;
+}
+export const proyeccionVisita = (diaActual?: number) =>
+  api.get<Proyeccion>('/visita/proyeccion', { params: diaActual ? { dia_actual: diaActual } : {} }).then(r => r.data);
+export const proyeccionRanking = (diaActual?: number) =>
+  api.get<RankingVM>('/visita/proyeccion/ranking', { params: diaActual ? { dia_actual: diaActual } : {} }).then(r => r.data);
+
 // Devuelve { medico } si se creó, o { duplicados } si el backend respondió 409.
 export const crearMedico = async (
   datos: MedicoCrear,
