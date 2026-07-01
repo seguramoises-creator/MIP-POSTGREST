@@ -79,8 +79,14 @@ export interface PosibleDuplicado {
 
 export interface Catalogo { id: number; nombre: string; }
 
-export const listarMedicos = (vmId?: number) =>
-  api.get<MedicoVisita[]>('/visita/medicos', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export const listarMedicos = (vmId?: number, incluirInactivos = false) =>
+  api.get<MedicoVisita[]>('/visita/medicos', {
+    params: { ...(vmId ? { vm_id: vmId } : {}), ...(incluirInactivos ? { incluir_inactivos: true } : {}) },
+  }).then(r => r.data);
+
+export type MedicoActualizar = Partial<Omit<MedicoCrear, 'vm_id' | 'confirmar_duplicado'>> & { activo?: boolean };
+export const actualizarMedico = (id: number, datos: MedicoActualizar) =>
+  api.put<MedicoVisita>(`/visita/medicos/${id}`, datos).then(r => r.data);
 
 export const listarEspecialidades = () =>
   api.get<Catalogo[]>('/visita/especialidades').then(r => r.data);

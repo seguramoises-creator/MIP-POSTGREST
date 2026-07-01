@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.models.visita import MedicoVisita
 from app.models.dimensiones import Especialidad, RepresentanteMedico, Linea
-from app.schemas.visita import MedicoVisitaCrear
+from app.schemas.visita import MedicoVisitaCrear, MedicoVisitaActualizar
 
 
 class DuplicadoMedicoError(Exception):
@@ -90,13 +90,34 @@ def crear_medico(db: Session, datos: MedicoVisitaCrear, usuario_id: int | None) 
     return medico
 
 
-def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None = None) -> list[dict]:
+def obtener_medico(db: Session, medico_id: int) -> MedicoVisita | None:
+    return db.query(MedicoVisita).filter(MedicoVisita.id == medico_id).first()
+
+
+def actualizar_medico(db: Session, medico: MedicoVisita,
+                      datos: MedicoVisitaActualizar, usuario_id: int | None) -> MedicoVisita:
+    """Aplica solo los campos enviados (patrón PATCH). Sirve tanto para editar el
+    médico como para activar/desactivar (campo `activo`)."""
+    cambios = datos.model_dump(exclude_unset=True)
+    for campo, valor in cambios.items():
+        setattr(medico, campo, valor)
+    db.commit()
+    db.refresh(medico)
+    logger.info(f"Médico de visita actualizado id={medico.id} "
+                f"(campos: {', '.join(cambios) or 'ninguno'}) por usuario={usuario_id}")
+    return medico
+
+
+def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None = None,
+                   incluir_inactivos: bool = False) -> list[dict]:
     """Lista los médicos del panel (opcionalmente de un VM), con el nombre de la
     especialidad y el estado de visita del ciclo (para el Panel Médico enriquecido):
     `estado_visita` = 'vr' (Vista+Revisita), 'v' (una visita), 'sin' (sin visitar)."""
     from app.services.visita_cobertura_service import ciclo_por_defecto, _mapa_visitas
 
-    q = db.query(MedicoVisita).filter(MedicoVisita.activo == True)  # noqa: E712
+    q = db.query(MedicoVisita)
+    if not incluir_inactivos:
+        q = q.filter(MedicoVisita.activo == True)  # noqa: E712
     if vm_id:
         q = q.filter(MedicoVisita.vm_id == vm_id)
     medicos = q.order_by(MedicoVisita.nombre_completo).all()

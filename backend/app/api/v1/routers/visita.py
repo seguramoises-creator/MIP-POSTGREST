@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_db, require_roles, get_current_active_user
 from app.models.usuario import Rol
 from app.schemas.visita import (
-    MedicoVisitaCrear, MedicoVisitaResponse, VisitaRegistrar, VisitaNoVisita,
-    PlaneacionGuardar, ParrillaGuardar, MuestrasRegistrar, ParametroCostoGuardar,
-    _CAUSAS_NO_VISITA,
+    MedicoVisitaCrear, MedicoVisitaActualizar, MedicoVisitaResponse, VisitaRegistrar,
+    VisitaNoVisita, PlaneacionGuardar, ParrillaGuardar, MuestrasRegistrar,
+    ParametroCostoGuardar, _CAUSAS_NO_VISITA,
 )
 from app.services import visita_service
 
@@ -58,10 +58,30 @@ def listar_vms(db: Session = Depends(get_db), current_user=RequireVisita):
 
 
 @router.get("/medicos", response_model=list[dict])
-def listar_medicos(vm_id: int | None = None, db: Session = Depends(get_db), current_user=RequireVisita):
-    """Panel médico. El VM ve solo el suyo; ADMIN/GERENTE pueden filtrar por ?vm_id=."""
+def listar_medicos(vm_id: int | None = None, incluir_inactivos: bool = False,
+                   db: Session = Depends(get_db), current_user=RequireVisita):
+    """Panel médico. El VM ve solo el suyo; ADMIN/GERENTE pueden filtrar por ?vm_id=.
+    `incluir_inactivos=true` incluye los médicos desactivados (para reactivarlos)."""
     vm = _scope_vm(current_user, vm_id)
-    return visita_service.listar_medicos(db, vm_id=vm)
+    return visita_service.listar_medicos(db, vm_id=vm, incluir_inactivos=incluir_inactivos)
+
+
+@router.put("/medicos/{medico_id}", response_model=MedicoVisitaResponse)
+def actualizar_medico(medico_id: int, datos: MedicoVisitaActualizar,
+                      db: Session = Depends(get_db), current_user=RequireVisita):
+    """Edita un médico o lo activa/desactiva (campo `activo`). El VM solo puede
+    modificar médicos de su propio panel."""
+    m = visita_service.obtener_medico(db, medico_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Médico no encontrado.")
+    if _rol(current_user) == "REPRESENTANTE_MEDICO":
+        rm = _scope_vm(current_user, None)
+        if m.vm_id != rm:
+            raise HTTPException(status_code=403, detail="Este médico no pertenece a tu panel.")
+    try:
+        return visita_service.actualizar_medico(db, m, datos, getattr(current_user, "id", None))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/medicos", response_model=MedicoVisitaResponse, status_code=status.HTTP_201_CREATED)

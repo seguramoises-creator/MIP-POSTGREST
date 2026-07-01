@@ -59,6 +59,62 @@ class MedicoVisitaCrear(BaseModel):
         return v
 
 
+class MedicoVisitaActualizar(BaseModel):
+    """Actualización parcial de un médico. Todos los campos opcionales: solo se
+    aplican los enviados (patrón PATCH). Incluye `activo` para activar/desactivar."""
+    codigo: str | None = None
+    nombre_completo: str | None = Field(default=None, min_length=3, max_length=200)
+    nombre: str | None = None
+    apellidos: str | None = None
+    especialidad_id: int | None = None
+    subespecialidad: str | None = None
+    categoria: str | None = None
+    centro_trabajo: str | None = None
+    institucion_tipo: str | None = None
+    tipo_consultorio: str | None = None
+    provincia: str | None = None
+    municipio: str | None = None
+    sector: str | None = None
+    direccion: str | None = None
+    latitud: float | None = None
+    longitud: float | None = None
+    telefono: str | None = None
+    email: str | None = None
+    exequatur: str | None = None
+    dias_consulta: str | None = None
+    horario_consulta: str | None = None
+    frecuencia_visita: str | None = None
+    acepta_visita: bool | None = None
+    potencial_prescripcion: str | None = None
+    kol: bool | None = None
+    segmento: str | None = None
+    observaciones: str | None = None
+    fecha_alta: date | None = None
+    activo: bool | None = None
+
+    @field_validator("nombre_completo")
+    @classmethod
+    def _nombre_valido(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = " ".join(v.strip().upper().split())
+        if "." in v:
+            raise ValueError("El nombre no debe llevar abreviaciones con punto (ej. Dr. o M.)")
+        if len(v.split()) < 2:
+            raise ValueError("El nombre debe tener al menos 2 palabras (nombre + apellido)")
+        return v
+
+    @field_validator("categoria")
+    @classmethod
+    def _categoria_valida(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip().upper()
+        if v not in ("A", "B", "C", "D"):
+            raise ValueError("La categoría debe ser A, B, C o D")
+        return v
+
+
 class MedicoVisitaResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

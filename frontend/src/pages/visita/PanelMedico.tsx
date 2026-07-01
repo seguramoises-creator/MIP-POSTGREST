@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert, Grid,
   MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
-  Avatar, InputAdornment, Divider, Switch, FormControlLabel,
+  Avatar, InputAdornment, Divider, Switch, FormControlLabel, IconButton, Tooltip,
 } from '@mui/material';
-import { Add, PersonAddAlt1, Warning, Search, FiberManualRecord } from '@mui/icons-material';
+import { Add, PersonAddAlt1, Warning, Search, FiberManualRecord, Edit, Block, Restore } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import {
-  listarMedicos, listarEspecialidades, listarVMs, crearMedico,
+  listarMedicos, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
   type MedicoVisita, type Catalogo, type PosibleDuplicado, type MedicoCrear,
 } from '../../services/visita.service';
 
@@ -54,6 +54,8 @@ export default function PanelMedico() {
   const [catFiltro, setCatFiltro] = useState('');
   const [lineaFiltro, setLineaFiltro] = useState('');
   const [espFiltro, setEspFiltro] = useState('');
+  const [estadoFiltro, setEstadoFiltro] = useState<'activos' | 'inactivos' | 'todos'>('activos');
+  const [editId, setEditId] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
@@ -64,9 +66,9 @@ export default function PanelMedico() {
 
   const cargar = useCallback(() => {
     setCargando(true);
-    listarMedicos(esVM ? undefined : (vmFiltro || undefined))
+    listarMedicos(esVM ? undefined : (vmFiltro || undefined), estadoFiltro !== 'activos')
       .then(setMedicos).catch(() => setMedicos([])).finally(() => setCargando(false));
-  }, [esVM, vmFiltro]);
+  }, [esVM, vmFiltro, estadoFiltro]);
 
   useEffect(() => { cargar(); }, [cargar]);
   useEffect(() => {
@@ -74,11 +76,12 @@ export default function PanelMedico() {
     if (!esVM) listarVMs().then(setVms).catch(() => {});
   }, [esVM]);
 
-  // KPIs del panel (del ciclo actual).
+  // KPIs del panel (del ciclo actual) — solo sobre médicos activos.
   const kpis = useMemo(() => {
-    const total = medicos.length;
-    const visitados = medicos.filter((m) => m.estado_visita && m.estado_visita !== 'sin').length;
-    const ruptura = medicos.filter((m) => m.ciclos_sin_visita >= 3).length;
+    const act = medicos.filter((m) => m.activo);
+    const total = act.length;
+    const visitados = act.filter((m) => m.estado_visita && m.estado_visita !== 'sin').length;
+    const ruptura = act.filter((m) => m.ciclos_sin_visita >= 3).length;
     return { total, visitados, sin: total - visitados, ruptura };
   }, [medicos]);
 
@@ -93,27 +96,58 @@ export default function PanelMedico() {
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toUpperCase();
     return medicos.filter((m) =>
+      (estadoFiltro === 'todos' || (estadoFiltro === 'activos' ? m.activo : !m.activo)) &&
       (!catFiltro || m.categoria === catFiltro) &&
       (!lineaFiltro || m.linea_nombre === lineaFiltro) &&
       (!espFiltro || m.especialidad_nombre === espFiltro) &&
       (!q || m.nombre_completo.toUpperCase().includes(q)
           || (m.especialidad_nombre ?? '').toUpperCase().includes(q)
           || (m.linea_nombre ?? '').toUpperCase().includes(q)));
-  }, [medicos, busqueda, catFiltro, lineaFiltro, espFiltro]);
+  }, [medicos, busqueda, catFiltro, lineaFiltro, espFiltro, estadoFiltro]);
 
-  const abrirNuevo = () => { setForm({ ...vacio, vm_id: esVM ? 0 : (vmFiltro || 0) }); setDuplicados(null); setAbierto(true); };
+  const abrirNuevo = () => { setEditId(null); setForm({ ...vacio, vm_id: esVM ? 0 : (vmFiltro || 0) }); setDuplicados(null); setAbierto(true); };
+  const abrirEditar = (m: MedicoVisita) => {
+    setEditId(m.id); setDuplicados(null);
+    setForm({
+      vm_id: m.vm_id, codigo: m.codigo, nombre_completo: m.nombre_completo, nombre: m.nombre,
+      apellidos: m.apellidos, especialidad_id: m.especialidad_id, subespecialidad: m.subespecialidad,
+      categoria: m.categoria, centro_trabajo: m.centro_trabajo, institucion_tipo: m.institucion_tipo,
+      tipo_consultorio: m.tipo_consultorio, provincia: m.provincia, municipio: m.municipio, sector: m.sector,
+      direccion: m.direccion, latitud: m.latitud, longitud: m.longitud, telefono: m.telefono, email: m.email,
+      exequatur: m.exequatur, dias_consulta: m.dias_consulta, horario_consulta: m.horario_consulta,
+      frecuencia_visita: m.frecuencia_visita, acepta_visita: m.acepta_visita ?? true,
+      potencial_prescripcion: m.potencial_prescripcion, kol: m.kol ?? false, segmento: m.segmento,
+      observaciones: m.observaciones, fecha_alta: m.fecha_alta,
+    });
+    setAbierto(true);
+  };
+  const toggleActivo = async (m: MedicoVisita) => {
+    try {
+      await actualizarMedico(m.id, { activo: !m.activo });
+      setMsg({ tipo: 'success', texto: m.activo ? 'Médico desactivado.' : 'Médico reactivado.' });
+      cargar();
+    } catch {
+      setMsg({ tipo: 'error', texto: 'No se pudo cambiar el estado.' });
+    }
+  };
   const set = (k: keyof MedicoCrear, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
   async function guardar(confirmar = false) {
-    if (!esVM && !form.vm_id) { setMsg({ tipo: 'error', texto: 'Selecciona el visitador (VM).' }); return; }
+    if (editId === null && !esVM && !form.vm_id) { setMsg({ tipo: 'error', texto: 'Selecciona el visitador (VM).' }); return; }
     setGuardando(true); setDuplicados(null);
     try {
-      const res = await crearMedico({ ...form, confirmar_duplicado: confirmar });
-      if (res.duplicados && res.duplicados.length) { setDuplicados(res.duplicados); return; }
-      setMsg({ tipo: 'success', texto: 'Médico registrado.' });
+      if (editId !== null) {
+        const { confirmar_duplicado: _c, vm_id: _v, ...cambios } = form;
+        await actualizarMedico(editId, cambios);
+        setMsg({ tipo: 'success', texto: 'Médico actualizado.' });
+      } else {
+        const res = await crearMedico({ ...form, confirmar_duplicado: confirmar });
+        if (res.duplicados && res.duplicados.length) { setDuplicados(res.duplicados); return; }
+        setMsg({ tipo: 'success', texto: 'Médico registrado.' });
+      }
       setAbierto(false); cargar();
     } catch {
-      setMsg({ tipo: 'error', texto: 'No se pudo registrar (revisa nombre en MAYÚSCULAS, ≥2 palabras, categoría A/B/C).' });
+      setMsg({ tipo: 'error', texto: 'No se pudo guardar (revisa nombre en MAYÚSCULAS, ≥2 palabras, categoría A/B/C/D).' });
     } finally { setGuardando(false); }
   }
 
@@ -165,10 +199,16 @@ export default function PanelMedico() {
             <MenuItem value="">Todas las especialidades</MenuItem>
             {opcEspecialidades.map((e) => <MenuItem key={e} value={e}>{e}</MenuItem>)}
           </TextField>
-          <TextField select size="small" label="Categoría" value={catFiltro} sx={{ minWidth: 150 }}
+          <TextField select size="small" label="Categoría" value={catFiltro} sx={{ minWidth: 140 }}
                      onChange={(e) => setCatFiltro(e.target.value)}>
             <MenuItem value="">Todas</MenuItem>
-            {['A', 'B', 'C'].map((c) => <MenuItem key={c} value={c}>Categoría {c}</MenuItem>)}
+            {['A', 'B', 'C', 'D'].map((c) => <MenuItem key={c} value={c}>Categoría {c}</MenuItem>)}
+          </TextField>
+          <TextField select size="small" label="Estado" value={estadoFiltro} sx={{ minWidth: 130 }}
+                     onChange={(e) => setEstadoFiltro(e.target.value as 'activos' | 'inactivos' | 'todos')}>
+            <MenuItem value="activos">Activos</MenuItem>
+            <MenuItem value="inactivos">Inactivos</MenuItem>
+            <MenuItem value="todos">Todos</MenuItem>
           </TextField>
           <Button variant="contained" startIcon={<PersonAddAlt1 />} onClick={abrirNuevo}>Agregar Médico</Button>
         </Stack>
@@ -203,7 +243,7 @@ export default function PanelMedico() {
                 <Box key={m.id}>
                   {i > 0 && <Divider />}
                   <Stack direction="row" alignItems="center" spacing={1.5}
-                         sx={{ px: 2, py: 1.5, bgcolor: ruptura ? 'rgba(211,47,47,0.06)' : 'transparent' }}>
+                         sx={{ px: 2, py: 1.5, bgcolor: ruptura ? 'rgba(211,47,47,0.06)' : 'transparent', opacity: m.activo ? 1 : 0.55 }}>
                     <Avatar sx={{ bgcolor: 'transparent', color, fontWeight: 700, fontSize: 14, width: 40, height: 40, border: `2px solid ${color}22` }}>
                       {iniciales(m.nombre_completo)}
                     </Avatar>
@@ -218,9 +258,10 @@ export default function PanelMedico() {
                                 label={`${m.ciclos_sin_visita} ciclos sin visitar — Ruptura de secuencia`}
                                 sx={{ height: 20, '& .MuiChip-label': { px: 0.75, fontSize: 11 } }} />
                         )}
+                        {!m.activo && <Chip size="small" variant="outlined" label="Inactivo" sx={{ height: 20, '& .MuiChip-label': { px: 0.75, fontSize: 11 } }} />}
                       </Stack>
                       <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-                        {[m.especialidad_nombre, m.tipo_consultorio, m.direccion].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
+                        {[m.especialidad_nombre, m.provincia, m.municipio, m.tipo_consultorio].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
                       </Typography>
                     </Box>
                     <Stack direction="row" alignItems="center" spacing={0.75} sx={{ flexShrink: 0 }}>
@@ -229,6 +270,14 @@ export default function PanelMedico() {
                         {est.label}
                       </Typography>
                       <Typography variant="caption" color="text.disabled" sx={{ ml: 1 }}>#{m.id}</Typography>
+                      <Tooltip title="Editar médico">
+                        <IconButton size="small" color="primary" onClick={() => abrirEditar(m)}><Edit fontSize="small" /></IconButton>
+                      </Tooltip>
+                      <Tooltip title={m.activo ? 'Desactivar' : 'Reactivar'}>
+                        <IconButton size="small" color={m.activo ? 'error' : 'success'} onClick={() => toggleActivo(m)}>
+                          {m.activo ? <Block fontSize="small" /> : <Restore fontSize="small" />}
+                        </IconButton>
+                      </Tooltip>
                     </Stack>
                   </Stack>
                 </Box>
@@ -240,7 +289,11 @@ export default function PanelMedico() {
 
       {/* Alta de médico */}
       <Dialog open={abierto} onClose={() => !guardando && setAbierto(false)} maxWidth="md" fullWidth>
-        <DialogTitle><Add sx={{ verticalAlign: 'middle', mr: 1 }} />Agregar médico</DialogTitle>
+        <DialogTitle>
+          {editId !== null
+            ? <><Edit sx={{ verticalAlign: 'middle', mr: 1 }} />Editar médico</>
+            : <><Add sx={{ verticalAlign: 'middle', mr: 1 }} />Agregar médico</>}
+        </DialogTitle>
         <DialogContent dividers>
           {(() => {
             const seccion = (t: string) => (
