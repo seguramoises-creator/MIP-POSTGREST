@@ -19,6 +19,8 @@ router = APIRouter(prefix="/visita", tags=["Visita Médica"])
 
 RequireVisita = Depends(require_roles(
     Rol.ADMIN, Rol.GERENTE_DISTRITO, Rol.GERENTE_PRODUCTIVIDAD, Rol.REPRESENTANTE_MEDICO))
+# El cierre de ciclo hace rodar el contador de todos los paneles: operación gerencial.
+RequireCierre = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
 RequireAnyAuth = Depends(get_current_active_user)
 
 
@@ -188,3 +190,43 @@ def resumen_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
     """Resumen de la planeación: cobertura planeada, carga por día y aviso de Cat A sin Revisita."""
     from app.services import visita_planeacion_service
     return visita_planeacion_service.resumen_planeacion(db, _vm_registro(current_user, vm_id), ciclo_id)
+
+
+# ── Ruptura de secuencia / Cierre de ciclo (Parte 5) ──────────────────────────
+@router.get("/ruptura", response_model=dict)
+def estado_ruptura(vm_id: int | None = None, db: Session = Depends(get_db), current_user=RequireVisita):
+    """Médicos en ruptura por severidad (1 / 2 / ≥3 ciclos sin visita). El VM ve el suyo."""
+    from app.services import visita_cierre_service
+    return visita_cierre_service.estado_ruptura(db, _scope_vm(current_user, vm_id))
+
+
+@router.get("/cierre/previsualizar", response_model=dict)
+def previsualizar_cierre(ciclo_id: int | None = None, db: Session = Depends(get_db), current_user=RequireCierre):
+    """Simula el cierre del ciclo (sin escribir): cuántos se resetean/incrementan y si ya está cerrado."""
+    from app.services import visita_cierre_service
+    try:
+        return visita_cierre_service.previsualizar_cierre(db, ciclo_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/cierre", response_model=dict, status_code=status.HTTP_201_CREATED)
+def cerrar_ciclo(ciclo_id: int | None = None, db: Session = Depends(get_db), current_user=RequireCierre):
+    """Cierra el ciclo de visita: hace rodar `ciclos_sin_visita`. Idempotente (409 si ya se cerró)."""
+    from app.services import visita_cierre_service
+    try:
+        return visita_cierre_service.cerrar_ciclo(db, ciclo_id, getattr(current_user, "id", None))
+    except visita_cierre_service.CicloVisitaYaCerradoError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"mensaje": "Este ciclo ya fue cerrado.",
+                    "fecha_cierre": e.cierre.fecha_cierre.isoformat() if e.cierre.fecha_cierre else None})
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/cierre/historial", response_model=list[dict])
+def historial_cierres(db: Session = Depends(get_db), current_user=RequireCierre):
+    """Historial de cierres de ciclo de visita, del más reciente al más antiguo."""
+    from app.services import visita_cierre_service
+    return visita_cierre_service.historial_cierres(db)

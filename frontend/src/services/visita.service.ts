@@ -104,6 +104,30 @@ export const guardarPlaneacion = (items: PlaneacionItem[], vmId?: number) =>
 export const planeacionResumen = (vmId?: number) =>
   api.get<PlaneacionResumen>('/visita/planeacion/resumen', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 
+// ── Ruptura de secuencia / Cierre de ciclo ────────────────────────────
+export interface RupturaMedico {
+  id: number; nombre: string; categoria: string;
+  vm_id: number; vm_nombre: string; ciclos_sin_visita: number;
+}
+export interface RupturaEstado {
+  total: number; alerta: number; grave: number; critica: number;
+  medicos: { alerta: RupturaMedico[]; grave: RupturaMedico[]; critica: RupturaMedico[] };
+}
+export interface CierrePreview {
+  ciclo_id: number; panel: number; visitados: number; sin_visitar: number;
+  ruptura_nueva: number; ruptura_critica: number; ya_cerrado?: boolean; fecha_cierre?: string | null;
+}
+export interface CierreHist {
+  id: number; ciclo_id: number; ciclo_nombre: string; fecha_cierre: string | null;
+  panel: number; visitados: number; sin_visitar: number; ruptura_nueva: number; ruptura_critica: number;
+}
+export const estadoRuptura = (vmId?: number) =>
+  api.get<RupturaEstado>('/visita/ruptura', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export const previsualizarCierre = () =>
+  api.get<CierrePreview>('/visita/cierre/previsualizar').then(r => r.data);
+export const cerrarCiclo = () => api.post<CierrePreview>('/visita/cierre').then(r => r.data);
+export const historialCierres = () => api.get<CierreHist[]>('/visita/cierre/historial').then(r => r.data);
+
 // Devuelve { medico } si se creó, o { duplicados } si el backend respondió 409.
 export const crearMedico = async (
   datos: MedicoCrear,

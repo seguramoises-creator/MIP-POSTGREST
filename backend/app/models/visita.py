@@ -96,3 +96,28 @@ class PlaneacionCiclo(Base):
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
     modificado_por: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+
+
+class CierreCicloVisita(Base):
+    """Registro de un cierre de ciclo de visita (Parte 5 — Ruptura de Secuencia).
+
+    Al cerrar un ciclo se hace rodar el contador `ciclos_sin_visita` de cada médico:
+    se resetea a 0 si tuvo ≥1 visita ejecutada, o se incrementa si no tuvo ninguna.
+    Esta tabla guarda el resumen del cierre y sirve de guard de idempotencia: un ciclo
+    solo puede cerrarse una vez (evita doble incremento del contador)."""
+    __tablename__ = "CierreCicloVisita"
+    __table_args__ = (
+        Index("IX_CierreVisita_ciclo", "ciclo_id"),
+        {"schema": "Visita"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
+    fecha_cierre: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+    panel: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    visitados: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    sin_visitar: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ruptura_nueva: Mapped[int] = mapped_column(Integer, nullable=False, default=0)   # contador incrementado este cierre
+    ruptura_critica: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # quedaron con ≥3 ciclos sin visita
+    cerrado_por: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)

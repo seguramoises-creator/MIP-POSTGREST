@@ -39,6 +39,7 @@ import CoberturaDashboard from './pages/visita/CoberturaDashboard';
 import RegistrarVisita from './pages/visita/RegistrarVisita';
 import ProyeccionVisita from './pages/visita/ProyeccionVisita';
 import PlaneacionVisita from './pages/visita/PlaneacionVisita';
+import RupturaVisita from './pages/visita/RupturaVisita';
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
 
@@ -114,6 +115,7 @@ function AppRoutes() {
         <Route path="visita/registrar" element={<ProtectedRoute allowedRoles={['ADMIN','REPRESENTANTE_MEDICO']}><RegistrarVisita /></ProtectedRoute>} />
         <Route path="visita/proyeccion" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><ProyeccionVisita /></ProtectedRoute>} />
         <Route path="visita/planeacion" element={<ProtectedRoute allowedRoles={['ADMIN','REPRESENTANTE_MEDICO']}><PlaneacionVisita /></ProtectedRoute>} />
+        <Route path="visita/ruptura" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><RupturaVisita /></ProtectedRoute>} />
         <Route path="etl" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><ETL /></ProtectedRoute>} />
         <Route path="admin" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><Admin /></ProtectedRoute>} />
         <Route path="usuarios" element={<ProtectedRoute allowedRoles={['ADMIN']}><Usuarios /></ProtectedRoute>} />

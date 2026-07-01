@@ -146,3 +146,48 @@ def test_planeacion_p03_mismo_dia_falla():
     r = PlaneacionItem(medico_id=1, tipo_visita="R", semana=2, dia_semana="Lunes")
     with pytest.raises(ValueError):
         _validar([v, r])
+
+
+# ── Ruptura de secuencia / Cierre de ciclo ────────────────────────────
+from app.services import visita_cierre_service as cs
+
+
+def test_severidad_por_ciclos_sin_visita():
+    assert cs._severidad(0) == "ninguna"
+    assert cs._severidad(1) == "alerta"
+    assert cs._severidad(2) == "grave"
+    assert cs._severidad(3) == "critica"
+    assert cs._severidad(7) == "critica"
+
+
+def test_cierre_resetea_visitados_e_incrementa_ausentes(monkeypatch):
+    # m1 visitado (contador 5 → 0); m2 sin visita (contador 2 → 3 = crítica)
+    m1 = SimpleNamespace(id=1, ciclos_sin_visita=5, activo=True)
+    m2 = SimpleNamespace(id=2, ciclos_sin_visita=2, activo=True)
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.return_value = [m1, m2]
+    monkeypatch.setattr(cs, "_mapa_visitas", lambda db, ciclo, vm: {1: {"v": True, "r": False}})
+    r = cs._resumen_cierre(db, ciclo_id=10, aplicar=True, usuario_id=None)
+    assert r["panel"] == 2 and r["visitados"] == 1 and r["sin_visitar"] == 1
+    assert r["ruptura_nueva"] == 1 and r["ruptura_critica"] == 1
+    assert m1.ciclos_sin_visita == 0   # reseteado por haber sido visitado
+    assert m2.ciclos_sin_visita == 3   # incrementado a ruptura crítica
+
+
+def test_cierre_previsualizar_no_muta(monkeypatch):
+    m = SimpleNamespace(id=1, ciclos_sin_visita=1, activo=True)
+    db = MagicMock()
+    db.query.return_value.filter.return_value.all.return_value = [m]
+    db.query.return_value.filter.return_value.first.return_value = None  # no cerrado aún
+    monkeypatch.setattr(cs, "_mapa_visitas", lambda db, ciclo, vm: {})   # nadie visitado
+    monkeypatch.setattr(cs, "ciclo_por_defecto", lambda db: 10)
+    r = cs.previsualizar_cierre(db, ciclo_id=10)
+    assert r["sin_visitar"] == 1 and r["ya_cerrado"] is False
+    assert m.ciclos_sin_visita == 1    # NO se modificó (dry-run)
+
+
+def test_cierre_bloquea_si_ya_cerrado(monkeypatch):
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(fecha_cierre=None)
+    with pytest.raises(cs.CicloVisitaYaCerradoError):
+        cs.cerrar_ciclo(db, ciclo_id=10, usuario_id=1)
