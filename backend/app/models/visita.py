@@ -6,10 +6,10 @@ Config.DIM_Ciclo y Config.DIM_Especialidad en lugar de crear catálogos nuevos.
 
 Fase 1: Panel Médico (catálogo de médicos del universo de visita).
 """
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 
 from sqlalchemy import (
-    String, Boolean, Integer, DateTime, ForeignKey, CHAR, Index, Numeric,
+    String, Boolean, Integer, DateTime, Date, ForeignKey, CHAR, Index, Numeric,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -35,16 +35,43 @@ class MedicoVisita(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     vm_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("Config.DIM_RM.id"), nullable=False)
+        Integer, ForeignKey("Config.DIM_RM.id"), nullable=False)  # Representante asignado
+    codigo: Mapped[str | None] = mapped_column(String(40), nullable=True)      # Código del médico (identificador)
     nombre_completo: Mapped[str] = mapped_column(String(200), nullable=False)  # solo MAYÚSCULAS
+    nombre: Mapped[str | None] = mapped_column(String(100), nullable=True)     # primer nombre
+    apellidos: Mapped[str | None] = mapped_column(String(150), nullable=True)  # apellidos
     especialidad_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Config.DIM_Especialidad.id"), nullable=True)
-    categoria: Mapped[str] = mapped_column(CHAR(1), nullable=False)  # A / B / C
+    subespecialidad: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    categoria: Mapped[str] = mapped_column(CHAR(1), nullable=False)            # A / B / C / D
+    # Ubicación / zonificación
+    centro_trabajo: Mapped[str | None] = mapped_column(String(200), nullable=True)   # clínica u hospital
+    institucion_tipo: Mapped[str | None] = mapped_column(String(20), nullable=True)  # Pública / Privada
     tipo_consultorio: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    provincia: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    municipio: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
     direccion: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    latitud: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
+    longitud: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
+    # Contacto
     telefono: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    exequatur: Mapped[str | None] = mapped_column(String(50), nullable=True)   # número de colegiación
+    # Consulta / visita
+    dias_consulta: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    horario_consulta: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    frecuencia_visita: Mapped[str | None] = mapped_column(String(20), nullable=True)  # Semanal/Quincenal/Mensual...
+    acepta_visita: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Comercial
+    potencial_prescripcion: Mapped[str | None] = mapped_column(String(20), nullable=True)  # Alto/Medio/Bajo
+    kol: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # Influenciador
+    segmento: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    observaciones: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Estado / control
     ciclos_sin_visita: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)  # Estado Activo/Inactivo
+    fecha_alta: Mapped[date | None] = mapped_column(Date, nullable=True)         # Fecha de alta (negocio)
     fecha_registro: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
     registrado_por: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)

@@ -1,15 +1,42 @@
 """Schemas del Módulo de Visita Médica — Fase 1 (Panel Médico)."""
+from datetime import date
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class MedicoVisitaCrear(BaseModel):
     vm_id: int
+    codigo: str | None = None
     nombre_completo: str = Field(min_length=3, max_length=200)
+    nombre: str | None = None
+    apellidos: str | None = None
     especialidad_id: int | None = None
+    subespecialidad: str | None = None
     categoria: str = Field(min_length=1, max_length=1)
+    # Ubicación / zonificación
+    centro_trabajo: str | None = None
+    institucion_tipo: str | None = None          # Pública / Privada
     tipo_consultorio: str | None = None
+    provincia: str | None = None
+    municipio: str | None = None
+    sector: str | None = None
     direccion: str | None = None
+    latitud: float | None = None
+    longitud: float | None = None
+    # Contacto
     telefono: str | None = None
+    email: str | None = None
+    exequatur: str | None = None
+    # Consulta / visita
+    dias_consulta: str | None = None
+    horario_consulta: str | None = None
+    frecuencia_visita: str | None = None         # Semanal / Quincenal / Mensual / Bimestral
+    acepta_visita: bool = True
+    # Comercial
+    potencial_prescripcion: str | None = None     # Alto / Medio / Bajo
+    kol: bool = False
+    segmento: str | None = None
+    observaciones: str | None = None
+    fecha_alta: date | None = None
     # Si el sistema detecta posible duplicado y el usuario decide registrar igual.
     confirmar_duplicado: bool = False
 
@@ -27,8 +54,8 @@ class MedicoVisitaCrear(BaseModel):
     @classmethod
     def _categoria_valida(cls, v: str) -> str:
         v = v.strip().upper()
-        if v not in ("A", "B", "C"):
-            raise ValueError("La categoría debe ser A, B o C")
+        if v not in ("A", "B", "C", "D"):
+            raise ValueError("La categoría debe ser A, B, C o D")
         return v
 
 
@@ -36,13 +63,35 @@ class MedicoVisitaResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     vm_id: int
+    codigo: str | None = None
     nombre_completo: str
+    nombre: str | None = None
+    apellidos: str | None = None
     especialidad_id: int | None
     especialidad_nombre: str | None = None
+    subespecialidad: str | None = None
     categoria: str
+    centro_trabajo: str | None = None
+    institucion_tipo: str | None = None
     tipo_consultorio: str | None
+    provincia: str | None = None
+    municipio: str | None = None
+    sector: str | None = None
     direccion: str | None
+    latitud: float | None = None
+    longitud: float | None = None
     telefono: str | None
+    email: str | None = None
+    exequatur: str | None = None
+    dias_consulta: str | None = None
+    horario_consulta: str | None = None
+    frecuencia_visita: str | None = None
+    acepta_visita: bool | None = None
+    potencial_prescripcion: str | None = None
+    kol: bool | None = None
+    segmento: str | None = None
+    observaciones: str | None = None
+    fecha_alta: date | None = None
     ciclos_sin_visita: int
     activo: bool
 

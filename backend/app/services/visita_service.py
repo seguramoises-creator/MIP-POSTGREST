@@ -48,14 +48,37 @@ def crear_medico(db: Session, datos: MedicoVisitaCrear, usuario_id: int | None) 
         if dups:
             logger.info(f"Posible duplicado al registrar médico '{datos.nombre_completo}': {len(dups)} coincidencia(s)")
             raise DuplicadoMedicoError(dups)
+    from datetime import date as _date
     medico = MedicoVisita(
         vm_id=datos.vm_id,
+        codigo=datos.codigo,
         nombre_completo=datos.nombre_completo,
+        nombre=datos.nombre,
+        apellidos=datos.apellidos,
         especialidad_id=datos.especialidad_id,
+        subespecialidad=datos.subespecialidad,
         categoria=datos.categoria,
+        centro_trabajo=datos.centro_trabajo,
+        institucion_tipo=datos.institucion_tipo,
         tipo_consultorio=datos.tipo_consultorio,
+        provincia=datos.provincia,
+        municipio=datos.municipio,
+        sector=datos.sector,
         direccion=datos.direccion,
+        latitud=datos.latitud,
+        longitud=datos.longitud,
         telefono=datos.telefono,
+        email=datos.email,
+        exequatur=datos.exequatur,
+        dias_consulta=datos.dias_consulta,
+        horario_consulta=datos.horario_consulta,
+        frecuencia_visita=datos.frecuencia_visita,
+        acepta_visita=datos.acepta_visita,
+        potencial_prescripcion=datos.potencial_prescripcion,
+        kol=datos.kol,
+        segmento=datos.segmento,
+        observaciones=datos.observaciones,
+        fecha_alta=datos.fecha_alta or _date.today(),
         ciclos_sin_visita=0,
         activo=True,
         registrado_por=usuario_id,
@@ -91,6 +114,17 @@ def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None =
     ciclo_id = ciclo_id or ciclo_por_defecto(db)
     mapa = _mapa_visitas(db, ciclo_id, vm_id) if ciclo_id else {}
 
+    # Fecha de última visita ejecutada por médico (derivada de FactVisita).
+    from sqlalchemy import func
+    from app.models.visita import VisitaRegistro
+    med_ids = [m.id for m in medicos]
+    ult_visita = {}
+    if med_ids:
+        ult_visita = dict(
+            db.query(VisitaRegistro.medico_id, func.max(VisitaRegistro.fecha_hora))
+            .filter(VisitaRegistro.medico_id.in_(med_ids), VisitaRegistro.ejecutada == True)  # noqa: E712
+            .group_by(VisitaRegistro.medico_id).all())
+
     salida = []
     for m in medicos:
         d = mapa.get(m.id)
@@ -101,13 +135,28 @@ def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None =
         else:
             estado = "sin"
         lid = rm_linea.get(m.vm_id)
+        uv = ult_visita.get(m.id)
         salida.append({
-            "id": m.id, "vm_id": m.vm_id, "nombre_completo": m.nombre_completo,
+            "id": m.id, "vm_id": m.vm_id, "codigo": m.codigo,
+            "nombre_completo": m.nombre_completo, "nombre": m.nombre, "apellidos": m.apellidos,
             "especialidad_id": m.especialidad_id,
             "especialidad_nombre": esp_nom.get(m.especialidad_id),
+            "subespecialidad": m.subespecialidad,
             "linea_id": lid, "linea_nombre": linea_nom.get(lid),
-            "categoria": m.categoria, "tipo_consultorio": m.tipo_consultorio,
-            "direccion": m.direccion, "telefono": m.telefono,
+            "categoria": m.categoria,
+            "centro_trabajo": m.centro_trabajo, "institucion_tipo": m.institucion_tipo,
+            "tipo_consultorio": m.tipo_consultorio,
+            "provincia": m.provincia, "municipio": m.municipio, "sector": m.sector,
+            "direccion": m.direccion,
+            "latitud": float(m.latitud) if m.latitud is not None else None,
+            "longitud": float(m.longitud) if m.longitud is not None else None,
+            "telefono": m.telefono, "email": m.email, "exequatur": m.exequatur,
+            "dias_consulta": m.dias_consulta, "horario_consulta": m.horario_consulta,
+            "frecuencia_visita": m.frecuencia_visita, "acepta_visita": m.acepta_visita,
+            "potencial_prescripcion": m.potencial_prescripcion, "kol": m.kol,
+            "segmento": m.segmento, "observaciones": m.observaciones,
+            "fecha_alta": m.fecha_alta.isoformat() if m.fecha_alta else None,
+            "fecha_ultima_visita": uv.isoformat() if uv else None,
             "ciclos_sin_visita": m.ciclos_sin_visita, "activo": m.activo,
             "estado_visita": estado,
         })

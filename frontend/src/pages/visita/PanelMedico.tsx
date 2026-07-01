@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert, Grid,
   MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
-  Avatar, InputAdornment, Divider,
+  Avatar, InputAdornment, Divider, Switch, FormControlLabel,
 } from '@mui/material';
 import { Add, PersonAddAlt1, Warning, Search, FiberManualRecord } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
@@ -12,13 +12,20 @@ import {
 } from '../../services/visita.service';
 
 const TIPOS = ['Clínica privada', 'Hospital público', 'Hospital privado', 'Consultorio independiente'];
-const vacio: MedicoCrear = { vm_id: 0, nombre_completo: '', especialidad_id: null, categoria: 'A', tipo_consultorio: '', direccion: '', telefono: '' };
+const FRECUENCIAS = ['Semanal', 'Quincenal', 'Mensual', 'Bimestral', 'Trimestral'];
+const POTENCIAL = ['Alto', 'Medio', 'Bajo'];
+const INSTITUCION = ['Pública', 'Privada'];
+const vacio: MedicoCrear = {
+  vm_id: 0, nombre_completo: '', especialidad_id: null, categoria: 'A',
+  tipo_consultorio: '', direccion: '', telefono: '', acepta_visita: true, kol: false,
+};
 
 // Avatar de categoría (círculo) — A dorado, B azul, C gris (como el prototipo).
 const CAT_AV: Record<string, { bg: string; fg: string }> = {
   A: { bg: '#FBE7A1', fg: '#8A6D0B' },
   B: { bg: '#D6E4FF', fg: '#1E52C7' },
   C: { bg: '#E8EAF0', fg: '#5A6472' },
+  D: { bg: '#F3D6D6', fg: '#B23B3B' },
 };
 // Paleta rotativa para las iniciales del médico.
 const INICIAL_COLORS = ['#2E5BFF', '#7A5AF8', '#0F9B8E', '#E8833A', '#D6409F', '#2AA76A', '#C0392B', '#3B82C4'];
@@ -95,6 +102,7 @@ export default function PanelMedico() {
   }, [medicos, busqueda, catFiltro, lineaFiltro, espFiltro]);
 
   const abrirNuevo = () => { setForm({ ...vacio, vm_id: esVM ? 0 : (vmFiltro || 0) }); setDuplicados(null); setAbierto(true); };
+  const set = (k: keyof MedicoCrear, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
   async function guardar(confirmar = false) {
     if (!esVM && !form.vm_id) { setMsg({ tipo: 'error', texto: 'Selecciona el visitador (VM).' }); return; }
@@ -231,49 +239,157 @@ export default function PanelMedico() {
       </Card>
 
       {/* Alta de médico */}
-      <Dialog open={abierto} onClose={() => !guardando && setAbierto(false)} maxWidth="sm" fullWidth>
+      <Dialog open={abierto} onClose={() => !guardando && setAbierto(false)} maxWidth="md" fullWidth>
         <DialogTitle><Add sx={{ verticalAlign: 'middle', mr: 1 }} />Agregar médico</DialogTitle>
-        <DialogContent>
-          <Stack spacing={1.75} sx={{ mt: 1 }}>
-            {!esVM && (
-              <TextField select label="Visitador (VM)" value={form.vm_id || ''} required
-                         onChange={(e) => setForm({ ...form, vm_id: Number(e.target.value) })}>
-                {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
-              </TextField>
-            )}
-            <TextField label="Nombre completo (MAYÚSCULAS, ≥2 palabras)" value={form.nombre_completo} required
-                       onChange={(e) => setForm({ ...form, nombre_completo: e.target.value.toUpperCase() })}
-                       helperText="Ej: MANUEL ANTONIO PEREZ GARCIA — sin abreviaciones con punto" />
-            <TextField select label="Especialidad" value={form.especialidad_id ?? ''}
-                       onChange={(e) => setForm({ ...form, especialidad_id: e.target.value === '' ? null : Number(e.target.value) })}
-                       helperText={especialidades.length === 0 ? 'No hay especialidades cargadas (catálogo vacío)' : ' '}>
-              <MenuItem value="">—</MenuItem>
-              {especialidades.map((e) => <MenuItem key={e.id} value={e.id}>{e.nombre}</MenuItem>)}
-            </TextField>
-            <Stack direction="row" spacing={1.5}>
-              <TextField select label="Categoría" value={form.categoria} sx={{ minWidth: 120 }}
-                         onChange={(e) => setForm({ ...form, categoria: e.target.value })}>
-                {['A', 'B', 'C'].map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-              </TextField>
-              <TextField select label="Tipo de consultorio" value={form.tipo_consultorio ?? ''} fullWidth
-                         onChange={(e) => setForm({ ...form, tipo_consultorio: e.target.value })}>
-                <MenuItem value="">—</MenuItem>
-                {TIPOS.map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
-              </TextField>
-            </Stack>
-            <TextField label="Dirección" value={form.direccion ?? ''} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
-            <TextField label="Teléfono (opcional)" value={form.telefono ?? ''} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
+        <DialogContent dividers>
+          {(() => {
+            const seccion = (t: string) => (
+              <Grid item xs={12}><Typography variant="overline" color="primary" fontWeight={700}>{t}</Typography></Grid>
+            );
+            return (
+              <Grid container spacing={1.75} sx={{ mt: 0 }}>
+                {seccion('Identificación')}
+                {!esVM && (
+                  <Grid item xs={12} sm={6}>
+                    <TextField select fullWidth size="small" label="Visitador (VM) — Representante asignado" value={form.vm_id || ''} required
+                               onChange={(e) => set('vm_id', Number(e.target.value))}>
+                      {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
+                    </TextField>
+                  </Grid>
+                )}
+                <Grid item xs={12} sm={esVM ? 6 : 6}>
+                  <TextField fullWidth size="small" label="Código del médico" value={form.codigo ?? ''}
+                             onChange={(e) => set('codigo', e.target.value)} />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField fullWidth size="small" label="Nombre completo (MAYÚSCULAS, ≥2 palabras)" value={form.nombre_completo} required
+                             onChange={(e) => set('nombre_completo', e.target.value.toUpperCase())}
+                             helperText="Ej: MANUEL ANTONIO PEREZ GARCIA — sin abreviaciones con punto" />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth size="small" label="Nombre" value={form.nombre ?? ''} onChange={(e) => set('nombre', e.target.value)} />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth size="small" label="Apellidos" value={form.apellidos ?? ''} onChange={(e) => set('apellidos', e.target.value)} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField select fullWidth size="small" label="Especialidad" value={form.especialidad_id ?? ''}
+                             onChange={(e) => set('especialidad_id', e.target.value === '' ? null : Number(e.target.value))}
+                             helperText={especialidades.length === 0 ? 'Catálogo vacío' : ' '}>
+                    <MenuItem value="">—</MenuItem>
+                    {especialidades.map((e) => <MenuItem key={e.id} value={e.id}>{e.nombre}</MenuItem>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth size="small" label="Subespecialidad" value={form.subespecialidad ?? ''} onChange={(e) => set('subespecialidad', e.target.value)} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField select fullWidth size="small" label="Categoría" value={form.categoria}
+                             onChange={(e) => set('categoria', e.target.value)}>
+                    {['A', 'B', 'C', 'D'].map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                  </TextField>
+                </Grid>
 
-            {duplicados && (
-              <Alert severity="warning" icon={<Warning />}>
-                <Typography variant="subtitle2" fontWeight={700}>Posible duplicidad — verificar</Typography>
-                <Typography variant="caption">Ya existe(n) médico(s) con nombre similar:</Typography>
-                {duplicados.map((d) => (
-                  <Typography key={d.id} variant="body2">• {d.nombre_completo}{d.direccion ? ` — ${d.direccion}` : ''}</Typography>
-                ))}
-              </Alert>
-            )}
-          </Stack>
+                {seccion('Ubicación / Zonificación')}
+                <Grid item xs={12} sm={6}>
+                  <TextField fullWidth size="small" label="Centro de trabajo principal" value={form.centro_trabajo ?? ''} onChange={(e) => set('centro_trabajo', e.target.value)} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField select fullWidth size="small" label="Institución" value={form.institucion_tipo ?? ''} onChange={(e) => set('institucion_tipo', e.target.value)}>
+                    <MenuItem value="">—</MenuItem>
+                    {INSTITUCION.map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField select fullWidth size="small" label="Tipo de consultorio" value={form.tipo_consultorio ?? ''} onChange={(e) => set('tipo_consultorio', e.target.value)}>
+                    <MenuItem value="">—</MenuItem>
+                    {TIPOS.map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth size="small" label="Provincia" value={form.provincia ?? ''} onChange={(e) => set('provincia', e.target.value)} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth size="small" label="Ciudad / Municipio" value={form.municipio ?? ''} onChange={(e) => set('municipio', e.target.value)} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth size="small" label="Sector" value={form.sector ?? ''} onChange={(e) => set('sector', e.target.value)} />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField fullWidth size="small" label="Dirección" value={form.direccion ?? ''} onChange={(e) => set('direccion', e.target.value)} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField fullWidth size="small" type="number" label="Latitud (GPS)" value={form.latitud ?? ''} onChange={(e) => set('latitud', e.target.value === '' ? null : Number(e.target.value))} />
+                </Grid>
+                <Grid item xs={6} sm={3}>
+                  <TextField fullWidth size="small" type="number" label="Longitud (GPS)" value={form.longitud ?? ''} onChange={(e) => set('longitud', e.target.value === '' ? null : Number(e.target.value))} />
+                </Grid>
+
+                {seccion('Contacto')}
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth size="small" label="Teléfono" value={form.telefono ?? ''} onChange={(e) => set('telefono', e.target.value)} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth size="small" label="Correo electrónico" value={form.email ?? ''} onChange={(e) => set('email', e.target.value)} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth size="small" label="Exequátur / colegiación" value={form.exequatur ?? ''} onChange={(e) => set('exequatur', e.target.value)} />
+                </Grid>
+
+                {seccion('Consulta y visita')}
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth size="small" label="Días de consulta" value={form.dias_consulta ?? ''} placeholder="Lun, Mié, Vie" onChange={(e) => set('dias_consulta', e.target.value)} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth size="small" label="Horario de consulta" value={form.horario_consulta ?? ''} placeholder="8:00–12:00" onChange={(e) => set('horario_consulta', e.target.value)} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField select fullWidth size="small" label="Frecuencia de visita" value={form.frecuencia_visita ?? ''} onChange={(e) => set('frecuencia_visita', e.target.value)}>
+                    <MenuItem value="">—</MenuItem>
+                    {FRECUENCIAS.map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+                  </TextField>
+                </Grid>
+
+                {seccion('Comercial')}
+                <Grid item xs={12} sm={4}>
+                  <TextField select fullWidth size="small" label="Potencial de prescripción" value={form.potencial_prescripcion ?? ''} onChange={(e) => set('potencial_prescripcion', e.target.value)}>
+                    <MenuItem value="">—</MenuItem>
+                    {POTENCIAL.map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+                  </TextField>
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth size="small" label="Segmento" value={form.segmento ?? ''} onChange={(e) => set('segmento', e.target.value)} />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <TextField fullWidth size="small" type="date" label="Fecha de alta" InputLabelProps={{ shrink: true }}
+                             value={form.fecha_alta ?? ''} onChange={(e) => set('fecha_alta', e.target.value || null)} />
+                </Grid>
+                <Grid item xs={6} sm={4}>
+                  <FormControlLabel control={<Switch checked={!!form.kol} onChange={(e) => set('kol', e.target.checked)} />} label="Influenciador (KOL)" />
+                </Grid>
+                <Grid item xs={6} sm={4}>
+                  <FormControlLabel control={<Switch checked={form.acepta_visita !== false} onChange={(e) => set('acepta_visita', e.target.checked)} />} label="Acepta visita" />
+                </Grid>
+
+                {seccion('Estado y observaciones')}
+                <Grid item xs={12}>
+                  <TextField fullWidth size="small" multiline minRows={2} label="Observaciones" value={form.observaciones ?? ''} onChange={(e) => set('observaciones', e.target.value)} />
+                </Grid>
+
+                {duplicados && (
+                  <Grid item xs={12}>
+                    <Alert severity="warning" icon={<Warning />}>
+                      <Typography variant="subtitle2" fontWeight={700}>Posible duplicidad — verificar</Typography>
+                      <Typography variant="caption">Ya existe(n) médico(s) con nombre similar:</Typography>
+                      {duplicados.map((d) => (
+                        <Typography key={d.id} variant="body2">• {d.nombre_completo}{d.direccion ? ` — ${d.direccion}` : ''}</Typography>
+                      ))}
+                    </Alert>
+                  </Grid>
+                )}
+              </Grid>
+            );
+          })()}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAbierto(false)} disabled={guardando}>Cancelar</Button>

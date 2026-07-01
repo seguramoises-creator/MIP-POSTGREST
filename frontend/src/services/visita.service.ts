@@ -3,15 +3,38 @@ import { api } from './api';
 export interface MedicoVisita {
   id: number;
   vm_id: number;
+  codigo: string | null;
   nombre_completo: string;
+  nombre: string | null;
+  apellidos: string | null;
   especialidad_id: number | null;
   especialidad_nombre: string | null;
+  subespecialidad: string | null;
   linea_id?: number | null;
   linea_nombre?: string | null;
   categoria: string;
+  centro_trabajo: string | null;
+  institucion_tipo: string | null;
   tipo_consultorio: string | null;
+  provincia: string | null;
+  municipio: string | null;
+  sector: string | null;
   direccion: string | null;
+  latitud: number | null;
+  longitud: number | null;
   telefono: string | null;
+  email: string | null;
+  exequatur: string | null;
+  dias_consulta: string | null;
+  horario_consulta: string | null;
+  frecuencia_visita: string | null;
+  acepta_visita: boolean | null;
+  potencial_prescripcion: string | null;
+  kol: boolean | null;
+  segmento: string | null;
+  observaciones: string | null;
+  fecha_alta: string | null;
+  fecha_ultima_visita: string | null;
   ciclos_sin_visita: number;
   activo: boolean;
   estado_visita?: 'vr' | 'v' | 'sin';   // Vista+Revisita / una visita / sin visitar
@@ -19,12 +42,34 @@ export interface MedicoVisita {
 
 export interface MedicoCrear {
   vm_id: number;
+  codigo?: string | null;
   nombre_completo: string;
+  nombre?: string | null;
+  apellidos?: string | null;
   especialidad_id?: number | null;
+  subespecialidad?: string | null;
   categoria: string;
+  centro_trabajo?: string | null;
+  institucion_tipo?: string | null;
   tipo_consultorio?: string | null;
+  provincia?: string | null;
+  municipio?: string | null;
+  sector?: string | null;
   direccion?: string | null;
+  latitud?: number | null;
+  longitud?: number | null;
   telefono?: string | null;
+  email?: string | null;
+  exequatur?: string | null;
+  dias_consulta?: string | null;
+  horario_consulta?: string | null;
+  frecuencia_visita?: string | null;
+  acepta_visita?: boolean;
+  potencial_prescripcion?: string | null;
+  kol?: boolean;
+  segmento?: string | null;
+  observaciones?: string | null;
+  fecha_alta?: string | null;
   confirmar_duplicado?: boolean;
 }
 

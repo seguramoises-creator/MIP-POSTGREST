@@ -51,7 +51,12 @@ def test_nombre_con_punto_falla():
 
 def test_categoria_invalida_falla():
     with pytest.raises(ValueError):
-        MedicoVisitaCrear(vm_id=1, nombre_completo="MANUEL PEREZ", categoria="D")
+        MedicoVisitaCrear(vm_id=1, nombre_completo="MANUEL PEREZ", categoria="Z")
+
+
+def test_categoria_d_es_valida():
+    m = MedicoVisitaCrear(vm_id=1, nombre_completo="MANUEL PEREZ", categoria="d")
+    assert m.categoria == "D"
 
 
 # ── Registro de visita ────────────────────────────────────────────────
