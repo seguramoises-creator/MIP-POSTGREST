@@ -11,7 +11,7 @@ from app.core.deps import get_db, require_roles, get_current_active_user
 from app.models.usuario import Rol
 from app.schemas.visita import (
     MedicoVisitaCrear, MedicoVisitaResponse, VisitaRegistrar, VisitaNoVisita,
-    _CAUSAS_NO_VISITA,
+    PlaneacionGuardar, _CAUSAS_NO_VISITA,
 )
 from app.services import visita_service
 
@@ -158,3 +158,33 @@ def registrar_no_visita(datos: VisitaNoVisita, vm_id: int | None = None,
         return {"id": v.id, "causa": v.causa_no_visita}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# ── Planeación del ciclo (Parte 3) ────────────────────────────────────────────
+@router.get("/planeacion", response_model=list[dict])
+def obtener_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
+                       db: Session = Depends(get_db), current_user=RequireVisita):
+    """Planeación del ciclo del VM (ítems Vista/Revisita por médico). El VM ve la suya."""
+    from app.services import visita_planeacion_service
+    return visita_planeacion_service.listar_planeacion(db, _vm_registro(current_user, vm_id), ciclo_id)
+
+
+@router.post("/planeacion", response_model=dict, status_code=status.HTTP_201_CREATED)
+def guardar_planeacion(datos: PlaneacionGuardar, vm_id: int | None = None, ciclo_id: int | None = None,
+                       db: Session = Depends(get_db), current_user=RequireVisita):
+    """Guarda (reemplaza) la planeación del ciclo. Valida reglas P01/P02/P03."""
+    from app.services import visita_planeacion_service
+    try:
+        n = visita_planeacion_service.guardar_planeacion(
+            db, _vm_registro(current_user, vm_id), ciclo_id, datos.items, getattr(current_user, "id", None))
+        return {"guardadas": n}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/planeacion/resumen", response_model=dict)
+def resumen_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
+                       db: Session = Depends(get_db), current_user=RequireVisita):
+    """Resumen de la planeación: cobertura planeada, carga por día y aviso de Cat A sin Revisita."""
+    from app.services import visita_planeacion_service
+    return visita_planeacion_service.resumen_planeacion(db, _vm_registro(current_user, vm_id), ciclo_id)

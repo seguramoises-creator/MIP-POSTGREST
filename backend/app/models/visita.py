@@ -74,3 +74,25 @@ class VisitaRegistro(Base):
     causa_no_visita: Mapped[str | None] = mapped_column(String(80), nullable=True)
     registrado_por: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+
+
+class PlaneacionCiclo(Base):
+    """Planeación de visitas del ciclo (Parte 3 del spec). Una fila por médico y
+    tipo (V/R). Reglas P01-P06 validadas al guardar."""
+    __tablename__ = "PlaneacionCiclo"
+    __table_args__ = (
+        Index("IX_Planeacion_vm_ciclo", "vm_id", "ciclo_id"),
+        {"schema": "Visita"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    vm_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_RM.id"), nullable=False)
+    ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
+    medico_id: Mapped[int] = mapped_column(Integer, ForeignKey("Visita.DIM_MedicoVisita.id"), nullable=False)
+    tipo_visita: Mapped[str] = mapped_column(CHAR(1), nullable=False)  # V / R
+    semana: Mapped[int] = mapped_column(Integer, nullable=False)       # 1 a 4
+    dia_semana: Mapped[str | None] = mapped_column(String(12), nullable=True)  # Lunes..Viernes
+    hora_estimada: Mapped[str | None] = mapped_column(String(5), nullable=True)  # HH:MM
+    fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+    modificado_por: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)

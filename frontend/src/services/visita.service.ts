@@ -86,6 +86,23 @@ export const proyeccionVisita = (diaActual?: number) =>
 export const proyeccionRanking = (diaActual?: number) =>
   api.get<RankingVM>('/visita/proyeccion/ranking', { params: diaActual ? { dia_actual: diaActual } : {} }).then(r => r.data);
 
+// ── Planeación del ciclo ──────────────────────────────────────────────
+export interface PlaneacionItem {
+  medico_id: number; tipo_visita: string; semana: number;
+  dia_semana?: string | null; hora_estimada?: string | null;
+}
+export interface PlaneacionResumen {
+  ciclo_id: number | null; panel: number; total_planeadas: number;
+  medicos_planeados: number; cobertura_planeada_pct: number;
+  cat_a_sin_revisita: number; carga_por_dia: number;
+}
+export const obtenerPlaneacion = (vmId?: number) =>
+  api.get<PlaneacionItem[]>('/visita/planeacion', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export const guardarPlaneacion = (items: PlaneacionItem[], vmId?: number) =>
+  api.post<{ guardadas: number }>('/visita/planeacion', { items }, { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export const planeacionResumen = (vmId?: number) =>
+  api.get<PlaneacionResumen>('/visita/planeacion/resumen', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+
 // Devuelve { medico } si se creó, o { duplicados } si el backend respondió 409.
 export const crearMedico = async (
   datos: MedicoCrear,

@@ -6,7 +6,7 @@ import {
 import {
   Dashboard, TrendingUp, TrackChanges, LocalHospital, EmojiEvents,
   CloudUpload, Settings, AdminPanelSettings, Assessment,
-  SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn, Groups, MedicalServices, EditNote, Insights,
+  SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn, Groups, MedicalServices, EditNote, Insights, EventNote,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { Rol } from '../../types';
@@ -31,6 +31,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Mis Exámenes',          path: '/mis-examenes',  icon: <AssignmentTurnedIn />, roles: ['GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
   { label: 'Exámenes — Equipo',     path: '/examenes-equipo', icon: <Groups />,           roles: ['GERENTE_DISTRITO'] },
   { label: 'Panel Médico',          path: '/visita/panel-medico', icon: <MedicalServices />, roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
+  { label: 'Planeación Ciclo',      path: '/visita/planeacion', icon: <EventNote />,          roles: ['ADMIN', 'REPRESENTANTE_MEDICO'] },
   { label: 'Cobertura Visita',      path: '/visita/cobertura', icon: <TrackChanges />,       roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
   { label: 'Registrar Visita',      path: '/visita/registrar', icon: <EditNote />,           roles: ['ADMIN', 'REPRESENTANTE_MEDICO'] },
   { label: 'Proyección Visita',     path: '/visita/proyeccion', icon: <Insights />,          roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },

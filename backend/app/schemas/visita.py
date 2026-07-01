@@ -102,3 +102,23 @@ class VisitaNoVisita(BaseModel):
         if v.strip() not in _CAUSAS_NO_VISITA:
             raise ValueError("Causa de no-visita inválida")
         return v.strip()
+
+
+class PlaneacionItem(BaseModel):
+    medico_id: int
+    tipo_visita: str = Field(min_length=1, max_length=1)  # V / R
+    semana: int = Field(ge=1, le=4)
+    dia_semana: str | None = None
+    hora_estimada: str | None = None
+
+    @field_validator("tipo_visita")
+    @classmethod
+    def _tipo(cls, v: str) -> str:
+        v = v.strip().upper()
+        if v not in ("V", "R"):
+            raise ValueError("tipo_visita debe ser V o R")
+        return v
+
+
+class PlaneacionGuardar(BaseModel):
+    items: list[PlaneacionItem] = Field(default_factory=list)

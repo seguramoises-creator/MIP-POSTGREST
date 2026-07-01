@@ -102,3 +102,47 @@ def test_dias_habiles():
     assert _dias_habiles(date(2026, 6, 1), date(2026, 6, 5)) == 5   # lun→vie
     assert _dias_habiles(date(2026, 6, 1), date(2026, 6, 8)) == 6   # incluye finde
     assert _dias_habiles(None, None) == 19                          # fallback
+
+
+# ── Planeación del ciclo (reglas P01/P02/P03) ─────────────────────────
+from app.schemas.visita import PlaneacionItem
+from app.services.visita_planeacion_service import _validar
+
+
+def _it(medico_id, tipo, semana):
+    return PlaneacionItem(medico_id=medico_id, tipo_visita=tipo, semana=semana)
+
+
+def test_planeacion_valida_vista_y_revisita_posterior():
+    _validar([_it(1, "V", 1), _it(1, "R", 3)])  # no levanta
+
+
+def test_planeacion_valida_misma_semana_sin_dia():
+    _validar([_it(1, "V", 2), _it(1, "R", 2)])  # V+R misma semana, sin día → ok
+
+
+def test_planeacion_p01_maximo_dos_por_medico():
+    with pytest.raises(ValueError):
+        _validar([_it(1, "V", 1), _it(1, "R", 2), _it(1, "V", 3)])
+
+
+def test_planeacion_dos_vistas_mismo_medico_falla():
+    with pytest.raises(ValueError):
+        _validar([_it(1, "V", 1), _it(1, "V", 2)])
+
+
+def test_planeacion_p02_revisita_antes_de_vista_falla():
+    with pytest.raises(ValueError):
+        _validar([_it(1, "V", 3), _it(1, "R", 1)])
+
+
+def test_planeacion_revisita_sin_vista_falla():
+    with pytest.raises(ValueError):
+        _validar([_it(1, "R", 2)])
+
+
+def test_planeacion_p03_mismo_dia_falla():
+    v = PlaneacionItem(medico_id=1, tipo_visita="V", semana=2, dia_semana="Lunes")
+    r = PlaneacionItem(medico_id=1, tipo_visita="R", semana=2, dia_semana="Lunes")
+    with pytest.raises(ValueError):
+        _validar([v, r])
