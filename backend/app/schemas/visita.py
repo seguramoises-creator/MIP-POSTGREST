@@ -160,3 +160,13 @@ class MuestrasRegistrar(BaseModel):
     medico_id: int
     ciclo_id: int | None = None
     entregas: list[MuestraItem] = Field(min_length=1)
+
+
+# ── Costo & ROI (Parte 8) ─────────────────────────────────────────────
+class ParametroCostoGuardar(BaseModel):
+    ciclo_id: int | None = None
+    linea_id: int | None = None                       # None = valor por defecto del ciclo
+    costo_visita: float = Field(ge=0)
+    costo_muestra: float = Field(ge=0)
+    costo_fijo_ciclo: float = Field(default=0, ge=0)
+    moneda: str = Field(default="RD$", min_length=1, max_length=8)

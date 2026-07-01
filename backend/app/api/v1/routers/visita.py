@@ -11,7 +11,8 @@ from app.core.deps import get_db, require_roles, get_current_active_user
 from app.models.usuario import Rol
 from app.schemas.visita import (
     MedicoVisitaCrear, MedicoVisitaResponse, VisitaRegistrar, VisitaNoVisita,
-    PlaneacionGuardar, ParrillaGuardar, MuestrasRegistrar, _CAUSAS_NO_VISITA,
+    PlaneacionGuardar, ParrillaGuardar, MuestrasRegistrar, ParametroCostoGuardar,
+    _CAUSAS_NO_VISITA,
 )
 from app.services import visita_service
 
@@ -285,3 +286,42 @@ def resumen_muestras(vm_id: int | None = None, ciclo_id: int | None = None,
     """Resumen de muestras por producto: entregadas, médicos alcanzados, meta y cobertura."""
     from app.services import visita_parrilla_service
     return visita_parrilla_service.resumen_muestras(db, ciclo_id, _scope_vm(current_user, vm_id))
+
+
+# ── Costo & ROI (Parte 8) ─────────────────────────────────────────────────────
+@router.get("/costo/parametros", response_model=dict)
+def obtener_parametros_costo(linea_id: int | None = None, ciclo_id: int | None = None,
+                             db: Session = Depends(get_db), current_user=RequireVisita):
+    """Parámetros de costo resueltos (cascada línea → default del ciclo)."""
+    from app.services import visita_costo_service
+    if linea_id is None:
+        vm = _scope_vm(current_user, None)
+        if vm:
+            from app.services.visita_parrilla_service import linea_de_vm
+            linea_id = linea_de_vm(db, vm)
+    return visita_costo_service.obtener_parametros(db, ciclo_id, linea_id)
+
+
+@router.post("/costo/parametros", response_model=dict, status_code=status.HTTP_201_CREATED)
+def guardar_parametros_costo(datos: ParametroCostoGuardar, db: Session = Depends(get_db), current_user=RequireCierre):
+    """Configura los parámetros de costo del ciclo (por línea o default). Solo gestión."""
+    from app.services import visita_costo_service
+    try:
+        return visita_costo_service.guardar_parametros(db, datos, getattr(current_user, "id", None))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/costo/roi", response_model=dict)
+def costo_roi(vm_id: int | None = None, ciclo_id: int | None = None,
+              db: Session = Depends(get_db), current_user=RequireVisita):
+    """Costo & ROI del ciclo: costo por contacto/médico, ingresos, utilidad y ROI. VM ve el suyo."""
+    from app.services import visita_costo_service
+    return visita_costo_service.roi(db, ciclo_id, _scope_vm(current_user, vm_id))
+
+
+@router.get("/costo/ranking", response_model=dict)
+def costo_ranking(ciclo_id: int | None = None, db: Session = Depends(get_db), current_user=RequireCierre):
+    """Detalle desplegable de ROI por VM (peor primero). Solo gestión (dato financiero)."""
+    from app.services import visita_costo_service
+    return visita_costo_service.roi_ranking(db, ciclo_id)

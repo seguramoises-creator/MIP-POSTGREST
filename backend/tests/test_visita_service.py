@@ -228,3 +228,34 @@ def test_muestras_medico_de_otro_panel_falla(monkeypatch):
     with pytest.raises(ValueError):
         ps.registrar_muestras(db, vm_id=1, ciclo_id=5, medico_id=9,
                               entregas=[MuestraItem(producto="X1", cantidad=2)], usuario_id=1)
+
+
+# ── Costo & ROI ───────────────────────────────────────────────────────
+from app.services.visita_costo_service import _calcular_roi
+
+
+def test_roi_calculo_rentable():
+    # 100 contactos*50 + 200 muestras*20 + 5000 fijo = 5000+4000+5000 = 14000
+    # ingresos 21000 -> utilidad 7000, ROI 50%
+    r = _calcular_roi(contactos=100, medicos=40, muestras=200,
+                      costo_visita=50, costo_muestra=20, costo_fijo=5000, ingresos=21000)
+    assert r["costo_total"] == 14000.0
+    assert r["costo_por_contacto"] == 140.0
+    assert r["costo_por_medico"] == 350.0
+    assert r["utilidad"] == 7000.0
+    assert r["roi_pct"] == 50.0
+    assert r["ratio_ingreso_costo"] == 1.5
+    assert r["rentable"] is True
+
+
+def test_roi_no_rentable_da_roi_negativo():
+    r = _calcular_roi(10, 5, 0, costo_visita=100, costo_muestra=0, costo_fijo=0, ingresos=400)
+    # costo 1000, ingresos 400 -> utilidad -600, ROI -60%
+    assert r["costo_total"] == 1000.0 and r["utilidad"] == -600.0
+    assert r["roi_pct"] == -60.0 and r["rentable"] is False
+
+
+def test_roi_sin_costo_devuelve_none():
+    r = _calcular_roi(0, 0, 0, 0, 0, 0, ingresos=0)
+    assert r["costo_total"] == 0.0
+    assert r["roi_pct"] is None and r["ratio_ingreso_costo"] is None and r["rentable"] is None

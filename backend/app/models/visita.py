@@ -9,7 +9,7 @@ Fase 1: Panel Médico (catálogo de médicos del universo de visita).
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    String, Boolean, Integer, DateTime, ForeignKey, CHAR, Index,
+    String, Boolean, Integer, DateTime, ForeignKey, CHAR, Index, Numeric,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -168,4 +168,29 @@ class MuestraEntregada(Base):
     cantidad: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     fecha_entrega: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
     registrado_por: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+
+
+class ParametroCosto(Base):
+    """Parámetros de costo del ciclo para el análisis de Costo & ROI (Parte 8).
+
+    Una fila por (ciclo, línea). `linea_id` NULL = valor por defecto del ciclo. La
+    resolución es en cascada: (ciclo, línea) específica primero, luego (ciclo, NULL).
+    Costos variables por contacto/muestra + un costo fijo del ciclo."""
+    __tablename__ = "ParametroCosto"
+    __table_args__ = (
+        Index("IX_ParamCosto_ciclo_linea", "ciclo_id", "linea_id"),
+        {"schema": "Visita"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
+    linea_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("Config.DIM_Linea.id"), nullable=True)
+    costo_visita: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)      # por contacto ejecutado
+    costo_muestra: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)     # por unidad entregada
+    costo_fijo_ciclo: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)  # costos fijos del ciclo
+    moneda: Mapped[str] = mapped_column(String(8), nullable=False, default="RD$")
+    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    fecha_actualizacion: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+    modificado_por: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)

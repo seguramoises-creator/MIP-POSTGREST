@@ -151,6 +151,34 @@ export const registrarMuestras = (medico_id: number, entregas: { producto: strin
 export const muestrasResumen = (vmId?: number) =>
   api.get<MuestrasResumen>('/visita/muestras/resumen', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 
+// ── Costo & ROI ───────────────────────────────────────────────────────
+export interface ParametroCosto {
+  ciclo_id: number; linea_id: number | null; costo_visita: number; costo_muestra: number;
+  costo_fijo_ciclo: number; moneda: string; configurado: boolean;
+}
+export interface RoiResumen {
+  ciclo_id: number; configurado: boolean; moneda: string;
+  contactos: number; medicos_visitados: number; muestras: number;
+  costo_visitas: number; costo_muestras: number; costo_fijo: number; costo_total: number;
+  costo_por_contacto: number; costo_por_medico: number;
+  ingresos: number; utilidad: number; roi_pct: number | null;
+  ratio_ingreso_costo: number | null; rentable: boolean | null;
+}
+export interface RoiRankingItem {
+  vm_id: number; nombre: string; zona: string | null;
+  costo_total: number; ingresos: number; valor: number; cumple: boolean;
+}
+export interface RoiRanking { metrica: string; objetivo: number; no_cumplen: number; total: number; items: RoiRankingItem[]; }
+
+export const obtenerParametrosCosto = (lineaId?: number) =>
+  api.get<ParametroCosto>('/visita/costo/parametros', { params: lineaId ? { linea_id: lineaId } : {} }).then(r => r.data);
+export const guardarParametrosCosto = (datos: {
+  linea_id: number | null; costo_visita: number; costo_muestra: number; costo_fijo_ciclo: number; moneda: string;
+}) => api.post<ParametroCosto>('/visita/costo/parametros', datos).then(r => r.data);
+export const costoRoi = (vmId?: number) =>
+  api.get<RoiResumen>('/visita/costo/roi', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export const costoRanking = () => api.get<RoiRanking>('/visita/costo/ranking').then(r => r.data);
+
 // Devuelve { medico } si se creó, o { duplicados } si el backend respondió 409.
 export const crearMedico = async (
   datos: MedicoCrear,
