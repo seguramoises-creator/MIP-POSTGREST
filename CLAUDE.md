@@ -835,6 +835,7 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 | Feature | Estado | Notas |
 |---------|--------|-------|
 | Completar frontend | Resuelto en buena parte | Ya existen vistas para todos los módulos (Dashboard, Productividad, Cobertura Predictiva, Coaching, Categorización, Ranking, Reconocimiento, LSII, ETL, Admin, Reportes) |
+| Módulo de Visita Médica (VISTA) | **Resuelto** (8 fases) | Esquema `Visita` en SQL Server; router `prefix="/visita"` en `visita.py`. Fases: Panel Médico (`DIM_MedicoVisita`), Planeación (`PlaneacionCiclo`, reglas P01-P03), Registro (`FactVisita`, hora servidor/ventana 60min), Ruptura+Cierre (`CierreCicloVisita`, rodaje idempotente de `ciclos_sin_visita`), Cobertura (gauges/ranking tiempo real), Proyección (ritmo vs requerido + simulador), Parrilla+Muestras (`ParrillaPromocional`+`MuestraEntregada`, cruce por producto normalizado), Costo+ROI (`ParametroCosto`, ingresos de `FACT_Ventas`). Servicios `visita_*_service.py`; páginas `frontend/src/pages/visita/*`. RBAC: VM auto-scope a `rm_id`; cierre/parrilla/costo = ADMIN+GERENTE_PRODUCTIVIDAD. Reutiliza `Config.DIM_RM` (VM), `DIM_Ciclo`, `DIM_Especialidad`, `DIM_Linea`. |
 | IUP consistencia completo | **Resuelto** | Ver §7 — promedio de los 3 ciclos previos más recientes, base neutral 0 si no hay historial |
 | Exportación PDF/Excel de reportes | **Resuelto** | Ver §15 — `exportacion.py` |
 | Ranking Gerentes de Distrito | **Resuelto** | `FACT_RankingGerente` (ver §4) |
@@ -843,7 +844,7 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 | Redesplegar web.config corregido y purgar caché | Pendiente | Ver nota en §21/§20 |
 | Capturar screenshots reales de la app MSM | Pendiente / en curso | Para materiales comerciales |
 | Notificaciones email | **Resuelto** | `notification_service.py` (smtplib, best-effort, no-op si `MAIL_SERVER=""`) cableado a 3 disparadores: `ranking_service` (`notificar_ranking_generado`), `reconocimiento_service` (`notificar_reconocimiento_otorgado`) y `examen_intento_service` (`notificar_resultado_examen`). Gmail SMTP configurado en `.env`; envío real verificado. |
-| Tests unitarios | Pendiente | No se detectaron tests automatizados |
+| Tests unitarios | **Resuelto (en curso)** | Suite `pytest` con **168 tests** en 11 archivos (`backend/tests/test_*.py`): IUP, puntaje, elegibilidad, token_store, módulo Exámenes (6 archivos) y módulo Visita (`test_visita_service.py`, 34 tests). CI de GitHub Actions corre pytest+build (ver §22 histórico). Cobertura ampliable a routers/ETL. |
 | Refresh token en BD | **Resuelto** (FIX W-04 v2) | La blacklist vive en SQL Server (`Security.FACT_TokenRevocado`, modelo `TokenRevocado`). `token_store.revocar_token`/`token_esta_revocado` reciben `db`; revocación consistente entre workers y duradera tras reinicio. Purga oportuna de expirados con `purgar_expirados`. |
 | Dashboard Power BI | Pendiente | Sin conexión a Power BI Embedded |
 
