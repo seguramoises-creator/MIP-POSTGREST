@@ -67,8 +67,12 @@ def crear_medico(db: Session, datos: MedicoVisitaCrear, usuario_id: int | None) 
     return medico
 
 
-def listar_medicos(db: Session, vm_id: int | None = None) -> list[dict]:
-    """Lista los médicos del panel (opcionalmente de un VM), con el nombre de especialidad."""
+def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None = None) -> list[dict]:
+    """Lista los médicos del panel (opcionalmente de un VM), con el nombre de la
+    especialidad y el estado de visita del ciclo (para el Panel Médico enriquecido):
+    `estado_visita` = 'vr' (Vista+Revisita), 'v' (una visita), 'sin' (sin visitar)."""
+    from app.services.visita_cobertura_service import ciclo_por_defecto, _mapa_visitas
+
     q = db.query(MedicoVisita).filter(MedicoVisita.activo == True)  # noqa: E712
     if vm_id:
         q = q.filter(MedicoVisita.vm_id == vm_id)
@@ -76,8 +80,19 @@ def listar_medicos(db: Session, vm_id: int | None = None) -> list[dict]:
     esp_ids = {m.especialidad_id for m in medicos if m.especialidad_id}
     esp_nom = dict(db.query(Especialidad.id, Especialidad.nombre)
                    .filter(Especialidad.id.in_(esp_ids)).all()) if esp_ids else {}
+
+    ciclo_id = ciclo_id or ciclo_por_defecto(db)
+    mapa = _mapa_visitas(db, ciclo_id, vm_id) if ciclo_id else {}
+
     salida = []
     for m in medicos:
+        d = mapa.get(m.id)
+        if d and d["v"] and d["r"]:
+            estado = "vr"
+        elif d and (d["v"] or d["r"]):
+            estado = "v"
+        else:
+            estado = "sin"
         salida.append({
             "id": m.id, "vm_id": m.vm_id, "nombre_completo": m.nombre_completo,
             "especialidad_id": m.especialidad_id,
@@ -85,5 +100,6 @@ def listar_medicos(db: Session, vm_id: int | None = None) -> list[dict]:
             "categoria": m.categoria, "tipo_consultorio": m.tipo_consultorio,
             "direccion": m.direccion, "telefono": m.telefono,
             "ciclos_sin_visita": m.ciclos_sin_visita, "activo": m.activo,
+            "estado_visita": estado,
         })
     return salida

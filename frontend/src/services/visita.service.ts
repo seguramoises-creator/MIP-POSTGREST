@@ -12,6 +12,7 @@ export interface MedicoVisita {
   telefono: string | null;
   ciclos_sin_visita: number;
   activo: boolean;
+  estado_visita?: 'vr' | 'v' | 'sin';   // Vista+Revisita / una visita / sin visitar
 }
 
 export interface MedicoCrear {
