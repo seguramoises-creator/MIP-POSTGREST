@@ -48,3 +48,29 @@ class MedicoVisita(Base):
     fecha_registro: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
     registrado_por: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+
+
+class VisitaRegistro(Base):
+    """Registro de visita médica (Parte 4 del spec). Fuente de la Cobertura.
+
+    Tabla en el esquema `Visita` (distinta del `DW.FACT_Visita` de Cobertura Predictiva).
+    tipo_visita: 'V' (Vista) / 'R' (Revisita). `ejecutada=False` = no-visita con causa.
+    """
+    __tablename__ = "FactVisita"
+    __table_args__ = (
+        Index("IX_FactVisita_vm_ciclo", "vm_id", "ciclo_id"),
+        Index("IX_FactVisita_medico", "medico_id"),
+        {"schema": "Visita"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    vm_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_RM.id"), nullable=False)
+    ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
+    medico_id: Mapped[int] = mapped_column(Integer, ForeignKey("Visita.DIM_MedicoVisita.id"), nullable=False)
+    tipo_visita: Mapped[str] = mapped_column(CHAR(1), nullable=False)  # V / R
+    fecha_hora: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+    comentario: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    ejecutada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    causa_no_visita: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    registrado_por: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)

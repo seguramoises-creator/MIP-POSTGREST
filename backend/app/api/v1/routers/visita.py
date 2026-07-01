@@ -73,3 +73,22 @@ def crear_medico(datos: MedicoVisitaCrear, db: Session = Depends(get_db), curren
             status_code=status.HTTP_409_CONFLICT,
             detail={"mensaje": "Posible duplicidad — verificar", "duplicados": e.duplicados},
         )
+
+
+@router.get("/cobertura/resumen", response_model=dict)
+def cobertura_resumen(ciclo_id: int | None = None, vm_id: int | None = None,
+                      db: Session = Depends(get_db), current_user=RequireVisita):
+    """Dashboard de Cobertura: gauges (cobertura/V+R/gap), desglose A/B/C, listas y ruptura.
+    El VM ve su propia cobertura; ADMIN/GERENTE ven el equipo o filtran por ?vm_id=."""
+    from app.services import visita_cobertura_service
+    vm = _scope_vm(current_user, vm_id)
+    return visita_cobertura_service.resumen_cobertura(db, ciclo_id, vm)
+
+
+@router.get("/cobertura/ranking", response_model=dict)
+def cobertura_ranking(metrica: str = "cobertura", ciclo_id: int | None = None,
+                      db: Session = Depends(get_db), current_user=RequireVisita):
+    """Detalle desplegable por visitador: ranking de quién cumple/no el indicador.
+    metrica: 'cobertura' | 'completa' | 'sin_visitar'."""
+    from app.services import visita_cobertura_service
+    return visita_cobertura_service.ranking_visitadores(db, ciclo_id, metrica)
