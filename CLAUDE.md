@@ -129,7 +129,7 @@ C:\Users\Lenovo\Proyecto\MSM\
 │   │       ├── categorizacion_service.py        ← NUEVO — motor 100% Python (no usa SPs)
 │   │       ├── exportacion_service.py           ← NUEVO
 │   │       ├── lsii_service.py                  ← NUEVO
-│   │       └── notification_service.py          ← presente en disco, pendiente de cablear (ver §22)
+│   │       └── notification_service.py          ← cableado a ranking/reconocimiento/examen (ver §22)
 ├── frontend/
 │   ├── package.json
 │   ├── vite.config.ts
@@ -669,7 +669,7 @@ GET `/health`.
 - Access token: 60 min (`JWT_ACCESS_TOKEN_EXPIRE_MINUTES`)
 - Refresh token: 7 días (`JWT_REFRESH_TOKEN_EXPIRE_DAYS`)
 - Payload: `sub` (user_id), `rol`, `username`, `nombre_completo`
-- Blacklist de refresh tokens en memoria (`token_store.py`) — se pierde al reiniciar (ver §22)
+- Blacklist de refresh tokens persistida en SQL Server (`Security.FACT_TokenRevocado`, `token_store.py`) — consistente entre workers y duradera tras reinicio (FIX W-04 v2, ver §22)
 
 ### Roles y permisos
 ```
@@ -842,9 +842,9 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 | Cargar datos iniciales de Cobertura Predictiva en producción | Pendiente | Módulo desplegado, falta cargar `DIM_TargetMedico`/`FACT_Visita` reales |
 | Redesplegar web.config corregido y purgar caché | Pendiente | Ver nota en §21/§20 |
 | Capturar screenshots reales de la app MSM | Pendiente / en curso | Para materiales comerciales |
-| Notificaciones email | Pendiente | `notification_service.py` existe en disco pero no se confirmó su cableado a un trigger (ranking/premios) |
+| Notificaciones email | **Resuelto** | `notification_service.py` (smtplib, best-effort, no-op si `MAIL_SERVER=""`) cableado a 3 disparadores: `ranking_service` (`notificar_ranking_generado`), `reconocimiento_service` (`notificar_reconocimiento_otorgado`) y `examen_intento_service` (`notificar_resultado_examen`). Gmail SMTP configurado en `.env`; envío real verificado. |
 | Tests unitarios | Pendiente | No se detectaron tests automatizados |
-| Refresh token en BD | Pendiente | Blacklist sigue in-memory (`token_store.py`), se pierde al reiniciar |
+| Refresh token en BD | **Resuelto** (FIX W-04 v2) | La blacklist vive en SQL Server (`Security.FACT_TokenRevocado`, modelo `TokenRevocado`). `token_store.revocar_token`/`token_esta_revocado` reciben `db`; revocación consistente entre workers y duradera tras reinicio. Purga oportuna de expirados con `purgar_expirados`. |
 | Dashboard Power BI | Pendiente | Sin conexión a Power BI Embedded |
 
 ---
