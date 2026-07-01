@@ -52,3 +52,42 @@ def test_nombre_con_punto_falla():
 def test_categoria_invalida_falla():
     with pytest.raises(ValueError):
         MedicoVisitaCrear(vm_id=1, nombre_completo="MANUEL PEREZ", categoria="D")
+
+
+# ── Registro de visita ────────────────────────────────────────────────
+from app.schemas.visita import VisitaRegistrar, VisitaNoVisita
+
+
+def test_visita_comentario_generico_falla():
+    with pytest.raises(ValueError):
+        VisitaRegistrar(medico_id=1, tipo_visita="V", comentario="VISITA OK")
+
+
+def test_visita_comentario_corto_falla():
+    with pytest.raises(ValueError):
+        VisitaRegistrar(medico_id=1, tipo_visita="V", comentario="corto")
+
+
+def test_visita_valida_normaliza_tipo():
+    v = VisitaRegistrar(medico_id=1, tipo_visita="v", comentario="MEDICO SOLICITO ESTUDIO CLINICO")
+    assert v.tipo_visita == "V"
+
+
+def test_visita_tipo_invalido_falla():
+    with pytest.raises(ValueError):
+        VisitaRegistrar(medico_id=1, tipo_visita="X", comentario="COMENTARIO VALIDO LARGO")
+
+
+def test_visita_hace_minutos_fuera_de_rango_falla():
+    with pytest.raises(ValueError):
+        VisitaRegistrar(medico_id=1, tipo_visita="V", comentario="COMENTARIO VALIDO", hace_minutos=90)
+
+
+def test_no_visita_causa_valida():
+    nv = VisitaNoVisita(medico_id=1, causa="Consultorio Cerrado (sin aviso previo)")
+    assert nv.causa.startswith("Consultorio")
+
+
+def test_no_visita_causa_invalida_falla():
+    with pytest.raises(ValueError):
+        VisitaNoVisita(medico_id=1, causa="porque sí")

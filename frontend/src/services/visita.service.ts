@@ -61,6 +61,18 @@ export const coberturaResumen = (vmId?: number) =>
 export const coberturaRanking = (metrica: string) =>
   api.get<RankingVM>('/visita/cobertura/ranking', { params: { metrica } }).then(r => r.data);
 
+// ── Registro de visita ────────────────────────────────────────────────
+export interface VisitaHoy {
+  id: number; medico_id: number; medico: string; tipo_visita: string;
+  ejecutada: boolean; causa_no_visita: string | null; comentario: string | null; hora: string | null;
+}
+export const listarCausas = () => api.get<string[]>('/visita/causas').then(r => r.data);
+export const misVisitasHoy = () => api.get<VisitaHoy[]>('/visita/mis-visitas-hoy').then(r => r.data);
+export const registrarVisita = (medico_id: number, tipo_visita: string, comentario: string, hace_minutos = 0) =>
+  api.post('/visita/registrar', { medico_id, tipo_visita, comentario, hace_minutos }).then(r => r.data);
+export const registrarNoVisita = (medico_id: number, causa: string, comentario?: string) =>
+  api.post('/visita/no-visita', { medico_id, causa, comentario }).then(r => r.data);
+
 // Devuelve { medico } si se creó, o { duplicados } si el backend respondió 409.
 export const crearMedico = async (
   datos: MedicoCrear,

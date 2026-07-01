@@ -52,3 +52,53 @@ class PosibleDuplicado(BaseModel):
     nombre_completo: str
     direccion: str | None = None
     palabras_coinciden: int
+
+
+# Comentarios genéricos rechazados (lista negra, spec 4.3)
+_COMENTARIOS_GENERICOS = {
+    "VISITA OK", "VISITA REALIZADA", "OK", "BIEN", "VISITA", "REALIZADA",
+    "TODO BIEN", "SIN NOVEDAD", "OK VISITA", "VISITA HECHA", "HECHA", "NORMAL",
+}
+_CAUSAS_NO_VISITA = {
+    "Médico en Vacaciones", "Médico Enfermo / Incapacitado",
+    "Médico en Congreso o Evento Científico", "Consultorio Cerrado (sin aviso previo)",
+    "Zona Inaccesible (transporte / clima)", "Reprogramada por el Médico",
+}
+
+
+class VisitaRegistrar(BaseModel):
+    medico_id: int
+    tipo_visita: str = Field(min_length=1, max_length=1)  # V / R
+    comentario: str = Field(min_length=10, max_length=1000)
+    hace_minutos: int = Field(default=0, ge=0, le=60)  # ventana de 60 min (spec 4.2)
+
+    @field_validator("tipo_visita")
+    @classmethod
+    def _tipo_valido(cls, v: str) -> str:
+        v = v.strip().upper()
+        if v not in ("V", "R"):
+            raise ValueError("El tipo de visita debe ser V (Vista) o R (Revisita)")
+        return v
+
+    @field_validator("comentario")
+    @classmethod
+    def _comentario_valido(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 10:
+            raise ValueError("El comentario debe tener al menos 10 caracteres")
+        if v.upper() in _COMENTARIOS_GENERICOS:
+            raise ValueError("El comentario es demasiado genérico; describe algo relevante de la visita")
+        return v
+
+
+class VisitaNoVisita(BaseModel):
+    medico_id: int
+    causa: str
+    comentario: str | None = None
+
+    @field_validator("causa")
+    @classmethod
+    def _causa_valida(cls, v: str) -> str:
+        if v.strip() not in _CAUSAS_NO_VISITA:
+            raise ValueError("Causa de no-visita inválida")
+        return v.strip()
