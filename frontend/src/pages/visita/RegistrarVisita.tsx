@@ -1,105 +1,162 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert,
-  MenuItem, ToggleButton, ToggleButtonGroup, CircularProgress, Autocomplete, Divider,
+  MenuItem, ToggleButton, ToggleButtonGroup, CircularProgress, Avatar, Checkbox,
+  Select, FormControl, Divider,
 } from '@mui/material';
-import { CheckCircle, Cancel, Save, EventBusy, Warning, Place, LocalHospital } from '@mui/icons-material';
+import { CheckCircle, Save, EventBusy, AccessAlarm, Medication, ChatBubbleOutline, Assignment, FiberManualRecord } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import {
-  listarMedicos, listarCausas, misVisitasHoy, registrarVisita, registrarNoVisita, listarVMs,
-  type MedicoVisita, type VisitaHoy, type Catalogo,
+  agendaHoy, listarCausas, misVisitasHoy, registrarVisita, registrarNoVisita, listarVMs, obtenerParrilla,
+  type AgendaMedico, type VisitaHoy, type Catalogo, type ParrillaItem, type ProductoDetalle,
 } from '../../services/visita.service';
 
-const CAT_COLOR: Record<string, 'success' | 'primary' | 'warning'> = { A: 'success', B: 'primary', C: 'warning' };
+const CAT_AV: Record<string, { bg: string; fg: string }> = {
+  A: { bg: '#FBE7A1', fg: '#8A6D0B' }, B: { bg: '#D6E4FF', fg: '#1E52C7' },
+  C: { bg: '#E8EAF0', fg: '#5A6472' }, D: { bg: '#F3D6D6', fg: '#B23B3B' },
+};
+const INICIAL_COLORS = ['#2E5BFF', '#7A5AF8', '#0F9B8E', '#E8833A', '#D6409F', '#2AA76A', '#C0392B', '#3B82C4'];
+const MENCIONES = [1, 2, 3];
 
+function iniciales(n: string): string {
+  const p = n.trim().split(/\s+/);
+  return ((p[0]?.[0] ?? '') + (p[1]?.[0] ?? '')).toUpperCase();
+}
 function msgError(e: unknown, fallback: string): string {
   const d = (e as { response?: { data?: { detalle?: { msg?: string }[]; detail?: string } } })?.response?.data;
   if (Array.isArray(d?.detalle) && d.detalle[0]?.msg) return d.detalle[0].msg.replace('Value error, ', '');
   if (typeof d?.detail === 'string') return d.detail;
   return fallback;
 }
+function hhmm(d: Date): string { return d.toTimeString().slice(0, 5); }
+
+// Estado de sincronización local de una visita del feed "Registradas hoy".
+type SyncEstado = 'local' | 'sincronizado' | 'error';
+interface Registrada extends VisitaHoy { sync: SyncEstado; }
 
 export default function RegistrarVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esVM = rol === 'REPRESENTANTE_MEDICO';
 
   const [vms, setVms] = useState<Catalogo[]>([]);
-  const [vmId, setVmId] = useState<number | ''>('');       // solo ADMIN/GERENTE
-  const [medicos, setMedicos] = useState<MedicoVisita[]>([]);
+  const [vmId, setVmId] = useState<number | ''>('');
+  const [agenda, setAgenda] = useState<AgendaMedico[]>([]);
   const [causas, setCausas] = useState<string[]>([]);
-  const [hoy, setHoy] = useState<VisitaHoy[]>([]);
+  const [registradas, setRegistradas] = useState<Registrada[]>([]);
   const [cargando, setCargando] = useState(true);
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
-  const [medico, setMedico] = useState<MedicoVisita | null>(null);
+  const [sel, setSel] = useState<AgendaMedico | null>(null);
   const [tipo, setTipo] = useState<'V' | 'R'>('V');
+  const [hora, setHora] = useState(hhmm(new Date()));
   const [comentario, setComentario] = useState('');
-  const [haceMin, setHaceMin] = useState('0');
   const [modoNoVisita, setModoNoVisita] = useState(false);
   const [causa, setCausa] = useState('');
+  const [productos, setProductos] = useState<ParrillaItem[]>([]);
+  const [detallados, setDetallados] = useState<Record<string, number>>({});   // producto → mención (0 = no marcado)
   const [guardando, setGuardando] = useState(false);
 
-  // El RM va contra su propio panel (backend fuerza rm_id); ADMIN/GERENTE deben elegir un VM.
   const vmParam = esVM ? undefined : (vmId || undefined);
   const listo = esVM || !!vmId;
 
-  const cargarFeed = useCallback(() => {
-    if (!listo) { setHoy([]); return; }
-    misVisitasHoy(vmParam).then(setHoy).catch(() => setHoy([]));
+  const cargarAgenda = useCallback(() => {
+    if (!listo) return;
+    agendaHoy(vmParam).then(setAgenda).catch(() => setAgenda([]));
   }, [listo, vmParam]);
 
-  // Catálogos estáticos (una vez).
+  const cargarRegistradas = useCallback(() => {
+    if (!listo) { setRegistradas([]); return; }
+    // Todo lo que devuelve el servidor está CONFIRMADO en BD → verde.
+    misVisitasHoy(vmParam).then((vs) => setRegistradas(vs.map((v) => ({ ...v, sync: 'sincronizado' as SyncEstado }))))
+      .catch(() => setRegistradas([]));
+  }, [listo, vmParam]);
+
   useEffect(() => {
     listarCausas().then(setCausas).catch(() => {});
     if (!esVM) listarVMs().then(setVms).catch(() => {});
     setCargando(false);
   }, [esVM]);
 
-  // Médicos + feed cuando cambia el VM elegido (o al entrar como RM).
-  useEffect(() => {
-    setMedico(null);
-    if (!listo) { setMedicos([]); setHoy([]); return; }
-    listarMedicos(vmParam).then(setMedicos).catch(() => setMedicos([]));
-    misVisitasHoy(vmParam).then(setHoy).catch(() => setHoy([]));
-  }, [listo, vmParam]);
+  useEffect(() => { setSel(null); cargarAgenda(); cargarRegistradas(); }, [cargarAgenda, cargarRegistradas]);
 
-  const visitadosHoy = useMemo(
-    () => new Set(hoy.filter((h) => h.ejecutada).map((h) => h.medico_id)),
-    [hoy],
-  );
-  const yaVisitado = medico ? visitadosHoy.has(medico.id) : false;
+  // Al seleccionar un médico: precarga tipo, hora actual y la parrilla de productos.
+  function seleccionar(m: AgendaMedico) {
+    if (m.estado === 'registrada') return;
+    setSel(m); setTipo((m.tipo_visita === 'R' ? 'R' : 'V')); setHora(hhmm(new Date()));
+    setComentario(''); setModoNoVisita(false); setCausa(''); setDetallados({}); setMsg(null);
+    obtenerParrilla(m.linea_id ?? undefined).then(setProductos).catch(() => setProductos([]));
+  }
 
-  const limpiar = () => { setMedico(null); setTipo('V'); setComentario(''); setHaceMin('0'); setModoNoVisita(false); setCausa(''); };
+  // Minutos transcurridos desde la hora indicada (para la ventana de 60 min).
+  const haceMin = useMemo(() => {
+    const [h, mi] = hora.split(':').map(Number);
+    const now = new Date();
+    const sel2 = new Date(now); sel2.setHours(h, mi, 0, 0);
+    return Math.round((now.getTime() - sel2.getTime()) / 60000);
+  }, [hora]);
+  const horaOk = haceMin >= 0 && haceMin <= 60;
+
+  const toggleProd = (p: string) => setDetallados((d) => {
+    const n = { ...d };
+    if (n[p]) delete n[p]; else n[p] = 1;
+    return n;
+  });
 
   async function guardar() {
-    if (!medico) { setMsg({ tipo: 'error', texto: 'Selecciona el médico.' }); return; }
+    if (!sel) return;
+    if (modoNoVisita) {
+      if (!causa) { setMsg({ tipo: 'error', texto: 'Selecciona la causa.' }); return; }
+    } else if (!horaOk) {
+      setMsg({ tipo: 'error', texto: 'La hora está fuera de la ventana de 60 minutos.' }); return;
+    }
     setGuardando(true); setMsg(null);
+    // Entrada optimista AMARILLA en "Registradas hoy" (aún sin confirmar en servidor).
+    const prods: ProductoDetalle[] = Object.entries(detallados).map(([producto, mencion]) => ({ producto, mencion }));
+    const optimista: Registrada = {
+      id: -Date.now(), medico_id: sel.medico_id, medico: sel.nombre, tipo_visita: modoNoVisita ? tipo : tipo,
+      ejecutada: !modoNoVisita, causa_no_visita: modoNoVisita ? causa : null, comentario,
+      productos: prods.map((p) => p.producto), hora: new Date().toISOString(), sync: 'local',
+    };
+    setRegistradas((r) => [optimista, ...r]);
     try {
       if (modoNoVisita) {
-        if (!causa) { setMsg({ tipo: 'error', texto: 'Selecciona la causa.' }); setGuardando(false); return; }
-        await registrarNoVisita(medico.id, causa, comentario || undefined, vmParam);
-        setMsg({ tipo: 'success', texto: 'No-visita registrada.' });
+        await registrarNoVisita(sel.medico_id, causa, comentario || undefined, vmParam);
       } else {
-        await registrarVisita(medico.id, tipo, comentario, Number(haceMin) || 0, vmParam);
-        setMsg({ tipo: 'success', texto: 'Visita registrada.' });
+        await registrarVisita(sel.medico_id, tipo, comentario, Math.max(0, Math.min(60, haceMin)), prods, vmParam);
       }
-      limpiar(); cargarFeed();
+      setMsg({ tipo: 'success', texto: modoNoVisita ? 'No-visita registrada.' : 'Visita registrada y confirmada en el servidor.' });
+      setSel(null);
+      // Confirmación real: re-consultamos el servidor → pasan a VERDE.
+      cargarRegistradas(); cargarAgenda();
     } catch (e) {
+      setRegistradas((r) => r.map((x) => x.id === optimista.id ? { ...x, sync: 'error' } : x));
       setMsg({ tipo: 'error', texto: msgError(e, 'No se pudo registrar.') });
     } finally { setGuardando(false); }
   }
 
   if (cargando) return <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /></Box>;
 
+  const pendientes = agenda.filter((a) => a.estado === 'pendiente').length;
+
+  const avatar = (nombre: string, categoria: string, mid: number, size = 40) => {
+    const color = INICIAL_COLORS[mid % INICIAL_COLORS.length];
+    const av = CAT_AV[categoria] ?? CAT_AV.C;
+    return (
+      <Stack direction="row" spacing={0.5} alignItems="center">
+        <Avatar sx={{ bgcolor: 'transparent', color, fontWeight: 700, fontSize: 13, width: size, height: size, border: `2px solid ${color}22` }}>{iniciales(nombre)}</Avatar>
+        <Avatar sx={{ bgcolor: av.bg, color: av.fg, fontWeight: 700, fontSize: 12, width: 24, height: 24 }}>{categoria}</Avatar>
+      </Stack>
+    );
+  };
+
   return (
-    <Box sx={{ maxWidth: 560, mx: 'auto', p: { xs: 1.5, sm: 3 } }}>
+    <Box sx={{ maxWidth: 620, mx: 'auto', p: { xs: 1.5, sm: 3 } }}>
       <Typography variant="h5" fontWeight={700} gutterBottom>Registrar Visita</Typography>
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
 
-      {/* Selector de visitador: solo ADMIN/GERENTE. El RM opera sobre su propio panel. */}
       {!esVM && (
         <TextField select fullWidth size="small" label="Visitador (VM)" value={vmId} sx={{ mb: 2 }}
-                   helperText="Elige el visitador para ver y registrar sobre su panel"
+                   helperText="Elige el visitador para ver su agenda del día"
                    onChange={(e) => setVmId(e.target.value === '' ? '' : Number(e.target.value))}>
           <MenuItem value=""><em>— Selecciona un visitador —</em></MenuItem>
           {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
@@ -107,135 +164,186 @@ export default function RegistrarVisita() {
       )}
 
       {!listo ? (
-        <Alert severity="info">Selecciona un visitador para cargar su panel de médicos.</Alert>
+        <Alert severity="info">Selecciona un visitador para ver su agenda.</Alert>
       ) : (
-      <Card variant="outlined" sx={{ mb: 2 }}>
-        <CardContent>
-          <Stack spacing={2}>
-            <Autocomplete
-              options={medicos}
-              value={medico}
-              onChange={(_, v) => setMedico(v)}
-              getOptionLabel={(m) => m.nombre_completo}
-              isOptionEqualToValue={(a, b) => a.id === b.id}
-              noOptionsText={medicos.length === 0 ? 'No hay médicos en este panel' : 'Sin coincidencias'}
-              renderInput={(params) => (
-                <TextField {...params} label="Médico visitado" required
-                           placeholder="Escribe para buscar en tu panel…" />
-              )}
-              renderOption={(props, m) => (
-                <Box component="li" {...props} key={m.id}
-                     sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                  <Box sx={{ minWidth: 0 }}>
-                    <Typography variant="body2" noWrap>{m.nombre_completo}</Typography>
-                    <Typography variant="caption" color="text.secondary" noWrap>
-                      {m.especialidad_nombre || 'Sin especialidad'}
+      <>
+        {/* Médicos de hoy (agenda) */}
+        <Card variant="outlined" sx={{ mb: 2 }}>
+          <CardContent sx={{ py: 1.5 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+              <Assignment fontSize="small" color="action" />
+              <Typography variant="subtitle1" fontWeight={700}>Médicos de hoy</Typography>
+              <Box sx={{ flex: 1 }} />
+              <Chip size="small" color={pendientes ? 'warning' : 'success'} label={pendientes ? `${pendientes} pendiente${pendientes > 1 ? 's' : ''}` : 'Al día'} />
+            </Stack>
+            {agenda.length === 0 ? (
+              <Alert severity="info">No hay médicos programados. Puedes registrar desde el panel.</Alert>
+            ) : (
+              <Stack divider={<Divider />}>
+                {agenda.map((a) => {
+                  const activa = sel?.medico_id === a.medico_id;
+                  const reg = a.estado === 'registrada';
+                  return (
+                    <Stack key={a.medico_id} direction="row" alignItems="center" spacing={1.5}
+                           onClick={() => seleccionar(a)}
+                           sx={{ py: 1, px: 0.5, cursor: reg ? 'default' : 'pointer', borderRadius: 1,
+                                 bgcolor: activa ? 'rgba(255,193,7,0.14)' : reg ? 'transparent' : 'transparent',
+                                 opacity: reg ? 0.7 : 1, '&:hover': { bgcolor: reg ? 'transparent' : 'action.hover' } }}>
+                      {avatar(a.nombre, a.categoria, a.medico_id, 36)}
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="body2" fontWeight={700} noWrap>{a.nombre}</Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                          {[a.especialidad, a.tipo_visita === 'R' ? 'Revisita' : 'Vista programada', a.hora_estimada].filter(Boolean).join(' · ')}
+                        </Typography>
+                      </Box>
+                      {reg ? (
+                        <Chip size="small" color={a.no_visita ? 'default' : 'success'}
+                              label={a.no_visita ? 'No-visita' : 'Registrada ✓'} />
+                      ) : (
+                        <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 700 }}>Pendiente</Typography>
+                      )}
+                    </Stack>
+                  );
+                })}
+              </Stack>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Formulario de la visita seleccionada */}
+        {sel && (
+          <Card variant="outlined" sx={{ mb: 2 }}>
+            <Box sx={{ bgcolor: 'rgba(46,91,255,0.06)', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              {avatar(sel.nombre, sel.categoria, sel.medico_id, 40)}
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography variant="body1" fontWeight={700} noWrap>{sel.nombre}</Typography>
+                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                  {[sel.especialidad, sel.centro_trabajo, sel.provincia].filter(Boolean).join(' · ') || 'Sin datos'}
+                </Typography>
+              </Box>
+              <ToggleButtonGroup exclusive size="small" value={tipo} onChange={(_, v) => v && setTipo(v)}>
+                <ToggleButton value="V">Vista</ToggleButton>
+                <ToggleButton value="R">Revisita</ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+            <CardContent>
+              <Stack spacing={2}>
+                {!modoNoVisita && (
+                  <Box>
+                    <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
+                      <AccessAlarm fontSize="small" color="error" />
+                      <Typography variant="body2" fontWeight={600}>Hora real de la visita</Typography>
+                    </Stack>
+                    <TextField type="time" size="small" value={hora} onChange={(e) => setHora(e.target.value)} sx={{ width: 180 }} />
+                    <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: horaOk ? 'success.main' : 'error.main' }}>
+                      Hora actual: {hhmm(new Date())} · {horaOk ? 'Dentro del rango de 60 min ✓' : 'Fuera del rango de 60 min ✗'}
                     </Typography>
                   </Box>
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    {visitadosHoy.has(m.id) && <CheckCircle color="success" fontSize="small" />}
-                    <Chip size="small" label={m.categoria} color={CAT_COLOR[m.categoria] ?? 'default'} />
-                  </Stack>
-                </Box>
-              )}
-            />
-
-            {/* Ficha del médico elegido: contexto para el representante en el momento de la visita. */}
-            {medico && (
-              <Box sx={{ bgcolor: 'action.hover', borderRadius: 1, p: 1.5 }}>
-                <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center" sx={{ mb: 0.5 }}>
-                  <Chip size="small" label={`Cat. ${medico.categoria}`} color={CAT_COLOR[medico.categoria] ?? 'default'} />
-                  <Chip size="small" variant="outlined" icon={<LocalHospital />} label={medico.especialidad_nombre || 'Sin especialidad'} />
-                  {medico.tipo_consultorio && <Chip size="small" variant="outlined" label={medico.tipo_consultorio} />}
-                </Stack>
-                {medico.direccion && (
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Place fontSize="inherit" /> {medico.direccion}
-                  </Typography>
                 )}
-                {medico.ciclos_sin_visita > 0 && (
-                  <Typography variant="caption" color="warning.main" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-                    <Warning fontSize="inherit" /> {medico.ciclos_sin_visita} ciclo(s) sin visita — riesgo de ruptura
-                  </Typography>
-                )}
-                {yaVisitado && (
-                  <Typography variant="caption" color="success.main" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
-                    <CheckCircle fontSize="inherit" /> Ya registraste una visita a este médico hoy
-                  </Typography>
-                )}
-              </Box>
-            )}
 
-            <Divider />
+                {!modoNoVisita && (
+                  <Box>
+                    <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
+                      <Medication fontSize="small" color="primary" />
+                      <Typography variant="body2" fontWeight={600}>Productos detallados</Typography>
+                    </Stack>
+                    {productos.length === 0 ? (
+                      <Typography variant="caption" color="text.secondary">No hay parrilla de productos para esta línea.</Typography>
+                    ) : (
+                      <Stack divider={<Divider />}>
+                        {productos.map((p) => {
+                          const on = detallados[p.producto] !== undefined;
+                          return (
+                            <Stack key={p.producto} direction="row" alignItems="center" spacing={1}
+                                   sx={{ py: 0.5, bgcolor: on ? 'rgba(46,91,255,0.06)' : 'transparent', borderRadius: 1, px: 0.5 }}>
+                              <Checkbox size="small" checked={on} onChange={() => toggleProd(p.producto)} />
+                              <Typography variant="body2" sx={{ flex: 1 }}>{p.producto}</Typography>
+                              <FormControl size="small" sx={{ minWidth: 120 }}>
+                                <Select value={detallados[p.producto] ?? 1} disabled={!on}
+                                        onChange={(e) => setDetallados((d) => ({ ...d, [p.producto]: Number(e.target.value) }))}>
+                                  {MENCIONES.map((m) => <MenuItem key={m} value={m}>{m}ª mención</MenuItem>)}
+                                </Select>
+                              </FormControl>
+                            </Stack>
+                          );
+                        })}
+                      </Stack>
+                    )}
+                  </Box>
+                )}
 
-            {!modoNoVisita ? (
-              <>
+                {modoNoVisita ? (
+                  <TextField select label="Causa de no-visita" value={causa} required
+                             onChange={(e) => setCausa(e.target.value)}>
+                    {causas.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+                  </TextField>
+                ) : null}
+
                 <Box>
-                  <Typography variant="caption" color="text.secondary">Tipo de visita</Typography>
-                  <ToggleButtonGroup exclusive fullWidth value={tipo} onChange={(_, v) => v && setTipo(v)} sx={{ mt: 0.5 }}>
-                    <ToggleButton value="V" color="primary">Vista</ToggleButton>
-                    <ToggleButton value="R" color="secondary">Revisita</ToggleButton>
-                  </ToggleButtonGroup>
+                  <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 0.5 }}>
+                    <ChatBubbleOutline fontSize="small" color="secondary" />
+                    <Typography variant="body2" fontWeight={600}>Comentario de visita <span style={{ color: '#d32f2f' }}>*</span></Typography>
+                  </Stack>
+                  <TextField fullWidth multiline minRows={3} value={comentario}
+                             onChange={(e) => setComentario(e.target.value)}
+                             placeholder="Describe algo relevante que ocurrió en la visita…"
+                             helperText='Mínimo 10 caracteres · No escribas solo "Visita OK"' />
                 </Box>
-                <TextField label="Comentario de la visita (mín. 10, no genérico)" multiline minRows={3}
-                           value={comentario} onChange={(e) => setComentario(e.target.value)}
-                           helperText='Ej: "MEDICO PREGUNTO POR INTERACCION CON METFORMINA"' />
-                <TextField select label="¿Hace cuánto ocurrió?" value={haceMin} sx={{ maxWidth: 220 }}
-                           onChange={(e) => setHaceMin(e.target.value)} helperText="Ventana máx. 60 min">
-                  {['0', '10', '20', '30', '45', '60'].map((n) => (
-                    <MenuItem key={n} value={n}>{n === '0' ? 'Ahora' : `Hace ${n} min`}</MenuItem>
-                  ))}
-                </TextField>
-              </>
+
+                <Stack direction="row" spacing={1.5}>
+                  <Button variant="contained" color="success" fullWidth startIcon={<Save />}
+                          disabled={guardando || (!modoNoVisita && comentario.trim().length < 10)}
+                          onClick={guardar}>
+                    {guardando ? 'Guardando…' : (modoNoVisita ? 'Registrar no-visita' : 'Guardar Visita')}
+                  </Button>
+                  <Button variant="outlined" color={modoNoVisita ? 'primary' : 'error'} startIcon={<EventBusy />}
+                          onClick={() => { setModoNoVisita(!modoNoVisita); setMsg(null); }}>
+                    {modoNoVisita ? 'Fue visita' : 'No visité'}
+                  </Button>
+                </Stack>
+              </Stack>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Registradas hoy */}
+        <Card variant="outlined">
+          <CardContent sx={{ py: 1.5 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+              <CheckCircle fontSize="small" color="success" />
+              <Typography variant="subtitle1" fontWeight={700}>Registradas hoy</Typography>
+              <Box sx={{ flex: 1 }} />
+              <Chip size="small" color="success" variant="outlined" label={`${registradas.length} visita${registradas.length === 1 ? '' : 's'}`} />
+            </Stack>
+            {registradas.length === 0 ? (
+              <Alert severity="info">Aún no hay visitas registradas hoy.</Alert>
             ) : (
-              <>
-                <TextField select label="Causa de no-visita" value={causa} required
-                           onChange={(e) => setCausa(e.target.value)}>
-                  {causas.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-                </TextField>
-                <TextField label="Nota (opcional)" value={comentario} onChange={(e) => setComentario(e.target.value)} />
-              </>
+              <Stack divider={<Divider />}>
+                {registradas.map((v) => {
+                  const verde = v.sync === 'sincronizado';
+                  const rojo = v.sync === 'error';
+                  return (
+                    <Stack key={v.id} direction="row" alignItems="center" spacing={1.5} sx={{ py: 1 }}>
+                      <FiberManualRecord sx={{ fontSize: 12, color: rojo ? 'error.main' : verde ? 'success.main' : 'warning.main' }} />
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="body2" fontWeight={600} noWrap>{v.medico}</Typography>
+                        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                          {[v.ejecutada ? (v.tipo_visita === 'R' ? 'Revisita' : 'Vista') : `No-visita: ${v.causa_no_visita ?? ''}`,
+                            v.hora ? new Date(v.hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
+                            v.productos && v.productos.length ? v.productos.join(', ') : null].filter(Boolean).join(' · ')}
+                        </Typography>
+                      </Box>
+                      <Chip size="small" color={rojo ? 'error' : verde ? 'success' : 'warning'}
+                            variant={verde ? 'filled' : 'outlined'}
+                            label={rojo ? 'Error' : verde ? 'Sincronizado ✓' : 'Registrada'} />
+                    </Stack>
+                  );
+                })}
+              </Stack>
             )}
-
-            <Stack direction="row" spacing={1.5}>
-              <Button variant="contained" fullWidth startIcon={<Save />} disabled={guardando || !medico} onClick={guardar}>
-                {guardando ? 'Guardando…' : (modoNoVisita ? 'Registrar no-visita' : 'Guardar visita')}
-              </Button>
-              <Button variant="outlined" color={modoNoVisita ? 'primary' : 'warning'} startIcon={<EventBusy />}
-                      onClick={() => { setModoNoVisita(!modoNoVisita); setMsg(null); }}>
-                {modoNoVisita ? 'Fue visita' : 'No pude'}
-              </Button>
-            </Stack>
-          </Stack>
-        </CardContent>
-      </Card>
-      )}
-
-      {listo && (
-        <>
-          <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Visitas de hoy ({hoy.length})</Typography>
-          {hoy.length === 0 ? (
-            <Alert severity="info">Aún no hay visitas registradas hoy.</Alert>
-          ) : (
-            <Stack spacing={1}>
-              {hoy.map((v) => (
-                <Card key={v.id} variant="outlined">
-                  <CardContent sx={{ py: 1, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-                    {v.ejecutada ? <CheckCircle color="success" /> : <Cancel color="disabled" />}
-                    <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography variant="body2" fontWeight={600}>{v.medico}</Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {v.ejecutada ? (v.comentario || '') : `No-visita: ${v.causa_no_visita}`}
-                      </Typography>
-                    </Box>
-                    <Chip size="small" color={v.ejecutada ? (v.tipo_visita === 'R' ? 'secondary' : 'primary') : 'default'}
-                          label={v.ejecutada ? (v.tipo_visita === 'R' ? 'Revisita' : 'Vista') : 'No-visita'} />
-                  </CardContent>
-                </Card>
-              ))}
-            </Stack>
-          )}
-        </>
+          </CardContent>
+        </Card>
+      </>
       )}
     </Box>
   );

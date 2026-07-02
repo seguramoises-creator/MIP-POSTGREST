@@ -239,6 +239,13 @@ def mis_visitas_hoy(vm_id: int | None = None, db: Session = Depends(get_db), cur
     return visita_registro_service.visitas_del_dia(db, _vm_registro(current_user, vm_id))
 
 
+@router.get("/agenda-hoy", response_model=list[dict])
+def agenda_hoy(vm_id: int | None = None, db: Session = Depends(get_db), current_user=RequireVisita):
+    """Médicos programados del VM para hoy (agenda), con su estado pendiente/registrada."""
+    from app.services import visita_registro_service
+    return visita_registro_service.agenda_hoy(db, _vm_registro(current_user, vm_id))
+
+
 @router.post("/registrar", response_model=dict, status_code=status.HTTP_201_CREATED)
 def registrar_visita(datos: VisitaRegistrar, vm_id: int | None = None,
                      db: Session = Depends(get_db), current_user=RequireVisita):

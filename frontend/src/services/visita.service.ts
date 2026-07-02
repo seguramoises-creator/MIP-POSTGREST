@@ -138,13 +138,27 @@ export const coberturaRanking = (metrica: string) =>
 // ── Registro de visita ────────────────────────────────────────────────
 export interface VisitaHoy {
   id: number; medico_id: number; medico: string; tipo_visita: string;
-  ejecutada: boolean; causa_no_visita: string | null; comentario: string | null; hora: string | null;
+  ejecutada: boolean; causa_no_visita: string | null; comentario: string | null;
+  productos: string[]; hora: string | null;
 }
+export interface AgendaMedico {
+  medico_id: number; nombre: string; especialidad: string | null; categoria: string;
+  centro_trabajo: string | null; provincia: string | null; linea_id: number | null;
+  tipo_visita: string; hora_estimada: string | null;
+  estado: 'pendiente' | 'registrada'; no_visita: boolean;
+}
+export interface ProductoDetalle { producto: string; mencion: number; }
+
 export const listarCausas = () => api.get<string[]>('/visita/causas').then(r => r.data);
 export const misVisitasHoy = (vmId?: number) =>
   api.get<VisitaHoy[]>('/visita/mis-visitas-hoy', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
-export const registrarVisita = (medico_id: number, tipo_visita: string, comentario: string, hace_minutos = 0, vmId?: number) =>
-  api.post('/visita/registrar', { medico_id, tipo_visita, comentario, hace_minutos }, { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export const agendaHoy = (vmId?: number) =>
+  api.get<AgendaMedico[]>('/visita/agenda-hoy', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export const registrarVisita = (
+  medico_id: number, tipo_visita: string, comentario: string, hace_minutos = 0,
+  productos: ProductoDetalle[] = [], vmId?: number,
+) => api.post('/visita/registrar', { medico_id, tipo_visita, comentario, hace_minutos, productos },
+              { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 export const registrarNoVisita = (medico_id: number, causa: string, comentario?: string, vmId?: number) =>
   api.post('/visita/no-visita', { medico_id, causa, comentario }, { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 

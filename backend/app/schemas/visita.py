@@ -172,11 +172,17 @@ _CAUSAS_NO_VISITA = {
 }
 
 
+class ProductoDetallado(BaseModel):
+    producto: str = Field(min_length=1, max_length=120)
+    mencion: int = Field(default=1, ge=1, le=9)   # 1ª/2ª/3ª mención…
+
+
 class VisitaRegistrar(BaseModel):
     medico_id: int
     tipo_visita: str = Field(min_length=1, max_length=1)  # V / R
     comentario: str = Field(min_length=10, max_length=1000)
     hace_minutos: int = Field(default=0, ge=0, le=60)  # ventana de 60 min (spec 4.2)
+    productos: list[ProductoDetallado] = Field(default_factory=list)
 
     @field_validator("tipo_visita")
     @classmethod

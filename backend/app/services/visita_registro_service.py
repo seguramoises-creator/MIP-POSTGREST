@@ -29,10 +29,11 @@ def registrar_visita(db: Session, vm_id: int, datos: VisitaRegistrar, usuario_id
         raise ValueError("No hay ciclo activo")
     # Hora del servidor menos los minutos indicados (ventana 60 min ya validada en el schema).
     fecha_hora = datetime.now(timezone.utc) - timedelta(minutes=datos.hace_minutos)
+    productos = "|".join(f"{p.producto}:{p.mencion}" for p in datos.productos) or None
     v = VisitaRegistro(
         vm_id=vm_id, ciclo_id=ciclo_id, medico_id=datos.medico_id,
         tipo_visita=datos.tipo_visita, fecha_hora=fecha_hora,
-        comentario=datos.comentario, ejecutada=True, registrado_por=usuario_id,
+        comentario=datos.comentario, productos=productos, ejecutada=True, registrado_por=usuario_id,
     )
     db.add(v)
     db.commit()
@@ -69,9 +70,84 @@ def visitas_del_dia(db: Session, vm_id: int) -> list[dict]:
     mids = {v.medico_id for v in vs}
     nombres = dict(db.query(MedicoVisita.id, MedicoVisita.nombre_completo)
                    .filter(MedicoVisita.id.in_(mids)).all()) if mids else {}
+    def _prods(s):
+        if not s:
+            return []
+        return [p.split(":")[0] for p in s.split("|")]
     return [{
         "id": v.id, "medico_id": v.medico_id, "medico": nombres.get(v.medico_id, "?"),
         "tipo_visita": v.tipo_visita, "ejecutada": v.ejecutada,
         "causa_no_visita": v.causa_no_visita, "comentario": v.comentario,
+        "productos": _prods(v.productos),
         "hora": v.fecha_hora.isoformat() if v.fecha_hora else None,
     } for v in vs]
+
+
+# Días de la semana (Mon=0 .. Sun=6) para casar con PlaneacionCiclo.dia_semana.
+_DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+
+
+def agenda_hoy(db: Session, vm_id: int) -> list[dict]:
+    """Médicos programados del VM para HOY (agenda). Sale de la Planeación del ciclo;
+    si la planeación tiene día, filtra al día de hoy; si no, muestra lo planeado.
+    Fallback: si no hay planeación, usa el panel activo. Marca 'registrada' cuando ya
+    existe una visita ejecutada hoy para ese médico."""
+    from app.models.visita import PlaneacionCiclo
+    from app.models.dimensiones import Especialidad, RepresentanteMedico
+    ciclo_id = ciclo_por_defecto(db)
+    rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
+    linea_id = rm.linea_id if rm else None
+    hoy = datetime.now(timezone.utc).date()
+    hoy_nombre = _DIAS[hoy.weekday()]
+    inicio = datetime(hoy.year, hoy.month, hoy.day, tzinfo=timezone.utc)
+
+    plan = db.query(PlaneacionCiclo).filter(
+        PlaneacionCiclo.vm_id == vm_id, PlaneacionCiclo.ciclo_id == ciclo_id).all() if ciclo_id else []
+    con_dia = [p for p in plan if p.dia_semana]
+    if con_dia:
+        plan = [p for p in con_dia if p.dia_semana == hoy_nombre]
+
+    # Un ítem por médico (si tiene V y R, prioriza R). Orden por hora estimada.
+    por_medico: dict[int, PlaneacionCiclo] = {}
+    for p in sorted(plan, key=lambda x: (x.hora_estimada or "99:99")):
+        cur = por_medico.get(p.medico_id)
+        if cur is None or (p.tipo_visita == "R" and cur.tipo_visita != "R"):
+            por_medico[p.medico_id] = p
+
+    medico_ids = list(por_medico)
+    fuente_plan = True
+    if not medico_ids:  # fallback: panel activo vigente
+        fuente_plan = False
+        meds = db.query(MedicoVisita).filter(
+            MedicoVisita.vm_id == vm_id, MedicoVisita.activo == True).all()  # noqa: E712
+        medico_ids = [m.id for m in meds]
+
+    medicos = {m.id: m for m in db.query(MedicoVisita).filter(MedicoVisita.id.in_(medico_ids)).all()} if medico_ids else {}
+    esp_ids = {m.especialidad_id for m in medicos.values() if m.especialidad_id}
+    esp = dict(db.query(Especialidad.id, Especialidad.nombre).filter(Especialidad.id.in_(esp_ids)).all()) if esp_ids else {}
+
+    visit_hoy = {}
+    if medico_ids:
+        for v in db.query(VisitaRegistro).filter(
+                VisitaRegistro.vm_id == vm_id, VisitaRegistro.fecha_hora >= inicio,
+                VisitaRegistro.medico_id.in_(medico_ids)).all():
+            visit_hoy[v.medico_id] = v.ejecutada
+
+    agenda = []
+    for mid in medico_ids:
+        m = medicos.get(mid)
+        if not m:
+            continue
+        p = por_medico.get(mid)
+        registrada = mid in visit_hoy
+        agenda.append({
+            "medico_id": mid, "nombre": m.nombre_completo,
+            "especialidad": esp.get(m.especialidad_id), "categoria": m.categoria,
+            "centro_trabajo": m.centro_trabajo, "provincia": m.provincia, "linea_id": linea_id,
+            "tipo_visita": (p.tipo_visita if p else "V"),
+            "hora_estimada": (p.hora_estimada if p else None),
+            "estado": "registrada" if registrada else "pendiente",
+            "no_visita": (registrada and visit_hoy.get(mid) is False),
+        })
+    agenda.sort(key=lambda a: (a["estado"] != "pendiente", a["hora_estimada"] or "99:99", a["nombre"]))
+    return agenda

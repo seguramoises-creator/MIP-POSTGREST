@@ -111,6 +111,7 @@ class VisitaRegistro(Base):
     tipo_visita: Mapped[str] = mapped_column(CHAR(1), nullable=False)  # V / R
     fecha_hora: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
     comentario: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    productos: Mapped[str | None] = mapped_column(String(300), nullable=True)  # "producto:mencion|..."
     ejecutada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     causa_no_visita: Mapped[str | None] = mapped_column(String(80), nullable=True)
     registrado_por: Mapped[int | None] = mapped_column(
