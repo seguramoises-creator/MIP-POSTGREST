@@ -181,11 +181,19 @@ class ParrillaPromocional(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
     linea_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Linea.id"), nullable=False)
-    producto: Mapped[str] = mapped_column(String(120), nullable=False)
+    producto_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Config.DIM_Producto.id"), nullable=True)  # producto del catálogo
+    producto: Mapped[str] = mapped_column(String(120), nullable=False)  # copia del código/nombre (display)
     mensaje_clave: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    segmento_target: Mapped[str | None] = mapped_column(String(120), nullable=True)
     prioridad: Mapped[int] = mapped_column(Integer, nullable=False, default=1)   # 1 = mayor
-    meta_muestras: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # objetivo del ciclo
+    meta_muestras: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # meta muestras / visita
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Publicación: el VM no ve la parrilla hasta que el Gerente de Producto la publica.
+    publicada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    fecha_publicacion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    publicada_por: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
     fecha_creacion: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
     modificado_por: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)

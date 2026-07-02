@@ -522,6 +522,25 @@ class ParametroCobertura(Base):
 # Por eso NO se crean DIM_Distrito ni DIM_Representante nuevas.
 # ═════════════════════════════════════════════════════════════════════════
 
+class Producto(Base):
+    """Catálogo de productos promocionales (DIM_Producto). Lo mantiene el Gerente de
+    Producto y alimenta la Parrilla Promocional: incluye el gerente de producto
+    responsable de la promoción, el área terapéutica y el segmento target por defecto."""
+    __tablename__ = "DIM_Producto"
+    __table_args__ = {"schema": "Config"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    codigo: Mapped[str] = mapped_column(String(40), unique=True, nullable=False)  # ONCX-301
+    nombre: Mapped[str] = mapped_column(String(120), nullable=False)
+    area_terapeutica: Mapped[str | None] = mapped_column(String(80), nullable=True)   # Oncología
+    descripcion: Mapped[str | None] = mapped_column(String(150), nullable=True)        # Inhibidor selectivo
+    segmento_target: Mapped[str | None] = mapped_column(String(120), nullable=True)    # Cat. A + B Oncología
+    meta_muestras_visita: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    gerente_producto: Mapped[str | None] = mapped_column(String(150), nullable=True)   # gerente de producto de promoción
+    linea_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("Config.DIM_Linea.id"), nullable=True)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
 class Especialidad(Base):
     """Catálogo de especialidades médicas. Global (no depende de país),
     igual que DIM_CategoriaDesempeno / DIM_KpiDashboard."""

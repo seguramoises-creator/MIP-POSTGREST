@@ -238,10 +238,12 @@ class PlaneacionGuardar(BaseModel):
 
 # ── Parrilla promocional / Muestras (Parte 6) ─────────────────────────
 class ParrillaItem(BaseModel):
-    producto: str = Field(min_length=2, max_length=120)
+    producto_id: int | None = None                      # del catálogo DIM_Producto
+    producto: str = Field(min_length=2, max_length=120)  # código/nombre (display)
     mensaje_clave: str | None = Field(default=None, max_length=300)
+    segmento_target: str | None = Field(default=None, max_length=120)
     prioridad: int = Field(default=1, ge=1, le=20)
-    meta_muestras: int = Field(default=0, ge=0)
+    meta_muestras: int = Field(default=0, ge=0)          # meta muestras / visita
 
     @field_validator("producto")
     @classmethod

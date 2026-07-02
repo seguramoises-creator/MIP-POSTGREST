@@ -12,8 +12,10 @@ from datetime import datetime, timezone
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.models.visita import ParrillaPromocional, MuestraEntregada, MedicoVisita
-from app.models.dimensiones import RepresentanteMedico, Linea
+from datetime import datetime, timezone
+
+from app.models.visita import ParrillaPromocional, MuestraEntregada, MedicoVisita, VisitaRegistro
+from app.models.dimensiones import RepresentanteMedico, Linea, Producto
 from app.schemas.visita import ParrillaItem, MuestraItem
 from app.services.visita_cobertura_service import ciclo_por_defecto
 
@@ -29,23 +31,61 @@ def listar_lineas(db: Session) -> list[dict]:
             .order_by(Linea.nombre).all()]
 
 
-def listar_parrilla(db: Session, ciclo_id: int | None, linea_id: int) -> list[dict]:
+def listar_productos(db: Session, linea_id: int | None = None) -> list[dict]:
+    """Catálogo DIM_Producto (para llenar la parrilla). Filtra por línea si se indica."""
+    q = db.query(Producto).filter(Producto.activo == True)  # noqa: E712
+    if linea_id:
+        q = q.filter((Producto.linea_id == linea_id) | (Producto.linea_id.is_(None)))
+    return [{
+        "id": p.id, "codigo": p.codigo, "nombre": p.nombre,
+        "area_terapeutica": p.area_terapeutica, "descripcion": p.descripcion,
+        "segmento_target": p.segmento_target, "meta_muestras_visita": p.meta_muestras_visita,
+        "gerente_producto": p.gerente_producto, "linea_id": p.linea_id,
+    } for p in q.order_by(Producto.codigo).all()]
+
+
+def listar_parrilla(db: Session, ciclo_id: int | None, linea_id: int, solo_publicada: bool = False) -> list[dict]:
     ciclo_id = ciclo_id or ciclo_por_defecto(db)
-    filas = (db.query(ParrillaPromocional)
-             .filter(ParrillaPromocional.ciclo_id == ciclo_id,
-                     ParrillaPromocional.linea_id == linea_id,
-                     ParrillaPromocional.activo == True)  # noqa: E712
-             .order_by(ParrillaPromocional.prioridad, ParrillaPromocional.producto).all())
-    return [{"id": f.id, "producto": f.producto, "mensaje_clave": f.mensaje_clave,
-             "prioridad": f.prioridad, "meta_muestras": f.meta_muestras} for f in filas]
+    q = db.query(ParrillaPromocional).filter(
+        ParrillaPromocional.ciclo_id == ciclo_id,
+        ParrillaPromocional.linea_id == linea_id,
+        ParrillaPromocional.activo == True)  # noqa: E712
+    if solo_publicada:
+        q = q.filter(ParrillaPromocional.publicada == True)  # noqa: E712
+    filas = q.order_by(ParrillaPromocional.prioridad, ParrillaPromocional.producto).all()
+    prod_ids = {f.producto_id for f in filas if f.producto_id}
+    prods = {p.id: p for p in db.query(Producto).filter(Producto.id.in_(prod_ids)).all()} if prod_ids else {}
+    out = []
+    for f in filas:
+        p = prods.get(f.producto_id)
+        out.append({
+            "id": f.id, "producto_id": f.producto_id, "producto": f.producto,
+            "nombre": p.nombre if p else f.producto,
+            "area_terapeutica": p.area_terapeutica if p else None,
+            "descripcion": p.descripcion if p else f.mensaje_clave,
+            "gerente_producto": p.gerente_producto if p else None,
+            "mensaje_clave": f.mensaje_clave,
+            "segmento_target": f.segmento_target or (p.segmento_target if p else None),
+            "prioridad": f.prioridad, "meta_muestras": f.meta_muestras,
+            "publicada": f.publicada,
+            "fecha_publicacion": f.fecha_publicacion.isoformat() if f.fecha_publicacion else None,
+        })
+    return out
+
+
+def parrilla_publicada(db: Session, ciclo_id: int, linea_id: int) -> bool:
+    return db.query(ParrillaPromocional).filter(
+        ParrillaPromocional.ciclo_id == ciclo_id, ParrillaPromocional.linea_id == linea_id,
+        ParrillaPromocional.publicada == True).first() is not None  # noqa: E712
 
 
 def guardar_parrilla(db: Session, ciclo_id: int | None, linea_id: int,
                      items: list[ParrillaItem], usuario_id: int | None) -> int:
+    """Guarda (reemplaza) la parrilla. Queda en BORRADOR (publicada=False): el VM no la
+    ve hasta que el Gerente de Producto la publique."""
     ciclo_id = ciclo_id or ciclo_por_defecto(db)
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
-    # Un mismo producto no puede repetirse en la parrilla de la línea (case-insensitive).
     vistos = set()
     for it in items:
         clave = it.producto.lower()
@@ -57,13 +97,69 @@ def guardar_parrilla(db: Session, ciclo_id: int | None, linea_id: int,
         ParrillaPromocional.linea_id == linea_id).delete(synchronize_session=False)
     for it in items:
         db.add(ParrillaPromocional(
-            ciclo_id=ciclo_id, linea_id=linea_id, producto=it.producto,
-            mensaje_clave=it.mensaje_clave, prioridad=it.prioridad,
-            meta_muestras=it.meta_muestras, activo=True,
+            ciclo_id=ciclo_id, linea_id=linea_id, producto_id=it.producto_id, producto=it.producto,
+            mensaje_clave=it.mensaje_clave, segmento_target=it.segmento_target, prioridad=it.prioridad,
+            meta_muestras=it.meta_muestras, activo=True, publicada=False,
             fecha_creacion=datetime.now(timezone.utc), modificado_por=usuario_id))
     db.commit()
-    logger.info(f"Parrilla guardada ciclo={ciclo_id} linea={linea_id}: {len(items)} productos")
+    logger.info(f"Parrilla guardada (borrador) ciclo={ciclo_id} linea={linea_id}: {len(items)} productos")
     return len(items)
+
+
+def publicar_parrilla(db: Session, ciclo_id: int | None, linea_id: int, usuario_id: int | None) -> int:
+    """Publica la parrilla al equipo: a partir de aquí el VM la recibe (solo lectura)."""
+    ciclo_id = ciclo_id or ciclo_por_defecto(db)
+    if ciclo_id is None:
+        raise ValueError("No hay ciclo activo")
+    filas = db.query(ParrillaPromocional).filter(
+        ParrillaPromocional.ciclo_id == ciclo_id, ParrillaPromocional.linea_id == linea_id).all()
+    if not filas:
+        raise ValueError("No hay parrilla que publicar para esta línea.")
+    ahora = datetime.now(timezone.utc)
+    for f in filas:
+        f.publicada = True
+        f.fecha_publicacion = ahora
+        f.publicada_por = usuario_id
+    db.commit()
+    logger.info(f"Parrilla PUBLICADA ciclo={ciclo_id} linea={linea_id}: {len(filas)} productos")
+    return len(filas)
+
+
+def penetracion_ciclo(db: Session, ciclo_id: int | None, linea_id: int) -> dict:
+    """Penetración por producto en el ciclo: % de médicos alcanzados (sobre el panel de
+    la línea), muestras totales y promedio por visita ejecutada."""
+    ciclo_id = ciclo_id or ciclo_por_defecto(db)
+    # VMs de la línea
+    vm_ids = [r.id for r in db.query(RepresentanteMedico).filter(RepresentanteMedico.linea_id == linea_id).all()]
+    panel = db.query(MedicoVisita).filter(
+        MedicoVisita.vm_id.in_(vm_ids), MedicoVisita.activo == True).count() if vm_ids else 0  # noqa: E712
+    visitas = db.query(VisitaRegistro).filter(
+        VisitaRegistro.ciclo_id == ciclo_id, VisitaRegistro.vm_id.in_(vm_ids),
+        VisitaRegistro.ejecutada == True).count() if vm_ids else 0  # noqa: E712
+    muestras = db.query(MuestraEntregada).filter(
+        MuestraEntregada.ciclo_id == ciclo_id, MuestraEntregada.vm_id.in_(vm_ids)).all() if vm_ids else []
+
+    agg: dict[str, dict] = {}
+    for m in muestras:
+        k = m.producto.lower()
+        d = agg.setdefault(k, {"producto": m.producto, "unidades": 0, "medicos": set()})
+        d["unidades"] += m.cantidad
+        d["medicos"].add(m.medico_id)
+
+    productos = []
+    for f in listar_parrilla(db, ciclo_id, linea_id):
+        k = f["producto"].lower()
+        d = agg.get(k, {"unidades": 0, "medicos": set()})
+        med = len(d["medicos"])
+        productos.append({
+            "producto": f["producto"], "nombre": f.get("nombre"),
+            "segmento_target": f.get("segmento_target"),
+            "medicos": med,
+            "penetracion_pct": round(med / panel * 100, 1) if panel else 0.0,
+            "muestras_total": d["unidades"],
+            "promedio_visita": round(d["unidades"] / visitas, 1) if visitas else 0.0,
+        })
+    return {"ciclo_id": ciclo_id, "panel": panel, "visitas": visitas, "productos": productos}
 
 
 def registrar_muestras(db: Session, vm_id: int, ciclo_id: int | None, medico_id: int,

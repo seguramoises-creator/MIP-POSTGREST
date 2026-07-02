@@ -24,6 +24,8 @@ RequireVisita = Depends(require_roles(
 RequireCierre = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
 # Aprobación de alta/baja de médicos: Gerente de Distrito (acotado a su distrito) + superusuarios.
 RequireAprobador = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO))
+# Parrilla promocional: solo el Gerente de Producto (marca/productividad) + ADMIN.
+RequireGerenteProducto = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_MARCA))
 RequireAnyAuth = Depends(get_current_active_user)
 
 
@@ -374,19 +376,54 @@ def listar_lineas(db: Session = Depends(get_db), current_user=RequireVisita):
 @router.get("/parrilla", response_model=list[dict])
 def obtener_parrilla(linea_id: int | None = None, ciclo_id: int | None = None,
                      db: Session = Depends(get_db), current_user=RequireVisita):
-    """Parrilla del ciclo para una línea. El VM usa su propia línea si no se indica."""
+    """Parrilla del ciclo para una línea. El VM usa su propia línea si no se indica y
+    SOLO ve parrillas publicadas; el Gerente de Producto ve también los borradores."""
     from app.services import visita_parrilla_service
     if linea_id is None:
         vm = _scope_vm(current_user, None)
         linea_id = visita_parrilla_service.linea_de_vm(db, vm) if vm else None
     if linea_id is None:
         raise HTTPException(status_code=400, detail="Indica la línea (linea_id).")
-    return visita_parrilla_service.listar_parrilla(db, ciclo_id, linea_id)
+    solo_pub = _rol(current_user) in ("REPRESENTANTE_MEDICO", "GERENTE_DISTRITO", "CONSULTA")
+    return visita_parrilla_service.listar_parrilla(db, ciclo_id, linea_id, solo_publicada=solo_pub)
+
+
+@router.get("/productos", response_model=list[dict])
+def listar_productos(linea_id: int | None = None, db: Session = Depends(get_db), current_user=RequireVisita):
+    """Catálogo DIM_Producto (para llenar la parrilla)."""
+    from app.services import visita_parrilla_service
+    return visita_parrilla_service.listar_productos(db, linea_id)
+
+
+@router.get("/parrilla/penetracion", response_model=dict)
+def parrilla_penetracion(linea_id: int | None = None, ciclo_id: int | None = None,
+                         db: Session = Depends(get_db), current_user=RequireVisita):
+    """Penetración del ciclo por producto (médicos alcanzados, muestras, promedio/visita)."""
+    from app.services import visita_parrilla_service
+    if linea_id is None:
+        vm = _scope_vm(current_user, None)
+        linea_id = visita_parrilla_service.linea_de_vm(db, vm) if vm else None
+    if linea_id is None:
+        raise HTTPException(status_code=400, detail="Indica la línea (linea_id).")
+    return visita_parrilla_service.penetracion_ciclo(db, ciclo_id, linea_id)
+
+
+@router.post("/parrilla/publicar", response_model=dict)
+def publicar_parrilla(linea_id: int, ciclo_id: int | None = None,
+                      db: Session = Depends(get_db), current_user=RequireGerenteProducto):
+    """Publica la parrilla al equipo (Gerente de Producto). El VM la recibe en solo lectura."""
+    from app.services import visita_parrilla_service
+    try:
+        n = visita_parrilla_service.publicar_parrilla(db, ciclo_id, linea_id, getattr(current_user, "id", None))
+        return {"publicados": n}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/parrilla", response_model=dict, status_code=status.HTTP_201_CREATED)
-def guardar_parrilla(datos: ParrillaGuardar, db: Session = Depends(get_db), current_user=RequireCierre):
-    """Guarda (reemplaza) la parrilla de una línea en el ciclo. Solo gestión."""
+def guardar_parrilla(datos: ParrillaGuardar, db: Session = Depends(get_db), current_user=RequireGerenteProducto):
+    """Guarda (reemplaza) la parrilla de una línea en el ciclo. Solo Gerente de Producto.
+    Queda en borrador hasta publicar."""
     from app.services import visita_parrilla_service
     try:
         n = visita_parrilla_service.guardar_parrilla(

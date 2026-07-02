@@ -1,16 +1,17 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert, MenuItem,
-  CircularProgress, Table, TableHead, TableRow, TableCell, TableBody, IconButton, Divider,
-  LinearProgress, Autocomplete,
+  CircularProgress, Table, TableHead, TableRow, TableCell, TableBody, IconButton, Grid,
+  LinearProgress, Avatar, ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
-import { Add, Delete, Save, Inventory2, Campaign, LocalPharmacy } from '@mui/icons-material';
+import { Add, Delete, Save, Campaign, Edit, Publish, Inventory2, BarChart, Person, SupervisorAccount } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import {
-  listarLineasVisita, obtenerParrilla, guardarParrilla, listarMedicos,
-  registrarMuestras, muestrasResumen,
-  type Catalogo, type ParrillaItem, type MuestrasResumen, type MedicoVisita,
+  listarLineasVisita, obtenerParrilla, guardarParrilla, publicarParrilla, parrillaPenetracion, listarProductosDim,
+  type Catalogo, type ParrillaItem, type PenetracionCiclo, type ProductoDim,
 } from '../../services/visita.service';
+
+const DOT = ['#E8833A', '#1E52C7', '#0F9B8E', '#7A5AF8', '#5A6472', '#C0392B', '#2AA76A'];
 
 function msgError(e: unknown, fallback: string): string {
   const d = (e as { response?: { data?: { detalle?: { msg?: string }[]; detail?: string } } })?.response?.data;
@@ -19,267 +20,290 @@ function msgError(e: unknown, fallback: string): string {
   return fallback;
 }
 
-const filaVacia = (): ParrillaItem => ({ producto: '', mensaje_clave: '', prioridad: 1, meta_muestras: 0 });
-
 export default function ParrillaVisita() {
   const rol = useAuthStore((s) => s.rol);
-  const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD';
-  const esVM = rol === 'REPRESENTANTE_MEDICO';
+  const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD' || rol === 'GERENTE_MARCA';
 
   const [lineas, setLineas] = useState<Catalogo[]>([]);
   const [lineaId, setLineaId] = useState<number | ''>('');
   const [parrilla, setParrilla] = useState<ParrillaItem[]>([]);
-  const [resumen, setResumen] = useState<MuestrasResumen | null>(null);
-  const [medicos, setMedicos] = useState<MedicoVisita[]>([]);
+  const [pen, setPen] = useState<PenetracionCiclo | null>(null);
+  const [productosDim, setProductosDim] = useState<ProductoDim[]>([]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
-  // Registro de muestras (solo VM)
-  const [medicoSel, setMedicoSel] = useState<number | ''>('');
-  const [entregas, setEntregas] = useState<{ producto: string; cantidad: number }[]>([{ producto: '', cantidad: 1 }]);
+  const [editando, setEditando] = useState(false);
+  const [draft, setDraft] = useState<ParrillaItem[]>([]);
+  const [vistaVM, setVistaVM] = useState(false);   // el gestor previsualiza como VM (solo lectura)
 
-  const cargarParrilla = useCallback((lid?: number) => {
-    obtenerParrilla(lid).then(setParrilla).catch(() => setParrilla([]));
-  }, []);
+  const soloLectura = !esGestor || vistaVM;
+  const lineaParam = esGestor ? (lineaId || undefined) : undefined;
+
+  const cargarParrilla = useCallback(() => {
+    obtenerParrilla(lineaParam).then(setParrilla).catch(() => setParrilla([]));
+    parrillaPenetracion(lineaParam).then(setPen).catch(() => setPen(null));
+  }, [lineaParam]);
 
   useEffect(() => {
-    const tareas: Promise<unknown>[] = [muestrasResumen().then(setResumen).catch(() => setResumen(null))];
+    const tareas: Promise<unknown>[] = [];
     if (esGestor) {
-      tareas.push(listarLineasVisita().then((ls) => {
-        setLineas(ls);
-        if (ls.length) { setLineaId(ls[0].id); cargarParrilla(ls[0].id); }
-      }).catch(() => {}));
-    } else {
-      tareas.push(Promise.resolve(cargarParrilla()));           // VM: su propia línea
-      if (esVM) tareas.push(listarMedicos().then(setMedicos).catch(() => {}));
+      tareas.push(listarLineasVisita().then((ls) => { setLineas(ls); if (ls.length && !lineaId) setLineaId(ls[0].id); }).catch(() => {}));
     }
     Promise.all(tareas).finally(() => setCargando(false));
-  }, [esGestor, esVM, cargarParrilla]);
+  }, [esGestor]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const onLinea = (v: number) => { setLineaId(v); cargarParrilla(v); };
+  useEffect(() => {
+    setEditando(false);
+    if (esGestor && lineaId) listarProductosDim(Number(lineaId)).then(setProductosDim).catch(() => {});
+    if (!esGestor || lineaId) cargarParrilla();
+  }, [esGestor, lineaId, cargarParrilla]);
 
-  // ── Edición de parrilla (gestor) ──
-  const setCampo = (i: number, campo: keyof ParrillaItem, valor: string | number) =>
-    setParrilla((p) => p.map((it, idx) => idx === i ? { ...it, [campo]: valor } : it));
-  const addFila = () => setParrilla((p) => [...p, filaVacia()]);
-  const delFila = (i: number) => setParrilla((p) => p.filter((_, idx) => idx !== i));
+  const publicada = parrilla.length > 0 && parrilla.every((p) => p.publicada);
+
+  // ── Edición ──
+  const filaVacia = (): ParrillaItem => ({ producto: '', prioridad: draft.length + 1, meta_muestras: 1 });
+  const iniciarEdicion = () => { setDraft(parrilla.length ? parrilla.map((p) => ({ ...p })) : [filaVacia()]); setEditando(true); setMsg(null); };
+  const setFila = (i: number, patch: Partial<ParrillaItem>) => setDraft((d) => d.map((x, idx) => idx === i ? { ...x, ...patch } : x));
+  const elegirProducto = (i: number, codigo: string) => {
+    const p = productosDim.find((x) => x.codigo === codigo);
+    if (!p) { setFila(i, { producto: codigo, producto_id: null }); return; }
+    setFila(i, {
+      producto: p.codigo, producto_id: p.id, nombre: p.nombre, area_terapeutica: p.area_terapeutica,
+      descripcion: p.descripcion, segmento_target: p.segmento_target, meta_muestras: p.meta_muestras_visita,
+      gerente_producto: p.gerente_producto,
+    });
+  };
 
   async function guardar() {
-    if (!lineaId) { setMsg({ tipo: 'error', texto: 'Selecciona la línea.' }); return; }
-    const items = parrilla.filter((p) => p.producto.trim());
+    if (!lineaId) return;
+    const items = draft.filter((d) => d.producto.trim());
     setGuardando(true); setMsg(null);
     try {
-      const r = await guardarParrilla(Number(lineaId), items);
-      setMsg({ tipo: 'success', texto: `Parrilla guardada (${r.guardados} productos).` });
-      cargarParrilla(Number(lineaId));
+      await guardarParrilla(Number(lineaId), items);
+      setMsg({ tipo: 'success', texto: 'Parrilla guardada como borrador. Publícala para que el equipo la reciba.' });
+      setEditando(false); cargarParrilla();
     } catch (e) {
       setMsg({ tipo: 'error', texto: msgError(e, 'No se pudo guardar la parrilla.') });
     } finally { setGuardando(false); }
   }
 
-  // ── Registro de muestras (VM) ──
-  const productosParrilla = parrilla.map((p) => p.producto);
-  const setEntrega = (i: number, campo: 'producto' | 'cantidad', v: string | number) =>
-    setEntregas((e) => e.map((it, idx) => idx === i ? { ...it, [campo]: v } : it));
-  const addEntrega = () => setEntregas((e) => [...e, { producto: '', cantidad: 1 }]);
-  const delEntrega = (i: number) => setEntregas((e) => e.filter((_, idx) => idx !== i));
-
-  async function guardarMuestras() {
-    if (!medicoSel) { setMsg({ tipo: 'error', texto: 'Selecciona el médico.' }); return; }
-    const items = entregas.filter((e) => e.producto.trim() && e.cantidad > 0)
-                          .map((e) => ({ producto: e.producto.trim(), cantidad: Number(e.cantidad) }));
-    if (!items.length) { setMsg({ tipo: 'error', texto: 'Agrega al menos un producto.' }); return; }
+  async function publicar() {
+    if (!lineaId) return;
     setGuardando(true); setMsg(null);
     try {
-      const r = await registrarMuestras(Number(medicoSel), items);
-      setMsg({ tipo: 'success', texto: `${r.registradas} muestra(s) registrada(s).` });
-      setMedicoSel(''); setEntregas([{ producto: '', cantidad: 1 }]);
-      muestrasResumen().then(setResumen).catch(() => {});
+      const r = await publicarParrilla(Number(lineaId));
+      setMsg({ tipo: 'success', texto: `Parrilla publicada al equipo (${r.publicados} productos). Los visitadores ya la reciben.` });
+      cargarParrilla();
     } catch (e) {
-      setMsg({ tipo: 'error', texto: msgError(e, 'No se pudieron registrar las muestras.') });
+      setMsg({ tipo: 'error', texto: msgError(e, 'No se pudo publicar la parrilla.') });
     } finally { setGuardando(false); }
   }
 
   if (cargando) return <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /></Box>;
 
+  const dot = (i: number) => (
+    <Avatar sx={{ width: 26, height: 26, fontSize: 13, fontWeight: 700, bgcolor: DOT[i % DOT.length] }}>{i + 1}</Avatar>
+  );
+
   return (
     <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-        <Campaign color="primary" />
-        <Typography variant="h5" fontWeight={700}>Parrilla Promocional & Muestras</Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={1} sx={{ mb: 1 }}>
+        <Box>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Campaign color="primary" />
+            <Typography variant="h5" fontWeight={700}>Parrilla Promocional</Typography>
+          </Stack>
+          <Typography variant="body2" color="text.secondary">
+            Configurada por Gerente de Producto · Se despliega automáticamente al VM · Solo lectura para el visitador
+          </Typography>
+        </Box>
+        {esGestor && (
+          <ToggleButtonGroup exclusive size="small" value={vistaVM ? 'vm' : 'gerente'} onChange={(_, v) => v && setVistaVM(v === 'vm')}>
+            <ToggleButton value="gerente"><SupervisorAccount fontSize="small" sx={{ mr: 0.5 }} /> Gerente</ToggleButton>
+            <ToggleButton value="vm"><Person fontSize="small" sx={{ mr: 0.5 }} /> Vista VM</ToggleButton>
+          </ToggleButtonGroup>
+        )}
       </Stack>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Productos a promover en el ciclo y muestras entregadas frente a la meta.
-      </Typography>
+
+      {esGestor && !vistaVM && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <b>Solo el Gerente de Producto puede modificar la parrilla.</b> Una vez publicada, el visitador médico la recibe automáticamente y no puede editarla.
+        </Alert>
+      )}
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
 
-      {/* Parrilla */}
+      {esGestor && (
+        <Stack direction="row" spacing={1.5} sx={{ mb: 2 }} alignItems="center">
+          <TextField select size="small" label="Línea" value={lineaId} sx={{ minWidth: 220 }}
+                     onChange={(e) => setLineaId(Number(e.target.value))}>
+            {lineas.map((l) => <MenuItem key={l.id} value={l.id}>{l.nombre}</MenuItem>)}
+          </TextField>
+        </Stack>
+      )}
+
+      {/* KPIs */}
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid item xs={12} sm={6}>
+          <Card variant="outlined"><CardContent sx={{ py: 1.75 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={600}>CICLO ACTIVO</Typography>
+            <Typography variant="h5" fontWeight={700} color="primary.main">Ciclo actual</Typography>
+            <Typography variant="caption" color={publicada ? 'success.main' : 'warning.main'}>
+              {publicada ? 'Parrilla publicada ✓' : 'Parrilla en borrador'}
+            </Typography>
+          </CardContent></Card>
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <Card variant="outlined"><CardContent sx={{ py: 1.75 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={600}>PRODUCTOS EN PARRILLA</Typography>
+            <Typography variant="h5" fontWeight={700}>{parrilla.length}</Typography>
+            <Typography variant="caption" color="text.secondary">en orden de importancia</Typography>
+          </CardContent></Card>
+        </Grid>
+      </Grid>
+
+      {/* Parrilla del ciclo */}
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }} flexWrap="wrap">
             <Inventory2 fontSize="small" color="action" />
-            <Typography variant="subtitle1" fontWeight={700}>Parrilla del ciclo</Typography>
+            <Typography variant="subtitle1" fontWeight={700}>Parrilla del Ciclo</Typography>
             <Box sx={{ flex: 1 }} />
-            {esGestor && (
-              <TextField select size="small" label="Línea" value={lineaId} sx={{ minWidth: 200 }}
-                         onChange={(e) => onLinea(Number(e.target.value))}>
-                {lineas.map((l) => <MenuItem key={l.id} value={l.id}>{l.nombre}</MenuItem>)}
-              </TextField>
+            {!soloLectura && !editando && (
+              <>
+                <Button size="small" startIcon={<Edit />} onClick={iniciarEdicion}>Editar</Button>
+                <Button size="small" variant="contained" startIcon={<Publish />} disabled={guardando || parrilla.length === 0}
+                        onClick={publicar}>Publicar al equipo</Button>
+              </>
             )}
           </Stack>
 
-          <Box sx={{ overflowX: 'auto' }}>
-            <Table size="small">
-              <TableHead><TableRow>
-                <TableCell width={70} align="center">Prior.</TableCell>
-                <TableCell>Producto</TableCell>
-                <TableCell>Mensaje clave</TableCell>
-                <TableCell width={110} align="center">Meta muestras</TableCell>
-                {esGestor && <TableCell width={48} />}
-              </TableRow></TableHead>
-              <TableBody>
-                {parrilla.length === 0 && (
-                  <TableRow><TableCell colSpan={esGestor ? 5 : 4}>
-                    <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-                      {esGestor ? 'Sin productos. Agrega filas y guarda.' : 'La parrilla de tu línea aún no está configurada.'}
-                    </Typography>
-                  </TableCell></TableRow>
-                )}
-                {parrilla.map((it, i) => (
-                  <TableRow key={it.id ?? `n${i}`}>
-                    <TableCell align="center">
-                      {esGestor ? (
-                        <TextField size="small" type="number" value={it.prioridad} sx={{ width: 60 }}
-                                   inputProps={{ min: 1, max: 20 }}
-                                   onChange={(e) => setCampo(i, 'prioridad', Number(e.target.value))} />
-                      ) : <Chip size="small" label={it.prioridad} />}
-                    </TableCell>
-                    <TableCell>
-                      {esGestor ? (
-                        <TextField size="small" fullWidth value={it.producto} placeholder="Producto"
-                                   onChange={(e) => setCampo(i, 'producto', e.target.value)} />
-                      ) : <Typography variant="body2" fontWeight={600}>{it.producto}</Typography>}
-                    </TableCell>
-                    <TableCell>
-                      {esGestor ? (
-                        <TextField size="small" fullWidth value={it.mensaje_clave ?? ''} placeholder="Mensaje clave"
-                                   onChange={(e) => setCampo(i, 'mensaje_clave', e.target.value)} />
-                      ) : <Typography variant="body2" color="text.secondary">{it.mensaje_clave || '—'}</Typography>}
-                    </TableCell>
-                    <TableCell align="center">
-                      {esGestor ? (
-                        <TextField size="small" type="number" value={it.meta_muestras} sx={{ width: 90 }}
-                                   inputProps={{ min: 0 }}
-                                   onChange={(e) => setCampo(i, 'meta_muestras', Number(e.target.value))} />
-                      ) : (it.meta_muestras || '—')}
-                    </TableCell>
-                    {esGestor && (
-                      <TableCell><IconButton size="small" color="error" onClick={() => delFila(i)}><Delete fontSize="small" /></IconButton></TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Box>
-
-          {esGestor && (
-            <Stack direction="row" spacing={1.5} sx={{ mt: 1.5 }}>
-              <Button size="small" startIcon={<Add />} onClick={addFila}>Agregar producto</Button>
-              <Button size="small" variant="contained" startIcon={<Save />} disabled={guardando} onClick={guardar}>
-                {guardando ? 'Guardando…' : 'Guardar parrilla'}
-              </Button>
-            </Stack>
+          {editando ? (
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small">
+                <TableHead><TableRow>
+                  <TableCell width={70}>Prior.</TableCell><TableCell>Producto</TableCell>
+                  <TableCell>Mensaje clave</TableCell><TableCell>Segmento target</TableCell>
+                  <TableCell width={110} align="center">Meta/visita</TableCell><TableCell width={48} />
+                </TableRow></TableHead>
+                <TableBody>
+                  {draft.map((it, i) => (
+                    <TableRow key={i}>
+                      <TableCell><TextField size="small" type="number" value={it.prioridad} sx={{ width: 60 }}
+                                            onChange={(e) => setFila(i, { prioridad: Number(e.target.value) })} /></TableCell>
+                      <TableCell>
+                        <TextField select size="small" fullWidth value={it.producto}
+                                   onChange={(e) => elegirProducto(i, e.target.value)}>
+                          <MenuItem value=""><em>— Producto —</em></MenuItem>
+                          {productosDim.map((p) => <MenuItem key={p.id} value={p.codigo}>{p.codigo} · {p.area_terapeutica}</MenuItem>)}
+                        </TextField>
+                      </TableCell>
+                      <TableCell><TextField size="small" fullWidth value={it.mensaje_clave ?? ''}
+                                            onChange={(e) => setFila(i, { mensaje_clave: e.target.value })} /></TableCell>
+                      <TableCell><TextField size="small" fullWidth value={it.segmento_target ?? ''}
+                                            onChange={(e) => setFila(i, { segmento_target: e.target.value })} /></TableCell>
+                      <TableCell align="center"><TextField size="small" type="number" value={it.meta_muestras} sx={{ width: 80 }}
+                                            inputProps={{ min: 0 }} onChange={(e) => setFila(i, { meta_muestras: Number(e.target.value) })} /></TableCell>
+                      <TableCell><IconButton size="small" color="error" onClick={() => setDraft((d) => d.filter((_, idx) => idx !== i))}><Delete fontSize="small" /></IconButton></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Stack direction="row" spacing={1.5} sx={{ mt: 1.5 }}>
+                <Button size="small" startIcon={<Add />} onClick={() => setDraft((d) => [...d, filaVacia()])}>Agregar producto</Button>
+                <Button size="small" variant="contained" startIcon={<Save />} disabled={guardando} onClick={guardar}>
+                  {guardando ? 'Guardando…' : 'Guardar borrador'}
+                </Button>
+                <Button size="small" onClick={() => setEditando(false)}>Cancelar</Button>
+              </Stack>
+            </Box>
+          ) : parrilla.length === 0 ? (
+            <Alert severity="info">
+              {soloLectura ? 'La parrilla del ciclo aún no ha sido publicada por el Gerente de Producto.'
+                           : 'Sin productos. Usa "Editar" para armar la parrilla y luego publícala.'}
+            </Alert>
+          ) : (
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small">
+                <TableHead><TableRow>
+                  <TableCell width={40}>#</TableCell><TableCell>Producto</TableCell>
+                  <TableCell align="center">Meta muestras/visita</TableCell>
+                  <TableCell>Segmento target</TableCell><TableCell align="center">Estado</TableCell>
+                </TableRow></TableHead>
+                <TableBody>
+                  {parrilla.map((p, i) => (
+                    <TableRow key={p.id ?? i} hover>
+                      <TableCell>{dot(i)}</TableCell>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={700}>{p.nombre || p.producto}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {[p.area_terapeutica, p.descripcion || p.mensaje_clave].filter(Boolean).join(' · ')}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="center">
+                        <Typography variant="body2" fontWeight={700} color="primary.main">{p.meta_muestras}</Typography>
+                        <Typography variant="caption" color="text.secondary">muestras/visita</Typography>
+                      </TableCell>
+                      <TableCell><Typography variant="body2" color="text.secondary">{p.segmento_target || '—'}</Typography></TableCell>
+                      <TableCell align="center">
+                        <Chip size="small" color={p.publicada ? 'success' : 'warning'} variant="outlined"
+                              label={p.publicada ? '✓ Activo' : 'Borrador'} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
           )}
         </CardContent>
       </Card>
 
-      {/* Registro de muestras (solo VM) */}
-      {esVM && (
-        <Card variant="outlined" sx={{ mb: 3 }}>
-          <CardContent>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
-              <LocalPharmacy fontSize="small" color="action" />
-              <Typography variant="subtitle1" fontWeight={700}>Registrar muestras entregadas</Typography>
-            </Stack>
-            <Stack spacing={2}>
-              <TextField select label="Médico" value={medicoSel} sx={{ maxWidth: 420 }} required
-                         onChange={(e) => setMedicoSel(e.target.value === '' ? '' : Number(e.target.value))}>
-                {medicos.length === 0 && <MenuItem value="" disabled>No hay médicos en tu panel</MenuItem>}
-                {medicos.map((m) => <MenuItem key={m.id} value={m.id}>{m.nombre_completo} · Cat. {m.categoria}</MenuItem>)}
-              </TextField>
-
-              {entregas.map((e, i) => (
-                <Stack key={i} direction="row" spacing={1.5} alignItems="center">
-                  <Autocomplete freeSolo options={productosParrilla} value={e.producto} sx={{ flex: 1, maxWidth: 320 }}
-                                onInputChange={(_, v) => setEntrega(i, 'producto', v)}
-                                renderInput={(p) => <TextField {...p} size="small" label="Producto" placeholder="De la parrilla o libre" />} />
-                  <TextField size="small" type="number" label="Cantidad" value={e.cantidad} sx={{ width: 110 }}
-                             inputProps={{ min: 1 }} onChange={(ev) => setEntrega(i, 'cantidad', Number(ev.target.value))} />
-                  <IconButton size="small" color="error" disabled={entregas.length === 1} onClick={() => delEntrega(i)}>
-                    <Delete fontSize="small" />
-                  </IconButton>
-                </Stack>
-              ))}
-              <Stack direction="row" spacing={1.5}>
-                <Button size="small" startIcon={<Add />} onClick={addEntrega}>Otro producto</Button>
-                <Button size="small" variant="contained" startIcon={<Save />} disabled={guardando} onClick={guardarMuestras}>
-                  {guardando ? 'Guardando…' : 'Registrar muestras'}
-                </Button>
-              </Stack>
-            </Stack>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Resumen de muestras */}
-      <Divider sx={{ my: 2 }} />
-      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-        <Inventory2 color="primary" />
-        <Typography variant="h6" fontWeight={700}>Muestras entregadas</Typography>
-        {resumen && <Chip size="small" label={`${resumen.total_entregadas} uds`} color="primary" />}
-      </Stack>
-      {!resumen || resumen.productos.length === 0 ? (
-        <Alert severity="info">Aún no hay muestras registradas ni metas de parrilla.</Alert>
-      ) : (
-        <Card variant="outlined">
-          <Box sx={{ overflowX: 'auto' }}>
-            <Table size="small">
-              <TableHead><TableRow>
-                <TableCell>Producto</TableCell>
-                <TableCell align="center">Entregadas</TableCell>
-                <TableCell align="center">Médicos</TableCell>
-                <TableCell align="center">Meta</TableCell>
-                <TableCell width={180}>Cobertura vs meta</TableCell>
-              </TableRow></TableHead>
-              <TableBody>
-                {resumen.productos.map((p) => (
-                  <TableRow key={p.producto} hover>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight={600}>{p.producto}</Typography>
-                      {!p.en_parrilla && <Chip size="small" variant="outlined" color="warning" label="fuera de parrilla" sx={{ mt: 0.3 }} />}
-                    </TableCell>
-                    <TableCell align="center">{p.entregadas}</TableCell>
-                    <TableCell align="center">{p.medicos_alcanzados}</TableCell>
-                    <TableCell align="center">{p.meta || '—'}</TableCell>
-                    <TableCell>
-                      {p.cobertura_meta_pct === null ? (
-                        <Typography variant="caption" color="text.secondary">sin meta</Typography>
-                      ) : (
-                        <Stack spacing={0.3}>
-                          <LinearProgress variant="determinate" value={p.cobertura_meta_pct}
-                                          color={p.cobertura_meta_pct >= 100 ? 'success' : p.cobertura_meta_pct >= 60 ? 'primary' : 'warning'} />
-                          <Typography variant="caption" color="text.secondary">{p.cobertura_meta_pct}%</Typography>
-                        </Stack>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Box>
-        </Card>
-      )}
+      {/* Penetración del ciclo */}
+      <Card variant="outlined">
+        <CardContent>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+            <BarChart fontSize="small" color="action" />
+            <Typography variant="subtitle1" fontWeight={700}>Penetración del Ciclo</Typography>
+            {pen && <Chip size="small" variant="outlined" label={`Panel ${pen.panel} · ${pen.visitas} visitas`} />}
+          </Stack>
+          {!pen || pen.productos.length === 0 ? (
+            <Alert severity="info">Aún no hay datos de penetración para esta línea.</Alert>
+          ) : (
+            <Box sx={{ overflowX: 'auto' }}>
+              <Table size="small">
+                <TableHead><TableRow>
+                  <TableCell width={40}>#</TableCell><TableCell>Producto</TableCell>
+                  <TableCell width={220}>Penetración médicos</TableCell>
+                  <TableCell align="center">Muestras total</TableCell><TableCell align="center">Promedio/visita</TableCell>
+                </TableRow></TableHead>
+                <TableBody>
+                  {pen.productos.map((p, i) => {
+                    const color = p.penetracion_pct >= 60 ? 'success' : p.penetracion_pct >= 40 ? 'warning' : 'error';
+                    return (
+                      <TableRow key={p.producto} hover>
+                        <TableCell>{dot(i)}</TableCell>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={700}>{p.nombre || p.producto}</Typography>
+                          <Typography variant="caption" color="text.secondary">{p.segmento_target || ''}</Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Stack direction="row" alignItems="center" spacing={1}>
+                            <Typography variant="caption" fontWeight={700} sx={{ minWidth: 34 }}>{p.penetracion_pct}%</Typography>
+                            <LinearProgress variant="determinate" value={Math.min(100, p.penetracion_pct)} color={color} sx={{ flex: 1, height: 6, borderRadius: 3 }} />
+                            <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>{p.medicos} méd.</Typography>
+                          </Stack>
+                        </TableCell>
+                        <TableCell align="center"><Typography variant="body2" fontWeight={700}>{p.muestras_total}</Typography></TableCell>
+                        <TableCell align="center"><Typography variant="body2" fontWeight={700} color="primary.main">{p.promedio_visita}</Typography></TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </Box>
+          )}
+        </CardContent>
+      </Card>
     </Box>
   );
 }

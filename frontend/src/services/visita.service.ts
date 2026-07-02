@@ -221,10 +221,30 @@ export const cerrarCiclo = () => api.post<CierrePreview>('/visita/cierre').then(
 export const historialCierres = () => api.get<CierreHist[]>('/visita/cierre/historial').then(r => r.data);
 
 // ── Parrilla promocional / Muestras ───────────────────────────────────
-export interface ParrillaItem {
-  id?: number; producto: string; mensaje_clave?: string | null;
-  prioridad: number; meta_muestras: number;
+export interface ProductoDim {
+  id: number; codigo: string; nombre: string; area_terapeutica: string | null;
+  descripcion: string | null; segmento_target: string | null;
+  meta_muestras_visita: number; gerente_producto: string | null; linea_id: number | null;
 }
+export interface ParrillaItem {
+  id?: number; producto_id?: number | null; producto: string; nombre?: string;
+  area_terapeutica?: string | null; descripcion?: string | null; gerente_producto?: string | null;
+  mensaje_clave?: string | null; segmento_target?: string | null;
+  prioridad: number; meta_muestras: number; publicada?: boolean; fecha_publicacion?: string | null;
+}
+export interface PenetracionProducto {
+  producto: string; nombre: string | null; segmento_target: string | null;
+  medicos: number; penetracion_pct: number; muestras_total: number; promedio_visita: number;
+}
+export interface PenetracionCiclo {
+  ciclo_id: number; panel: number; visitas: number; productos: PenetracionProducto[];
+}
+export const listarProductosDim = (lineaId?: number) =>
+  api.get<ProductoDim[]>('/visita/productos', { params: lineaId ? { linea_id: lineaId } : {} }).then(r => r.data);
+export const publicarParrilla = (linea_id: number) =>
+  api.post<{ publicados: number }>('/visita/parrilla/publicar', null, { params: { linea_id } }).then(r => r.data);
+export const parrillaPenetracion = (lineaId?: number) =>
+  api.get<PenetracionCiclo>('/visita/parrilla/penetracion', { params: lineaId ? { linea_id: lineaId } : {} }).then(r => r.data);
 export interface MuestraResumenProducto {
   producto: string; mensaje_clave: string | null; entregadas: number;
   medicos_alcanzados: number; meta: number; cobertura_meta_pct: number | null; en_parrilla: boolean;
