@@ -254,14 +254,19 @@ function CatalogoTab({
     retry: 1,
   });
 
+  // Los campos opcionales vacíos ("") rompen la validación de Pydantic (int/date).
+  // Se omiten del payload → el backend los toma como no enviados (None).
+  const limpiar = (f: Record<string, any>) =>
+    Object.fromEntries(Object.entries(f).filter(([, v]) => v !== '' && v !== null && v !== undefined));
+
   const createMutation = useMutation({
-    mutationFn: () => api.post(`/admin/${endpoint}`, form),
+    mutationFn: () => api.post(`/admin/${endpoint}`, limpiar(form)),
     onSuccess: () => { setOpenNew(false); setForm({}); setMsg('Creado correctamente'); qc.invalidateQueries({ queryKey: [endpoint] }); },
     onError: (e: any) => setMsg(`Error: ${e.response?.data?.detail || e.message}`),
   });
 
   const updateMutation = useMutation({
-    mutationFn: () => api.put(`/admin/${endpoint}/${editItem?.id}`, form),
+    mutationFn: () => api.put(`/admin/${endpoint}/${editItem?.id}`, limpiar(form)),
     onSuccess: () => { setOpenEdit(false); setForm({}); setEditItem(null); setMsg('Actualizado'); qc.invalidateQueries({ queryKey: [endpoint] }); },
     onError: (e: any) => setMsg(`Error: ${e.response?.data?.detail || e.message}`),
   });
