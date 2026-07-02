@@ -4,11 +4,11 @@ import {
   MenuItem, ToggleButton, ToggleButtonGroup, CircularProgress, Avatar, Checkbox,
   Select, FormControl, Divider,
 } from '@mui/material';
-import { CheckCircle, Save, EventBusy, AccessAlarm, Medication, ChatBubbleOutline, Assignment, FiberManualRecord } from '@mui/icons-material';
+import { CheckCircle, Save, EventBusy, AccessAlarm, Medication, ChatBubbleOutline, Assignment, FiberManualRecord, SupervisorAccount } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import {
-  agendaHoy, listarCausas, misVisitasHoy, registrarVisita, registrarNoVisita, listarVMs, obtenerParrilla,
-  type AgendaMedico, type VisitaHoy, type Catalogo, type ParrillaItem, type ProductoDetalle,
+  agendaHoy, listarCausas, misVisitasHoy, registrarVisita, registrarNoVisita, listarVMs, obtenerParrilla, miGerente,
+  type AgendaMedico, type VisitaHoy, type Catalogo, type ParrillaItem, type ProductoDetalle, type MiGerente,
 } from '../../services/visita.service';
 
 const CAT_AV: Record<string, { bg: string; fg: string }> = {
@@ -55,6 +55,7 @@ export default function RegistrarVisita() {
   const [productos, setProductos] = useState<ParrillaItem[]>([]);
   const [detallados, setDetallados] = useState<Record<string, number>>({});   // producto → mención (0 = no marcado)
   const [guardando, setGuardando] = useState(false);
+  const [gd, setGd] = useState<MiGerente | null>(null);
 
   const vmParam = esVM ? undefined : (vmId || undefined);
   const listo = esVM || !!vmId;
@@ -78,6 +79,10 @@ export default function RegistrarVisita() {
   }, [esVM]);
 
   useEffect(() => { setSel(null); cargarAgenda(); cargarRegistradas(); }, [cargarAgenda, cargarRegistradas]);
+  useEffect(() => {
+    if (listo) miGerente(vmParam).then(setGd).catch(() => setGd(null));
+    else setGd(null);
+  }, [listo, vmParam]);
 
   // Al seleccionar un médico: precarga tipo, hora actual y la parrilla de productos.
   function seleccionar(m: AgendaMedico) {
@@ -151,7 +156,13 @@ export default function RegistrarVisita() {
 
   return (
     <Box sx={{ maxWidth: 620, mx: 'auto', p: { xs: 1.5, sm: 3 } }}>
-      <Typography variant="h5" fontWeight={700} gutterBottom>Registrar Visita</Typography>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1} sx={{ mb: 1 }}>
+        <Typography variant="h5" fontWeight={700}>Registrar Visita</Typography>
+        {gd?.gerente && (
+          <Chip color="primary" variant="outlined" icon={<SupervisorAccount />}
+                label={`Gerente de Distrito: ${gd.gerente}${gd.linea ? ` · ${gd.linea}` : ''}`} sx={{ fontWeight: 600 }} />
+        )}
+      </Stack>
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
 
       {!esVM && (

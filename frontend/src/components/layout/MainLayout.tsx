@@ -1,20 +1,28 @@
 import { Outlet, useNavigate } from 'react-router-dom';
 import {
   Box, AppBar, Toolbar, Typography, IconButton,
-  Tooltip, Avatar, Menu, MenuItem, Divider,
+  Tooltip, Avatar, Menu, MenuItem, Divider, Chip,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Alert, Stack,
 } from '@mui/material';
-import { Logout, AccountCircle, LockReset } from '@mui/icons-material';
-import { useState } from 'react';
+import { Logout, AccountCircle, LockReset, SupervisorAccount } from '@mui/icons-material';
+import { useState, useEffect } from 'react';
 import Sidebar, { DRAWER_WIDTH } from './Sidebar';
 import { useAuthStore } from '../../store/auth.store';
 import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
+import { miGerente, type MiGerente } from '../../services/visita.service';
 
 export default function MainLayout() {
   const navigate = useNavigate();
-  const { nombreCompleto, accessToken, logout } = useAuthStore();
+  const { nombreCompleto, accessToken, rol, logout } = useAuthStore();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [gd, setGd] = useState<MiGerente | null>(null);
+
+  // El representante ve su Gerente de Distrito de la línea arriba a la derecha.
+  useEffect(() => {
+    if (rol === 'REPRESENTANTE_MEDICO') miGerente().then(setGd).catch(() => setGd(null));
+    else setGd(null);
+  }, [rol]);
 
   const [pwOpen, setPwOpen] = useState(false);
   const [pwActual, setPwActual] = useState('');
@@ -62,6 +70,18 @@ export default function MainLayout() {
               Sistema Corporativo de Gestión Comercial
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              {gd?.gerente && (
+                <Tooltip title={`Gerente de Distrito${gd.linea ? ` · Línea ${gd.linea}` : ''}`}>
+                  <Chip
+                    size="small"
+                    color="primary"
+                    variant="outlined"
+                    icon={<SupervisorAccount />}
+                    label={`Gerente de Distrito: ${gd.gerente}`}
+                    sx={{ fontWeight: 600 }}
+                  />
+                </Tooltip>
+              )}
               {nombreCompleto && (
                 <Typography
                   variant="body2"

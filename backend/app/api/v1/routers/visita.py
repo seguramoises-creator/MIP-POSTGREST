@@ -50,6 +50,29 @@ def listar_especialidades(db: Session = Depends(get_db), current_user=RequireVis
             .order_by(Especialidad.nombre).all()]
 
 
+@router.get("/mi-gerente", response_model=dict)
+def mi_gerente(vm_id: int | None = None, db: Session = Depends(get_db), current_user=RequireAnyAuth):
+    """Gerente de Distrito de la línea del visitador. Para un REPRESENTANTE_MEDICO
+    se resuelve por su propio rm_id; ADMIN/gerentes pueden pasar ?vm_id=."""
+    from app.models.dimensiones import RepresentanteMedico, Gerente, Linea
+    rid = vm_id
+    if rid is None and _rol(current_user) == "REPRESENTANTE_MEDICO":
+        rid = getattr(current_user, "rm_id", None)
+    if not rid:
+        return {"gerente": None, "linea": None, "vm": None}
+    rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == rid).first()
+    if not rm:
+        return {"gerente": None, "linea": None, "vm": None}
+    g = db.query(Gerente).filter(Gerente.id == rm.gerente_id).first() if rm.gerente_id else None
+    linea = db.query(Linea).filter(Linea.id == rm.linea_id).first() if rm.linea_id else None
+    return {
+        "gerente": g.nombre if g else None,
+        "gerente_tipo": getattr(g, "tipo", None) if g else None,
+        "linea": linea.nombre if linea else None,
+        "vm": rm.nombre,
+    }
+
+
 @router.get("/vms", response_model=list[dict])
 def listar_vms(db: Session = Depends(get_db), current_user=RequireVisita):
     """Visitadores médicos (DIM_RM) — para que ADMIN/GERENTE elijan el panel a ver."""

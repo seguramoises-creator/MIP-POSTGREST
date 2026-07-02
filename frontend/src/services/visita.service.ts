@@ -114,6 +114,10 @@ export const listarEspecialidades = () =>
 export const listarVMs = () =>
   api.get<Catalogo[]>('/visita/vms').then(r => r.data);
 
+export interface MiGerente { gerente: string | null; gerente_tipo: string | null; linea: string | null; vm: string | null; }
+export const miGerente = (vmId?: number) =>
+  api.get<MiGerente>('/visita/mi-gerente', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+
 // ── Cobertura ─────────────────────────────────────────────────────────
 export interface CatCobertura { total: number; visitados: number; completos: number; }
 export interface CoberturaResumen {
