@@ -43,11 +43,18 @@ def _mapa_visitas(db: Session, ciclo_id: int, vm_id: int | None):
 
 
 def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None) -> dict:
-    """Calcula panel, visitados, completos, sin visitar y desglose por categoría."""
-    mq = db.query(MedicoVisita).filter(MedicoVisita.activo == True)  # noqa: E712
+    """Calcula panel, visitados, completos, sin visitar y desglose por categoría.
+
+    Solo incluye médicos VIGENTES para el ciclo: excluye altas pendientes/rechazadas
+    y respeta el ciclo efectivo de alta/baja (aprobación del Gerente de Distrito)."""
+    from app.services.visita_aprobacion_service import ordenes_ciclo, cuenta_en_ciclo
+    ordenes = ordenes_ciclo(db)
+    ciclo_orden = ordenes.get(ciclo_id)
+
+    mq = db.query(MedicoVisita)
     if vm_id:
         mq = mq.filter(MedicoVisita.vm_id == vm_id)
-    medicos = mq.all()
+    medicos = [m for m in mq.all() if cuenta_en_ciclo(m, ciclo_orden, ordenes)]
     mapa = _mapa_visitas(db, ciclo_id, vm_id)
 
     total = len(medicos)

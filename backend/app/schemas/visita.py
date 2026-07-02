@@ -148,6 +148,7 @@ class MedicoVisitaResponse(BaseModel):
     segmento: str | None = None
     observaciones: str | None = None
     fecha_alta: date | None = None
+    estado_aprobacion: str | None = None
     ciclos_sin_visita: int
     activo: bool
 

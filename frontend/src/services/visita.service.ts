@@ -38,6 +38,14 @@ export interface MedicoVisita {
   ciclos_sin_visita: number;
   activo: boolean;
   estado_visita?: 'vr' | 'v' | 'sin';   // Vista+Revisita / una visita / sin visitar
+  estado_aprobacion?: 'APROBADO' | 'PENDIENTE_ALTA' | 'PENDIENTE_BAJA' | 'RECHAZADO';
+  ciclo_baja_id?: number | null;
+}
+
+export interface AprobacionPendiente {
+  id: number; nombre_completo: string; categoria: string; especialidad_nombre: string | null;
+  vm_id: number; vm_nombre: string; linea_nombre: string | null;
+  tipo_solicitud: 'ALTA' | 'BAJA'; fecha_solicitud: string | null;
 }
 
 export interface MedicoCrear {
@@ -84,9 +92,21 @@ export const listarMedicos = (vmId?: number, incluirInactivos = false) =>
     params: { ...(vmId ? { vm_id: vmId } : {}), ...(incluirInactivos ? { incluir_inactivos: true } : {}) },
   }).then(r => r.data);
 
-export type MedicoActualizar = Partial<Omit<MedicoCrear, 'vm_id' | 'confirmar_duplicado'>> & { activo?: boolean };
+export type MedicoActualizar = Partial<Omit<MedicoCrear, 'vm_id' | 'confirmar_duplicado'>>;
 export const actualizarMedico = (id: number, datos: MedicoActualizar) =>
   api.put<MedicoVisita>(`/visita/medicos/${id}`, datos).then(r => r.data);
+
+// Flujo de aprobación de alta/baja (Gerente de Distrito)
+export const solicitarBajaMedico = (id: number) =>
+  api.post(`/visita/medicos/${id}/baja`).then(r => r.data);
+export const reactivarMedico = (id: number) =>
+  api.post(`/visita/medicos/${id}/reactivar`).then(r => r.data);
+export const listarAprobaciones = () =>
+  api.get<AprobacionPendiente[]>('/visita/aprobaciones').then(r => r.data);
+export const aprobarMedico = (id: number) =>
+  api.post(`/visita/medicos/${id}/aprobar`).then(r => r.data);
+export const rechazarMedico = (id: number, motivo?: string) =>
+  api.post(`/visita/medicos/${id}/rechazar`, null, { params: motivo ? { motivo } : {} }).then(r => r.data);
 
 export const listarEspecialidades = () =>
   api.get<Catalogo[]>('/visita/especialidades').then(r => r.data);

@@ -72,8 +72,12 @@ def estado_ruptura(db: Session, vm_id: int | None = None) -> dict:
 
 def _resumen_cierre(db: Session, ciclo_id: int, aplicar: bool, usuario_id: int | None) -> dict:
     """Núcleo compartido por previsualizar (aplicar=False) y cerrar (aplicar=True)."""
+    from app.services.visita_aprobacion_service import ordenes_ciclo, cuenta_en_ciclo
+    ordenes = ordenes_ciclo(db)
+    ciclo_orden = ordenes.get(ciclo_id)
     mapa = _mapa_visitas(db, ciclo_id, None)  # todos los VM
-    medicos = db.query(MedicoVisita).filter(MedicoVisita.activo == True).all()  # noqa: E712
+    # Solo los médicos vigentes para el ciclo (excluye altas pendientes, respeta alta/baja).
+    medicos = [m for m in db.query(MedicoVisita).all() if cuenta_en_ciclo(m, ciclo_orden, ordenes)]
     panel = len(medicos)
     visitados = sin_visitar = ruptura_nueva = ruptura_critica = 0
     for m in medicos:

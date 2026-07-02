@@ -22,6 +22,8 @@ RequireVisita = Depends(require_roles(
     Rol.ADMIN, Rol.GERENTE_DISTRITO, Rol.GERENTE_PRODUCTIVIDAD, Rol.REPRESENTANTE_MEDICO))
 # El cierre de ciclo hace rodar el contador de todos los paneles: operación gerencial.
 RequireCierre = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
+# Aprobación de alta/baja de médicos: Gerente de Distrito (acotado a su distrito) + superusuarios.
+RequireAprobador = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO))
 RequireAnyAuth = Depends(get_current_active_user)
 
 
@@ -78,10 +80,88 @@ def actualizar_medico(medico_id: int, datos: MedicoVisitaActualizar,
         rm = _scope_vm(current_user, None)
         if m.vm_id != rm:
             raise HTTPException(status_code=403, detail="Este médico no pertenece a tu panel.")
+    # El alta/baja (campo `activo`) NO se cambia por edición directa: pasa por aprobación.
+    datos.activo = None
     try:
         return visita_service.actualizar_medico(db, m, datos, getattr(current_user, "id", None))
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+def _medico_de_mi_panel(current_user, m):
+    if _rol(current_user) == "REPRESENTANTE_MEDICO":
+        rm = _scope_vm(current_user, None)
+        if m.vm_id != rm:
+            raise HTTPException(status_code=403, detail="Este médico no pertenece a tu panel.")
+
+
+@router.post("/medicos/{medico_id}/baja", response_model=dict)
+def solicitar_baja(medico_id: int, db: Session = Depends(get_db), current_user=RequireVisita):
+    """Solicita la BAJA de un médico. Requiere aprobación del Gerente de Distrito;
+    efectiva el próximo ciclo. El VM solo puede solicitar sobre su panel."""
+    from app.services import visita_aprobacion_service as aps
+    m = visita_service.obtener_medico(db, medico_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Médico no encontrado.")
+    _medico_de_mi_panel(current_user, m)
+    aps.solicitar_baja(db, m, current_user)
+    return {"id": m.id, "estado_aprobacion": m.estado_aprobacion}
+
+
+@router.post("/medicos/{medico_id}/reactivar", response_model=dict)
+def reactivar_medico(medico_id: int, db: Session = Depends(get_db), current_user=RequireVisita):
+    """Reactiva un médico inactivo/rechazado: vuelve a quedar PENDIENTE_ALTA (requiere
+    aprobación, efectivo el próximo ciclo)."""
+    from app.services.visita_aprobacion_service import ciclo_actual_id
+    from datetime import datetime as _dt, timezone as _tz
+    m = visita_service.obtener_medico(db, medico_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Médico no encontrado.")
+    _medico_de_mi_panel(current_user, m)
+    m.activo = True
+    m.estado_aprobacion = "PENDIENTE_ALTA"
+    m.ciclo_alta_id = ciclo_actual_id(db)
+    m.ciclo_baja_id = None
+    m.solicitado_por = getattr(current_user, "id", None)
+    m.fecha_solicitud = _dt.now(_tz.utc)
+    db.commit()
+    return {"id": m.id, "estado_aprobacion": m.estado_aprobacion}
+
+
+@router.get("/aprobaciones", response_model=list[dict])
+def listar_aprobaciones(db: Session = Depends(get_db), current_user=RequireAprobador):
+    """Solicitudes de alta/baja pendientes que este gerente puede aprobar."""
+    from app.services import visita_aprobacion_service as aps
+    return aps.listar_pendientes(db, current_user)
+
+
+@router.post("/medicos/{medico_id}/aprobar", response_model=dict)
+def aprobar_medico(medico_id: int, db: Session = Depends(get_db), current_user=RequireAprobador):
+    """Aprueba la solicitud pendiente (alta o baja). Efecto al próximo ciclo."""
+    from app.services import visita_aprobacion_service as aps
+    m = visita_service.obtener_medico(db, medico_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Médico no encontrado.")
+    try:
+        aps.aprobar(db, m, current_user)
+    except aps.AprobacionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    return {"id": m.id, "estado_aprobacion": m.estado_aprobacion}
+
+
+@router.post("/medicos/{medico_id}/rechazar", response_model=dict)
+def rechazar_medico(medico_id: int, motivo: str | None = None,
+                    db: Session = Depends(get_db), current_user=RequireAprobador):
+    """Rechaza la solicitud pendiente (alta → queda inactivo; baja → se cancela)."""
+    from app.services import visita_aprobacion_service as aps
+    m = visita_service.obtener_medico(db, medico_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Médico no encontrado.")
+    try:
+        aps.rechazar(db, m, current_user, motivo)
+    except aps.AprobacionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    return {"id": m.id, "estado_aprobacion": m.estado_aprobacion}
 
 
 @router.post("/medicos", response_model=MedicoVisitaResponse, status_code=status.HTTP_201_CREATED)

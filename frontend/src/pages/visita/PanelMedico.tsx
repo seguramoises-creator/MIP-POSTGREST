@@ -4,11 +4,12 @@ import {
   MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
   Avatar, InputAdornment, Divider, Switch, FormControlLabel, IconButton, Tooltip,
 } from '@mui/material';
-import { Add, PersonAddAlt1, Warning, Search, FiberManualRecord, Edit, Block, Restore } from '@mui/icons-material';
+import { Add, PersonAddAlt1, Warning, Search, FiberManualRecord, Edit, Block, Restore, HowToReg, ThumbUp, ThumbDown } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import {
   listarMedicos, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
-  type MedicoVisita, type Catalogo, type PosibleDuplicado, type MedicoCrear,
+  solicitarBajaMedico, reactivarMedico, listarAprobaciones, aprobarMedico, rechazarMedico,
+  type MedicoVisita, type Catalogo, type PosibleDuplicado, type MedicoCrear, type AprobacionPendiente,
 } from '../../services/visita.service';
 
 const TIPOS = ['Clínica privada', 'Hospital público', 'Hospital privado', 'Consultorio independiente'];
@@ -30,6 +31,13 @@ const CAT_AV: Record<string, { bg: string; fg: string }> = {
 // Paleta rotativa para las iniciales del médico.
 const INICIAL_COLORS = ['#2E5BFF', '#7A5AF8', '#0F9B8E', '#E8833A', '#D6409F', '#2AA76A', '#C0392B', '#3B82C4'];
 
+// Estado de aprobación → chip (solo si no está APROBADO).
+const APROB: Record<string, { label: string; color: 'warning' | 'info' | 'default' }> = {
+  PENDIENTE_ALTA: { label: 'Pendiente aprobación', color: 'warning' },
+  PENDIENTE_BAJA: { label: 'Baja pendiente', color: 'warning' },
+  RECHAZADO: { label: 'Rechazado', color: 'default' },
+};
+
 // Estado de visita del ciclo → etiqueta + color de punto.
 const ESTADO: Record<string, { label: string; color: string }> = {
   vr:  { label: 'Vista + Revisita', color: '#2E7D32' },
@@ -45,6 +53,7 @@ function iniciales(nombre: string): string {
 export default function PanelMedico() {
   const rol = useAuthStore((s) => s.rol);
   const esVM = rol === 'REPRESENTANTE_MEDICO';
+  const esAprobador = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD' || rol === 'GERENTE_DISTRITO';
 
   const [medicos, setMedicos] = useState<MedicoVisita[]>([]);
   const [especialidades, setEspecialidades] = useState<Catalogo[]>([]);
@@ -56,6 +65,7 @@ export default function PanelMedico() {
   const [espFiltro, setEspFiltro] = useState('');
   const [estadoFiltro, setEstadoFiltro] = useState<'activos' | 'inactivos' | 'todos'>('activos');
   const [editId, setEditId] = useState<number | null>(null);
+  const [pendientes, setPendientes] = useState<AprobacionPendiente[]>([]);
   const [cargando, setCargando] = useState(true);
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
@@ -70,11 +80,16 @@ export default function PanelMedico() {
       .then(setMedicos).catch(() => setMedicos([])).finally(() => setCargando(false));
   }, [esVM, vmFiltro, estadoFiltro]);
 
+  const cargarPendientes = useCallback(() => {
+    if (esAprobador) listarAprobaciones().then(setPendientes).catch(() => setPendientes([]));
+  }, [esAprobador]);
+
   useEffect(() => { cargar(); }, [cargar]);
   useEffect(() => {
     listarEspecialidades().then(setEspecialidades).catch(() => {});
     if (!esVM) listarVMs().then(setVms).catch(() => {});
-  }, [esVM]);
+    cargarPendientes();
+  }, [esVM, cargarPendientes]);
 
   // KPIs del panel (del ciclo actual) — solo sobre médicos activos.
   const kpis = useMemo(() => {
@@ -123,11 +138,26 @@ export default function PanelMedico() {
   };
   const toggleActivo = async (m: MedicoVisita) => {
     try {
-      await actualizarMedico(m.id, { activo: !m.activo });
-      setMsg({ tipo: 'success', texto: m.activo ? 'Médico desactivado.' : 'Médico reactivado.' });
-      cargar();
+      if (m.activo) {
+        await solicitarBajaMedico(m.id);
+        setMsg({ tipo: 'success', texto: 'Solicitud de baja enviada — requiere aprobación del Gerente de Distrito (efectiva el próximo ciclo).' });
+      } else {
+        await reactivarMedico(m.id);
+        setMsg({ tipo: 'success', texto: 'Solicitud de alta enviada — requiere aprobación del Gerente de Distrito.' });
+      }
+      cargar(); cargarPendientes();
     } catch {
-      setMsg({ tipo: 'error', texto: 'No se pudo cambiar el estado.' });
+      setMsg({ tipo: 'error', texto: 'No se pudo procesar la solicitud.' });
+    }
+  };
+
+  const resolver = async (id: number, accion: 'aprobar' | 'rechazar') => {
+    try {
+      if (accion === 'aprobar') { await aprobarMedico(id); setMsg({ tipo: 'success', texto: 'Solicitud aprobada.' }); }
+      else { await rechazarMedico(id); setMsg({ tipo: 'success', texto: 'Solicitud rechazada.' }); }
+      cargar(); cargarPendientes();
+    } catch {
+      setMsg({ tipo: 'error', texto: 'No se pudo procesar (¿es de tu distrito?).' });
     }
   };
   const set = (k: keyof MedicoCrear, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
@@ -143,9 +173,9 @@ export default function PanelMedico() {
       } else {
         const res = await crearMedico({ ...form, confirmar_duplicado: confirmar });
         if (res.duplicados && res.duplicados.length) { setDuplicados(res.duplicados); return; }
-        setMsg({ tipo: 'success', texto: 'Médico registrado.' });
+        setMsg({ tipo: 'success', texto: 'Médico registrado — pendiente de aprobación del Gerente de Distrito (contará desde el próximo ciclo).' });
       }
-      setAbierto(false); cargar();
+      setAbierto(false); cargar(); cargarPendientes();
     } catch {
       setMsg({ tipo: 'error', texto: 'No se pudo guardar (revisa nombre en MAYÚSCULAS, ≥2 palabras, categoría A/B/C/D).' });
     } finally { setGuardando(false); }
@@ -224,6 +254,34 @@ export default function PanelMedico() {
         <Grid item xs={6} md={3}>{kpiCard('RUPTURA SECUENCIA', kpis.ruptura, '3+ ciclos sin visitar', 'error.main', true)}</Grid>
       </Grid>
 
+      {/* Solicitudes pendientes de aprobación (Gerente de Distrito) */}
+      {esAprobador && pendientes.length > 0 && (
+        <Card variant="outlined" sx={{ mb: 2, borderColor: 'warning.main' }}>
+          <CardContent sx={{ py: 1.5 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+              <HowToReg color="warning" />
+              <Typography variant="subtitle1" fontWeight={700}>Solicitudes pendientes de aprobación</Typography>
+              <Chip size="small" color="warning" label={pendientes.length} />
+            </Stack>
+            <Stack divider={<Divider />} spacing={0}>
+              {pendientes.map((p) => (
+                <Stack key={p.id} direction="row" alignItems="center" spacing={1.5} sx={{ py: 1 }}>
+                  <Chip size="small" color={p.tipo_solicitud === 'ALTA' ? 'success' : 'error'} label={p.tipo_solicitud} />
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography variant="body2" fontWeight={700} noWrap>{p.nombre_completo} · Cat. {p.categoria}</Typography>
+                    <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                      {[p.especialidad_nombre, p.linea_nombre, `VM: ${p.vm_nombre}`].filter(Boolean).join(' · ')}
+                    </Typography>
+                  </Box>
+                  <Button size="small" variant="contained" color="success" startIcon={<ThumbUp />} onClick={() => resolver(p.id, 'aprobar')}>Aprobar</Button>
+                  <Button size="small" variant="outlined" color="error" startIcon={<ThumbDown />} onClick={() => resolver(p.id, 'rechazar')}>Rechazar</Button>
+                </Stack>
+              ))}
+            </Stack>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Lista de médicos (tarjetas) */}
       <Card variant="outlined">
         {cargando ? (
@@ -259,6 +317,15 @@ export default function PanelMedico() {
                                 sx={{ height: 20, '& .MuiChip-label': { px: 0.75, fontSize: 11 } }} />
                         )}
                         {!m.activo && <Chip size="small" variant="outlined" label="Inactivo" sx={{ height: 20, '& .MuiChip-label': { px: 0.75, fontSize: 11 } }} />}
+                        {m.estado_aprobacion && m.estado_aprobacion !== 'APROBADO' && APROB[m.estado_aprobacion] && (
+                          <Chip size="small" variant="outlined" color={APROB[m.estado_aprobacion].color}
+                                label={APROB[m.estado_aprobacion].label}
+                                sx={{ height: 20, '& .MuiChip-label': { px: 0.75, fontSize: 11 } }} />
+                        )}
+                        {m.estado_aprobacion === 'APROBADO' && m.ciclo_baja_id && (
+                          <Chip size="small" variant="outlined" color="info" label="Baja próx. ciclo"
+                                sx={{ height: 20, '& .MuiChip-label': { px: 0.75, fontSize: 11 } }} />
+                        )}
                       </Stack>
                       <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
                         {[m.especialidad_nombre, m.provincia, m.municipio, m.tipo_consultorio].filter(Boolean).join(' · ') || 'Sin datos de contacto'}
@@ -273,7 +340,7 @@ export default function PanelMedico() {
                       <Tooltip title="Editar médico">
                         <IconButton size="small" color="primary" onClick={() => abrirEditar(m)}><Edit fontSize="small" /></IconButton>
                       </Tooltip>
-                      <Tooltip title={m.activo ? 'Desactivar' : 'Reactivar'}>
+                      <Tooltip title={m.activo ? 'Solicitar baja (requiere aprobación)' : 'Solicitar alta (requiere aprobación)'}>
                         <IconButton size="small" color={m.activo ? 'error' : 'success'} onClick={() => toggleActivo(m)}>
                           {m.activo ? <Block fontSize="small" /> : <Restore fontSize="small" />}
                         </IconButton>

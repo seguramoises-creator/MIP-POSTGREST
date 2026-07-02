@@ -1,0 +1,147 @@
+"""Flujo de aprobación de alta/baja de médicos del panel (Gerente de Distrito).
+
+Reglas de negocio:
+  - Al crear un médico (ALTA) queda PENDIENTE_ALTA y NO cuenta en la cobertura.
+  - Al desactivar (BAJA) queda PENDIENTE_BAJA; sigue contando el ciclo actual.
+  - El Gerente de Distrito de la línea (o ADMIN/GER. PRODUCTIVIDAD) aprueba o rechaza.
+  - El cambio es efectivo **al próximo ciclo**: `ciclo_alta_id`/`ciclo_baja_id`
+    guardan el ciclo durante el que se solicitó; un médico cuenta en un ciclo de
+    orden O solo si O > orden(ciclo_alta) y O <= orden(ciclo_baja).
+
+`orden(ciclo)` = anio*1000 + numero (cronológico). Los médicos existentes tienen
+`ciclo_alta_id = NULL` → cuentan siempre (grandfathered).
+"""
+from datetime import datetime, timezone
+
+from loguru import logger
+from sqlalchemy.orm import Session
+
+from app.models.visita import MedicoVisita
+from app.models.dimensiones import RepresentanteMedico, Linea, Especialidad, Ciclo
+
+
+class AprobacionError(Exception):
+    pass
+
+
+def ordenes_ciclo(db: Session) -> dict[int, int]:
+    return {c.id: c.anio * 1000 + c.numero for c in db.query(Ciclo).all()}
+
+
+def ciclo_actual_id(db: Session) -> int | None:
+    """Ciclo 'actual' = el más reciente por (anio, numero). Es el ciclo durante el
+    que se registra la solicitud; el cambio surtirá efecto en el siguiente."""
+    c = db.query(Ciclo).order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first()
+    return c.id if c else None
+
+
+def cuenta_en_ciclo(m: MedicoVisita, ciclo_orden: int | None, ordenes: dict[int, int]) -> bool:
+    """¿El médico forma parte del panel efectivo para un ciclo de orden `ciclo_orden`?"""
+    if not m.activo:
+        return False
+    if m.estado_aprobacion in ("PENDIENTE_ALTA", "RECHAZADO"):
+        return False
+    if ciclo_orden is None:
+        return True
+    if m.ciclo_alta_id is not None:
+        oa = ordenes.get(m.ciclo_alta_id)
+        if oa is not None and ciclo_orden <= oa:   # alta efectiva el ciclo siguiente
+            return False
+    if m.ciclo_baja_id is not None:
+        ob = ordenes.get(m.ciclo_baja_id)
+        if ob is not None and ciclo_orden > ob:     # baja efectiva desde el ciclo siguiente
+            return False
+    return True
+
+
+def _gerente_id_de_medico(db: Session, m: MedicoVisita) -> int | None:
+    rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == m.vm_id).first()
+    return rm.gerente_id if rm else None
+
+
+def puede_aprobar(db: Session, usuario, m: MedicoVisita) -> bool:
+    """ADMIN y GER. PRODUCTIVIDAD aprueban cualquiera; el GERENTE_DISTRITO solo los
+    médicos de su distrito (VM.gerente_id == su propio gerente_id)."""
+    rol = usuario.rol.value if hasattr(usuario.rol, "value") else str(usuario.rol)
+    if rol in ("ADMIN", "GERENTE_PRODUCTIVIDAD"):
+        return True
+    if rol == "GERENTE_DISTRITO":
+        mi_gerente = getattr(usuario, "gerente_id", None)
+        return mi_gerente is not None and _gerente_id_de_medico(db, m) == mi_gerente
+    return False
+
+
+def solicitar_baja(db: Session, m: MedicoVisita, usuario) -> MedicoVisita:
+    """Registra una solicitud de BAJA (requiere aprobación). Efecto al próximo ciclo."""
+    if m.estado_aprobacion == "PENDIENTE_ALTA":
+        # Un médico aún no aprobado no se 'da de baja': se rechaza directamente.
+        m.estado_aprobacion = "RECHAZADO"
+        m.activo = False
+    else:
+        m.estado_aprobacion = "PENDIENTE_BAJA"
+        m.ciclo_baja_id = ciclo_actual_id(db)
+    m.solicitado_por = getattr(usuario, "id", None)
+    m.fecha_solicitud = datetime.now(timezone.utc)
+    db.commit(); db.refresh(m)
+    logger.info(f"Solicitud de baja médico id={m.id} estado={m.estado_aprobacion} por={getattr(usuario,'id',None)}")
+    return m
+
+
+def aprobar(db: Session, m: MedicoVisita, usuario) -> MedicoVisita:
+    if not puede_aprobar(db, usuario, m):
+        raise AprobacionError("No autorizado para aprobar este médico (no es de tu distrito).")
+    if m.estado_aprobacion not in ("PENDIENTE_ALTA", "PENDIENTE_BAJA"):
+        raise AprobacionError("El médico no tiene una solicitud pendiente.")
+    m.estado_aprobacion = "APROBADO"   # para BAJA queda APROBADO con ciclo_baja programado
+    m.aprobado_por = getattr(usuario, "id", None)
+    m.fecha_aprobacion = datetime.now(timezone.utc)
+    db.commit(); db.refresh(m)
+    logger.info(f"Médico id={m.id} APROBADO por={getattr(usuario,'id',None)}")
+    return m
+
+
+def rechazar(db: Session, m: MedicoVisita, usuario, motivo: str | None) -> MedicoVisita:
+    if not puede_aprobar(db, usuario, m):
+        raise AprobacionError("No autorizado para rechazar este médico (no es de tu distrito).")
+    if m.estado_aprobacion == "PENDIENTE_ALTA":
+        m.estado_aprobacion = "RECHAZADO"
+        m.activo = False
+    elif m.estado_aprobacion == "PENDIENTE_BAJA":
+        m.estado_aprobacion = "APROBADO"   # se cancela la baja
+        m.ciclo_baja_id = None
+    else:
+        raise AprobacionError("El médico no tiene una solicitud pendiente.")
+    m.aprobado_por = getattr(usuario, "id", None)
+    m.fecha_aprobacion = datetime.now(timezone.utc)
+    m.motivo = motivo
+    db.commit(); db.refresh(m)
+    logger.info(f"Médico id={m.id} solicitud RECHAZADA por={getattr(usuario,'id',None)}")
+    return m
+
+
+def listar_pendientes(db: Session, usuario) -> list[dict]:
+    """Solicitudes pendientes (alta/baja) que el usuario puede aprobar."""
+    q = db.query(MedicoVisita).filter(
+        MedicoVisita.estado_aprobacion.in_(("PENDIENTE_ALTA", "PENDIENTE_BAJA")))
+    pend = q.order_by(MedicoVisita.fecha_solicitud.desc()).all()
+    pend = [m for m in pend if puede_aprobar(db, usuario, m)]
+
+    vm_ids = {m.vm_id for m in pend}
+    rms = {r.id: r for r in db.query(RepresentanteMedico).filter(RepresentanteMedico.id.in_(vm_ids)).all()} if vm_ids else {}
+    linea_ids = {r.linea_id for r in rms.values()}
+    lineas = dict(db.query(Linea.id, Linea.nombre).filter(Linea.id.in_(linea_ids)).all()) if linea_ids else {}
+    esp_ids = {m.especialidad_id for m in pend if m.especialidad_id}
+    esps = dict(db.query(Especialidad.id, Especialidad.nombre).filter(Especialidad.id.in_(esp_ids)).all()) if esp_ids else {}
+
+    salida = []
+    for m in pend:
+        rm = rms.get(m.vm_id)
+        salida.append({
+            "id": m.id, "nombre_completo": m.nombre_completo, "categoria": m.categoria,
+            "especialidad_nombre": esps.get(m.especialidad_id),
+            "vm_id": m.vm_id, "vm_nombre": rm.nombre if rm else f"VM #{m.vm_id}",
+            "linea_nombre": lineas.get(rm.linea_id) if rm else None,
+            "tipo_solicitud": "ALTA" if m.estado_aprobacion == "PENDIENTE_ALTA" else "BAJA",
+            "fecha_solicitud": m.fecha_solicitud.isoformat() if m.fecha_solicitud else None,
+        })
+    return salida

@@ -59,6 +59,49 @@ def test_categoria_d_es_valida():
     assert m.categoria == "D"
 
 
+# ── Aprobación de alta/baja (gating de cobertura) ─────────────────────
+from app.services.visita_aprobacion_service import cuenta_en_ciclo
+
+# ciclos: 10 -> orden 2026*1000+3=2026003 ; 11 -> 2026004 (siguiente)
+_ORD = {10: 2026003, 11: 2026004}
+
+
+def _med(**kw):
+    base = dict(activo=True, estado_aprobacion="APROBADO", ciclo_alta_id=None, ciclo_baja_id=None)
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def test_medico_existente_cuenta_siempre():
+    assert cuenta_en_ciclo(_med(), _ORD[10], _ORD) is True
+
+
+def test_pendiente_alta_no_cuenta():
+    assert cuenta_en_ciclo(_med(estado_aprobacion="PENDIENTE_ALTA", ciclo_alta_id=10), _ORD[10], _ORD) is False
+
+
+def test_rechazado_no_cuenta():
+    assert cuenta_en_ciclo(_med(estado_aprobacion="RECHAZADO"), _ORD[10], _ORD) is False
+
+
+def test_alta_aprobada_no_cuenta_en_el_ciclo_de_solicitud_pero_si_en_el_siguiente():
+    # Solicitada en ciclo 10 (aprobada): no cuenta en 10, sí en 11.
+    m = _med(estado_aprobacion="APROBADO", ciclo_alta_id=10)
+    assert cuenta_en_ciclo(m, _ORD[10], _ORD) is False
+    assert cuenta_en_ciclo(m, _ORD[11], _ORD) is True
+
+
+def test_baja_pendiente_cuenta_en_ciclo_actual_no_en_el_siguiente():
+    # Baja solicitada en ciclo 10: cuenta en 10, deja de contar en 11.
+    m = _med(estado_aprobacion="PENDIENTE_BAJA", ciclo_baja_id=10)
+    assert cuenta_en_ciclo(m, _ORD[10], _ORD) is True
+    assert cuenta_en_ciclo(m, _ORD[11], _ORD) is False
+
+
+def test_inactivo_no_cuenta():
+    assert cuenta_en_ciclo(_med(activo=False), _ORD[10], _ORD) is False
+
+
 # ── Registro de visita ────────────────────────────────────────────────
 from app.schemas.visita import VisitaRegistrar, VisitaNoVisita
 
@@ -165,12 +208,21 @@ def test_severidad_por_ciclos_sin_visita():
     assert cs._severidad(7) == "critica"
 
 
+def _patch_gating(monkeypatch):
+    """El cierre filtra médicos vigentes vía visita_aprobacion_service; en los tests
+    unitarios lo neutralizamos (cuenta = activo)."""
+    import app.services.visita_aprobacion_service as aps
+    monkeypatch.setattr(aps, "ordenes_ciclo", lambda db: {})
+    monkeypatch.setattr(aps, "cuenta_en_ciclo", lambda m, o, ords: m.activo)
+
+
 def test_cierre_resetea_visitados_e_incrementa_ausentes(monkeypatch):
     # m1 visitado (contador 5 → 0); m2 sin visita (contador 2 → 3 = crítica)
     m1 = SimpleNamespace(id=1, ciclos_sin_visita=5, activo=True)
     m2 = SimpleNamespace(id=2, ciclos_sin_visita=2, activo=True)
     db = MagicMock()
-    db.query.return_value.filter.return_value.all.return_value = [m1, m2]
+    db.query.return_value.all.return_value = [m1, m2]
+    _patch_gating(monkeypatch)
     monkeypatch.setattr(cs, "_mapa_visitas", lambda db, ciclo, vm: {1: {"v": True, "r": False}})
     r = cs._resumen_cierre(db, ciclo_id=10, aplicar=True, usuario_id=None)
     assert r["panel"] == 2 and r["visitados"] == 1 and r["sin_visitar"] == 1
@@ -182,8 +234,9 @@ def test_cierre_resetea_visitados_e_incrementa_ausentes(monkeypatch):
 def test_cierre_previsualizar_no_muta(monkeypatch):
     m = SimpleNamespace(id=1, ciclos_sin_visita=1, activo=True)
     db = MagicMock()
-    db.query.return_value.filter.return_value.all.return_value = [m]
+    db.query.return_value.all.return_value = [m]
     db.query.return_value.filter.return_value.first.return_value = None  # no cerrado aún
+    _patch_gating(monkeypatch)
     monkeypatch.setattr(cs, "_mapa_visitas", lambda db, ciclo, vm: {})   # nadie visitado
     monkeypatch.setattr(cs, "ciclo_por_defecto", lambda db: 10)
     r = cs.previsualizar_cierre(db, ciclo_id=10)
