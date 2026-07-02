@@ -291,6 +291,42 @@ export const costoRoi = (vmId?: number) =>
   api.get<RoiResumen>('/visita/costo/roi', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 export const costoRanking = () => api.get<RoiRanking>('/visita/costo/ranking').then(r => r.data);
 
+// ── Costo & ROI — modelo financiero completo ──────────────────────────
+export interface CostoEstructuraInput {
+  ciclo_id?: number | null; linea_id?: number | null; moneda: string;
+  salario_mensual: number; cargas_pct: number; viaticos_dia: number; materiales_ciclo: number;
+  dias_campo: number; total_visitas: number; dias_mes: number;
+  visitadores: number; visitas_ciclo_vm: number; ciclos_anio: number;
+  coef_conservador: number; coef_optimista: number; psp_a: number; psp_b: number; psp_c: number;
+  med_sin_visitar_a: number | null; med_sin_visitar_b: number | null; med_sin_visitar_c: number | null;
+  configurado?: boolean;
+}
+export interface CostoProdInput {
+  producto_id?: number | null; producto: string; orden?: number;
+  costo_unitario_muestra: number; cantidad_muestras: number;
+  pool_ventas: number; visitas_detalladas: number; presupuesto_anual: number; precio_prom: number;
+}
+// Respuesta completa (bloques calculados) — estructura flexible.
+export interface CostoFull {
+  ciclo_id: number; linea_id: number | null; moneda: string; configurado: boolean;
+  estructura: CostoEstructuraInput;
+  fijo: { costo_fijo_total: number; costo_fijo_dia: number; costo_fijo_visita: number; salario_ciclo: number; viaticos_total: number };
+  muestras: { productos: { producto: string; costo_unitario: number; cantidad: number; total_ciclo: number }[]; total_muestras: number; costo_total_muestras: number; costo_variable_visita: number };
+  pool: { productos: { producto: string; pool_ventas: number; visitas_detalladas: number; retorno_x_visita: number }[]; pool_total: number };
+  plan_anual: { contactos_anio: number; contactos_anio_vm: number; presupuesto_total: number; presupuesto_por_vm: number; productiv_obj_contacto: number; productos: { producto: string; presupuesto_anual: number; precio_prom: number; productiv_obj_contacto: number; unidades_obj_contacto: number; cumplimiento_pct: number; retorno_real: number }[] };
+  resumen: { costo_total_visita: number; retorno_prom_visita: number; roi_promedio: number | null; productos: { producto: string; costo_visita: number; retorno_visita: number; roi: number; estado: string }[] };
+  impacto: { categorias: { categoria: string; medicos_sin_visitar: number; psp: number; venta_riesgo_bajo: number; venta_riesgo_alto: number }[]; venta_riesgo_bajo: number; venta_riesgo_alto: number; total_medicos_sin_visitar: number; headcount_equivalente: number };
+}
+export const costoEstructura = (lineaId?: number) =>
+  api.get<CostoFull>('/visita/costo/estructura', { params: lineaId ? { linea_id: lineaId } : {} }).then(r => r.data);
+export const guardarCostoEstructura = (datos: CostoEstructuraInput & { productos: CostoProdInput[] }) =>
+  api.post<CostoFull>('/visita/costo/estructura', datos).then(r => r.data);
+export const importarCostoExcel = (file: File, lineaId?: number) => {
+  const fd = new FormData(); fd.append('archivo', file);
+  return api.post<CostoFull & { importados: number }>('/visita/costo/importar', fd,
+    { params: lineaId ? { linea_id: lineaId } : {}, headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
+};
+
 // Devuelve { medico } si se creó, o { duplicados } si el backend respondió 409.
 export const crearMedico = async (
   datos: MedicoCrear,

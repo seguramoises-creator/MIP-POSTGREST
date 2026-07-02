@@ -4,7 +4,7 @@ Prefijo: /visita.  Reutiliza Config.DIM_RM (VM), Config.DIM_Especialidad.
 RBAC: el VM (REPRESENTANTE_MEDICO) gestiona su propio panel (auto-filtro por rm_id);
 ADMIN/GERENTE ven/gestionan el de cualquier VM.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles, get_current_active_user
@@ -12,7 +12,7 @@ from app.models.usuario import Rol
 from app.schemas.visita import (
     MedicoVisitaCrear, MedicoVisitaActualizar, MedicoVisitaResponse, VisitaRegistrar,
     VisitaNoVisita, PlaneacionGuardar, ParrillaGuardar, MuestrasRegistrar,
-    ParametroCostoGuardar, _CAUSAS_NO_VISITA,
+    ParametroCostoGuardar, CostoEstructuraGuardar, _CAUSAS_NO_VISITA,
 )
 from app.services import visita_service
 
@@ -492,3 +492,43 @@ def costo_ranking(ciclo_id: int | None = None, db: Session = Depends(get_db), cu
     """Detalle desplegable de ROI por VM (peor primero). Solo gestión (dato financiero)."""
     from app.services import visita_costo_service
     return visita_costo_service.roi_ranking(db, ciclo_id)
+
+
+# ── Costo & ROI de Visita — modelo financiero completo ────────────────────────
+@router.get("/costo/estructura", response_model=dict)
+def costo_estructura(linea_id: int | None = None, ciclo_id: int | None = None,
+                     db: Session = Depends(get_db), current_user=RequireVisita):
+    """Modelo financiero completo (costo fijo, muestras, pool de ventas, plan anual,
+    resumen ROI e impacto de cobertura) por (ciclo, línea)."""
+    from app.services import visita_costo_service
+    return visita_costo_service.calcular_full(db, ciclo_id, linea_id)
+
+
+@router.post("/costo/estructura", response_model=dict, status_code=status.HTTP_201_CREATED)
+def guardar_costo_estructura(datos: CostoEstructuraGuardar, db: Session = Depends(get_db), current_user=RequireCierre):
+    """Guarda la estructura de costo + datos financieros por producto (Finanzas/Gerencia)."""
+    from app.services import visita_costo_service
+    try:
+        return visita_costo_service.guardar_estructura(db, datos, getattr(current_user, "id", None))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/costo/importar", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def importar_costo_excel(linea_id: int | None = None, ciclo_id: int | None = None,
+                               archivo: UploadFile = File(...),
+                               db: Session = Depends(get_db), current_user=RequireCierre):
+    """Importa los datos financieros por producto desde un Excel (.xlsx). Columnas:
+    producto, costo_unitario_muestra, cantidad_muestras, pool_ventas, visitas_detalladas,
+    presupuesto_anual, precio_prom."""
+    from app.services import visita_costo_service
+    nombre = (archivo.filename or "").lower()
+    if not (nombre.endswith(".xlsx") or nombre.endswith(".xls")):
+        raise HTTPException(status_code=400, detail="El archivo debe ser Excel (.xlsx/.xls).")
+    contenido = await archivo.read()
+    try:
+        return visita_costo_service.importar_excel(db, contenido, ciclo_id, linea_id, getattr(current_user, "id", None))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"No se pudo leer el Excel: {e}")

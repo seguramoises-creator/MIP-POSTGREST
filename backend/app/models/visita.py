@@ -244,3 +244,69 @@ class ParametroCosto(Base):
     fecha_actualizacion: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
     modificado_por: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+
+
+class CostoEstructura(Base):
+    """Estructura de costo del representante + parámetros de planeación anual e impacto
+    de cobertura, por (ciclo, línea). Configurado por Finanzas/Gerencia. Alimenta el
+    módulo Costo & ROI de Visita (bloques: costo fijo, plan anual, impacto)."""
+    __tablename__ = "CostoEstructura"
+    __table_args__ = (
+        Index("IX_CostoEstructura_ciclo_linea", "ciclo_id", "linea_id"),
+        {"schema": "Visita"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
+    linea_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("Config.DIM_Linea.id"), nullable=True)
+    moneda: Mapped[str] = mapped_column(String(8), nullable=False, default="RD$")
+    # Estructura de costo del representante
+    salario_mensual: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
+    cargas_pct: Mapped[float] = mapped_column(Numeric(6, 2), nullable=False, default=0)      # % TSS/AFP/ARS/regalía
+    viaticos_dia: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    materiales_ciclo: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    dias_campo: Mapped[int] = mapped_column(Integer, nullable=False, default=19)
+    total_visitas: Mapped[int] = mapped_column(Integer, nullable=False, default=190)
+    dias_mes: Mapped[int] = mapped_column(Integer, nullable=False, default=21)                # días hábiles/mes (prorrateo)
+    # Planificación anual
+    visitadores: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    visitas_ciclo_vm: Mapped[int] = mapped_column(Integer, nullable=False, default=190)
+    ciclos_anio: Mapped[int] = mapped_column(Integer, nullable=False, default=11)
+    # Impacto de cobertura (venta en riesgo)
+    coef_conservador: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0.40)
+    coef_optimista: Mapped[float] = mapped_column(Numeric(5, 2), nullable=False, default=0.70)
+    psp_a: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)            # PSP/contacto Cat A
+    psp_b: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
+    psp_c: Mapped[float] = mapped_column(Numeric(14, 2), nullable=False, default=0)
+    med_sin_visitar_a: Mapped[int | None] = mapped_column(Integer, nullable=True)              # override; si null → proyección
+    med_sin_visitar_b: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    med_sin_visitar_c: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fecha_actualizacion: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+    modificado_por: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+
+
+class CostoProducto(Base):
+    """Datos financieros por producto/ciclo/línea: costo de muestras, pool de ventas y
+    presupuesto/precio anual. Ingresado por Finanzas/Gerencia (formulario, Excel o API)."""
+    __tablename__ = "CostoProducto"
+    __table_args__ = (
+        Index("IX_CostoProducto_ciclo_linea", "ciclo_id", "linea_id"),
+        {"schema": "Visita"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
+    linea_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("Config.DIM_Linea.id"), nullable=True)
+    producto_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("Config.DIM_Producto.id"), nullable=True)
+    producto: Mapped[str] = mapped_column(String(120), nullable=False)         # código (display)
+    orden: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # Costo de muestras
+    costo_unitario_muestra: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+    cantidad_muestras: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Pool de ventas
+    pool_ventas: Mapped[float] = mapped_column(Numeric(16, 2), nullable=False, default=0)
+    visitas_detalladas: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Plan anual
+    presupuesto_anual: Mapped[float] = mapped_column(Numeric(16, 2), nullable=False, default=0)
+    precio_prom: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)

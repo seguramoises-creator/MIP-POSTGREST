@@ -284,3 +284,41 @@ class ParametroCostoGuardar(BaseModel):
     costo_muestra: float = Field(ge=0)
     costo_fijo_ciclo: float = Field(default=0, ge=0)
     moneda: str = Field(default="RD$", min_length=1, max_length=8)
+
+
+# ── Costo & ROI de Visita (modelo financiero completo) ────────────────
+class CostoProductoItem(BaseModel):
+    producto_id: int | None = None
+    producto: str = Field(min_length=1, max_length=120)
+    orden: int = 1
+    costo_unitario_muestra: float = Field(default=0, ge=0)
+    cantidad_muestras: int = Field(default=0, ge=0)
+    pool_ventas: float = Field(default=0, ge=0)
+    visitas_detalladas: int = Field(default=0, ge=0)
+    presupuesto_anual: float = Field(default=0, ge=0)
+    precio_prom: float = Field(default=0, ge=0)
+
+
+class CostoEstructuraGuardar(BaseModel):
+    ciclo_id: int | None = None
+    linea_id: int | None = None
+    moneda: str = Field(default="RD$", min_length=1, max_length=8)
+    salario_mensual: float = Field(default=0, ge=0)
+    cargas_pct: float = Field(default=0, ge=0, le=200)
+    viaticos_dia: float = Field(default=0, ge=0)
+    materiales_ciclo: float = Field(default=0, ge=0)
+    dias_campo: int = Field(default=19, ge=1)
+    total_visitas: int = Field(default=190, ge=1)
+    dias_mes: int = Field(default=21, ge=1, le=31)
+    visitadores: int = Field(default=1, ge=1)
+    visitas_ciclo_vm: int = Field(default=190, ge=1)
+    ciclos_anio: int = Field(default=11, ge=1, le=13)
+    coef_conservador: float = Field(default=0.40, ge=0, le=1)
+    coef_optimista: float = Field(default=0.70, ge=0, le=1)
+    psp_a: float = Field(default=0, ge=0)
+    psp_b: float = Field(default=0, ge=0)
+    psp_c: float = Field(default=0, ge=0)
+    med_sin_visitar_a: int | None = None
+    med_sin_visitar_b: int | None = None
+    med_sin_visitar_c: int | None = None
+    productos: list[CostoProductoItem] = Field(default_factory=list)
