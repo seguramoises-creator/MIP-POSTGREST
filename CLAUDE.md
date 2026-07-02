@@ -839,7 +839,7 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 | IUP consistencia completo | **Resuelto** | Ver §7 — promedio de los 3 ciclos previos más recientes, base neutral 0 si no hay historial |
 | Exportación PDF/Excel de reportes | **Resuelto** | Ver §15 — `exportacion.py` |
 | Ranking Gerentes de Distrito | **Resuelto** | `FACT_RankingGerente` (ver §4) |
-| Certificados de premios PDF | Ya existía en v1.0 (`reconocimiento_service.py`, ReportLab) | Confirmar si cubre todos los premios nuevos |
+| Certificados de premios PDF | **Resuelto** | `reconocimiento_service.generar_certificado_pdf` (ReportLab) se dispara como BackgroundTask tanto al otorgar premio manual (`reconocimiento.py`) como en la generación automática (`reconocimiento_service.generar_reconocimientos_automaticos`); marca `certificado_generado=True`. |
 | Cargar datos iniciales de Cobertura Predictiva en producción | Pendiente | Módulo desplegado, falta cargar `DIM_TargetMedico`/`FACT_Visita` reales |
 | Redesplegar web.config corregido y purgar caché | Pendiente | Ver nota en §21/§20 |
 | Capturar screenshots reales de la app MSM | Pendiente / en curso | Para materiales comerciales |
