@@ -162,6 +162,7 @@ class ProductoResponse(BaseModel):
     meta_muestras_visita: int
     gerente_producto: Optional[str] = None
     linea_id: Optional[int] = None
+    pais_codigo: Optional[str] = None
     activo: bool
 
 

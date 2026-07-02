@@ -170,12 +170,26 @@ def update_rm(id: int, data: RMCreate, db: Session = Depends(get_db), _=AdminOnl
 
 # ── Productos (DIM_Producto) — catálogo para la Parrilla Promocional ──────────
 
+def _producto_dict(db: Session, p: Producto) -> dict:
+    """Producto + pais_codigo derivado de su línea (para prellenar el país en el form)."""
+    pais = None
+    if p.linea_id:
+        linea = db.query(Linea).filter(Linea.id == p.linea_id).first()
+        pais = linea.pais_codigo if linea else None
+    return {
+        "id": p.id, "codigo": p.codigo, "nombre": p.nombre,
+        "area_terapeutica": p.area_terapeutica, "descripcion": p.descripcion,
+        "segmento_target": p.segmento_target, "meta_muestras_visita": p.meta_muestras_visita,
+        "gerente_producto": p.gerente_producto, "linea_id": p.linea_id,
+        "pais_codigo": pais, "activo": p.activo,
+    }
+
 @router.get("/productos", response_model=List[ProductoResponse], summary="Listar productos")
 def list_productos(linea_id: Optional[int] = None, db: Session = Depends(get_db), _=LecturaCatalogos):
     q = db.query(Producto).filter(Producto.activo == True)
     if linea_id:
         q = q.filter(Producto.linea_id == linea_id)
-    return q.order_by(Producto.codigo).all()
+    return [_producto_dict(db, p) for p in q.order_by(Producto.codigo).all()]
 
 @router.post("/productos", response_model=ProductoResponse, status_code=201, summary="Crear producto")
 def create_producto(data: ProductoCreate, db: Session = Depends(get_db), _=AdminOnly):
@@ -183,7 +197,7 @@ def create_producto(data: ProductoCreate, db: Session = Depends(get_db), _=Admin
         raise HTTPException(400, "Código de producto ya existe")
     obj = Producto(**data.model_dump())
     db.add(obj); db.commit(); db.refresh(obj)
-    return obj
+    return _producto_dict(db, obj)
 
 @router.put("/productos/{id}", response_model=ProductoResponse, summary="Actualizar producto")
 def update_producto(id: int, data: ProductoCreate, db: Session = Depends(get_db), _=AdminOnly):
@@ -192,7 +206,7 @@ def update_producto(id: int, data: ProductoCreate, db: Session = Depends(get_db)
     for k, v in data.model_dump().items():
         setattr(obj, k, v)
     db.commit(); db.refresh(obj)
-    return obj
+    return _producto_dict(db, obj)
 
 @router.delete("/productos/{id}", response_model=Msg, summary="Desactivar producto")
 def delete_producto(id: int, db: Session = Depends(get_db), _=AdminOnly):
