@@ -31,6 +31,8 @@ class UsuarioResponse(BaseModel):
     nombre_completo: str
     rol: str
     pais_codigo: Optional[str]
+    rm_id: Optional[int] = None
+    gerente_id: Optional[int] = None
     activo: bool
     ultimo_login: Optional[datetime]
 
@@ -98,14 +100,18 @@ class GerenteCreate(BaseModel):
     nombre: str
     email: Optional[str] = None
     tipo: str  # DISTRITO | MARCA | REGIONAL
+    fecha_ingreso: Optional[date] = None
 
 class GerenteResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     pais_codigo: str
+    linea_id: Optional[int] = None
     codigo: str
     nombre: str
+    email: Optional[str] = None
     tipo: str
+    fecha_ingreso: Optional[date] = None
     activo: bool
 
 class RMCreate(BaseModel):
@@ -128,6 +134,34 @@ class RMResponse(BaseModel):
     codigo: str
     nombre: str
     cedula: Optional[str]
+    email: Optional[str] = None
+    zona: Optional[str] = None
+    fecha_ingreso: Optional[date] = None
+    activo: bool
+
+
+# ── Productos (DIM_Producto) ────────────────────────────────────────────────────
+class ProductoCreate(BaseModel):
+    codigo: str
+    nombre: str
+    area_terapeutica: Optional[str] = None
+    descripcion: Optional[str] = None
+    segmento_target: Optional[str] = None
+    meta_muestras_visita: int = 1
+    gerente_producto: Optional[str] = None
+    linea_id: Optional[int] = None
+
+class ProductoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    codigo: str
+    nombre: str
+    area_terapeutica: Optional[str] = None
+    descripcion: Optional[str] = None
+    segmento_target: Optional[str] = None
+    meta_muestras_visita: int
+    gerente_producto: Optional[str] = None
+    linea_id: Optional[int] = None
     activo: bool
 
 

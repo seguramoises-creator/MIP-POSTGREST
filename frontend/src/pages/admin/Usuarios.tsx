@@ -47,6 +47,51 @@ export default function Usuarios() {
     retry: 1,
   });
 
+  // Dimensiones para relacionar el usuario según su rol.
+  const { data: rms } = useQuery({
+    queryKey: ['rms-all'], queryFn: () => api.get('/admin/rms').then((r) => r.data), retry: 1,
+  });
+  const { data: gerentes } = useQuery({
+    queryKey: ['gerentes-all'], queryFn: () => api.get('/admin/gerentes').then((r) => r.data), retry: 1,
+  });
+
+  // Selector relacional: RM (rm_id) o Gerente (gerente_id) según el rol elegido.
+  const renderRelacion = () => {
+    const rol = form.rol;
+    if (rol === 'REPRESENTANTE_MEDICO') {
+      return (
+        <FormControl fullWidth size="small">
+          <InputLabel>Representante médico (DIM_RM)</InputLabel>
+          <Select label="Representante médico (DIM_RM)" value={form.rm_id ?? ''}
+                  onChange={(e) => setForm({ ...form, rm_id: e.target.value, gerente_id: null })}>
+            <MenuItem value=""><em>— Sin vincular —</em></MenuItem>
+            {(Array.isArray(rms) ? rms : []).map((r: any) => (
+              <MenuItem key={r.id} value={r.id}>{r.codigo} — {r.nombre}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      );
+    }
+    if (rol === 'GERENTE_DISTRITO' || rol === 'GERENTE_MARCA') {
+      const tipo = rol === 'GERENTE_DISTRITO' ? 'DISTRITO' : 'MARCA';
+      const label = rol === 'GERENTE_DISTRITO' ? 'Gerente de Distrito (DIM_Gerente)' : 'Gerente de Producto / Marca (DIM_Gerente)';
+      const opts = (Array.isArray(gerentes) ? gerentes : []).filter((g: any) => g.tipo === tipo);
+      return (
+        <FormControl fullWidth size="small">
+          <InputLabel>{label}</InputLabel>
+          <Select label={label} value={form.gerente_id ?? ''}
+                  onChange={(e) => setForm({ ...form, gerente_id: e.target.value, rm_id: null })}>
+            <MenuItem value=""><em>— Sin vincular —</em></MenuItem>
+            {opts.map((g: any) => (
+              <MenuItem key={g.id} value={g.id}>{g.codigo} — {g.nombre}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      );
+    }
+    return null;
+  };
+
   const showMsg = (text: string, type: 'success' | 'error' = 'success') => {
     setMsg(text); setMsgType(type);
     setTimeout(() => setMsg(''), 4000);
@@ -84,7 +129,8 @@ export default function Usuarios() {
 
   const handleEdit = (row: any) => {
     setEditItem(row);
-    setForm({ nombre_completo: row.nombre_completo || '', email: row.email || '', rol: row.rol || '' });
+    setForm({ nombre_completo: row.nombre_completo || '', email: row.email || '', rol: row.rol || '',
+              rm_id: row.rm_id ?? null, gerente_id: row.gerente_id ?? null });
     setOpenEdit(true);
   };
 
@@ -236,11 +282,12 @@ export default function Usuarios() {
               <Select
                 label="Rol"
                 value={form.rol || ''}
-                onChange={(e) => setForm({ ...form, rol: e.target.value })}
+                onChange={(e) => setForm({ ...form, rol: e.target.value, rm_id: null, gerente_id: null })}
               >
                 {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
               </Select>
             </FormControl>
+            {renderRelacion()}
           </Stack>
         </DialogContent>
         <DialogActions>
@@ -275,11 +322,12 @@ export default function Usuarios() {
               <Select
                 label="Rol"
                 value={form.rol || ''}
-                onChange={(e) => setForm({ ...form, rol: e.target.value })}
+                onChange={(e) => setForm({ ...form, rol: e.target.value, rm_id: null, gerente_id: null })}
               >
                 {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
               </Select>
             </FormControl>
+            {renderRelacion()}
           </Stack>
         </DialogContent>
         <DialogActions>

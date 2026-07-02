@@ -49,6 +49,7 @@ class Gerente(Base):
     nombre: Mapped[str] = mapped_column(String(200), nullable=False)
     email: Mapped[str | None] = mapped_column(String(200), nullable=True)
     tipo: Mapped[str] = mapped_column(String(50), nullable=False)  # DISTRITO | MARCA | REGIONAL
+    fecha_ingreso: Mapped[date | None] = mapped_column(Date, nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
 
     rms: Mapped[list["RepresentanteMedico"]] = relationship("RepresentanteMedico", back_populates="gerente")

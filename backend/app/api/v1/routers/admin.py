@@ -11,7 +11,7 @@ from sqlalchemy import func
 from app.core.deps import get_db, get_current_active_user, require_roles
 from app.models.usuario import Usuario, Rol
 from app.models.dimensiones import (
-    Pais, Linea, Gerente, RepresentanteMedico,
+    Pais, Linea, Gerente, RepresentanteMedico, Producto,
     Indicador, IndicadorTabla, Ciclo, ReglaElegibilidad, Premio, CapacitacionDim,
     CategoriaMedica, CriterioCategoria, CriterioCategoriaTabla,
 )
@@ -20,6 +20,7 @@ from app.schemas.schemas import (
     LineaCreate, LineaResponse,
     GerenteCreate, GerenteResponse,
     RMCreate, RMResponse,
+    ProductoCreate, ProductoResponse,
     IndicadorCreate, IndicadorResponse,
     IndicadorTablaCreate, IndicadorTablaResponse,
     CicloCreate, CicloResponse,
@@ -165,6 +166,41 @@ def update_rm(id: int, data: RMCreate, db: Session = Depends(get_db), _=AdminOnl
         setattr(obj, k, v)
     db.commit(); db.refresh(obj)
     return obj
+
+
+# ── Productos (DIM_Producto) — catálogo para la Parrilla Promocional ──────────
+
+@router.get("/productos", response_model=List[ProductoResponse], summary="Listar productos")
+def list_productos(linea_id: Optional[int] = None, db: Session = Depends(get_db), _=LecturaCatalogos):
+    q = db.query(Producto).filter(Producto.activo == True)
+    if linea_id:
+        q = q.filter(Producto.linea_id == linea_id)
+    return q.order_by(Producto.codigo).all()
+
+@router.post("/productos", response_model=ProductoResponse, status_code=201, summary="Crear producto")
+def create_producto(data: ProductoCreate, db: Session = Depends(get_db), _=AdminOnly):
+    if db.query(Producto).filter(Producto.codigo == data.codigo).first():
+        raise HTTPException(400, "Código de producto ya existe")
+    obj = Producto(**data.model_dump())
+    db.add(obj); db.commit(); db.refresh(obj)
+    return obj
+
+@router.put("/productos/{id}", response_model=ProductoResponse, summary="Actualizar producto")
+def update_producto(id: int, data: ProductoCreate, db: Session = Depends(get_db), _=AdminOnly):
+    obj = db.query(Producto).filter(Producto.id == id).first()
+    if not obj: raise HTTPException(404, "Producto no encontrado")
+    for k, v in data.model_dump().items():
+        setattr(obj, k, v)
+    db.commit(); db.refresh(obj)
+    return obj
+
+@router.delete("/productos/{id}", response_model=Msg, summary="Desactivar producto")
+def delete_producto(id: int, db: Session = Depends(get_db), _=AdminOnly):
+    obj = db.query(Producto).filter(Producto.id == id).first()
+    if not obj: raise HTTPException(404, "Producto no encontrado")
+    obj.activo = False
+    db.commit()
+    return Msg(mensaje="Producto desactivado")
 
 
 # ── Indicadores ───────────────────────────────────────────────────────────────
