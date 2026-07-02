@@ -15,9 +15,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # Importar todos los modelos para resolver relaciones ORM entre esquemas.
 from app.models import usuario, dimensiones, hechos, visita  # noqa: F401
 from app.db.database import SessionLocal
-from app.models.dimensiones import Ciclo
 from app.schemas.visita import CostoEstructuraGuardar, CostoProductoItem
 from app.services import visita_costo_service
+from app.services.visita_cobertura_service import ciclo_por_defecto
 
 LINEA_ID = int(sys.argv[1]) if len(sys.argv) > 1 else 1
 
@@ -45,8 +45,10 @@ DATA = [
 def main() -> None:
     db = SessionLocal()
     try:
-        ciclo = db.query(Ciclo).filter(Ciclo.cerrado == False).order_by(Ciclo.id.desc()).first()  # noqa: E712
-        if not ciclo:
+        # Mismo ciclo que resuelve el endpoint (calcular_full → ciclo_por_defecto),
+        # para que el seed alimente exactamente lo que ve la UI.
+        ciclo_id = ciclo_por_defecto(db)
+        if not ciclo_id:
             raise SystemExit("No hay ciclo abierto para sembrar.")
         productos = [
             CostoProductoItem(
@@ -56,10 +58,10 @@ def main() -> None:
             for i, (cod, cu, cm, pool, vd, pa, pp) in enumerate(DATA, start=1)
         ]
         datos = CostoEstructuraGuardar(
-            ciclo_id=ciclo.id, linea_id=LINEA_ID, productos=productos, **ESTRUCTURA
+            ciclo_id=ciclo_id, linea_id=LINEA_ID, productos=productos, **ESTRUCTURA
         )
         full = visita_costo_service.guardar_estructura(db, datos, usuario_id=None)
-        print(f"Sembrado ciclo {ciclo.id} línea {LINEA_ID}: {len(DATA)} productos")
+        print(f"Sembrado ciclo {ciclo_id} línea {LINEA_ID}: {len(DATA)} productos")
         print(f"  costo fijo/visita   = {full['fijo']['costo_fijo_visita']}")
         print(f"  costo var/visita    = {full['muestras']['costo_variable_visita']}")
         print(f"  pool total          = {full['pool']['pool_total']}")
