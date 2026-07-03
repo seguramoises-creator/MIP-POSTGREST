@@ -173,6 +173,29 @@ class IntentoRespuesta(Base):
     intento: Mapped["IntentoExamen"] = relationship("IntentoExamen", back_populates="respuestas")
 
 
+class ConsolidacionCiclo(Base):
+    """Gate de integración de EVAL_CONOCIMIENTOS por (ciclo, país). Una fila por
+    par consolidado; la nota del RM solo llega al KPI cuando esta consolidación
+    se ejecuta (ver examen_consolidacion_service)."""
+    __tablename__ = "FactConsolidacionCiclo"
+    __table_args__ = (
+        UniqueConstraint("ciclo_id", "pais_codigo",
+                         name="UQ_ConsolidacionCiclo_ciclo_pais"),
+        {"schema": "exam"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ciclo_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
+    pais_codigo: Mapped[str] = mapped_column(String(10), nullable=False)
+    estado: Mapped[str] = mapped_column(String(15), nullable=False, default="pendiente")
+    rms_consolidados: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    nota_promedio_equipo: Mapped[float | None] = mapped_column(Numeric(5, 2), nullable=True)
+    fecha_consolidacion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    consolidado_por_usuario_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+
+
 class FuenteIA(Base):
     __tablename__ = "FactFuenteIA"
     __table_args__ = {"schema": "exam"}
