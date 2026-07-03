@@ -345,14 +345,12 @@ def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:
 
 
 def _finalizar_resultado(db, intento, examen, asignacion, correctas: int, total: int) -> None:
-    """Dispara el puente EVAL_CONOCIMIENTOS y el correo de resultado. Solo se invoca
-    cuando el resultado es definitivo (sin preguntas abiertas pendientes). Ningún
-    fallo aquí debe romper la entrega/calificación."""
-    try:
-        from app.services import examen_kpi_service
-        examen_kpi_service.alimentar_eval_conocimientos(db, intento)
-    except Exception as e:  # noqa: BLE001
-        logger.error(f"Puente EVAL_CONOCIMIENTOS falló (no bloquea): {e}")
+    """Dispara el correo de resultado por intento. Solo se invoca cuando el resultado
+    es definitivo (sin preguntas abiertas pendientes). Ningún fallo aquí debe romper
+    la entrega/calificación.
+
+    El aporte a EVAL_CONOCIMIENTOS ya NO ocurre aquí: la nota del RM solo entra al KPI
+    cuando Capacitación consolida el (ciclo, país) — ver examen_consolidacion_service."""
     if asignacion is not None and getattr(asignacion, "notif_activa", False):
         try:
             _notificar_resultado_examen(db, intento, examen, correctas, total)
