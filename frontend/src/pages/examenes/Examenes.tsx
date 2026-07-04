@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import { Add, AutoAwesome, UploadFile, CheckCircle, DeleteOutline, FileDownload } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import { useCicloStore } from '../../store/ciclo.store';
 import ConsolidacionPanel from './ConsolidacionPanel';
 import {
   listarExamenes, crearExamen, agregarPregunta, publicarExamen, asignarExamen,
@@ -64,6 +65,9 @@ export default function Examenes() {
   };
   useEffect(() => { cargar(); }, [cargar]);
 
+  // Ciclo/país activos del control global — todo examen nuevo se crea contra el ciclo operativo actual.
+  const { cicloId } = useCicloStore();
+
   // Crear examen
   const [nuevo, setNuevo] = useState({ nombre: '', producto: '', nota_minima: 70, tiempo_limite_min: '' as string });
   async function handleCrear() {
@@ -72,6 +76,7 @@ export default function Examenes() {
         nombre: nuevo.nombre, producto: nuevo.producto || null,
         nota_minima: Number(nuevo.nota_minima),
         tiempo_limite_min: nuevo.tiempo_limite_min ? Number(nuevo.tiempo_limite_min) : null,
+        ciclo_id: cicloId,
       });
       setNuevo({ nombre: '', producto: '', nota_minima: 70, tiempo_limite_min: '' });
       setMsg({ tipo: 'success', texto: `Examen "${ex.nombre}" creado en borrador.` });

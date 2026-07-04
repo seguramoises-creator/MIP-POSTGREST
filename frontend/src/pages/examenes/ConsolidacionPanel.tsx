@@ -1,35 +1,30 @@
 import { useEffect, useState } from 'react';
 import {
-  Card, CardContent, Box, Typography, TextField, MenuItem, Button, Chip, Stack,
+  Card, CardContent, Box, Typography, Button, Chip, Stack,
   Alert, CircularProgress, Divider, Tooltip,
 } from '@mui/material';
 import { Lock, CheckCircle } from '@mui/icons-material';
-import { api } from '../../services/api';
+import { useCicloStore } from '../../store/ciclo.store';
 import {
   consolidacionEstado, consolidarCiclo, type ConsolidacionEstado,
 } from '../../services/examenes.service';
-
-type Ciclo = { id: number; nombre?: string; nombre_canonico?: string; pais_codigo: string };
 
 /**
  * Panel "Consolidación de Ciclo → KPI": el gate del módulo de Exámenes. Escribe la
  * nota EVAL_CONOCIMIENTOS de los RM del (ciclo, país) a la FACT del motor de KPI —
  * es la ÚNICA vía por la que la nota entra al sistema. Solo Capacitación.
+ *
+ * Opera siempre sobre el ciclo/país del control global (useCicloStore), no sobre
+ * un desplegable local — evita listar los ~72 ciclos históricos de todos los países.
  */
 export default function ConsolidacionPanel() {
-  const [ciclos, setCiclos] = useState<Ciclo[]>([]);
-  const [cicloId, setCicloId] = useState<number | ''>('');
+  const { cicloId, paisCodigo, ciclo } = useCicloStore();
   const [estado, setEstado] = useState<ConsolidacionEstado | null>(null);
   const [cargando, setCargando] = useState(false);
   const [ejecutando, setEjecutando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
-  useEffect(() => {
-    api.get('/admin/ciclos').then((r) => setCiclos(r.data as Ciclo[])).catch(() => setCiclos([]));
-  }, []);
-
-  const ciclo = ciclos.find((c) => c.id === cicloId);
-  const label = (c: Ciclo) => `${c.nombre_canonico || c.nombre || `Ciclo ${c.id}`} — ${c.pais_codigo}`;
+  const label = ciclo ? `${ciclo.nombre_canonico || ciclo.nombre} — ${ciclo.pais_codigo}` : '—';
 
   const cargarEstado = (cid: number, pais: string) => {
     setCargando(true); setMsg(null);
@@ -39,26 +34,24 @@ export default function ConsolidacionPanel() {
       .finally(() => setCargando(false));
   };
 
-  const onSelect = (id: number) => {
-    setCicloId(id);
-    const c = ciclos.find((x) => x.id === id);
-    if (c) cargarEstado(c.id, c.pais_codigo);
+  useEffect(() => {
+    if (cicloId != null && paisCodigo) cargarEstado(cicloId, paisCodigo);
     else setEstado(null);
-  };
+  }, [cicloId, paisCodigo]);
 
   const consolidar = async () => {
-    if (!ciclo) return;
+    if (cicloId == null || !paisCodigo) return;
     if (!window.confirm(
       `Se escribirá la nota EVAL_CONOCIMIENTOS de ${estado?.rms_con_nota ?? 0} RM al KPI del ciclo `
-      + `${label(ciclo)} y se recalculará el ranking. ¿Continuar?`)) return;
+      + `${label} y se recalculará el ranking. ¿Continuar?`)) return;
     setEjecutando(true); setMsg(null);
     try {
-      const r = await consolidarCiclo(ciclo.id, ciclo.pais_codigo);
+      const r = await consolidarCiclo(cicloId, paisCodigo);
       if (r.abortado) {
         setMsg({ tipo: 'error', texto: 'Consolidación abortada: el ciclo está cerrado.' });
       } else {
         setMsg({ tipo: 'success', texto: `Consolidado: ${r.rms_consolidados} RM (promedio ${r.nota_promedio_equipo ?? '—'}). Ranking recalculado.` });
-        cargarEstado(ciclo.id, ciclo.pais_codigo);
+        cargarEstado(cicloId, paisCodigo);
       }
     } catch {
       setMsg({ tipo: 'error', texto: 'No se pudo consolidar el ciclo.' });
@@ -78,10 +71,10 @@ export default function ConsolidacionPanel() {
         </Typography>
 
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', mt: 1.5 }}>
-          <TextField select size="small" label="Ciclo" value={cicloId} sx={{ minWidth: 280 }}
-                     onChange={(e) => onSelect(Number(e.target.value))}>
-            {ciclos.map((c) => <MenuItem key={c.id} value={c.id}>{label(c)}</MenuItem>)}
-          </TextField>
+          <Box>
+            <Typography variant="caption" color="text.secondary" display="block">Ciclo</Typography>
+            <Typography fontWeight={600}>{label}</Typography>
+          </Box>
           {cargando && <CircularProgress size={22} />}
           {estado && (
             <Tooltip arrow title={estado.ciclo_abierto ? 'Ciclo abierto — se puede consolidar'
