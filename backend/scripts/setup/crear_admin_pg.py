@@ -46,7 +46,7 @@ def main() -> None:
         else:
             db.add(Usuario(
                 username="admin",
-                email="admin@sistemamip.com",
+                email="admin@vista-mip.com",
                 hashed_password=hashed,
                 nombre_completo="Administrador",
                 rol=Rol.ADMIN,

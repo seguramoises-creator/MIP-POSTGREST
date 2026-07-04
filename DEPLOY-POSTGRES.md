@@ -67,7 +67,7 @@ DB_PASSWORD=Tu.Clave.Fuerte_2026
 JWT_SECRET_KEY=__pega_un_secreto_largo__
 
 # CORS: como el frontend es same-origin no es crítico, pero incluye tu dominio:
-CORS_ORIGINS=["https://sistemamip.com","http://localhost"]
+CORS_ORIGINS=["https://vista-mip.com","http://localhost"]
 
 # Correo (Gmail App Password) y IA (opcional)
 MAIL_SERVER=smtp.gmail.com
@@ -125,17 +125,17 @@ git clone <tu-repo> /opt/msm && cd /opt/msm
 nano backend/.env
 # 4. Construir y levantar
 docker compose up -d --build       # (o --profile with-db si la BD va en contenedor)
-# 5. Apuntar el DNS de sistemamip.com → IP del servidor
+# 5. Apuntar el DNS de vista-mip.com → IP del servidor
 ```
 
-### TLS / HTTPS (sistemamip.com)
+### TLS / HTTPS (vista-mip.com)
 El frontend escucha en **80**. Pon un **terminador TLS delante**. Opción recomendada
-(usa el nginx del host + Let's Encrypt, ya existe `deploy/linux/nginx_sistemamip.com.conf`):
+(usa el nginx del host + Let's Encrypt, ya existe `deploy/linux/nginx_vista-mip.com.conf`):
 
 ```bash
 sudo apt install -y nginx certbot python3-certbot-nginx
 # nginx del host: reverse-proxy 443 → http://127.0.0.1:80 (el contenedor frontend)
-sudo certbot --nginx -d sistemamip.com -d www.sistemamip.com
+sudo certbot --nginx -d vista-mip.com -d www.vista-mip.com
 ```
 > Alternativa "todo-en-uno": añadir un contenedor **Caddy** como reverse-proxy con
 > HTTPS automático (`caddy reverse-proxy`), apuntando a `frontend:80`.

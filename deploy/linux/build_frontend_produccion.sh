@@ -3,18 +3,18 @@
 # MSM / SCGCPR — Build de producción del frontend (Linux/nginx)
 # ═══════════════════════════════════════════════════════════════════
 # Uso:
-#   ./build_frontend_produccion.sh [/ruta/al/proyecto] [https://sistemamip.com]
+#   ./build_frontend_produccion.sh [/ruta/al/proyecto] [https://vista-mip.com]
 #
 # Qué hace:
 #   1. Escribe frontend/.env.production con VITE_API_URL=<dominio>/api/v1
 #   2. Ejecuta npm install (si falta node_modules) y npm run build
 #   3. Deja el resultado en frontend/dist (nginx lo sirve directo, ver
-#      deploy/linux/nginx_sistemamip.com.conf -> root /opt/msm/frontend/dist)
+#      deploy/linux/nginx_vista-mip.com.conf -> root /opt/msm/frontend/dist)
 # ═══════════════════════════════════════════════════════════════════
 set -euo pipefail
 
 PROYECTO_DIR="${1:-/opt/msm}"
-DOMINIO_PUBLICO="${2:-https://sistemamip.com}"
+DOMINIO_PUBLICO="${2:-https://vista-mip.com}"
 FRONTEND_DIR="$PROYECTO_DIR/frontend"
 
 if [[ ! -d "$FRONTEND_DIR" ]]; then

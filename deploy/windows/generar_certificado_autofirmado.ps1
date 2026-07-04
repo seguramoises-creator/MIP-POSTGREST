@@ -1,9 +1,9 @@
 # ===================================================================
-# MSM / SCGCPR - Certificado TLS autofirmado para sistemamip.com
+# MSM / SCGCPR - Certificado TLS autofirmado para vista-mip.com
 # ===================================================================
 # Que hace:
 #   1. Genera un certificado autofirmado (valido 2 anios) para
-#      sistemamip.com y www.sistemamip.com en el almacen de certificados
+#      vista-mip.com y www.vista-mip.com en el almacen de certificados
 #      de la maquina local (LocalMachine\My).
 #   2. Crea (o reemplaza) los bindings https/443 del sitio IIS indicado,
 #      usando SNI, y les asocia el certificado generado.
@@ -14,7 +14,7 @@
 #     certificadora (CA) publica. Esto es normal y esperado para pruebas
 #     internas. Para produccion real, reemplazar mas adelante por un
 #     certificado de Let's Encrypt (win-acme) u otra CA, una vez el
-#     dominio sistemamip.com tenga DNS publico resuelto.
+#     dominio vista-mip.com tenga DNS publico resuelto.
 #   - Este script NO requiere DNS ni acceso a Internet, solo se ejecuta
 #     localmente en el servidor.
 #
@@ -26,9 +26,9 @@
 # ===================================================================
 
 param(
-    [string]$SiteName         = "sistemamip.com",
-    [string]$DominioPrincipal = "sistemamip.com",
-    [string]$DominioWww       = "www.sistemamip.com",
+    [string]$SiteName         = "vista-mip.com",
+    [string]$DominioPrincipal = "vista-mip.com",
+    [string]$DominioWww       = "www.vista-mip.com",
     [bool]$IncluirWww         = $true,
     [int]$AniosValidez        = 2
 )

@@ -1,11 +1,11 @@
 # ===================================================================
-# MSM / SCGCPR - Crear el sitio IIS para sistemamip.com (paso A.5)
+# MSM / SCGCPR - Crear el sitio IIS para vista-mip.com (paso A.5)
 # ===================================================================
 # Que hace:
 #   1. Crea (o reutiliza) un Application Pool dedicado "No Managed Code"
 #   2. Crea (o reutiliza) el sitio IIS con ruta fisica = build del frontend
 #      (C:\inetpub\wwwroot\mip, publicado por build_frontend_produccion.ps1)
-#   3. Agrega el binding http/80 para sistemamip.com (y www.sistemamip.com)
+#   3. Agrega el binding http/80 para vista-mip.com (y www.vista-mip.com)
 #      - Necesario para que win-acme (Let's Encrypt) pueda validar el
 #        dominio via HTTP-01 y para que la regla "Redirigir HTTP a HTTPS"
 #        del web.config funcione.
@@ -19,7 +19,7 @@
 #   - IIS instalado, modulos ARR/URL Rewrite (configurar_iis_arr.ps1 ya
 #     ejecutado), frontend publicado (build_frontend_produccion.ps1 ya
 #     ejecutado) en la ruta fisica indicada.
-#   - DNS de sistemamip.com (y www, si aplica) apuntando a la IP publica
+#   - DNS de vista-mip.com (y www, si aplica) apuntando a la IP publica
 #     de este servidor, y puerto 80 accesible desde Internet, ANTES de
 #     ejecutar win-acme (no es requisito para este script en si).
 #
@@ -29,9 +29,9 @@
 # ===================================================================
 
 param(
-    [string]$SiteName       = "sistemamip.com",
-    [string]$DominioPrincipal = "sistemamip.com",
-    [string]$DominioWww     = "www.sistemamip.com",
+    [string]$SiteName       = "vista-mip.com",
+    [string]$DominioPrincipal = "vista-mip.com",
+    [string]$DominioWww     = "www.vista-mip.com",
     [bool]$IncluirWww       = $true,
     [string]$RutaFisica     = "C:\inetpub\wwwroot\mip",
     [string]$AppPoolName    = "MSM-Pool"

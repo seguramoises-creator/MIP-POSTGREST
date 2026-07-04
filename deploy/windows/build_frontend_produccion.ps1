@@ -2,7 +2,7 @@
 # MSM / SCGCPR — Build de producción del frontend + publicación en IIS
 # ═══════════════════════════════════════════════════════════════════
 # Qué hace:
-#   1. Escribe frontend\.env.production con VITE_API_URL=https://sistemamip.com/api/v1
+#   1. Escribe frontend\.env.production con VITE_API_URL=https://vista-mip.com/api/v1
 #      (Vite carga .env.production automáticamente al ejecutar "vite build")
 #   2. Ejecuta npm install (si node_modules no existe) y npm run build
 #   3. Copia frontend\dist\* + deploy\windows\web.config a la carpeta del
@@ -11,12 +11,12 @@
 # Uso (PowerShell, no requiere ser Administrador salvo que -DestinoIIS
 # esté bajo una carpeta protegida como C:\inetpub):
 #   .\build_frontend_produccion.ps1
-#   .\build_frontend_produccion.ps1 -DominioPublico "https://sistemamip.com" -DestinoIIS "D:\sitios\mip"
+#   .\build_frontend_produccion.ps1 -DominioPublico "https://vista-mip.com" -DestinoIIS "D:\sitios\mip"
 # ═══════════════════════════════════════════════════════════════════
 
 param(
     [string]$ProyectoDir    = "C:\Users\Lenovo\Proyecto\MSM",
-    [string]$DominioPublico = "https://sistemamip.com",
+    [string]$DominioPublico = "https://vista-mip.com",
     [string]$DestinoIIS     = "C:\inetpub\wwwroot\mip"
 )
 

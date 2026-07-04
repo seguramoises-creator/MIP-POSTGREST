@@ -5,7 +5,7 @@
 #   1. Python 3.13 instalado y entorno virtual creado en backend\venv
 #      (cd backend; python -m venv venv; .\venv\Scripts\pip install -r requirements.txt)
 #   2. backend\.env configurado para produccion (APP_ENV=production, DEBUG=false,
-#      JWT_SECRET_KEY fuerte, CORS_ORIGINS y ALLOWED_HOSTS con https://sistemamip.com)
+#      JWT_SECRET_KEY fuerte, CORS_ORIGINS y ALLOWED_HOSTS con https://vista-mip.com)
 #   3. NSSM descargado desde https://nssm.cc/download y nssm.exe copiado a
 #      C:\Tools\nssm\nssm.exe (o ajustar -NssmPath al ejecutar este script)
 #
@@ -85,7 +85,7 @@ Write-Host "Instalando servicio '$ServiceName'..." -ForegroundColor Cyan
 
 & $NssmPath set $ServiceName AppDirectory $BackendDir
 & $NssmPath set $ServiceName DisplayName "MSM SCGCPR - Backend FastAPI"
-& $NssmPath set $ServiceName Description "Backend FastAPI del sistema MIP (MSM/SCGCPR), servido internamente y expuesto via IIS como proxy inverso en https://sistemamip.com"
+& $NssmPath set $ServiceName Description "Backend FastAPI del sistema MIP (MSM/SCGCPR), servido internamente y expuesto via IIS como proxy inverso en https://vista-mip.com"
 & $NssmPath set $ServiceName Start SERVICE_AUTO_START
 & $NssmPath set $ServiceName AppStdout (Join-Path $LogsDir "service_stdout.log")
 & $NssmPath set $ServiceName AppStderr (Join-Path $LogsDir "service_stderr.log")

@@ -59,7 +59,7 @@ El sistema permite:
 
 ### Infraestructura
 - Desarrollo — Backend: `http://localhost:8000` | Frontend: `http://localhost:3000` | Swagger: `http://localhost:8000/api/v1/docs`
-- Producción — `https://sistemamip.com` (IIS + ARR como proxy inverso hacia uvicorn, backend como servicio Windows vía NSSM)
+- Producción — `https://vista-mip.com` (IIS + ARR como proxy inverso hacia uvicorn, backend como servicio Windows vía NSSM)
 - Base de datos: SQL Server Express, BD `SCGCPR`, usuario `segura`
 
 ---
@@ -740,7 +740,7 @@ LOG_LEVEL=INFO
 LOG_FILE=logs/scgcpr.log
 ```
 
-En producción, `CORS_ORIGINS` debe incluir `https://sistemamip.com`. El `field_validator("CORS_ORIGINS", mode="before")` en `config.py` acepta tanto JSON array como string CSV (sin cambios respecto a v1.0).
+En producción, `CORS_ORIGINS` debe incluir `https://vista-mip.com`. El `field_validator("CORS_ORIGINS", mode="before")` en `config.py` acepta tanto JSON array como string CSV (sin cambios respecto a v1.0).
 
 ---
 
@@ -797,7 +797,7 @@ npm run dev
 ```
 
 ### Producción
-El sistema ya está desplegado en `https://sistemamip.com`: backend como servicio Windows (NSSM) detrás de IIS+ARR (proxy inverso, `preserveHostHeader` habilitado), frontend compilado y publicado en IIS, certificado TLS configurado. Ver `deploy/DEPLOYMENT.md` y los scripts en `deploy/windows/` (IIS/NSSM) y `deploy/linux/` (alternativa systemd+nginx) para el procedimiento completo. Pendiente: tras el último ajuste de `web.config`, redesplegar y purgar caché del navegador (ver §22, tarea de seguimiento abierta).
+El sistema ya está desplegado en `https://vista-mip.com`: backend como servicio Windows (NSSM) detrás de IIS+ARR (proxy inverso, `preserveHostHeader` habilitado), frontend compilado y publicado en IIS, certificado TLS configurado. Ver `deploy/DEPLOYMENT.md` y los scripts en `deploy/windows/` (IIS/NSSM) y `deploy/linux/` (alternativa systemd+nginx) para el procedimiento completo. Pendiente: tras el último ajuste de `web.config`, redesplegar y purgar caché del navegador (ver §22, tarea de seguimiento abierta).
 
 ### Crear tablas e inicializar (primera vez)
 ```powershell

@@ -76,8 +76,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = [
         "http://localhost:3000",
         "http://localhost:8000",
-        "https://sistemamip.com",
-        "https://www.sistemamip.com",
+        "https://vista-mip.com",
+        "https://www.vista-mip.com",
     ]
 
     @field_validator("CORS_ORIGINS", mode="before")
@@ -94,8 +94,8 @@ class Settings(BaseSettings):
     # ── Hosts permitidos (TrustedHostMiddleware, solo aplica en producción)
     # Debe incluir el dominio público servido por IIS/nginx (proxy inverso).
     ALLOWED_HOSTS: List[str] = [
-        "sistemamip.com",
-        "www.sistemamip.com",
+        "vista-mip.com",
+        "www.vista-mip.com",
         "localhost",
         "127.0.0.1",
     ]
@@ -116,7 +116,7 @@ class Settings(BaseSettings):
     # enviados por el proxy. No es leído directamente por uvicorn desde aquí;
     # ver start_produccion.ps1 / msm-backend.service (--proxy-headers).
     FORWARDED_ALLOW_IPS: str = "127.0.0.1"
-    PUBLIC_BASE_URL: str = "https://sistemamip.com"
+    PUBLIC_BASE_URL: str = "https://vista-mip.com"
 
     # ── Redis
     REDIS_URL: str = "redis://localhost:6379/0"

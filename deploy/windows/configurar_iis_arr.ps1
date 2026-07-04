@@ -10,7 +10,7 @@
 #   3. Habilita "Enable Proxy" en ARR (system.webServer/proxy)
 #   4. Habilita preserveHostHeader=True - CRITICO: sin esto, IIS reescribe
 #      el encabezado Host hacia 127.0.0.1:8000 y el backend (que valida
-#      ALLOWED_HOSTS=["sistemamip.com",...] via TrustedHostMiddleware) rechazara
+#      ALLOWED_HOSTS=["vista-mip.com",...] via TrustedHostMiddleware) rechazara
 #      TODAS las peticiones con error 400.
 #   5. Desbloquea la seccion system.webServer/rewrite/allowedServerVariables
 #      a nivel de servidor - CRITICO: por defecto esta seccion viene
@@ -124,7 +124,7 @@ $appcmd = "$env:SystemRoot\System32\inetsrv\appcmd.exe"
 
 Write-Host "  Proxy habilitado y preserveHostHeader=True." -ForegroundColor Green
 Write-Host "  (preserveHostHeader es CRITICO: permite que el backend reciba" -ForegroundColor Green
-Write-Host "   Host: sistemamip.com en lugar de 127.0.0.1:8000, requerido por ALLOWED_HOSTS)" -ForegroundColor Green
+Write-Host "   Host: vista-mip.com en lugar de 127.0.0.1:8000, requerido por ALLOWED_HOSTS)" -ForegroundColor Green
 
 # 4. Desbloquear allowedServerVariables (evita HTTP 500.52) ---------------
 Write-Host ""

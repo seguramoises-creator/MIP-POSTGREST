@@ -1,6 +1,6 @@
 # MSM / SCGCPR — Procedimiento de Instalación y Despliegue en Producción
 
-Dominio público objetivo: **https://sistemamip.com**
+Dominio público objetivo: **https://vista-mip.com**
 
 Este documento cubre dos rutas de despliegue equivalentes:
 
@@ -12,7 +12,7 @@ En ambas rutas, la aplicación Python (FastAPI/Uvicorn) corre internamente en
 Internet, actuando como proxy inverso y terminando TLS/HTTPS.
 
 ```
-Internet ──HTTPS──▶ IIS / nginx (puerto 443, dominio sistemamip.com)
+Internet ──HTTPS──▶ IIS / nginx (puerto 443, dominio vista-mip.com)
                         │
                         ├─▶ archivos estáticos (frontend/dist) — servidos directo
                         │
@@ -37,7 +37,7 @@ deploy/
 │   └── generar_jwt_secret.ps1
 └── linux/
     ├── msm-backend.service             ← unidad systemd
-    ├── nginx_sistemamip.com.conf              ← config nginx (proxy + SPA + HTTPS)
+    ├── nginx_vista-mip.com.conf              ← config nginx (proxy + SPA + HTTPS)
     ├── instalar_servicio_backend.sh
     └── build_frontend_produccion.sh
 
@@ -55,9 +55,9 @@ backend/.env.production.example         ← plantilla de variables de entorno
 - **Python 3.13** instalado en el servidor.
 - **Node.js 18+** y npm instalados (solo se necesitan para compilar el
   frontend; no se requieren en tiempo de ejecución).
-- Un registro DNS tipo **A** (o **CNAME**) para `sistemamip.com` (y opcionalmente
-  `www.sistemamip.com`) apuntando a la IP pública del servidor.
-- Certificado TLS para `sistemamip.com`:
+- Un registro DNS tipo **A** (o **CNAME**) para `vista-mip.com` (y opcionalmente
+  `www.vista-mip.com`) apuntando a la IP pública del servidor.
+- Certificado TLS para `vista-mip.com`:
   - Producción: certificado de una CA pública (ej. Let's Encrypt, gratuito)
   - Pruebas internas: certificado autofirmado (instrucciones en cada ruta)
 
@@ -75,13 +75,13 @@ backend/.env.production.example         ← plantilla de variables de entorno
      - Windows: `deploy\windows\generar_jwt_secret.ps1`
      - Linux/macOS: `openssl rand -base64 48`
    - Confirme `APP_ENV=production`, `DEBUG=false`
-   - Confirme `CORS_ORIGINS=["https://sistemamip.com","https://www.sistemamip.com"]`
-   - Confirme `ALLOWED_HOSTS=["sistemamip.com","www.sistemamip.com","localhost","127.0.0.1"]`
+   - Confirme `CORS_ORIGINS=["https://vista-mip.com","https://www.vista-mip.com"]`
+   - Confirme `ALLOWED_HOSTS=["vista-mip.com","www.vista-mip.com","localhost","127.0.0.1"]`
 
-   > **Crítico:** si `sistemamip.com` no está en `ALLOWED_HOSTS`, el middleware
+   > **Crítico:** si `vista-mip.com` no está en `ALLOWED_HOSTS`, el middleware
    > `TrustedHostMiddleware` (activo solo cuando `APP_ENV=production`)
    > rechazará con HTTP 400 **todas** las peticiones que lleguen con
-   > `Host: sistemamip.com`. Esto ya viene configurado por defecto en
+   > `Host: vista-mip.com`. Esto ya viene configurado por defecto en
    > `app/core/config.py`, pero verifíquelo si cambia el dominio.
 
 3. Cree el entorno virtual e instale dependencias (si no existe):
@@ -162,37 +162,37 @@ Routing Cache* → *Server Proxy Settings* → marcar **Enable proxy**, y en
 
 ```powershell
 cd C:\Users\Lenovo\Proyecto\MSM\deploy\windows
-.\build_frontend_produccion.ps1 -DominioPublico "https://sistemamip.com" -DestinoIIS "C:\inetpub\wwwroot\mip"
+.\build_frontend_produccion.ps1 -DominioPublico "https://vista-mip.com" -DestinoIIS "C:\inetpub\wwwroot\mip"
 ```
-Esto compila el frontend con `VITE_API_URL=https://sistemamip.com/api/v1` (en vez
+Esto compila el frontend con `VITE_API_URL=https://vista-mip.com/api/v1` (en vez
 del valor de desarrollo `http://127.0.0.1:8000/api/v1`) y copia el resultado
 junto con `web.config` a `C:\inetpub\wwwroot\mip`.
 
 ### A.5 Crear el sitio en IIS Manager
 
 1. *Sites → Add Website*:
-   - **Site name**: `sistemamip.com`
+   - **Site name**: `vista-mip.com`
    - **Physical path**: `C:\inetpub\wwwroot\mip`
-   - **Binding**: Type `https`, Host name `sistemamip.com`, puerto `443`,
+   - **Binding**: Type `https`, Host name `vista-mip.com`, puerto `443`,
      seleccione el certificado SSL (ver A.6)
-2. Agregue un segundo binding `http`/puerto `80`/host `sistemamip.com` — necesario
+2. Agregue un segundo binding `http`/puerto `80`/host `vista-mip.com` — necesario
    para que la regla "Redirigir HTTP a HTTPS" del `web.config` pueda
    procesar la petición antes de redirigir (si no, el navegador nunca llega
    a IIS en el puerto 80).
-3. Repita los bindings para `www.sistemamip.com` si aplica.
+3. Repita los bindings para `www.vista-mip.com` si aplica.
 4. Confirme que el *Application Pool* del sitio usa **"No Managed Code"**
    (el sitio es estático + proxy, no necesita .NET CLR).
 
 ### A.6 Certificado TLS
 
-- **Producción (CA pública)**: solicite/importe el certificado de `sistemamip.com`
+- **Producción (CA pública)**: solicite/importe el certificado de `vista-mip.com`
   en el almacén de certificados del servidor (*Server Certificates* en IIS
   Manager → *Import* o *Create Certificate Request*), luego selecciónelo en
   el binding HTTPS del paso A.5. Si usa un proveedor compatible con ACME,
   puede automatizar la renovación con `win-acme` (https://www.win-acme.com/).
 - **Pruebas internas (autofirmado)**:
   ```powershell
-  New-SelfSignedCertificate -DnsName "sistemamip.com","www.sistemamip.com" `
+  New-SelfSignedCertificate -DnsName "vista-mip.com","www.vista-mip.com" `
       -CertStoreLocation "cert:\LocalMachine\My" -NotAfter (Get-Date).AddYears(2)
   ```
   Luego selecciónelo en el binding HTTPS. Los navegadores mostrarán una
@@ -200,17 +200,17 @@ junto con `web.config` a `C:\inetpub\wwwroot\mip`.
 
 ### A.7 DNS
 
-Cree un registro **A** para `sistemamip.com` (y `www.sistemamip.com` si aplica) apuntando
+Cree un registro **A** para `vista-mip.com` (y `www.vista-mip.com` si aplica) apuntando
 a la IP pública del servidor Windows. Verifique propagación con
-`nslookup sistemamip.com` desde una máquina externa.
+`nslookup vista-mip.com` desde una máquina externa.
 
 ### A.8 Verificación end-to-end
 
 ```
-https://sistemamip.com/                  → debe cargar el SPA (login de MSM)
-https://sistemamip.com/health            → {"status":"healthy",...}
-https://sistemamip.com/api/v1/docs       → Swagger UI
-http://sistemamip.com/                   → debe redirigir (301) a https://sistemamip.com/
+https://vista-mip.com/                  → debe cargar el SPA (login de MSM)
+https://vista-mip.com/health            → {"status":"healthy",...}
+https://vista-mip.com/api/v1/docs       → Swagger UI
+http://vista-mip.com/                   → debe redirigir (301) a https://vista-mip.com/
 ```
 Pruebe un login real y navegue 2-3 pantallas que llamen a la API para
 confirmar que el proxy reenvía correctamente `/api/v1/*`.
@@ -253,16 +253,16 @@ sudo systemctl status msm-backend
 ### B.4 Compilar el frontend
 
 ```bash
-./build_frontend_produccion.sh /opt/msm https://sistemamip.com
+./build_frontend_produccion.sh /opt/msm https://vista-mip.com
 ```
 El build queda en `/opt/msm/frontend/dist`, que es exactamente el `root`
-configurado en `nginx_sistemamip.com.conf`.
+configurado en `nginx_vista-mip.com.conf`.
 
 ### B.5 Configurar nginx
 
 ```bash
-sudo cp /opt/msm/deploy/linux/nginx_sistemamip.com.conf /etc/nginx/sites-available/sistemamip.com.conf
-sudo ln -s /etc/nginx/sites-available/sistemamip.com.conf /etc/nginx/sites-enabled/
+sudo cp /opt/msm/deploy/linux/nginx_vista-mip.com.conf /etc/nginx/sites-available/vista-mip.com.conf
+sudo ln -s /etc/nginx/sites-available/vista-mip.com.conf /etc/nginx/sites-enabled/
 sudo rm -f /etc/nginx/sites-enabled/default   # evita conflicto con el sitio por defecto
 sudo nginx -t
 ```
@@ -270,9 +270,9 @@ sudo nginx -t
 ### B.6 Certificado TLS con Let's Encrypt
 
 ```bash
-sudo certbot --nginx -d sistemamip.com -d www.sistemamip.com
+sudo certbot --nginx -d vista-mip.com -d www.vista-mip.com
 ```
-Certbot edita automáticamente `sistemamip.com.conf` con las rutas del certificado
+Certbot edita automáticamente `vista-mip.com.conf` con las rutas del certificado
 y configura la renovación automática (vía systemd timer / cron).
 
 ```bash
@@ -281,15 +281,15 @@ sudo systemctl reload nginx
 
 ### B.7 DNS
 
-Igual que en la Ruta A: registro **A** de `sistemamip.com` (y `www.sistemamip.com`) hacia
+Igual que en la Ruta A: registro **A** de `vista-mip.com` (y `www.vista-mip.com`) hacia
 la IP pública del VPS.
 
 ### B.8 Verificación end-to-end
 
 ```bash
-curl -I https://sistemamip.com/
-curl -s https://sistemamip.com/health
-curl -s https://sistemamip.com/api/v1/openapi.json | head -c 200
+curl -I https://vista-mip.com/
+curl -s https://vista-mip.com/health
+curl -s https://vista-mip.com/api/v1/openapi.json | head -c 200
 ```
 
 ---
@@ -314,11 +314,11 @@ Cada vez que se despliegue una nueva versión del código:
 | Síntoma | Causa probable | Solución |
 |---|---|---|
 | `400 Bad Request` en todas las rutas tras activar producción | `Host` recibido no está en `ALLOWED_HOSTS`, o IIS no preserva el Host header | Verificar `ALLOWED_HOSTS` en `.env`; en IIS confirmar `preserveHostHeader=True` (paso A.2) |
-| El SPA carga pero las llamadas a la API fallan (CORS) | `CORS_ORIGINS` no incluye `https://sistemamip.com` | Editar `backend/.env`, agregar el origen exacto (con esquema), reiniciar el servicio |
-| El frontend llama a `127.0.0.1:8000` en vez de `sistemamip.com` desde el navegador | El build se hizo sin `VITE_API_URL` de producción (build viejo) | Re-ejecutar `build_frontend_produccion.ps1`/`.sh` con el dominio correcto |
+| El SPA carga pero las llamadas a la API fallan (CORS) | `CORS_ORIGINS` no incluye `https://vista-mip.com` | Editar `backend/.env`, agregar el origen exacto (con esquema), reiniciar el servicio |
+| El frontend llama a `127.0.0.1:8000` en vez de `vista-mip.com` desde el navegador | El build se hizo sin `VITE_API_URL` de producción (build viejo) | Re-ejecutar `build_frontend_produccion.ps1`/`.sh` con el dominio correcto |
 | `JWT_SECRET_KEY inseguro en producción` al arrancar | Se dejó el valor de desarrollo o uno corto | Generar uno nuevo (`generar_jwt_secret.ps1` o `openssl rand -base64 48`) |
 | 502/504 al llamar `/api/v1/*` desde el dominio público | El backend no está corriendo en `127.0.0.1:8000`, o el firewall local bloquea loopback | `Get-Service MSM-Backend` / `systemctl status msm-backend`; revisar logs en `backend/logs/` |
-| Rutas de React Router (ej. `/dashboard/ejecutivo`) dan 404 al refrescar la página | Falta la regla de SPA fallback | Confirmar que `web.config`/`nginx_sistemamip.com.conf` están realmente publicados en el sitio activo |
+| Rutas de React Router (ej. `/dashboard/ejecutivo`) dan 404 al refrescar la página | Falta la regla de SPA fallback | Confirmar que `web.config`/`nginx_vista-mip.com.conf` están realmente publicados en el sitio activo |
 | Subida de Excel grande falla con 413 | Límite de tamaño del proxy menor a `ETL_MAX_FILE_SIZE_MB` | Ajustar `maxAllowedContentLength` (web.config) o `client_max_body_size` (nginx) |
 
 ---

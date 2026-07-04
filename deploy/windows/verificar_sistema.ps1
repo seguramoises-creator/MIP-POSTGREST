@@ -16,7 +16,7 @@ param(
     [string]$BackendServiceName = "MSM-Backend",
     [string]$IisServiceName    = "W3SVC",
     [string]$BackendUrl        = "http://localhost:8000/api/v1/docs",
-    [string]$SitioUrl          = "https://sistemamip.com"
+    [string]$SitioUrl          = "https://vista-mip.com"
 )
 
 $ErrorActionPreference = "Continue"

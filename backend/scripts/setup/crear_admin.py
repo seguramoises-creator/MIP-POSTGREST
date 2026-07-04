@@ -40,7 +40,7 @@ else:
         INSERT INTO Security.DIM_Usuario
             (username, email, hashed_password, nombre_completo, rol, activo, debe_cambiar_password, intentos_fallidos)
         VALUES
-            ('admin', 'admin@sistemamip.com', %s, 'Administrador', 'ADMIN', 1, 0, 0)
+            ('admin', 'admin@vista-mip.com', %s, 'Administrador', 'ADMIN', 1, 0, 0)
     """, (hashed,))
     conn.commit()
     print("  ✓ Usuario admin creado")
@@ -58,5 +58,5 @@ print("""
 ¡Listo!
   Usuario:    admin
   Contraseña: Admin1234!
-  URL:        https://sistemamip.com
+  URL:        https://vista-mip.com
 """)

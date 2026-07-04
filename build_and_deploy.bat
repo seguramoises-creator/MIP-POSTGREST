@@ -34,6 +34,6 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo.
 echo ============================================
-echo  Listo! Abre https://sistemamip.com
+echo  Listo! Abre https://vista-mip.com
 echo ============================================
 pause
