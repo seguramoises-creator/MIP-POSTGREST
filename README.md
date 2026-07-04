@@ -1,17 +1,23 @@
-# MSM — Sistema MIP de Productividad y Reconocimiento Comercial
+# MSM — Sistema MIP de Productividad y Reconocimiento Comercial · Edición PostgreSQL
 
 [![CI](https://github.com/seguramoises-creator/MIP/actions/workflows/ci.yml/badge.svg)](https://github.com/seguramoises-creator/MIP/actions/workflows/ci.yml)
 
 Aplicación web empresarial multipaís para medir, gestionar y reconocer el desempeño
 de la fuerza de ventas farmacéutica (Representantes Médicos y Gerentes de Distrito).
 
+> 🐘 **Edición PostgreSQL** — pensada para clientes grandes. El motor de cálculo
+> (Score Integral, Ranking, Categorización, Cobertura) es **100% Python**, sin stored
+> procedures; la BD es PostgreSQL 14+. Existe una edición gemela con SQL Server en
+> contenedor para clientes que ya operan sobre SQL Server.
+>
 > 📘 La documentación técnica completa está en [`CLAUDE.md`](CLAUDE.md).
+> 🐳 Despliegue con Docker: [`DEPLOY-POSTGRES.md`](DEPLOY-POSTGRES.md).
 
 ## Stack
 
 | Capa | Tecnología |
 |------|------------|
-| Backend | Python 3.13 · FastAPI · SQLAlchemy 2.0 · Alembic · SQL Server (pymssql) |
+| Backend | Python 3.13 · FastAPI · SQLAlchemy 2.0 · Alembic · **PostgreSQL (psycopg2)** |
 | Frontend | React 18 · TypeScript · Vite · Material UI v6 · Zustand · React Query |
 | Auth | JWT (python-jose) · RBAC por roles |
 

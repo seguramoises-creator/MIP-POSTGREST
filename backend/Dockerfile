@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────
-# Backend MSM / VISTA (SCGCPR) — FastAPI + uvicorn (pymssql/FreeTDS)
+# Backend MSM / VISTA (SCGCPR) — FastAPI + uvicorn — edición PostgreSQL
 # ─────────────────────────────────────────────────────────────
 FROM python:3.12-slim
 
@@ -7,10 +7,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1
 
-# pymssql requiere FreeTDS (libsybdb) en runtime; gcc por si toca compilar.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        freetds-dev freetds-bin gcc \
-    && rm -rf /var/lib/apt/lists/*
+# psycopg2-binary trae libpq embebido: no requiere paquetes de sistema en runtime.
+# (La edición SQL Server necesitaba FreeTDS aquí; esta no.)
 
 WORKDIR /app
 
