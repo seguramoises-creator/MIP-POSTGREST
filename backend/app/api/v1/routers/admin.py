@@ -439,12 +439,35 @@ def delete_tabla_criterio(id: int, tabla_id: int, db: Session = Depends(get_db),
 
 # ── Ciclos ────────────────────────────────────────────────────────────────────
 
+def _ciclo_actual_de(ciclos):
+    """Ciclo abierto (cerrado=False) más reciente: max por (anio, numero)."""
+    abiertos = [c for c in ciclos if not c.cerrado]
+    if not abiertos:
+        return None
+    return max(abiertos, key=lambda c: (c.anio, c.numero))
+
+
 @router.get("/ciclos", response_model=List[CicloResponse], summary="Listar ciclos")
-def list_ciclos(pais_codigo: Optional[str] = None, anio: Optional[int] = None, db: Session = Depends(get_db), _=LecturaCatalogos):
+def list_ciclos(pais_codigo: Optional[str] = None, anio: Optional[int] = None,
+                abierto: Optional[bool] = None,
+                db: Session = Depends(get_db), _=LecturaCatalogos):
     q = db.query(Ciclo).filter(Ciclo.activo == True)
-    if pais_codigo: q = q.filter(Ciclo.pais_codigo == pais_codigo)
-    if anio: q = q.filter(Ciclo.anio == anio)
+    if pais_codigo:
+        q = q.filter(Ciclo.pais_codigo == pais_codigo)
+    if anio:
+        q = q.filter(Ciclo.anio == anio)
+    if abierto is not None:
+        q = q.filter(Ciclo.cerrado == (not abierto))
     return q.order_by(Ciclo.anio, Ciclo.numero).all()
+
+
+@router.get("/ciclos/actual", response_model=Optional[CicloResponse],
+            summary="Ciclo abierto actual de un país")
+def ciclo_actual(pais_codigo: str, db: Session = Depends(get_db), _=LecturaCatalogos):
+    ciclos = (db.query(Ciclo)
+              .filter(Ciclo.activo == True, Ciclo.pais_codigo == pais_codigo)
+              .all())
+    return _ciclo_actual_de(ciclos)
 
 @router.post("/ciclos", response_model=CicloResponse, status_code=201, summary="Crear ciclo")
 def create_ciclo(data: CicloCreate, db: Session = Depends(get_db), _=AdminOnly):
