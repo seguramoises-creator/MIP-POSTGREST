@@ -605,7 +605,7 @@ def _importar_hoja(
         # Si LINEA_ID del Excel es numérico, preservarlo como id de BD (IDENTITY_INSERT)
         usar_id_natural = bool(rows and _i(rows[0].get("LINEA_ID")))
         if usar_id_natural:
-            db.execute(_text("SET IDENTITY_INSERT [Config].[DIM_Linea] ON"))
+            db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_Linea" ON'))
 
         try:
             ids_usados: set = set()
@@ -636,7 +636,7 @@ def _importar_hoja(
                 ins += 1
         finally:
             if usar_id_natural:
-                db.execute(_text("SET IDENTITY_INSERT [Config].[DIM_Linea] OFF"))
+                db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_Linea" OFF'))
 
         db.commit()
 
@@ -647,7 +647,7 @@ def _importar_hoja(
         # Si GERENTE_ID del Excel es numérico, preservarlo como id de BD (IDENTITY_INSERT)
         usar_id_natural = bool(rows and _i(rows[0].get("GERENTE_ID")))
         if usar_id_natural:
-            db.execute(_text("SET IDENTITY_INSERT [Config].[DIM_Gerente] ON"))
+            db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_Gerente" ON'))
 
         try:
             ids_usados: set = set()
@@ -683,7 +683,7 @@ def _importar_hoja(
                 ins += 1
         finally:
             if usar_id_natural:
-                db.execute(_text("SET IDENTITY_INSERT [Config].[DIM_Gerente] OFF"))
+                db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_Gerente" OFF'))
 
         db.commit()
 
@@ -699,7 +699,7 @@ def _importar_hoja(
         ))
 
         if usar_id_natural:
-            db.execute(_text("SET IDENTITY_INSERT [Config].[DIM_RM] ON"))
+            db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_RM" ON'))
 
         try:
             for row in rows:
@@ -741,7 +741,7 @@ def _importar_hoja(
                 ins += 1
         finally:
             if usar_id_natural:
-                db.execute(_text("SET IDENTITY_INSERT [Config].[DIM_RM] OFF"))
+                db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_RM" OFF'))
 
         db.commit()
 
@@ -754,7 +754,7 @@ def _importar_hoja(
         # los países subsiguientes con el mismo id obtendrán un id auto-generado.
         usar_id_natural = bool(rows and _i(rows[0].get("INDICADOR_ID")))
         if usar_id_natural:
-            db.execute(_text("SET IDENTITY_INSERT [Config].[DIM_Indicador] ON"))
+            db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_Indicador" ON'))
 
         try:
             ids_usados: set = set()  # IDs ya asignados en este lote o en BD
@@ -827,7 +827,7 @@ def _importar_hoja(
                     ins += 1
         finally:
             if usar_id_natural:
-                db.execute(_text("SET IDENTITY_INSERT [Config].[DIM_Indicador] OFF"))
+                db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_Indicador" OFF'))
 
         db.commit()
 
