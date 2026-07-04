@@ -75,3 +75,6 @@ Thumbs.db
 
 # Scratch del flujo subagent-driven (skill superpowers)
 .superpowers/
+
+# Tooling de sesión (preview/launch)
+.claude/
