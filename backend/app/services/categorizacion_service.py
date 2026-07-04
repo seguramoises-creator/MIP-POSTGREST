@@ -264,6 +264,175 @@ def _limpiar_periodo(db: Session, periodo: str) -> int:
     return len(keys)
 
 
+# Mapeo de componentes → columna de staging (numérico vs texto), como en el SP.
+_COMP_NUM = {"PACIENTES_SEMANA": "PacientesSemana", "PODER_ADQUISITIVO": "CostoConsulta"}
+_COMP_TXT = {"POTENCIAL_PRESCRIPCION": "RecetasSemana",
+             "UBICACION_TERRITORIAL_CM": "UbicacionTerritorialCM", "KOL": "KOL"}
+
+
+def _mejor_regla(matches):
+    """rn=1 del SP: ORDER BY Criterio DESC, ReglaKey ASC. Devuelve la regla top o None."""
+    if not matches:
+        return None
+    orden = sorted(matches, key=lambda r: r["ReglaKey"])
+    orden.sort(key=lambda r: (r["Criterio"] or ""), reverse=True)  # NULL/'' al final (como SQL NULL en DESC)
+    return orden[0]
+
+
+def _regla_aplica(regla, valor_num, valor_txt):
+    if valor_num is not None:
+        if (regla["ValorMinimo"] is None or valor_num >= regla["ValorMinimo"]) and \
+           (regla["ValorMaximo"] is None or valor_num <= regla["ValorMaximo"]):
+            return True
+    if valor_txt is not None and regla["ValorTexto"] is not None:
+        if valor_txt.strip().upper() == str(regla["ValorTexto"]).strip().upper():
+            return True
+    return False
+
+
+def calcular_categorias_py(db: Session, load_batch_key: int) -> None:
+    """Equivalente Python de cat.sp_CalcularCategoriaMedica (ETL dimensional + scoring).
+    Conforma dimensiones, calcula puntaje por reglas y escribe Snapshot + Detalle."""
+    from datetime import datetime, timezone
+    from collections import defaultdict
+    b = {"b": load_batch_key}
+    fc = {"fc": datetime.now(timezone.utc).date()}
+
+    # 1-5: conformar dimensiones (SQL portable: TRIM/COALESCE)
+    db.execute(text("""INSERT INTO cat.DimEspecialidad (PaisKey, Especialidad)
+        SELECT DISTINCT p.PaisKey, TRIM(s.Especialidad) FROM stg.MedicoCategoriaInput s
+        JOIN cat.DimPais p ON p.CodigoPais=s.CodigoPais
+        WHERE s.LoadBatchKey=:b AND s.Especialidad IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM cat.DimEspecialidad d WHERE d.PaisKey=p.PaisKey AND d.Especialidad=TRIM(s.Especialidad))"""), b)
+    db.execute(text("""INSERT INTO cat.DimCentroMedico (PaisKey, CentroMedico)
+        SELECT DISTINCT p.PaisKey, TRIM(s.CentroMedico) FROM stg.MedicoCategoriaInput s
+        JOIN cat.DimPais p ON p.CodigoPais=s.CodigoPais
+        WHERE s.LoadBatchKey=:b AND s.CentroMedico IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM cat.DimCentroMedico d WHERE d.PaisKey=p.PaisKey AND d.CentroMedico=TRIM(s.CentroMedico))"""), b)
+    db.execute(text("""INSERT INTO cat.DimGeografia (PaisKey, Provincia, Municipio)
+        SELECT DISTINCT p.PaisKey, TRIM(s.Provincia), TRIM(s.Municipio) FROM stg.MedicoCategoriaInput s
+        JOIN cat.DimPais p ON p.CodigoPais=s.CodigoPais
+        WHERE s.LoadBatchKey=:b AND s.Provincia IS NOT NULL AND s.Municipio IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM cat.DimGeografia d WHERE d.PaisKey=p.PaisKey AND d.Provincia=TRIM(s.Provincia) AND d.Municipio=TRIM(s.Municipio))"""), b)
+    db.execute(text("""INSERT INTO cat.DimRepresentanteMedico (PaisKey, CodigoRepresentante, NombreRepresentante, LineaIdOrigen, EquipoTexto, Activo)
+        SELECT DISTINCT p.PaisKey, s.CodigoRepresentante, TRIM(s.NombreRepresentante), s.LineaIdOrigen, TRIM(s.Equipo), 1
+        FROM stg.MedicoCategoriaInput s JOIN cat.DimPais p ON p.CodigoPais=s.CodigoPais
+        WHERE s.LoadBatchKey=:b AND s.CodigoRepresentante IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM cat.DimRepresentanteMedico d WHERE d.PaisKey=p.PaisKey AND d.CodigoRepresentante=s.CodigoRepresentante)"""), b)
+    db.execute(text("""INSERT INTO cat.DimMedico (PaisKey, CodigoMedico, NombreMedico, EspecialidadKey)
+        SELECT DISTINCT p.PaisKey, NULL, TRIM(s.Medico), esp.EspecialidadKey
+        FROM stg.MedicoCategoriaInput s JOIN cat.DimPais p ON p.CodigoPais=s.CodigoPais
+        LEFT JOIN cat.DimEspecialidad esp ON esp.PaisKey=p.PaisKey AND esp.Especialidad=TRIM(s.Especialidad)
+        WHERE s.LoadBatchKey=:b
+          AND NOT EXISTS (SELECT 1 FROM cat.DimMedico d WHERE d.PaisKey=p.PaisKey AND d.NombreMedico=TRIM(s.Medico)
+            AND COALESCE(d.EspecialidadKey,-1)=COALESCE(esp.EspecialidadKey,-1))"""), b)
+    db.flush()
+
+    # 6-7: filas enriquecidas con las keys de dimensión
+    rows = db.execute(text("""
+        SELECT s.RowNumber, p.PaisKey, med.MedicoKey, cm.CentroMedicoKey, geo.GeografiaKey, rep.RepresentanteKey,
+               s.Periodo, s.Equipo, s.LineaIdOrigen, s.PacientesSemana, s.CostoConsulta, s.RecetasSemana,
+               s.UbicacionTerritorialCM, s.KOL, TRIM(s.Provincia) AS Provincia, TRIM(s.Municipio) AS Municipio, s.CategoriaExcel
+        FROM stg.MedicoCategoriaInput s
+        JOIN cat.DimPais p ON p.CodigoPais=s.CodigoPais
+        LEFT JOIN cat.DimEspecialidad esp ON esp.PaisKey=p.PaisKey AND esp.Especialidad=TRIM(s.Especialidad)
+        JOIN cat.DimMedico med ON med.PaisKey=p.PaisKey AND med.NombreMedico=TRIM(s.Medico)
+             AND COALESCE(med.EspecialidadKey,-1)=COALESCE(esp.EspecialidadKey,-1)
+        LEFT JOIN cat.DimCentroMedico cm ON cm.PaisKey=p.PaisKey AND cm.CentroMedico=TRIM(s.CentroMedico)
+        LEFT JOIN cat.DimGeografia geo ON geo.PaisKey=p.PaisKey AND geo.Provincia=TRIM(s.Provincia) AND geo.Municipio=TRIM(s.Municipio)
+        LEFT JOIN cat.DimRepresentanteMedico rep ON rep.PaisKey=p.PaisKey AND rep.CodigoRepresentante=s.CodigoRepresentante
+        WHERE s.LoadBatchKey=:b"""), b).mappings().all()
+
+    comps = db.execute(text("SELECT ComponenteKey, CodigoComponente, Requerido FROM cat.DimComponenteCategoria WHERE Activo=1")).mappings().all()
+    reglas = db.execute(text("""SELECT ReglaKey, PaisKey, ComponenteKey, ValorMinimo, ValorMaximo, ValorTexto, Criterio, PuntajePct
+        FROM cat.DimReglaCategoriaMedica WHERE Activo=1 AND VigenteDesde<=:fc AND (VigenteHasta IS NULL OR VigenteHasta>=:fc)"""), fc).mappings().all()
+    clases = db.execute(text("""SELECT ClasificacionKey, PaisKey, Clase, PuntajeMinPct, PuntajeMaxPct
+        FROM cat.DimClasificacionMedica WHERE Activo=1 AND VigenteDesde<=:fc AND (VigenteHasta IS NULL OR VigenteHasta>=:fc)"""), fc).mappings().all()
+
+    reglas_idx = defaultdict(list)
+    for r in reglas:
+        reglas_idx[(r["PaisKey"], r["ComponenteKey"])].append(r)
+    clases_pais = defaultdict(list)
+    for c in clases:
+        clases_pais[c["PaisKey"]].append(c)
+    n_req = sum(1 for c in comps if c["Requerido"])
+
+    def _valor(row, cod):
+        if cod in _COMP_NUM:
+            return row[_COMP_NUM[cod]], None
+        if cod in _COMP_TXT:
+            v = row[_COMP_TXT[cod]]
+            return None, (None if v is None else str(v))
+        return None, None
+
+    snap_params, detalle_por_row = [], {}
+    for row in rows:
+        total = 0
+        calculados = 0
+        detalles = []
+        for c in comps:
+            vnum, vtxt = _valor(row, c["CodigoComponente"])
+            candidatas = [g for g in reglas_idx.get((row["PaisKey"], c["ComponenteKey"]), []) if _regla_aplica(g, vnum, vtxt)]
+            mejor = _mejor_regla(candidatas)
+            if c["Requerido"]:
+                if mejor is not None:
+                    total += mejor["PuntajePct"]
+                    calculados += 1
+            detalles.append({"ComponenteKey": c["ComponenteKey"], "ReglaKey": mejor["ReglaKey"] if mejor else None,
+                             "ValorEntradaTexto": vtxt, "ValorEntradaNumero": vnum,
+                             "Criterio": mejor["Criterio"] if mejor else None,
+                             "PuntajePct": mejor["PuntajePct"] if mejor else None,
+                             "EstadoComponente": "OK" if mejor else "SIN_REGLA"})
+        clase = next((cl for cl in clases_pais.get(row["PaisKey"], []) if cl["PuntajeMinPct"] <= total <= cl["PuntajeMaxPct"]), None)
+        cat_excel = row["CategoriaExcel"]
+        if cat_excel is None or str(cat_excel).strip() == "":
+            concil = "SIN_CATEGORIA_EXCEL"
+        elif clase is not None and str(clase["Clase"]).strip().upper() == str(cat_excel).strip().upper():
+            concil = "COINCIDE"
+        else:
+            concil = "DISCREPANCIA"
+        estado = "CALCULADO" if calculados == n_req else "PENDIENTE"
+        mensaje = None if calculados == n_req else f"Componentes calculados {calculados} de {n_req}"
+        snap_params.append({
+            "LoadBatchKey": load_batch_key, "RowNumber": row["RowNumber"], "Periodo": row["Periodo"],
+            "PaisKey": row["PaisKey"], "MedicoKey": row["MedicoKey"], "CentroMedicoKey": row["CentroMedicoKey"],
+            "GeografiaKey": row["GeografiaKey"], "RepresentanteKey": row["RepresentanteKey"], "Equipo": row["Equipo"],
+            "Provincia": row["Provincia"], "Municipio": row["Municipio"], "LineaIdOrigen": row["LineaIdOrigen"],
+            "PacientesSemana": row["PacientesSemana"], "CostoConsulta": row["CostoConsulta"], "RecetasSemana": row["RecetasSemana"],
+            "UbicacionTerritorialCM": row["UbicacionTerritorialCM"], "KOL": row["KOL"], "PuntajeTotalPct": total,
+            "ClasificacionKey": clase["ClasificacionKey"] if clase else None,
+            "CategoriaCalculada": clase["Clase"] if clase else None, "CategoriaExcel": cat_excel,
+            "EstadoConciliacion": concil, "EstadoCalculo": estado, "MensajeCalculo": mensaje})
+        detalle_por_row[row["RowNumber"]] = detalles
+
+    if snap_params:
+        db.execute(text("""INSERT INTO cat.FactMedicoCategoriaSnapshot
+            (LoadBatchKey,RowNumber,Periodo,PaisKey,MedicoKey,CentroMedicoKey,GeografiaKey,RepresentanteKey,Equipo,
+             Provincia,Municipio,LineaIdOrigen,PacientesSemana,CostoConsulta,RecetasSemana,UbicacionTerritorialCM,KOL,
+             PuntajeTotalPct,ClasificacionKey,CategoriaCalculada,CategoriaExcel,EstadoConciliacion,EstadoCalculo,MensajeCalculo)
+            VALUES (:LoadBatchKey,:RowNumber,:Periodo,:PaisKey,:MedicoKey,:CentroMedicoKey,:GeografiaKey,:RepresentanteKey,:Equipo,
+             :Provincia,:Municipio,:LineaIdOrigen,:PacientesSemana,:CostoConsulta,:RecetasSemana,:UbicacionTerritorialCM,:KOL,
+             :PuntajeTotalPct,:ClasificacionKey,:CategoriaCalculada,:CategoriaExcel,:EstadoConciliacion,:EstadoCalculo,:MensajeCalculo)"""),
+            snap_params)
+        db.flush()
+        # mapear RowNumber -> MedicoCategoriaKey generado
+        keymap = dict(db.execute(text("SELECT RowNumber, MedicoCategoriaKey FROM cat.FactMedicoCategoriaSnapshot WHERE LoadBatchKey=:b"), b).all())
+        det_params = []
+        for rn, dets in detalle_por_row.items():
+            mck = keymap.get(rn)
+            for d in dets:
+                det_params.append({**d, "MedicoCategoriaKey": mck})
+        if det_params:
+            db.execute(text("""INSERT INTO cat.FactMedicoCategoriaDetalle
+                (MedicoCategoriaKey,ComponenteKey,ReglaKey,ValorEntradaTexto,ValorEntradaNumero,Criterio,PuntajePct,EstadoComponente)
+                VALUES (:MedicoCategoriaKey,:ComponenteKey,:ReglaKey,:ValorEntradaTexto,:ValorEntradaNumero,:Criterio,:PuntajePct,:EstadoComponente)"""),
+                det_params)
+
+    db.execute(text("UPDATE cat.LoadBatch SET Estado='CALCULADO', Mensaje='Proceso de categorizacion ejecutado.' WHERE LoadBatchKey=:b"), b)
+    db.flush()
+    logger.info(f"[CAT] calcular_categorias_py batch={load_batch_key}: {len(snap_params)} snapshots")
+
+
 def cargar_excel_categorizacion(db: Session, excel_bytes: bytes, nombre_archivo: str, periodo: str, usuario: str) -> dict:
     logger.info(f"[CAT] Iniciando carga '{nombre_archivo}' periodo={periodo}")
     wb = load_workbook(io.BytesIO(excel_bytes), data_only=True, read_only=False)
@@ -290,7 +459,7 @@ def cargar_excel_categorizacion(db: Session, excel_bytes: bytes, nombre_archivo:
         fact_rows = _read_table(wb, "FactMedicoInput", "tbl_FactMedicoInput")
         _insert_staging(db, load_batch_key, fact_rows, periodo=periodo)
 
-        db.execute(text("EXEC cat.sp_CalcularCategoriaMedica @LoadBatchKey = :key"), {"key": load_batch_key})
+        calcular_categorias_py(db, load_batch_key)  # jul-2026: motor en Python (antes cat.sp_CalcularCategoriaMedica)
         db.commit()
 
         batch = db.execute(text("SELECT Estado,Mensaje FROM cat.LoadBatch WHERE LoadBatchKey=:key"), {"key": load_batch_key}).fetchone()
