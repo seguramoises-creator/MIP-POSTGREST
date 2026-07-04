@@ -15,6 +15,7 @@
  */
 import { useMemo, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCicloStore } from '../../store/ciclo.store';
 import {
   Box, Typography, Card, CardContent, Grid, Chip, CircularProgress,
   TextField, MenuItem, Alert, Tabs, Tab, Button, Divider,
@@ -199,10 +200,15 @@ export default function Lsii() {
   const puedeEvaluar = !!rol && ROLES_EVALUADOR.includes(rol);
   const qc = useQueryClient();
 
+  const cicloGlobal = useCicloStore((s) => s.cicloId);
   const [tab, setTab] = useState(0);
   const [paisId, setPaisId] = useState('');
   const [cicloId, setCicloId] = useState('');
   const [gerenteId, setGerenteId] = useState('');
+
+  useEffect(() => {
+    if (cicloGlobal && !cicloId) setCicloId(String(cicloGlobal));
+  }, [cicloGlobal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: paises } = useQuery({ queryKey: ['paises'], queryFn: () => api.get('/admin/paises').then(r => r.data) });
   const { data: ciclos } = useQuery({ queryKey: ['ciclos', paisId], queryFn: () => api.get('/admin/ciclos', { params: paisId ? { pais_codigo: paisId } : {} }).then(r => r.data) });
