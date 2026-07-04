@@ -457,6 +457,7 @@ def calcular_cobertura_equipo(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 from sqlalchemy import text as _text
+from app.core.config import settings as _settings
 from app.models.cat_models import (
     CatDimPais, CatDimCiclo, CatDimCalendario,
     CatFactTargetMedicoCiclo, CatFactVisitaMedica,
@@ -812,13 +813,20 @@ def get_dashboard_cat(
             "detalle_rms": [],
         }
 
-    # Buscar la fecha de corte más próxima (el SP puede haberse corrido en otra fecha)
+    # Buscar la fecha de corte más próxima (el SP puede haberse corrido en otra fecha).
+    # La diferencia de días es dialect-específica: SQL Server usa DATEDIFF(DAY, a, b);
+    # Postgres resta directamente dos DATE y devuelve un entero de días.
+    _diff_dias = (
+        'ABS("FechaCorte"::date - CAST(:fecha_corte AS date))'
+        if _settings.DB_ENGINE == "postgres"
+        else 'ABS(DATEDIFF(DAY, "FechaCorte", :fecha_corte))'
+    )
     kpi_fecha = db.execute(
-        _text("""
+        _text(f"""
             SELECT "FechaCorte"
             FROM "cat"."KpiCoberturaPredictiva"
             WHERE "CicloKey" = :ciclo_key
-            ORDER BY ABS(DATEDIFF(DAY, "FechaCorte", :fecha_corte))
+            ORDER BY {_diff_dias}
             OFFSET 0 ROWS FETCH FIRST 1 ROWS ONLY
         """),
         {"ciclo_key": ciclo_row["CicloKey"], "fecha_corte": fecha_corte},

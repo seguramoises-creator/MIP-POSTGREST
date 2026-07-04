@@ -44,8 +44,42 @@ from app.models.dimensiones import (
     Ciclo, Mes, Premio, Medico,
 )
 from app.services.categorizacion_service import resolver_medico_por_codigo
+from app.core.config import settings as _settings
 
 router = APIRouter(prefix="/dims", tags=["Importación DIMs"])
+
+
+def _identity_insert_on(db: Session, tabla: str) -> None:
+    """Habilita inserción de ids explícitos en una columna autoincremental.
+
+    Dialect-aware: SQL Server exige ``SET IDENTITY_INSERT <tabla> ON`` antes de
+    insertar un id explícito; en Postgres las columnas SERIAL aceptan valores
+    explícitos sin comando previo, así que es un no-op.
+    """
+    if _settings.DB_ENGINE != "postgres":
+        from sqlalchemy import text as _text
+        db.execute(_text(f'SET IDENTITY_INSERT {tabla} ON'))
+
+
+def _identity_insert_off(db: Session, tabla: str, pk: str = "id") -> None:
+    """Cierra el modo de inserción explícita de ids.
+
+    En SQL Server emite ``SET IDENTITY_INSERT <tabla> OFF``. En Postgres
+    resincroniza la secuencia SERIAL al ``MAX(pk)`` para que los siguientes
+    inserts automáticos no colisionen con los ids explícitos recién insertados.
+    """
+    from sqlalchemy import text as _text
+    if _settings.DB_ENGINE == "postgres":
+        db.execute(
+            _text(
+                f'SELECT setval(pg_get_serial_sequence(:tab, :pk), '
+                f'GREATEST(COALESCE((SELECT MAX("{pk}") FROM {tabla}), 1), 1))'
+            ),
+            {"tab": tabla, "pk": pk},
+        )
+    else:
+        db.execute(_text(f'SET IDENTITY_INSERT {tabla} OFF'))
+
 
 AdminOGerProd = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
 
@@ -605,7 +639,7 @@ def _importar_hoja(
         # Si LINEA_ID del Excel es numérico, preservarlo como id de BD (IDENTITY_INSERT)
         usar_id_natural = bool(rows and _i(rows[0].get("LINEA_ID")))
         if usar_id_natural:
-            db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_Linea" ON'))
+            _identity_insert_on(db, '"Config"."DIM_Linea"')
 
         try:
             ids_usados: set = set()
@@ -636,7 +670,7 @@ def _importar_hoja(
                 ins += 1
         finally:
             if usar_id_natural:
-                db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_Linea" OFF'))
+                _identity_insert_off(db, '"Config"."DIM_Linea"')
 
         db.commit()
 
@@ -647,7 +681,7 @@ def _importar_hoja(
         # Si GERENTE_ID del Excel es numérico, preservarlo como id de BD (IDENTITY_INSERT)
         usar_id_natural = bool(rows and _i(rows[0].get("GERENTE_ID")))
         if usar_id_natural:
-            db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_Gerente" ON'))
+            _identity_insert_on(db, '"Config"."DIM_Gerente"')
 
         try:
             ids_usados: set = set()
@@ -683,7 +717,7 @@ def _importar_hoja(
                 ins += 1
         finally:
             if usar_id_natural:
-                db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_Gerente" OFF'))
+                _identity_insert_off(db, '"Config"."DIM_Gerente"')
 
         db.commit()
 
@@ -699,7 +733,7 @@ def _importar_hoja(
         ))
 
         if usar_id_natural:
-            db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_RM" ON'))
+            _identity_insert_on(db, '"Config"."DIM_RM"')
 
         try:
             for row in rows:
@@ -741,7 +775,7 @@ def _importar_hoja(
                 ins += 1
         finally:
             if usar_id_natural:
-                db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_RM" OFF'))
+                _identity_insert_off(db, '"Config"."DIM_RM"')
 
         db.commit()
 
@@ -754,7 +788,7 @@ def _importar_hoja(
         # los países subsiguientes con el mismo id obtendrán un id auto-generado.
         usar_id_natural = bool(rows and _i(rows[0].get("INDICADOR_ID")))
         if usar_id_natural:
-            db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_Indicador" ON'))
+            _identity_insert_on(db, '"Config"."DIM_Indicador"')
 
         try:
             ids_usados: set = set()  # IDs ya asignados en este lote o en BD
@@ -827,7 +861,7 @@ def _importar_hoja(
                     ins += 1
         finally:
             if usar_id_natural:
-                db.execute(_text('SET IDENTITY_INSERT "Config"."DIM_Indicador" OFF'))
+                _identity_insert_off(db, '"Config"."DIM_Indicador"')
 
         db.commit()
 

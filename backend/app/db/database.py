@@ -1,5 +1,5 @@
 """
-SCGCPR — Configuración SQLAlchemy + SQL Server
+SCGCPR — Configuración SQLAlchemy + PostgreSQL (edición PostgreSQL)
 """
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker, Session
@@ -10,6 +10,9 @@ from loguru import logger
 from app.core.config import settings
 
 
+# El timeout de conexión difiere por dialecto: pymssql usa 'timeout', psycopg2 'connect_timeout'.
+_connect_args = {"connect_timeout": 30} if settings.DB_ENGINE == "postgres" else {"timeout": 30}
+
 engine = create_engine(
     settings.DATABASE_URL,
     poolclass=QueuePool,
@@ -18,7 +21,7 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=1800,
     echo=settings.DEBUG,
-    connect_args={"timeout": 30},
+    connect_args=_connect_args,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
