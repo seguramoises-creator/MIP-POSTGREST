@@ -39,7 +39,10 @@ services:
         VITE_API_URL: /api/v1         # same-origin: nginx del frontend hace proxy al backend
     image: msm-frontend:latest
     ports:
-      - "80:80"                       # punto de entrada público (poner TLS delante, ver DEPLOY-POSTGRES.md)
+      # Puerto del host → 80 del contenedor. Configurable para NO chocar con otros
+      # stacks en el mismo servidor (p.ej. srv1772225 con DW/Odoo). El nginx del host
+      # (TLS/certbot) hace proxy 443 → 127.0.0.1:${FRONTEND_PORT}. Ver DEPLOY-POSTGRES.md.
+      - "${FRONTEND_PORT:-8090}:80"
     depends_on:
       - backend
     restart: unless-stopped
@@ -55,8 +58,12 @@ services:
       POSTGRES_DB: "${DB_NAME:-scgcpr}"
       POSTGRES_USER: "${DB_USER:-segura}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD (clave fuerte) para el perfil with-db}"
-    ports:
-      - "5432:5432"
+    # NO se publica el 5432 al host: el backend alcanza la BD por la red interna de
+    # compose (host 'db'). Así no choca con otro Postgres del servidor (p.ej. postgres-dw
+    # del DW/Odoo en srv1772225) y no se expone la BD al exterior. Para acceso puntual
+    # desde el host: `docker compose exec db psql -U segura -d scgcpr`.
+    expose:
+      - "5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:

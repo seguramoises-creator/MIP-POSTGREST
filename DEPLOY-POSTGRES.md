@@ -96,9 +96,11 @@ docker compose --profile with-db up -d --build
 Verifica:
 ```bash
 docker compose ps
-curl -s http://localhost/health        # {"status":"healthy",...}
+curl -s http://localhost:8090/health   # {"status":"healthy",...}  (puerto FRONTEND_PORT)
 ```
-Abre **http://localhost/** (o la IP del servidor).
+Abre **http://<IP-del-servidor>:8090/** (o, tras configurar TLS, `https://vista-mip.com`).
+> El frontend se publica en `FRONTEND_PORT` (default **8090**), no en 80, para no chocar
+> con otros stacks del servidor. El Postgres del contenedor **no** se publica al host.
 
 ## 4) Migraciones y datos iniciales
 
@@ -134,7 +136,7 @@ El frontend escucha en **80**. Pon un **terminador TLS delante**. Opción recome
 
 ```bash
 sudo apt install -y nginx certbot python3-certbot-nginx
-# nginx del host: reverse-proxy 443 → http://127.0.0.1:80 (el contenedor frontend)
+# server block para vista-mip.com:  proxy_pass http://127.0.0.1:8090;  (el contenedor frontend, FRONTEND_PORT)
 sudo certbot --nginx -d vista-mip.com -d www.vista-mip.com
 ```
 > Alternativa "todo-en-uno": añadir un contenedor **Caddy** como reverse-proxy con
