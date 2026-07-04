@@ -11,7 +11,7 @@ import { useAuthStore } from '../../store/auth.store';
 import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
 import { miGerente, type MiGerente } from '../../services/visita.service';
-import CicloPaisSelector from '../CicloPaisSelector';
+import CicloPaisBadge from '../CicloPaisBadge';
 
 export default function MainLayout() {
   const navigate = useNavigate();
@@ -71,7 +71,7 @@ export default function MainLayout() {
               Sistema Corporativo de Gestión Comercial
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <CicloPaisSelector />
+              <CicloPaisBadge />
               {gd?.gerente && (
                 <Tooltip title={`Gerente de Distrito${gd.linea ? ` · Línea ${gd.linea}` : ''}`}>
                   <Chip
