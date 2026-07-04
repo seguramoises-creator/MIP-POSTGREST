@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import { Add, AutoAwesome, UploadFile, CheckCircle, DeleteOutline, FileDownload } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import ConsolidacionPanel from './ConsolidacionPanel';
 import {
   listarExamenes, crearExamen, agregarPregunta, publicarExamen, asignarExamen,
   resultadosExamen, analisisPreguntas, listarPreguntasExamen, eliminarPregunta,
@@ -257,6 +258,8 @@ export default function Examenes() {
     <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
       <Typography variant="h5" fontWeight={700} gutterBottom>Exámenes — Capacitación</Typography>
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
+
+      <ConsolidacionPanel />
 
       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <Box sx={{ flex: '1 1 340px', minWidth: 300 }}>
