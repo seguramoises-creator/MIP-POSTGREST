@@ -450,7 +450,7 @@ def _ciclo_actual_de(ciclos):
 @router.get("/ciclos", response_model=List[CicloResponse], summary="Listar ciclos")
 def list_ciclos(pais_codigo: Optional[str] = None, anio: Optional[int] = None,
                 abierto: Optional[bool] = None,
-                db: Session = Depends(get_db), _=LecturaCatalogos):
+                db: Session = Depends(get_db), _=AnyAuth):
     q = db.query(Ciclo).filter(Ciclo.activo == True)
     if pais_codigo:
         q = q.filter(Ciclo.pais_codigo == pais_codigo)
@@ -463,7 +463,7 @@ def list_ciclos(pais_codigo: Optional[str] = None, anio: Optional[int] = None,
 
 @router.get("/ciclos/actual", response_model=Optional[CicloResponse],
             summary="Ciclo abierto actual de un país")
-def ciclo_actual(pais_codigo: str, db: Session = Depends(get_db), _=LecturaCatalogos):
+def ciclo_actual(pais_codigo: str, db: Session = Depends(get_db), _=AnyAuth):
     ciclos = (db.query(Ciclo)
               .filter(Ciclo.activo == True, Ciclo.pais_codigo == pais_codigo)
               .all())

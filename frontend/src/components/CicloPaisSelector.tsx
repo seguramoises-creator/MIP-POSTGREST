@@ -8,7 +8,7 @@ export default function CicloPaisSelector() {
     puedeCambiarPais, init, setPais, setCiclo,
   } = useCicloStore();
 
-  useEffect(() => { if (!paisCodigo) init().catch(() => {}); }, [paisCodigo, init]);
+  useEffect(() => { if (!paisCodigo) init().catch((e) => { console.error('CicloPaisSelector: init failed', e); }); }, [paisCodigo, init]);
 
   if (!paisCodigo) return null;
 
