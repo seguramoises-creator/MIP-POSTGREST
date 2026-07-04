@@ -29,7 +29,7 @@ class LoadBatch(Base):
 
     load_batch_key: Mapped[int]     = mapped_column("LoadBatchKey", BigInteger, primary_key=True, autoincrement=True)
     archivo_origen: Mapped[str]     = mapped_column("ArchivoOrigen", String(260), nullable=False)
-    periodo: Mapped[str]            = mapped_column("Periodo", String(7), nullable=False)
+    periodo: Mapped[str]            = mapped_column("Periodo", String(20), nullable=False)
     codigo_pais_default: Mapped[Optional[str]] = mapped_column("CodigoPaisDefault", String(2))
     fecha_carga_utc: Mapped[datetime] = mapped_column("FechaCargaUtc", DateTime, nullable=False)
     usuario_carga: Mapped[Optional[str]] = mapped_column("UsuarioCarga", String(150))
@@ -151,7 +151,7 @@ class FactMedicoCategoriaSnapshot(Base):
     medico_categoria_key: Mapped[int] = mapped_column("MedicoCategoriaKey", BigInteger, primary_key=True, autoincrement=True)
     load_batch_key: Mapped[int]     = mapped_column("LoadBatchKey", BigInteger, ForeignKey("cat.LoadBatch.LoadBatchKey"), nullable=False)
     row_number: Mapped[int]         = mapped_column("RowNumber", Integer, nullable=False)
-    periodo: Mapped[str]            = mapped_column("Periodo", String(7), nullable=False)
+    periodo: Mapped[str]            = mapped_column("Periodo", String(20), nullable=False)
     pais_key: Mapped[int]           = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False)
     medico_key: Mapped[int]         = mapped_column("MedicoKey", BigInteger, ForeignKey("cat.DimMedico.MedicoKey"), nullable=False)
     centro_medico_key: Mapped[Optional[int]] = mapped_column("CentroMedicoKey", Integer)
