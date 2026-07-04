@@ -58,3 +58,16 @@ def test_categoria_de_rangos():
     assert mc._categoria_de(cats, Decimal("95")) == 1
     assert mc._categoria_de(cats, Decimal("80")) == 2
     assert mc._categoria_de(cats, Decimal("50")) == 3
+
+
+def test_recalcular_aborta_ciclo_cerrado(monkeypatch):
+    from app.services import recalculo_service
+    db = MagicMock()
+
+    def _raise(d, c):
+        raise recalculo_service.CicloCerradoError("cerrado")
+    monkeypatch.setattr(mc, "validar_ciclo_abierto", _raise)
+    out = mc.recalcular_ciclo_py(db, ciclo_id=7, pais_codigo="DO")
+    assert out["abortado"] is True
+    assert out["filas_kpi_actualizadas"] == 0 and out["rankings_generados"] == 0
+    assert "motivo" in out

@@ -170,3 +170,21 @@ def generar_ranking(db: Session, ciclo_id: int, pais_codigo=None) -> int:
     db.commit()
     logger.info(f"Motor: ranking generado ciclo={ciclo_id} pais={pais_codigo} filas={n}")
     return n
+
+
+def recalcular_ciclo_py(db: Session, ciclo_id: int, pais_codigo=None) -> dict:
+    """Orquestador (equivale a DW.sp_RecalcularCiclo): guard de ciclo abierto,
+    completar puntajes y generar ranking. Mismo contrato de dict que consume el
+    endpoint /etl/recalcular y el frontend."""
+    try:
+        validar_ciclo_abierto(db, ciclo_id)
+    except CicloCerradoError as e:
+        logger.warning(f"RECALCULO abortado — {e}")
+        return {"ciclo_id": ciclo_id, "abortado": True, "motivo": str(e),
+                "filas_kpi_actualizadas": 0, "rankings_generados": 0}
+    n_kpi = completar_puntajes(db, ciclo_id, pais_codigo)
+    n_rank = generar_ranking(db, ciclo_id, pais_codigo)
+    logger.info(f"RECALCULO (Python): ciclo_id={ciclo_id} pais={pais_codigo} — "
+                f"{n_kpi} puntajes, {n_rank} rankings")
+    return {"ciclo_id": ciclo_id, "abortado": False,
+            "filas_kpi_actualizadas": n_kpi, "rankings_generados": n_rank}
