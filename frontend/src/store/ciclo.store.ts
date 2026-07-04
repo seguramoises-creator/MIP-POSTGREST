@@ -10,19 +10,24 @@ const ROLES_MULTIPAIS = ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODU
 
 interface CicloState {
   paisCodigo: string | null;
-  cicloId: number | null;
+  cicloId: number | null;          // ciclo EN CONSULTA (default = abierto)
   ciclo: Ciclo | null;
+  cicloAbiertoId: number | null;   // ciclo ABIERTO (de trabajo) — único editable
+  cicloAbierto: Ciclo | null;
   paisesDisponibles: string[];
   ciclosDisponibles: Ciclo[];
   puedeCambiarPais: boolean;
+  esSoloLectura: boolean;          // cicloId !== cicloAbiertoId (o sin abierto)
   init: () => Promise<void>;
   setPais: (codigo: string) => Promise<void>;
-  setCiclo: (id: number) => void;
+  setCicloVer: (id: number) => void;
 }
 
 export const useCicloStore = create<CicloState>((set, get) => ({
   paisCodigo: null, cicloId: null, ciclo: null,
+  cicloAbiertoId: null, cicloAbierto: null,
   paisesDisponibles: [], ciclosDisponibles: [], puedeCambiarPais: false,
+  esSoloLectura: true,
 
   init: async () => {
     const me = (await api.get('/auth/me')).data as { pais_codigo?: string; rol: string };
@@ -42,12 +47,23 @@ export const useCicloStore = create<CicloState>((set, get) => ({
   setPais: async (codigo) => {
     const ciclos = (await api.get(`/admin/ciclos?pais_codigo=${codigo}`)).data as Ciclo[];
     const actual = (await api.get(`/admin/ciclos/actual?pais_codigo=${codigo}`)).data as Ciclo | null;
-    const elegido = actual || ciclos[ciclos.length - 1] || null;
-    set({ paisCodigo: codigo, ciclosDisponibles: ciclos, ciclo: elegido, cicloId: elegido ? elegido.id : null });
+    const abierto = actual || null;
+    // El ciclo EN CONSULTA arranca en el abierto; si no hay abierto, en el último de la lista.
+    const verInicial = abierto || ciclos[ciclos.length - 1] || null;
+    set({
+      paisCodigo: codigo,
+      ciclosDisponibles: ciclos,
+      cicloAbierto: abierto,
+      cicloAbiertoId: abierto ? abierto.id : null,
+      ciclo: verInicial,
+      cicloId: verInicial ? verInicial.id : null,
+      esSoloLectura: !abierto || !verInicial || verInicial.id !== abierto.id,
+    });
   },
 
-  setCiclo: (id) => {
+  setCicloVer: (id) => {
     const c = get().ciclosDisponibles.find((x) => x.id === id) || null;
-    set({ cicloId: id, ciclo: c });
+    const abiertoId = get().cicloAbiertoId;
+    set({ cicloId: id, ciclo: c, esSoloLectura: abiertoId == null || id !== abiertoId });
   },
 }));
