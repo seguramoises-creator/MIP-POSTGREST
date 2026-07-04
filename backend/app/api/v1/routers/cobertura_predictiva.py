@@ -762,7 +762,7 @@ def reset_datos_cat(
     try:
         # Resolver pais_key
         pais_row = db.execute(
-            _t("SELECT TOP 1 PaisKey FROM [cat].[DimPais] WHERE CodigoPais = :c"),
+            _t('SELECT "PaisKey" FROM "cat"."DimPais" WHERE "CodigoPais" = :c'),
             {"c": pais_codigo.upper()},
         ).mappings().first()
         if not pais_row:
@@ -774,7 +774,7 @@ def reset_datos_cat(
         ciclo_key = None
         if ciclo_codigo:
             ciclo_row = db.execute(
-                _t("SELECT TOP 1 CicloKey FROM [cat].[DimCiclo] WHERE CodigoCiclo = :c AND PaisKey = :p"),
+                _t('SELECT "CicloKey" FROM "cat"."DimCiclo" WHERE "CodigoCiclo" = :c AND "PaisKey" = :p'),
                 {"c": ciclo_codigo, "p": pais_key},
             ).mappings().first()
             if not ciclo_row:
@@ -785,12 +785,12 @@ def reset_datos_cat(
         conteos: dict = {}
 
         def _borrar(tabla: str, extra_where: str = "") -> int:
-            where = f"PaisKey = {pais_key}"
+            where = f'"PaisKey" = {pais_key}'
             if ciclo_key:
-                where += f" AND CicloKey = {ciclo_key}"
+                where += f' AND "CicloKey" = {ciclo_key}'
             if extra_where:
                 where += f" AND {extra_where}"
-            r = db.execute(_t(f"DELETE FROM [cat].[{tabla}] WHERE {where}"))
+            r = db.execute(_t(f'DELETE FROM "cat"."{tabla}" WHERE {where}'))
             return r.rowcount
 
         # 1. KPIs calculados (sin FK entrante)
@@ -826,45 +826,45 @@ def reset_datos_cat(
                 if fk_info:
                     parent_col, ref_col = fk_info[0], fk_info[1]
                     r = db.execute(_t(
-                        f"DELETE d FROM [cat].[FactMedicoCategoriaDetalle] d "
-                        f"INNER JOIN [cat].[FactMedicoCategoriaSnapshot] s "
-                        f"  ON s.[{ref_col}] = d.[{parent_col}] "
-                        f"WHERE s.PaisKey = {pais_key}"
+                        f'DELETE d FROM "cat"."FactMedicoCategoriaDetalle" d '
+                        f'INNER JOIN "cat"."FactMedicoCategoriaSnapshot" s '
+                        f'  ON s."{ref_col}" = d."{parent_col}" '
+                        f'WHERE s."PaisKey" = {pais_key}'
                     ))
                     conteos["FactMedicoCategoriaDetalle"] = r.rowcount
                 else:
                     # Fallback: si no se encuentra el FK, intentar borrar por subquery en PK
                     _log.warning("[reset_datos_cat] FK_FactDetalle_Snapshot no encontrado, intentando DELETE directo")
                     r = db.execute(_t(
-                        f"DELETE FROM [cat].[FactMedicoCategoriaDetalle] WHERE "
-                        f"EXISTS (SELECT 1 FROM [cat].[FactMedicoCategoriaSnapshot] snap "
-                        f"  WHERE snap.PaisKey = {pais_key} "
-                        f"  AND snap.[MedicoCategoriaKey] = [cat].[FactMedicoCategoriaDetalle].[MedicoCategoriaKey])"
+                        f'DELETE FROM "cat"."FactMedicoCategoriaDetalle" WHERE '
+                        f'EXISTS (SELECT 1 FROM "cat"."FactMedicoCategoriaSnapshot" snap '
+                        f'  WHERE snap."PaisKey" = {pais_key} '
+                        f'  AND snap."MedicoCategoriaKey" = "cat"."FactMedicoCategoriaDetalle"."MedicoCategoriaKey")'
                     ))
                     conteos["FactMedicoCategoriaDetalle"] = r.rowcount
 
             if _tabla_existe("FactMedicoCategoriaSnapshot"):
-                r = db.execute(_t(f"DELETE FROM [cat].[FactMedicoCategoriaSnapshot] WHERE PaisKey = {pais_key}"))
+                r = db.execute(_t(f'DELETE FROM "cat"."FactMedicoCategoriaSnapshot" WHERE "PaisKey" = {pais_key}'))
                 conteos["FactMedicoCategoriaSnapshot"] = r.rowcount
 
             if _tabla_existe("FactCategorizacionMedica"):
-                r = db.execute(_t(f"DELETE FROM [cat].[FactCategorizacionMedica] WHERE PaisKey = {pais_key}"))
+                r = db.execute(_t(f'DELETE FROM "cat"."FactCategorizacionMedica" WHERE "PaisKey" = {pais_key}'))
                 conteos["FactCategorizacionMedica"] = r.rowcount
 
             # DimMedico — no tiene CicloKey, borrar todo el país
-            r = db.execute(_t(f"DELETE FROM [cat].[DimMedico] WHERE PaisKey = {pais_key}"))
+            r = db.execute(_t(f'DELETE FROM "cat"."DimMedico" WHERE "PaisKey" = {pais_key}'))
             conteos["DimMedico"] = r.rowcount
             # DimCiclo
             if ciclo_key:
-                r = db.execute(_t(f"DELETE FROM [cat].[DimCiclo] WHERE CicloKey = {ciclo_key} AND PaisKey = {pais_key}"))
+                r = db.execute(_t(f'DELETE FROM "cat"."DimCiclo" WHERE "CicloKey" = {ciclo_key} AND "PaisKey" = {pais_key}'))
             else:
-                r = db.execute(_t(f"DELETE FROM [cat].[DimCiclo] WHERE PaisKey = {pais_key}"))
+                r = db.execute(_t(f'DELETE FROM "cat"."DimCiclo" WHERE "PaisKey" = {pais_key}'))
             conteos["DimCiclo"] = r.rowcount
             # DimRepresentanteMedico
-            r = db.execute(_t(f"DELETE FROM [cat].[DimRepresentanteMedico] WHERE PaisKey = {pais_key}"))
+            r = db.execute(_t(f'DELETE FROM "cat"."DimRepresentanteMedico" WHERE "PaisKey" = {pais_key}'))
             conteos["DimRepresentanteMedico"] = r.rowcount
             # DimEspecialidad
-            r = db.execute(_t(f"DELETE FROM [cat].[DimEspecialidad] WHERE PaisKey = {pais_key}"))
+            r = db.execute(_t(f'DELETE FROM "cat"."DimEspecialidad" WHERE "PaisKey" = {pais_key}'))
             conteos["DimEspecialidad"] = r.rowcount
 
         db.commit()

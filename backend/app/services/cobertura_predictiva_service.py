@@ -522,14 +522,14 @@ def calcular_cobertura_py(db: Session, ciclo_codigo: str, pais_codigo: str,
     import math
     from datetime import datetime, timezone
 
-    pais_key = db.execute(_text("SELECT PaisKey FROM cat.DimPais WHERE CodigoPais=:p"),
+    pais_key = db.execute(_text('SELECT "PaisKey" FROM "cat"."DimPais" WHERE "CodigoPais"=:p'),
                           {"p": pais_codigo}).scalar()
     if pais_key is None:
         raise ValueError(f"País no encontrado: {pais_codigo}")
     c = db.execute(_text(
-        "SELECT TOP 1 CicloKey, FechaInicio, FechaFin, MetaCoberturaPct, ISNULL(MetaContactosCiclo,0) AS MetaContactosCiclo "
-        "FROM cat.DimCiclo WHERE CodigoCiclo=:cc AND PaisKey=:pk AND Activo=1 "
-        "AND (:linea IS NULL OR Linea=:linea) ORDER BY CicloKey"),
+        'SELECT "CicloKey", "FechaInicio", "FechaFin", "MetaCoberturaPct", COALESCE("MetaContactosCiclo",0) AS "MetaContactosCiclo" '
+        'FROM "cat"."DimCiclo" WHERE "CodigoCiclo"=:cc AND "PaisKey"=:pk AND "Activo"=1 '
+        'AND (:linea IS NULL OR "Linea"=:linea) ORDER BY "CicloKey" OFFSET 0 ROWS FETCH FIRST 1 ROWS ONLY'),
         {"cc": ciclo_codigo, "pk": pais_key, "linea": linea}).mappings().first()
     if c is None:
         raise ValueError(f"Ciclo no encontrado: {ciclo_codigo} / País: {pais_codigo}")
@@ -538,12 +538,12 @@ def calcular_cobertura_py(db: Session, ciclo_codigo: str, pais_codigo: str,
     fce = f_fin if fecha_corte > f_fin else fecha_corte
 
     # Días hábiles (DimCalendario, o fallback L-V)
-    total = db.execute(_text("SELECT COUNT(*) FROM cat.DimCalendario WHERE PaisKey=:pk AND CicloKey=:ck AND EsHabil=1"),
+    total = db.execute(_text('SELECT COUNT(*) FROM "cat"."DimCalendario" WHERE "PaisKey"=:pk AND "CicloKey"=:ck AND "EsHabil"=1'),
                        {"pk": pais_key, "ck": ciclo_key}).scalar() or 0
     if total == 0:
         total = _dias_habiles(f_ini, f_fin)
-    transc = db.execute(_text("SELECT COUNT(*) FROM cat.DimCalendario WHERE PaisKey=:pk AND CicloKey=:ck "
-                              "AND EsHabil=1 AND Fecha<=:fce AND Fecha>=:fi"),
+    transc = db.execute(_text('SELECT COUNT(*) FROM "cat"."DimCalendario" WHERE "PaisKey"=:pk AND "CicloKey"=:ck '
+                              'AND "EsHabil"=1 AND "Fecha"<=:fce AND "Fecha">=:fi'),
                         {"pk": pais_key, "ck": ciclo_key, "fce": fce, "fi": f_ini}).scalar() or 0
     if transc == 0 and fce >= f_ini:
         transc = _dias_habiles(f_ini, fce)
@@ -551,21 +551,21 @@ def calcular_cobertura_py(db: Session, ciclo_codigo: str, pais_codigo: str,
             transc += 1
     restantes = total - transc if total > transc else 0
 
-    db.execute(_text("DELETE FROM cat.KpiCoberturaPredictiva WHERE CicloKey=:ck AND FechaCorte=:fc "
-                     "AND (:rk IS NULL OR RepresentanteKey=:rk)"),
+    db.execute(_text('DELETE FROM "cat"."KpiCoberturaPredictiva" WHERE "CicloKey"=:ck AND "FechaCorte"=:fc '
+                     'AND (:rk IS NULL OR "RepresentanteKey"=:rk)'),
                {"ck": ciclo_key, "fc": fecha_corte, "rk": representante_key})
 
     targets = {r["RepresentanteKey"]: r["MedicosProg"] for r in db.execute(_text(
-        "SELECT RepresentanteKey, COUNT(*) AS MedicosProg FROM cat.FactTargetMedicoCiclo "
-        "WHERE CicloKey=:ck AND PaisKey=:pk AND ProgramadoFlag=1 AND (:rk IS NULL OR RepresentanteKey=:rk) "
-        "GROUP BY RepresentanteKey"), {"ck": ciclo_key, "pk": pais_key, "rk": representante_key}).mappings().all()}
+        'SELECT "RepresentanteKey", COUNT(*) AS "MedicosProg" FROM "cat"."FactTargetMedicoCiclo" '
+        'WHERE "CicloKey"=:ck AND "PaisKey"=:pk AND "ProgramadoFlag"=1 AND (:rk IS NULL OR "RepresentanteKey"=:rk) '
+        'GROUP BY "RepresentanteKey"'), {"ck": ciclo_key, "pk": pais_key, "rk": representante_key}).mappings().all()}
     visitas = {r["RepresentanteKey"]: (r["MedicosUnicos"], r["ContactosTotales"]) for r in db.execute(_text(
-        "SELECT RepresentanteKey, COUNT(DISTINCT CodigoMedicoOrigen) AS MedicosUnicos, COUNT(*) AS ContactosTotales "
-        "FROM cat.FactVisitaMedica WHERE CicloKey=:ck AND PaisKey=:pk AND EstadoVisita=N'Realizada' "
-        "AND FechaVisita<=:fc AND (:rk IS NULL OR RepresentanteKey=:rk) GROUP BY RepresentanteKey"),
+        'SELECT "RepresentanteKey", COUNT(DISTINCT "CodigoMedicoOrigen") AS "MedicosUnicos", COUNT(*) AS "ContactosTotales" '
+        'FROM "cat"."FactVisitaMedica" WHERE "CicloKey"=:ck AND "PaisKey"=:pk AND "EstadoVisita"=\'Realizada\' '
+        'AND "FechaVisita"<=:fc AND (:rk IS NULL OR "RepresentanteKey"=:rk) GROUP BY "RepresentanteKey"'),
         {"ck": ciclo_key, "pk": pais_key, "fc": fecha_corte, "rk": representante_key}).mappings().all()}
-    reps = db.execute(_text("SELECT RepresentanteKey, EquipoTexto, NombreRepresentante FROM cat.DimRepresentanteMedico "
-                            "WHERE Activo=1 AND (:linea IS NULL OR EquipoTexto=:linea) ORDER BY RepresentanteKey"),
+    reps = db.execute(_text('SELECT "RepresentanteKey", "EquipoTexto", "NombreRepresentante" FROM "cat"."DimRepresentanteMedico" '
+                            'WHERE "Activo"=1 AND (:linea IS NULL OR "EquipoTexto"=:linea) ORDER BY "RepresentanteKey"'),
                       {"linea": linea}).mappings().all()
 
     ahora = datetime.now(timezone.utc)
@@ -641,12 +641,12 @@ def calcular_cobertura_py(db: Session, ciclo_codigo: str, pais_codigo: str,
             "LecturaAccionable": lectura, "FechaCargaUtc": ahora})
 
     if filas:
-        db.execute(_text("""INSERT INTO cat.KpiCoberturaPredictiva
-            (FechaCorte,CicloKey,PaisKey,Linea,GD,RepresentanteKey,NombreVM,MedicosProgramados,MedicosVisitadosUnicos,
-             CoberturaActualPct,CoberturaEsperadaPct,CoberturaProyectadaPct,MetaCoberturaPct,BrechaActualVsEsperada,BrechaProyectadaVsMeta,
-             MedicosRequeridosMeta,MedicosPendientesMeta,MedicosDiariosRequeridos,ContactosMetaCiclo,ContactosRealizados,CumplimientoContactosPct,
-             ContactosProyectados,ContactosPendientes,ContactosDiariosRequeridos,DiasHabilesTotales,DiasHabilesTranscurridos,DiasHabilesRestantes,
-             EstadoCobertura,EstadoRitmo,EstadoPSP,LecturaAccionable,FechaCargaUtc)
+        db.execute(_text("""INSERT INTO "cat"."KpiCoberturaPredictiva"
+            ("FechaCorte","CicloKey","PaisKey","Linea","GD","RepresentanteKey","NombreVM","MedicosProgramados","MedicosVisitadosUnicos",
+             "CoberturaActualPct","CoberturaEsperadaPct","CoberturaProyectadaPct","MetaCoberturaPct","BrechaActualVsEsperada","BrechaProyectadaVsMeta",
+             "MedicosRequeridosMeta","MedicosPendientesMeta","MedicosDiariosRequeridos","ContactosMetaCiclo","ContactosRealizados","CumplimientoContactosPct",
+             "ContactosProyectados","ContactosPendientes","ContactosDiariosRequeridos","DiasHabilesTotales","DiasHabilesTranscurridos","DiasHabilesRestantes",
+             "EstadoCobertura","EstadoRitmo","EstadoPSP","LecturaAccionable","FechaCargaUtc")
             VALUES (:FechaCorte,:CicloKey,:PaisKey,:Linea,:GD,:RepresentanteKey,:NombreVM,:MedicosProgramados,:MedicosVisitadosUnicos,
              :CoberturaActualPct,:CoberturaEsperadaPct,:CoberturaProyectadaPct,:MetaCoberturaPct,:BrechaActualVsEsperada,:BrechaProyectadaVsMeta,
              :MedicosRequeridosMeta,:MedicosPendientesMeta,:MedicosDiariosRequeridos,:ContactosMetaCiclo,:ContactosRealizados,:CumplimientoContactosPct,
@@ -706,11 +706,11 @@ def get_cobertura_por_categoria(
     # Resolver claves
     ciclo_row = db.execute(
         _t("""
-            SELECT TOP 1 c.CicloKey, p.PaisKey
-            FROM [cat].[DimCiclo] c
-            JOIN [cat].[DimPais] p ON p.PaisKey = c.PaisKey
-            WHERE c.CodigoCiclo = :cc AND p.CodigoPais = :pc
-            ORDER BY c.CicloKey DESC
+            SELECT c."CicloKey", p."PaisKey"
+            FROM "cat"."DimCiclo" c
+            JOIN "cat"."DimPais" p ON p."PaisKey" = c."PaisKey"
+            WHERE c."CodigoCiclo" = :cc AND p."CodigoPais" = :pc
+            ORDER BY c."CicloKey" DESC
         """),
         {"cc": ciclo_codigo, "pc": pais_codigo},
     ).mappings().first()
@@ -726,36 +726,36 @@ def get_cobertura_por_categoria(
     params: dict = {"ciclo_key": ciclo_key, "pais_key": pais_key}
 
     if representante_codigo:
-        rep_filter += " AND r.CodigoRepresentante = :rep_cod"
+        rep_filter += ' AND r."CodigoRepresentante" = :rep_cod'
         params["rep_cod"] = representante_codigo.upper()
     if gd:
-        rep_filter += " AND r.EquipoTexto = :gd"
+        rep_filter += ' AND r."EquipoTexto" = :gd'
         params["gd"] = gd
 
     sql = f"""
         SELECT
-            t.Potencial                                       AS Categoria,
-            COUNT(DISTINCT t.CodigoMedicoOrigen)             AS TotalProgramados,
-            COUNT(DISTINCT v.CodigoMedicoOrigen)             AS Visitados,
-            COUNT(DISTINCT t.CodigoMedicoOrigen)
-              - COUNT(DISTINCT v.CodigoMedicoOrigen)         AS Pendientes
-        FROM [cat].[FactTargetMedicoCiclo] t
-        JOIN [cat].[DimRepresentanteMedico] r
-          ON r.RepresentanteKey = t.RepresentanteKey
-        LEFT JOIN [cat].[FactVisitaMedica] v
-          ON  v.CodigoMedicoOrigen  = t.CodigoMedicoOrigen
-          AND v.CicloKey            = t.CicloKey
-          AND v.PaisKey             = t.PaisKey
-          AND v.RepresentanteKey    = t.RepresentanteKey
-          AND v.EstadoVisita        = N'Realizada'
-        WHERE t.CicloKey       = :ciclo_key
-          AND t.PaisKey        = :pais_key
-          AND t.ProgramadoFlag = 1
-          AND t.Potencial      IS NOT NULL
-          AND t.Potencial      <> ''
+            t."Potencial"                                       AS "Categoria",
+            COUNT(DISTINCT t."CodigoMedicoOrigen")             AS "TotalProgramados",
+            COUNT(DISTINCT v."CodigoMedicoOrigen")             AS "Visitados",
+            COUNT(DISTINCT t."CodigoMedicoOrigen")
+              - COUNT(DISTINCT v."CodigoMedicoOrigen")         AS "Pendientes"
+        FROM "cat"."FactTargetMedicoCiclo" t
+        JOIN "cat"."DimRepresentanteMedico" r
+          ON r."RepresentanteKey" = t."RepresentanteKey"
+        LEFT JOIN "cat"."FactVisitaMedica" v
+          ON  v."CodigoMedicoOrigen"  = t."CodigoMedicoOrigen"
+          AND v."CicloKey"            = t."CicloKey"
+          AND v."PaisKey"             = t."PaisKey"
+          AND v."RepresentanteKey"    = t."RepresentanteKey"
+          AND v."EstadoVisita"        = 'Realizada'
+        WHERE t."CicloKey"       = :ciclo_key
+          AND t."PaisKey"        = :pais_key
+          AND t."ProgramadoFlag" = 1
+          AND t."Potencial"      IS NOT NULL
+          AND t."Potencial"      <> ''
           {rep_filter}
-        GROUP BY t.Potencial
-        ORDER BY t.Potencial
+        GROUP BY t."Potencial"
+        ORDER BY t."Potencial"
     """
 
     rows = db.execute(_t(sql), params).mappings().all()
@@ -792,14 +792,14 @@ def get_dashboard_cat(
     # Resolver ciclo_key + pais_key más reciente para este ciclo_codigo
     ciclo_row = db.execute(
         _text("""
-            SELECT TOP 1 c.CicloKey, p.PaisKey, c.CodigoCiclo,
-                         c.FechaInicio, c.FechaFin, c.MetaCoberturaPct,
-                         c.DiasHabilesCiclo
-            FROM cat.DimCiclo c
-            INNER JOIN cat.DimPais p ON p.PaisKey = c.PaisKey
-            WHERE c.CodigoCiclo = :ciclo_codigo AND p.CodigoPais = :pais_codigo
-              AND c.Activo = 1
-            ORDER BY c.CicloKey
+            SELECT c."CicloKey", p."PaisKey", c."CodigoCiclo",
+                         c."FechaInicio", c."FechaFin", c."MetaCoberturaPct",
+                         c."DiasHabilesCiclo"
+            FROM "cat"."DimCiclo" c
+            INNER JOIN "cat"."DimPais" p ON p."PaisKey" = c."PaisKey"
+            WHERE c."CodigoCiclo" = :ciclo_codigo AND p."CodigoPais" = :pais_codigo
+              AND c."Activo" = 1
+            ORDER BY c."CicloKey"
         """),
         {"ciclo_codigo": ciclo_codigo, "pais_codigo": pais_codigo.upper()},
     ).mappings().first()
@@ -815,10 +815,11 @@ def get_dashboard_cat(
     # Buscar la fecha de corte más próxima (el SP puede haberse corrido en otra fecha)
     kpi_fecha = db.execute(
         _text("""
-            SELECT TOP 1 FechaCorte
-            FROM cat.KpiCoberturaPredictiva
-            WHERE CicloKey = :ciclo_key
-            ORDER BY ABS(DATEDIFF(DAY, FechaCorte, :fecha_corte))
+            SELECT "FechaCorte"
+            FROM "cat"."KpiCoberturaPredictiva"
+            WHERE "CicloKey" = :ciclo_key
+            ORDER BY ABS(DATEDIFF(DAY, "FechaCorte", :fecha_corte))
+            OFFSET 0 ROWS FETCH FIRST 1 ROWS ONLY
         """),
         {"ciclo_key": ciclo_row["CicloKey"], "fecha_corte": fecha_corte},
     ).scalar()
@@ -838,28 +839,28 @@ def get_dashboard_cat(
 
     # Leer desde la vista
     filters = [
-        "CodigoCiclo = :ciclo_codigo",
-        "FechaCorte = :fecha_corte_ef",
+        '"CodigoCiclo" = :ciclo_codigo',
+        '"FechaCorte" = :fecha_corte_ef',
     ]
     params: dict = {"ciclo_codigo": ciclo_row["CodigoCiclo"], "fecha_corte_ef": kpi_fecha}
 
     if linea:
-        filters.append("Linea = :linea")
+        filters.append('"Linea" = :linea')
         params["linea"] = linea
     if gd:
-        filters.append("GD = :gd")
+        filters.append('"GD" = :gd')
         params["gd"] = gd
     if representante:
-        filters.append("(NombreRepresentante LIKE :rep OR CodigoRepresentante = :rep)")
+        filters.append('("NombreRepresentante" LIKE :rep OR "CodigoRepresentante" = :rep)')
         params["rep"] = f"%{representante}%"
 
     where = " AND ".join(filters)
 
     rows = db.execute(
         _text(f"""
-            SELECT * FROM [cat].[vwDashboardCoberturaPredictivaGD]
+            SELECT * FROM "cat"."vwDashboardCoberturaPredictivaGD"
             WHERE {where}
-            ORDER BY EstadoCobertura, CoberturaActualPct
+            ORDER BY "EstadoCobertura", "CoberturaActualPct"
         """),
         params,
     ).mappings().all()
