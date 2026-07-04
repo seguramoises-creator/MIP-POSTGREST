@@ -144,6 +144,7 @@ export interface VisitaHoy {
   id: number; medico_id: number; medico: string; tipo_visita: string;
   ejecutada: boolean; causa_no_visita: string | null; comentario: string | null;
   productos: string[]; hora: string | null;
+  tiene_gps?: boolean; tiene_foto?: boolean;
 }
 export interface AgendaMedico {
   medico_id: number; nombre: string; especialidad: string | null; categoria: string;
