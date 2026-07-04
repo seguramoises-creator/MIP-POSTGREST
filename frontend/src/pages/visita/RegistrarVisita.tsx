@@ -7,7 +7,7 @@ import {
 import { CheckCircle, Save, EventBusy, AccessAlarm, Medication, ChatBubbleOutline, Assignment, FiberManualRecord, SupervisorAccount } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import {
-  agendaHoy, listarCausas, misVisitasHoy, registrarVisita, registrarNoVisita, listarVMs, obtenerParrilla, miGerente,
+  agendaHoy, listarCausas, misVisitasHoy, registrarVisita, registrarNoVisita, listarVMs, obtenerParrilla, miGerente, subirFotoVisita,
   type AgendaMedico, type VisitaHoy, type Catalogo, type ParrillaItem, type ProductoDetalle, type MiGerente,
 } from '../../services/visita.service';
 
@@ -56,6 +56,9 @@ export default function RegistrarVisita() {
   const [detallados, setDetallados] = useState<Record<string, number>>({});   // producto → mención (0 = no marcado)
   const [guardando, setGuardando] = useState(false);
   const [gd, setGd] = useState<MiGerente | null>(null);
+  const [gps, setGps] = useState<{ lat: number; lng: number } | null>(null);
+  const [foto, setFoto] = useState<File | null>(null);
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null);
 
   const vmParam = esVM ? undefined : (vmId || undefined);
   const listo = esVM || !!vmId;
@@ -127,10 +130,14 @@ export default function RegistrarVisita() {
       if (modoNoVisita) {
         await registrarNoVisita(sel.medico_id, causa, comentario || undefined, vmParam);
       } else {
-        await registrarVisita(sel.medico_id, tipo, comentario, Math.max(0, Math.min(60, haceMin)), prods, vmParam);
+        const r = await registrarVisita(sel.medico_id, tipo, comentario, Math.max(0, Math.min(60, haceMin)), prods, vmParam, gps?.lat ?? null, gps?.lng ?? null);
+        if (foto && r?.id) {
+          try { await subirFotoVisita(r.id, foto); }
+          catch { setMsg({ tipo: 'error', texto: 'Visita registrada, pero la foto no se pudo subir.' }); }
+        }
       }
-      setMsg({ tipo: 'success', texto: modoNoVisita ? 'No-visita registrada.' : 'Visita registrada y confirmada en el servidor.' });
-      setSel(null);
+      setMsg((m) => m ?? { tipo: 'success', texto: modoNoVisita ? 'No-visita registrada.' : 'Visita registrada y confirmada en el servidor.' });
+      setSel(null); setGps(null); setFoto(null); setFotoPreview(null);
       // Confirmación real: re-consultamos el servidor → pasan a VERDE.
       cargarRegistradas(); cargarAgenda();
     } catch (e) {
@@ -300,6 +307,28 @@ export default function RegistrarVisita() {
                              placeholder="Describe algo relevante que ocurrió en la visita…"
                              helperText='Mínimo 10 caracteres · No escribas solo "Visita OK"' />
                 </Box>
+
+                {!modoNoVisita && (
+                  <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
+                    <Button size="small" variant="outlined" startIcon={<span>📍</span>}
+                            onClick={() => {
+                              if (!navigator.geolocation) { setMsg({ tipo: 'error', texto: 'Este dispositivo no soporta geolocalización.' }); return; }
+                              navigator.geolocation.getCurrentPosition(
+                                (pos) => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                                () => setMsg({ tipo: 'error', texto: 'No se pudo obtener la ubicación (permiso denegado o sin señal).' }),
+                                { enableHighAccuracy: true, timeout: 8000 });
+                            }}>
+                      {gps ? 'Ubicación capturada' : 'Capturar ubicación'}
+                    </Button>
+                    {gps && <Typography variant="caption" color="text.secondary">📍 {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}</Typography>}
+                    <Button size="small" variant="outlined" component="label" startIcon={<span>📷</span>}>
+                      {foto ? 'Cambiar foto' : 'Foto del centro'}
+                      <input hidden type="file" accept="image/*" capture="environment"
+                             onChange={(e) => { const f = e.target.files?.[0] || null; setFoto(f); setFotoPreview(f ? URL.createObjectURL(f) : null); }} />
+                    </Button>
+                    {fotoPreview && <Box component="img" src={fotoPreview} alt="foto" sx={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 1, border: '1px solid #ddd' }} />}
+                  </Stack>
+                )}
 
                 <Stack direction="row" spacing={1.5}>
                   <Button variant="contained" color="success" fullWidth startIcon={<Save />}
