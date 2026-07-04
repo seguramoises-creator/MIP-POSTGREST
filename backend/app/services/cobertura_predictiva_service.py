@@ -505,6 +505,157 @@ def get_ciclos_cat(db: Session, pais_codigo: Optional[str] = None) -> list:
     ]
 
 
+def _dias_habiles(f_ini: date, f_fin: date) -> int:
+    """Cuenta días L-V (Mon-Fri) en [f_ini, f_fin] inclusive — fallback sin DimCalendario."""
+    n, d = 0, f_ini
+    while d <= f_fin:
+        if d.weekday() < 5:
+            n += 1
+        d += timedelta(days=1)
+    return n
+
+
+def calcular_cobertura_py(db: Session, ciclo_codigo: str, pais_codigo: str,
+                          fecha_corte: date, representante_key=None, linea=None) -> dict:
+    """Equivalente Python de cat.sp_CalcularCoberturaPredictiva. Calcula los KPIs de
+    cobertura por representante y los inserta en cat.KpiCoberturaPredictiva."""
+    import math
+    from datetime import datetime, timezone
+
+    pais_key = db.execute(_text("SELECT PaisKey FROM cat.DimPais WHERE CodigoPais=:p"),
+                          {"p": pais_codigo}).scalar()
+    if pais_key is None:
+        raise ValueError(f"País no encontrado: {pais_codigo}")
+    c = db.execute(_text(
+        "SELECT TOP 1 CicloKey, FechaInicio, FechaFin, MetaCoberturaPct, ISNULL(MetaContactosCiclo,0) AS MetaContactosCiclo "
+        "FROM cat.DimCiclo WHERE CodigoCiclo=:cc AND PaisKey=:pk AND Activo=1 "
+        "AND (:linea IS NULL OR Linea=:linea) ORDER BY CicloKey"),
+        {"cc": ciclo_codigo, "pk": pais_key, "linea": linea}).mappings().first()
+    if c is None:
+        raise ValueError(f"Ciclo no encontrado: {ciclo_codigo} / País: {pais_codigo}")
+    ciclo_key, f_ini, f_fin = c["CicloKey"], c["FechaInicio"], c["FechaFin"]
+    meta = Decimal(str(c["MetaCoberturaPct"]))
+    fce = f_fin if fecha_corte > f_fin else fecha_corte
+
+    # Días hábiles (DimCalendario, o fallback L-V)
+    total = db.execute(_text("SELECT COUNT(*) FROM cat.DimCalendario WHERE PaisKey=:pk AND CicloKey=:ck AND EsHabil=1"),
+                       {"pk": pais_key, "ck": ciclo_key}).scalar() or 0
+    if total == 0:
+        total = _dias_habiles(f_ini, f_fin)
+    transc = db.execute(_text("SELECT COUNT(*) FROM cat.DimCalendario WHERE PaisKey=:pk AND CicloKey=:ck "
+                              "AND EsHabil=1 AND Fecha<=:fce AND Fecha>=:fi"),
+                        {"pk": pais_key, "ck": ciclo_key, "fce": fce, "fi": f_ini}).scalar() or 0
+    if transc == 0 and fce >= f_ini:
+        transc = _dias_habiles(f_ini, fce)
+        if fce <= f_fin and fce.weekday() < 5:
+            transc += 1
+    restantes = total - transc if total > transc else 0
+
+    db.execute(_text("DELETE FROM cat.KpiCoberturaPredictiva WHERE CicloKey=:ck AND FechaCorte=:fc "
+                     "AND (:rk IS NULL OR RepresentanteKey=:rk)"),
+               {"ck": ciclo_key, "fc": fecha_corte, "rk": representante_key})
+
+    targets = {r["RepresentanteKey"]: r["MedicosProg"] for r in db.execute(_text(
+        "SELECT RepresentanteKey, COUNT(*) AS MedicosProg FROM cat.FactTargetMedicoCiclo "
+        "WHERE CicloKey=:ck AND PaisKey=:pk AND ProgramadoFlag=1 AND (:rk IS NULL OR RepresentanteKey=:rk) "
+        "GROUP BY RepresentanteKey"), {"ck": ciclo_key, "pk": pais_key, "rk": representante_key}).mappings().all()}
+    visitas = {r["RepresentanteKey"]: (r["MedicosUnicos"], r["ContactosTotales"]) for r in db.execute(_text(
+        "SELECT RepresentanteKey, COUNT(DISTINCT CodigoMedicoOrigen) AS MedicosUnicos, COUNT(*) AS ContactosTotales "
+        "FROM cat.FactVisitaMedica WHERE CicloKey=:ck AND PaisKey=:pk AND EstadoVisita=N'Realizada' "
+        "AND FechaVisita<=:fc AND (:rk IS NULL OR RepresentanteKey=:rk) GROUP BY RepresentanteKey"),
+        {"ck": ciclo_key, "pk": pais_key, "fc": fecha_corte, "rk": representante_key}).mappings().all()}
+    reps = db.execute(_text("SELECT RepresentanteKey, EquipoTexto, NombreRepresentante FROM cat.DimRepresentanteMedico "
+                            "WHERE Activo=1 AND (:linea IS NULL OR EquipoTexto=:linea) ORDER BY RepresentanteKey"),
+                      {"linea": linea}).mappings().all()
+
+    ahora = datetime.now(timezone.utc)
+    filas = []
+    for r in reps:
+        rk = r["RepresentanteKey"]
+        prog = targets.get(rk)
+        if prog is None:  # INNER JOIN: solo reps con target
+            continue
+        unicos, contactos = visitas.get(rk, (0, 0))
+        prog_d, unicos_d, cont_d = Decimal(prog), Decimal(unicos), Decimal(contactos)
+
+        cob_actual = (unicos_d / prog_d) if prog > 0 else Decimal(0)
+        cob_esperada = (meta * Decimal(transc) / total) if total > 0 else Decimal(0)
+        if prog == 0 or transc == 0:
+            proj = Decimal(0)
+        else:
+            raw = (unicos_d / transc * total) / prog_d
+            proj = Decimal(1) if raw > 1 else raw
+        brecha_actual = (cob_actual - cob_esperada) if (prog > 0 and total > 0) else Decimal(0)
+        brecha_proj = proj - meta
+        req = math.ceil(prog_d * meta) if prog > 0 else 0
+        pend = max(0, req - unicos) if prog > 0 else 0
+        med_diarios = (math.ceil(Decimal(req - unicos) / restantes) if (restantes and prog > 0 and req > unicos) else 0)
+        cumpl_cont = (cont_d / prog_d) if prog > 0 else Decimal(0)
+        cont_proj = (cont_d / transc * total) if transc > 0 else Decimal(0)
+        cont_pend = (prog_d - cont_d) if prog > contactos else Decimal(0)
+        cont_diarios = (math.ceil(prog_d / total + (cont_pend / restantes if restantes else Decimal(0)))
+                        if (restantes and total) else 0)
+
+        def _estado_cob():
+            if prog == 0 or transc == 0:
+                return "Rojo"
+            if proj >= meta:
+                return "Verde"
+            if proj >= Decimal("0.85"):
+                return "Amarillo"
+            return "Rojo"
+
+        def _estado_ritmo():
+            if prog == 0 or total == 0:
+                return "Rojo"
+            umbral = meta * Decimal(transc) / total
+            if cob_actual >= umbral:
+                return "Verde"
+            if cob_actual >= umbral - Decimal("0.05"):
+                return "Amarillo"
+            return "Rojo"
+
+        def _estado_psp():
+            if prog == 0 or transc == 0:
+                return "Rojo"
+            if cont_proj >= prog_d:
+                return "Verde"
+            if cont_proj >= prog_d * Decimal("0.9"):
+                return "Amarillo"
+            return "Rojo"
+
+        lectura = (f"Médicos diarios requeridos: {med_diarios}. Contactos/día requeridos: {cont_diarios}. "
+                   f"Días hábiles restantes: {restantes}. Médicos pendientes: {pend} de {prog} programados.")
+        filas.append({
+            "FechaCorte": fecha_corte, "CicloKey": ciclo_key, "PaisKey": pais_key, "Linea": r["EquipoTexto"],
+            "GD": None, "RepresentanteKey": rk, "NombreVM": r["NombreRepresentante"],
+            "MedicosProgramados": prog, "MedicosVisitadosUnicos": unicos,
+            "CoberturaActualPct": cob_actual, "CoberturaEsperadaPct": cob_esperada,
+            "CoberturaProyectadaPct": proj, "MetaCoberturaPct": meta,
+            "BrechaActualVsEsperada": brecha_actual, "BrechaProyectadaVsMeta": brecha_proj,
+            "MedicosRequeridosMeta": req, "MedicosPendientesMeta": pend, "MedicosDiariosRequeridos": med_diarios,
+            "ContactosMetaCiclo": prog, "ContactosRealizados": contactos, "CumplimientoContactosPct": cumpl_cont,
+            "ContactosProyectados": cont_proj, "ContactosPendientes": cont_pend, "ContactosDiariosRequeridos": cont_diarios,
+            "DiasHabilesTotales": total, "DiasHabilesTranscurridos": transc, "DiasHabilesRestantes": restantes,
+            "EstadoCobertura": _estado_cob(), "EstadoRitmo": _estado_ritmo(), "EstadoPSP": _estado_psp(),
+            "LecturaAccionable": lectura, "FechaCargaUtc": ahora})
+
+    if filas:
+        db.execute(_text("""INSERT INTO cat.KpiCoberturaPredictiva
+            (FechaCorte,CicloKey,PaisKey,Linea,GD,RepresentanteKey,NombreVM,MedicosProgramados,MedicosVisitadosUnicos,
+             CoberturaActualPct,CoberturaEsperadaPct,CoberturaProyectadaPct,MetaCoberturaPct,BrechaActualVsEsperada,BrechaProyectadaVsMeta,
+             MedicosRequeridosMeta,MedicosPendientesMeta,MedicosDiariosRequeridos,ContactosMetaCiclo,ContactosRealizados,CumplimientoContactosPct,
+             ContactosProyectados,ContactosPendientes,ContactosDiariosRequeridos,DiasHabilesTotales,DiasHabilesTranscurridos,DiasHabilesRestantes,
+             EstadoCobertura,EstadoRitmo,EstadoPSP,LecturaAccionable,FechaCargaUtc)
+            VALUES (:FechaCorte,:CicloKey,:PaisKey,:Linea,:GD,:RepresentanteKey,:NombreVM,:MedicosProgramados,:MedicosVisitadosUnicos,
+             :CoberturaActualPct,:CoberturaEsperadaPct,:CoberturaProyectadaPct,:MetaCoberturaPct,:BrechaActualVsEsperada,:BrechaProyectadaVsMeta,
+             :MedicosRequeridosMeta,:MedicosPendientesMeta,:MedicosDiariosRequeridos,:ContactosMetaCiclo,:ContactosRealizados,:CumplimientoContactosPct,
+             :ContactosProyectados,:ContactosPendientes,:ContactosDiariosRequeridos,:DiasHabilesTotales,:DiasHabilesTranscurridos,:DiasHabilesRestantes,
+             :EstadoCobertura,:EstadoRitmo,:EstadoPSP,:LecturaAccionable,:FechaCargaUtc)"""), filas)
+    return {"FilasInsertadas": len(filas), "CicloKey": ciclo_key, "FechaCorte": fecha_corte,
+            "DiasHabilesTotales": total, "DiasHabilesTranscurridos": transc, "DiasHabilesRestantes": restantes}
+
+
 def calcular_cobertura_sp(
     db: Session,
     ciclo_codigo: str,
@@ -513,45 +664,28 @@ def calcular_cobertura_sp(
     representante_key: Optional[int] = None,
     linea: Optional[str] = None,
 ) -> dict:
-    """
-    Llama a cat.sp_CalcularCoberturaPredictiva para (re)calcular los KPIs
-    de cobertura predictiva en cat.KpiCoberturaPredictiva.
-    """
+    """(Re)calcula los KPIs de cobertura predictiva en cat.KpiCoberturaPredictiva.
+
+    jul-2026: el cálculo se movió de cat.sp_CalcularCoberturaPredictiva (T-SQL) a
+    Python (calcular_cobertura_py) para dejar el core agnóstico de BD."""
     if fecha_corte is None:
         fecha_corte = date.today()
-
     try:
-        result = db.execute(
-            _text("""
-                EXEC [cat].[sp_CalcularCoberturaPredictiva]
-                    @CodigoCiclo      = :ciclo_codigo,
-                    @CodigoPais       = :pais_codigo,
-                    @FechaCorte       = :fecha_corte,
-                    @RepresentanteKey = :representante_key,
-                    @Linea            = :linea
-            """),
-            {
-                "ciclo_codigo": ciclo_codigo,
-                "pais_codigo": pais_codigo.upper(),
-                "fecha_corte": fecha_corte,
-                "representante_key": representante_key,
-                "linea": linea,
-            },
-        ).mappings().first()
+        result = calcular_cobertura_py(db, ciclo_codigo, pais_codigo.upper(), fecha_corte,
+                                       representante_key, linea)
         db.commit()
-
         return {
             "ok": True,
-            "filas_insertadas": result["FilasInsertadas"] if result else 0,
-            "ciclo_key": result["CicloKey"] if result else None,
+            "filas_insertadas": result["FilasInsertadas"],
+            "ciclo_key": result["CicloKey"],
             "fecha_corte": str(fecha_corte),
-            "dias_habiles_totales": result["DiasHabilesTotales"] if result else 0,
-            "dias_habiles_transcurridos": result["DiasHabilesTranscurridos"] if result else 0,
-            "dias_habiles_restantes": result["DiasHabilesRestantes"] if result else 0,
+            "dias_habiles_totales": result["DiasHabilesTotales"],
+            "dias_habiles_transcurridos": result["DiasHabilesTranscurridos"],
+            "dias_habiles_restantes": result["DiasHabilesRestantes"],
         }
     except Exception as exc:
         db.rollback()
-        logger.error(f"[sp_CalcularCoberturaPredictiva] Error: {exc}")
+        logger.error(f"[calcular_cobertura_py] Error: {exc}")
         raise
 
 

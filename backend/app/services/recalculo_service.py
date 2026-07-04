@@ -38,7 +38,6 @@ no disparar el recálculo en absoluto si el ciclo ya está cerrado).
 from typing import Optional
 
 from sqlalchemy.orm import Session
-from sqlalchemy import text
 from loguru import logger
 
 from app.models.dimensiones import Ciclo
@@ -91,37 +90,8 @@ def recalcular_ciclo(
     (ETL.tsx): `{ciclo_id, abortado, motivo?, filas_kpi_actualizadas,
     rankings_generados}`.
     """
-    fila = db.execute(
-        text("EXEC DW.sp_RecalcularCiclo @ciclo_id = :ciclo_id, @pais_codigo = :pais_codigo"),
-        {"ciclo_id": ciclo_id, "pais_codigo": pais_codigo},
-    ).mappings().first()
-    db.commit()
-
-    if fila is None:
-        raise ValueError(f"Ciclo ID={ciclo_id} no encontrado")
-
-    abortado = bool(fila["abortado"])
-
-    if abortado:
-        motivo = fila["motivo"]
-        logger.warning(f"RECALCULO abortado — {motivo}")
-        return {
-            "ciclo_id": fila["ciclo_id"],
-            "abortado": True,
-            "motivo": motivo,
-            "filas_kpi_actualizadas": fila["filas_kpi_actualizadas"],
-            "rankings_generados": fila["rankings_generados"],
-        }
-
-    logger.info(
-        f"RECALCULO (SQL Server, DW.sp_RecalcularCiclo): ciclo_id={ciclo_id}, pais_codigo={pais_codigo} — "
-        f"{fila['filas_kpi_actualizadas']} filas de resultado actualizadas, "
-        f"{fila['rankings_generados']} registros de ranking generados"
-    )
-
-    return {
-        "ciclo_id": fila["ciclo_id"],
-        "abortado": False,
-        "filas_kpi_actualizadas": fila["filas_kpi_actualizadas"],
-        "rankings_generados": fila["rankings_generados"],
-    }
+    # jul-2026: el cálculo se movió de DW.sp_RecalcularCiclo (T-SQL) a Python
+    # (motor_calculo_service) para dejar el core agnóstico de BD. El contrato de
+    # salida y el guard "solo ciclo abierto" se conservan idénticos.
+    from app.services import motor_calculo_service
+    return motor_calculo_service.recalcular_ciclo_py(db, ciclo_id, pais_codigo)

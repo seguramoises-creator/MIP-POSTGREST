@@ -24,7 +24,7 @@ El sistema permite:
 
 **REDISEÑO DE JUNIO 2026 — cambios estructurales clave respecto a la v1.0:**
 
-1. **El motor de cálculo de Score Integral/Ranking se trasladó a SQL Server.** Lo que antes era lógica Python en `recalculo_service.py` ahora es un conjunto de stored procedures T-SQL (`DW.sp_RecalcularCiclo`, `DW.sp_CompletarPuntajesCiclo`, `DW.sp_GenerarRankingCiclo`). El servicio Python quedó como capa de orquestación/traducción (ver §8).
+1. **El motor de cálculo de Score Integral/Ranking:** se trasladó a SQL Server (stored procedures T-SQL) en jun-2026 y **se movió de vuelta a Python en jul-2026** para dejar el core agnóstico de BD (ediciones PostgreSQL / SQL Server-contenedor). Hoy vive en `motor_calculo_service.py`, verificado por caracterización; los SPs fueron eliminados. Ver §8.
 2. **El esquema `DW` fue rediseñado.** `FACT_RendimientoComercial`, `FACT_Ranking` y `FACT_Reconocimiento` (v1.0) fueron reemplazados por `FACT_ResultadoIndicador` (entrada), `FACT_ScoreIntegralRM` + `FACT_RankingRM` + `FACT_RankingGerente` + `FACT_ReconocimientoRM` (salidas calculadas), más tablas derivadas nuevas para dashboards (ver §4).
 3. **Cuatro módulos nuevos**: **LSII** (§12), **Cobertura Predictiva / 4DX** (§13, sustituye a Comercial), **Categorización Médica** (§14, sustituye a Capacitación) y **Exportación/Reportes** (§15, resuelve el pendiente histórico de exportación PDF/Excel).
 4. **Dos routers y dos páginas frontend quedaron como código muerto, intencionalmente no registrados**: `comercial.py` / `Comercial.tsx` y `capacitacion.py` / `Capacitacion.tsx`. Siguen en el disco (con comentarios inline que documentan la sustitución) pero no se importan en `router.py` ni en `App.tsx`. No tocarlos salvo que se pida explícitamente reactivarlos.
@@ -387,25 +387,31 @@ Score ∈ [0, 100]
 
 ---
 
-## 8. Servicio de Recálculo — ahora en SQL Server
+## 8. Servicio de Recálculo — en Python (motor agnóstico de BD)
 
-**Archivo**: `app/services/recalculo_service.py`
+**Archivo**: `app/services/recalculo_service.py` (orquestación) + `app/services/motor_calculo_service.py` (motor).
 
-**Cambio de arquitectura**: para que el cálculo no dependa de la estructura del Excel y se ejecute como un proceso de base de datos parametrizado exactamente por (país, ciclo) — los mismos valores que el usuario elige en la pantalla "Calcular IUP y Ranking" — **todo el motor de cálculo vive ahora en stored procedures T-SQL** (esquema `DW`, migración `e7a91f4c2b58`):
+**Cambio de arquitectura (jul-2026, revierte el diseño anterior):** el motor de Score/Ranking
+**se movió de vuelta a Python** para dejar el core **agnóstico de base de datos** (prerequisito de
+las ediciones PostgreSQL y SQL Server-contenedor). Los 3 stored procedures T-SQL (`DW.sp_RecalcularCiclo`,
+`DW.sp_CompletarPuntajesCiclo`, `DW.sp_GenerarRankingCiclo`) **fueron eliminados** (migración `e8f1a2c3d4b5`);
+su lógica se reimplementó en `motor_calculo_service.py` con `decimal.Decimal` para aritmética exacta,
+**verificada por caracterización** (`tests/test_caracterizacion_motor.py`: mismo resultado que el SP).
+Igual se hizo con Categorización (`cat.sp_CalcularCategoriaMedica` → `categorizacion_service.calcular_categorias_py`)
+y Cobertura (`cat.sp_CalcularCoberturaPredictiva` → `cobertura_predictiva_service.calcular_cobertura_py`),
+también caracterizadas. **Ya no hay stored procedures en la BD.**
 
-- `DW.sp_CompletarPuntajesCiclo` — completa `resultado_porcentaje` y `puntos_obtenidos` en `FACT_ResultadoIndicador`
-- `DW.sp_GenerarRankingCiclo` — borra y regenera Score Integral y Ranking (patrón **delete-then-regenerate**, nunca upsert parcial)
-- `DW.sp_RecalcularCiclo` — orquestador: aplica el guard de "solo ciclo abierto" y ejecuta los dos anteriores
+- `motor_calculo_service.completar_puntajes(db, ciclo_id, pais_codigo)` — `resultado_porcentaje` + `puntos_obtenidos`.
+- `motor_calculo_service.generar_ranking(db, ciclo_id, pais_codigo)` — Score Integral + Ranking (**delete-then-insert**).
+- `motor_calculo_service.recalcular_ciclo_py(db, ciclo_id, pais_codigo)` — orquestador (guard de ciclo abierto).
 
-`recalculo_service.py` (Python) es ahora **solo una capa de orquestación/traducción**: RBAC, logging, auditoría, y traduce el result set del SP al contrato de dict que consumen el endpoint y el frontend. El cálculo en sí ya no está en Python.
+`recalculo_service.recalcular_ciclo` delega en `motor_calculo_service.recalcular_ciclo_py`, conservando
+idéntico el contrato de dict (`{ciclo_id, abortado, motivo?, filas_kpi_actualizadas, rankings_generados}`).
 
 ```python
-def recalcular_ciclo(db, ciclo_id, pais_id=None) -> dict:
-    fila = db.execute(
-        text("EXEC DW.sp_RecalcularCiclo @ciclo_id = :ciclo_id, @pais_id = :pais_id"),
-        {"ciclo_id": ciclo_id, "pais_id": pais_id},
-    ).mappings().first()
-    ...
+def recalcular_ciclo(db, ciclo_id, pais_codigo=None) -> dict:
+    from app.services import motor_calculo_service
+    return motor_calculo_service.recalcular_ciclo_py(db, ciclo_id, pais_codigo)
 ```
 
 **REGLA DE NEGOCIO CRÍTICA**: el recálculo **solo opera sobre el ciclo ABIERTO** de cada país (`DIM_Ciclo.cerrado == False`). Los ciclos cerrados son snapshots históricos inmutables — el motor nunca los toca, ni siquiera si llegan datos nuevos o correcciones. `validar_ciclo_abierto(db, ciclo_id)` es el guard central, reutilizado por `ranking_service` y `reconocimiento_service` para garantizar que ningún camino de cálculo pueda escribir sobre un ciclo cerrado; levanta `CicloCerradoError` si el ciclo está cerrado.

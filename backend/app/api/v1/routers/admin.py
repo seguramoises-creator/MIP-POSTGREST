@@ -472,6 +472,34 @@ def open_ciclo(id: int, db: Session = Depends(get_db), _=AdminOnly):
 
 # ── Reset de datos ────────────────────────────────────────────────────────────
 
+def _reset_datos_postgres(tipo: str) -> dict:
+    """Reset portable para PostgreSQL (edición clientes grandes). Usa TRUNCATE con
+    RESTART IDENTITY CASCADE (respeta FKs sin NOCHECK). Los identificadores mixtos
+    (DW, Config, DIM_*) van entre comillas dobles."""
+    from sqlalchemy import text
+    from app.db.database import SessionLocal
+    schemas = ("DW", "ETL", "Audit") if tipo == "facts" else ("Config",)
+    db = SessionLocal()
+    resultados, total = [], 0
+    try:
+        if tipo == "dims":
+            db.execute(text('UPDATE "Security"."DIM_Usuario" SET pais_codigo = NULL WHERE pais_codigo IS NOT NULL'))
+        tablas = db.execute(text(
+            "SELECT table_schema AS s, table_name AS t FROM information_schema.tables "
+            "WHERE table_type='BASE TABLE' AND table_schema = ANY(:schemas)"),
+            {"schemas": list(schemas)}).mappings().all()
+        for row in tablas:
+            db.execute(text(f'TRUNCATE TABLE "{row["s"]}"."{row["t"]}" RESTART IDENTITY CASCADE'))
+            resultados.append({"tabla": f'{row["s"]}.{row["t"]}', "filas": -1, "estado": "ok"})
+        db.commit()
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Error en reset {tipo} (postgres): {e}")
+    finally:
+        db.close()
+    return {"tipo": tipo, "total_filas": total, "tablas": resultados}
+
+
 @router.post("/reset", response_model=dict, summary="Borrar datos por fase: facts o dims")
 def reset_datos(tipo: str = "facts", _=AdminOnly):
     """
@@ -486,8 +514,13 @@ def reset_datos(tipo: str = "facts", _=AdminOnly):
     if tipo not in ("facts", "dims"):
         raise HTTPException(status_code=400, detail="tipo debe ser 'facts' o 'dims'")
 
-    import pymssql
     from app.core.config import settings
+
+    # PostgreSQL (edición clientes grandes): reset portable con TRUNCATE CASCADE.
+    if settings.DB_ENGINE == "postgres":
+        return _reset_datos_postgres(tipo)
+
+    import pymssql
 
     try:
         conn = pymssql.connect(
