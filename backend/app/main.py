@@ -40,8 +40,20 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("Base de datos: NO disponible — verificar configuración")
 
+    # Scheduler de tareas (correo de correcciones de exámenes, etc.)
+    try:
+        from app.core import scheduler
+        scheduler.iniciar()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"No se pudo iniciar el scheduler: {e}")
+
     yield  # Servidor corriendo
 
+    try:
+        from app.core import scheduler
+        scheduler.apagar()
+    except Exception:  # noqa: BLE001
+        pass
     logger.info(f"Apagando {settings.APP_NAME}...")
 
 

@@ -223,7 +223,16 @@ export default function MisExamenes() {
         <Card variant="outlined">
           <CardContent>
             {preguntaActual.escenario && (
-              <Alert severity="info" sx={{ mb: 2 }}>{preguntaActual.escenario}</Alert>
+              preguntaActual.tipo === 'objecion' ? (
+                <Box sx={{ p: 1.5, mb: 2, bgcolor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 1 }}>
+                  <Typography variant="subtitle2" sx={{ color: '#e65100', fontWeight: 700 }}>
+                    🛡️ Objeción del Médico sobre el Producto
+                  </Typography>
+                  <Typography variant="body2">{preguntaActual.escenario}</Typography>
+                </Box>
+              ) : (
+                <Alert severity="info" sx={{ mb: 2 }}>{preguntaActual.escenario}</Alert>
+              )
             )}
             <Typography variant="h6" sx={{ mb: 2 }}>{preguntaActual.texto}</Typography>
             {preguntaActual.opciones.length === 0 ? (
@@ -277,15 +286,11 @@ export default function MisExamenes() {
         <Card variant="outlined" sx={{ mb: 2 }}>
           <CardContent sx={{ textAlign: 'center' }}>
             <Typography variant="h6">{reporte.examen_nombre}</Typography>
-            <Typography variant="h2" fontWeight={800} color={reporte.aprobado ? 'success.main' : 'error.main'}>
+            <Typography variant="caption" color="text.secondary">Nota obtenida</Typography>
+            <Typography variant="h2" fontWeight={800}
+              color={reporte.provisional ? 'warning.main' : reporte.aprobado ? 'success.main' : 'error.main'}>
               {reporte.score}%
             </Typography>
-            <Chip
-              icon={reporte.aprobado ? <CheckCircle /> : <Cancel />}
-              color={reporte.aprobado ? 'success' : 'error'}
-              label={reporte.aprobado ? 'Aprobado' : 'Reprobado'}
-              sx={{ mb: 1 }}
-            />
             <Typography variant="body2" color="text.secondary">
               {reporte.correctas} de {reporte.total} correctas · nota mínima {reporte.nota_minima}%
             </Typography>
@@ -293,11 +298,38 @@ export default function MisExamenes() {
           </CardContent>
         </Card>
 
+        {reporte.provisional ? (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            <Typography fontWeight={700}>Pendiente de calificación del Gerente</Typography>
+            Tu nota final se calculará cuando tu supervisor revise las preguntas abiertas.
+          </Alert>
+        ) : reporte.aprobado ? (
+          <Alert severity="success" icon={<CheckCircle />} sx={{ mb: 2 }}>
+            <Typography fontWeight={700}>¡Examen Aprobado!</Typography>
+            Nota {reporte.score}% (mínima {reporte.nota_minima}%). ✅ Este resultado suma para tu KPI
+            (al consolidar el ciclo el área de Capacitación).
+          </Alert>
+        ) : (
+          <Alert severity="error" icon={<Cancel />} sx={{ mb: 2 }}>
+            <Typography fontWeight={700}>Examen no aprobado — por debajo de nota mínima</Typography>
+            Nota obtenida: <b>{reporte.score}%</b> · Nota mínima requerida: <b>{reporte.nota_minima}%</b><br />
+            ❌ Este resultado NO suma para KPI. Solicita un nuevo intento a tu supervisor de capacitación.
+          </Alert>
+        )}
+
         <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Revisión pregunta por pregunta</Typography>
         <Stack spacing={1.5}>
           {reporte.respuestas.map((r, i) => (
             <Card key={i} variant="outlined">
               <CardContent>
+                {r.tipo === 'objecion' && r.escenario && (
+                  <Box sx={{ p: 1.25, mb: 1, bgcolor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 1 }}>
+                    <Typography variant="caption" sx={{ color: '#e65100', fontWeight: 700, display: 'block' }}>
+                      🛡️ Objeción del Médico sobre el Producto
+                    </Typography>
+                    <Typography variant="body2">{r.escenario}</Typography>
+                  </Box>
+                )}
                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
                   {r.es_correcta ? <CheckCircle color="success" /> : <Cancel color="error" />}
                   <Typography fontWeight={600}>{r.pregunta_texto}</Typography>
@@ -314,6 +346,11 @@ export default function MisExamenes() {
             </Card>
           ))}
         </Stack>
+
+        <Alert severity="info" icon={<span>📧</span>} sx={{ mt: 2 }}>
+          Recibirás por correo las correcciones de tus respuestas incorrectas 30 minutos después
+          de concluido el tiempo hábil del examen.
+        </Alert>
 
         <Button sx={{ mt: 2 }} variant="contained" onClick={() => { setVista('lista'); cargarPendientes(); }}>
           Volver a mis exámenes

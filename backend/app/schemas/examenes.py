@@ -147,6 +147,8 @@ class CalificarRespuesta(BaseModel):
 
 class ReporteRespuesta(BaseModel):
     pregunta_texto: str
+    tipo: str = "multi"
+    escenario: str | None = None
     explicacion: str | None
     indice_elegido_presentado: int | None
     texto_elegido: str | None
@@ -161,6 +163,7 @@ class ReporteIntento(BaseModel):
     score: float
     aprobado: bool
     nota_minima: int
+    provisional: bool = False
     correctas: int
     total: int
     fecha_fin: datetime | None
@@ -192,3 +195,9 @@ class JobIAEstado(BaseModel):
     mensaje_error: str | None = None
     examen_id: int | None = None
     total_preguntas: int = 0
+
+
+# ── Consolidación EVAL_CONOCIMIENTOS (gate por ciclo/país) ────────────────
+class ConsolidarCiclo(BaseModel):
+    ciclo_id: int
+    pais_codigo: str = Field(min_length=1, max_length=10)

@@ -429,3 +429,20 @@ def test_entregar_intento_cierra_asignacion_si_agota_intentos():
     assert intento.aprobado is False
     assert asignacion.intentos_usados == 3   # 2 + 1
     assert asignacion.estado == "completado"  # agotó intentos_max
+
+
+# ---------------------------------------------------------------------------
+# Regresión v2.0: la entrega ya NO alimenta EVAL_CONOCIMIENTOS (gate de consolidación)
+# ---------------------------------------------------------------------------
+def test_finalizar_resultado_no_alimenta_kpi(monkeypatch):
+    import app.services.examen_kpi_service as kpi
+    llamado = {"kpi": False}
+    monkeypatch.setattr(kpi, "upsert_nota_rm",
+                        lambda *a, **k: llamado.__setitem__("kpi", True))
+    db = MagicMock()
+    intento = SimpleNamespace(id=1, evaluado_tipo="RM", evaluado_rm_id=5)
+    examen = SimpleNamespace(id=1, indicador_codigo="EVAL_CONOCIMIENTOS", ciclo_id=7)
+    asignacion = SimpleNamespace(notif_activa=False)
+    # notif desactivada: _finalizar_resultado no debe tocar el KPI ni notificar
+    svc._finalizar_resultado(db, intento, examen, asignacion, correctas=3, total=5)
+    assert llamado["kpi"] is False

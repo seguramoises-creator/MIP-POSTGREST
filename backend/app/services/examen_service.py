@@ -37,6 +37,15 @@ def obtener_examen(db: Session, examen_id: int) -> Examen | None:
     return db.query(Examen).filter(Examen.id == examen_id).first()
 
 
+def validar_objecion_producto(escenario: str | None, n_opciones: int) -> None:
+    """Reglas del tipo 'objecion' (Objeción de Producto): opción múltiple (5 opciones
+    a–e) con el texto de la objeción del médico obligatorio en `escenario`."""
+    if not (escenario and escenario.strip()):
+        raise ValueError("La Objeción de Producto requiere el texto de la objeción (escenario)")
+    if n_opciones != 5:
+        raise ValueError("La Objeción de Producto debe tener exactamente 5 opciones (a–e)")
+
+
 def agregar_pregunta(db: Session, examen_id: int, datos: PreguntaCrear) -> Pregunta:
     examen = obtener_examen(db, examen_id)
     if examen is None:
@@ -44,7 +53,8 @@ def agregar_pregunta(db: Session, examen_id: int, datos: PreguntaCrear) -> Pregu
     if examen.estado != "borrador":
         raise ValueError("Solo se editan preguntas de un examen en borrador")  # RN-01
     # Cantidad de opciones por tipo (estándar VISTA):
-    #   multi → 5 (a–e); vf → 2; abierta → 0; caso → 5 (consigna múltiple) o 0 (abierta).
+    #   multi → 5 (a–e); vf → 2; abierta → 0; caso → 5 (consigna múltiple) o 0 (abierta);
+    #   objecion → 5 (a–e) + escenario (texto de la objeción) obligatorio.
     n_ops = len(datos.opciones)
     abierta = datos.tipo == "abierta" or (datos.tipo == "caso" and n_ops == 0)
     if datos.tipo == "multi" and n_ops != 5:
@@ -55,6 +65,8 @@ def agregar_pregunta(db: Session, examen_id: int, datos: PreguntaCrear) -> Pregu
         raise ValueError("La pregunta abierta no lleva opciones")
     if datos.tipo == "caso" and n_ops not in (0, 5):
         raise ValueError("El caso debe tener 5 opciones (a–e) o ninguna (consigna abierta)")
+    if datos.tipo == "objecion":
+        validar_objecion_producto(datos.escenario, n_ops)
     # Las preguntas con opciones exigen exactamente 1 correcta; las abiertas no.
     if not abierta:
         n_correctas = sum(1 for o in datos.opciones if o.es_correcta)

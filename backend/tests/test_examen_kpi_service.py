@@ -42,3 +42,21 @@ def test_no_alimenta_si_ciclo_cerrado(monkeypatch):
     monkeypatch.setattr(kpi.recalculo_service, "validar_ciclo_abierto", _raise)
     # No debe lanzar; retorna False y no recalcula.
     assert kpi.alimentar_eval_conocimientos(db, intento) is False
+
+
+def test_upsert_nota_rm_escribe_sin_recalcular(monkeypatch):
+    db = MagicMock()
+    rm = SimpleNamespace(id=5, pais_codigo="DO", linea_id=2, gerente_id=3)
+    monkeypatch.setattr(kpi, "_nota_promedio_rm", lambda d, rid, cid: 8.5)
+    monkeypatch.setattr(kpi, "_indicador_de_pais", lambda d, pais: SimpleNamespace(id=42))
+    nota = kpi.upsert_nota_rm(db, rm, ciclo_id=7)
+    assert nota == 8.5
+    # Escribe a la FACT pero NO recalcula (eso lo hace la consolidación 1 sola vez).
+    assert db.add.called
+
+
+def test_upsert_nota_rm_sin_indicador_devuelve_none(monkeypatch):
+    db = MagicMock()
+    rm = SimpleNamespace(id=5, pais_codigo="DO", linea_id=2, gerente_id=3)
+    monkeypatch.setattr(kpi, "_indicador_de_pais", lambda d, pais: None)
+    assert kpi.upsert_nota_rm(db, rm, ciclo_id=7) is None

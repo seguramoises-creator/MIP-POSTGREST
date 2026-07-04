@@ -61,6 +61,7 @@ from app.schemas.examenes import (
     ReporteIntento,
     RespuestaEnviar,
     CalificarRespuesta,
+    ConsolidarCiclo,
 )
 from app.services import examen_intento_service as intento_svc
 from app.services import examen_ia_service
@@ -464,6 +465,32 @@ def listar(
     return examen_service.listar_examenes(db)
 
 
+@router.get("/consolidacion", response_model=dict)
+def consolidacion_estado(
+    ciclo_id: int,
+    pais_codigo: str,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Preview del gate EVAL_CONOCIMIENTOS para un (ciclo, país): cuántos RM tienen
+    nota, quiénes, promedio, estado del gate y si el ciclo está abierto. No escribe."""
+    from app.services import examen_consolidacion_service
+    return examen_consolidacion_service.estado_consolidacion(db, ciclo_id, pais_codigo)
+
+
+@router.post("/consolidacion/consolidar", response_model=dict)
+def consolidacion_ejecutar(
+    body: ConsolidarCiclo,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Consolida el (ciclo, país): escribe la nota EVAL_CONOCIMIENTOS de cada RM a
+    DW.FACT_ResultadoIndicador y dispara un único recálculo. Solo Capacitación."""
+    from app.services import examen_consolidacion_service
+    return examen_consolidacion_service.consolidar_ciclo(
+        db, body.ciclo_id, body.pais_codigo, getattr(current_user, "id", None))
+
+
 @router.get("/{examen_id}", response_model=ExamenResponse)
 def obtener(
     examen_id: int,
@@ -551,11 +578,47 @@ def asignar(
     current_user=RequireCapacitacion,
 ):
     try:
-        return examen_service.asignar_examen(
+        asignaciones = examen_service.asignar_examen(
             db, examen_id, datos.evaluados, datos.fecha_limite, datos.intentos_max, datos.notif_activa
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    # Programa el correo de correcciones a fecha_límite + 30 min (spec §2.2).
+    if datos.fecha_limite is not None:
+        try:
+            from datetime import datetime, time
+            from app.core import scheduler
+            fl = datos.fecha_limite
+            if not isinstance(fl, datetime):
+                fl = datetime.combine(fl, time(23, 59))
+            scheduler.programar_correcciones(examen_id, fl)
+        except Exception:  # noqa: BLE001
+            pass
+    return asignaciones
+
+
+@router.post("/{examen_id}/correcciones/enviar", response_model=dict)
+def enviar_correcciones(
+    examen_id: int,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Envía (o simula en modo demo) las correcciones de las preguntas incorrectas a
+    todos los participantes ahora mismo. Devuelve el número de correos."""
+    from app.services import notification_service
+    n = notification_service.notificar_correcciones_examen(db, examen_id)
+    return {"enviados": n}
+
+
+@router.get("/{examen_id}/recomendaciones", response_model=list[dict])
+def examen_recomendaciones(
+    examen_id: int,
+    db: Session = Depends(get_db),
+    current_user=RequireEquipo,
+):
+    """Preguntas con desacierto ≥ 40% (brecha crítica) + quiénes fallaron."""
+    from app.services import examen_resultados_service
+    return examen_resultados_service.recomendaciones(db, examen_id)
 
 
 @router.post("/{examen_id}/iniciar", response_model=IntentoIniciado)

@@ -50,13 +50,13 @@ export interface IntentoIniciado {
   tiempo_limite_min: number | null; preguntas: PreguntaPresentada[];
 }
 export interface ReporteRespuesta {
-  pregunta_texto: string; explicacion: string | null;
+  pregunta_texto: string; tipo?: string; escenario?: string | null; explicacion: string | null;
   indice_elegido_presentado: number | null; texto_elegido: string | null;
   texto_correcto: string; es_correcta: boolean;
 }
 export interface ReporteIntento {
   intento_id: number; examen_nombre: string; producto: string | null;
-  score: number; aprobado: boolean; nota_minima: number;
+  score: number; aprobado: boolean; nota_minima: number; provisional?: boolean;
   correctas: number; total: number; fecha_fin: string | null;
   respuestas: ReporteRespuesta[];
 }
@@ -73,9 +73,11 @@ export interface ResultadosExamen {
   ranking: RankingFila[];
 }
 export interface AnalisisPregunta {
-  pregunta_id: number; texto: string; orden: number;
+  pregunta_id: number; texto: string; orden: number; tipo?: string;
   respuesta_correcta?: string | null;
-  total_respuestas: number; incorrectas: number; error_pct: number;
+  total_respuestas: number; incorrectas: number;
+  acierto_pct: number; error_pct: number;
+  aciertan: string[]; fallan: string[]; etiqueta: string;
 }
 
 export interface OpcionRevision {
@@ -106,6 +108,19 @@ export const resultadosExamen = (examenId: number) =>
   api.get<ResultadosExamen>(`/examenes/${examenId}/resultados`).then(r => r.data);
 export const analisisPreguntas = (examenId: number) =>
   api.get<AnalisisPregunta[]>(`/examenes/${examenId}/analisis-preguntas`).then(r => r.data);
+export const enviarCorrecciones = (examenId: number) =>
+  api.post<{ enviados: number }>(`/examenes/${examenId}/correcciones/enviar`).then(r => r.data);
+// Consolidación EVAL_CONOCIMIENTOS (gate por ciclo/país)
+export interface ConsolidacionEstado {
+  ciclo_id: number; pais_codigo: string; estado: string;
+  rms_con_nota: number; rms_con_nota_nombres: string[];
+  nota_promedio_equipo: number | null; ultima_consolidacion: string | null; ciclo_abierto: boolean;
+}
+export const consolidacionEstado = (cicloId: number, paisCodigo: string) =>
+  api.get<ConsolidacionEstado>('/examenes/consolidacion', { params: { ciclo_id: cicloId, pais_codigo: paisCodigo } }).then(r => r.data);
+export const consolidarCiclo = (ciclo_id: number, pais_codigo: string) =>
+  api.post<{ abortado: boolean; rms_consolidados: number; nota_promedio_equipo: number | null }>(
+    '/examenes/consolidacion/consolidar', { ciclo_id, pais_codigo }).then(r => r.data);
 export const listarPreguntasExamen = (examenId: number) =>
   api.get<PreguntaConOpciones[]>(`/examenes/${examenId}/preguntas`).then(r => r.data);
 export const eliminarPregunta = (examenId: number, preguntaId: number) =>
