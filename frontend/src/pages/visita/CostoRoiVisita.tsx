@@ -5,10 +5,13 @@ import {
 } from '@mui/material';
 import { Paid, Save, UploadFile, Calculate, Inventory2, MonetizationOn, CalendarMonth, Assessment, WarningAmber } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import { api } from '../../services/api';
 import {
   costoEstructura, guardarCostoEstructura, importarCostoExcel, listarLineasVisita,
   type CostoFull, type CostoEstructuraInput, type CostoProdInput, type Catalogo,
 } from '../../services/visita.service';
+
+type CicloOpt = { id: number; nombre: string; cerrado: boolean };
 
 function errMsg(e: unknown, fallback: string): string {
   const d = (e as { response?: { data?: { detalle?: { msg?: string }[]; detail?: string } } })?.response?.data;
@@ -32,6 +35,8 @@ export default function CostoRoiVisita() {
 
   const [lineas, setLineas] = useState<Catalogo[]>([]);
   const [lineaId, setLineaId] = useState<number | ''>('');
+  const [ciclos, setCiclos] = useState<CicloOpt[]>([]);
+  const [cicloId, setCicloId] = useState<number | ''>('');
   const [full, setFull] = useState<CostoFull | null>(null);
   const [est, setEst] = useState<CostoEstructuraInput | null>(null);
   const [prods, setProds] = useState<CostoProdInput[]>([]);
@@ -43,26 +48,31 @@ export default function CostoRoiVisita() {
   const moneda = full?.moneda ?? 'RD$';
   const money = (v: number) => `${moneda} ${Math.round(v).toLocaleString()}`;
   const lineaParam = esGestor ? (lineaId || undefined) : undefined;
+  const cicloParam = cicloId || undefined;
+  const cicloSel = ciclos.find((c) => c.id === cicloId);
+  const cerrado = !!cicloSel?.cerrado;
+  const editable = esGestor && !cerrado;
 
   const aplicar = (f: CostoFull) => { setFull(f); setEst({ ...f.estructura }); setProds(productosDe(f)); };
   const cargar = useCallback(() => {
     setCargando(true);
-    costoEstructura(lineaParam).then(aplicar).catch(() => setFull(null)).finally(() => setCargando(false));
-  }, [lineaParam]);
+    costoEstructura(cicloParam, lineaParam).then(aplicar).catch(() => setFull(null)).finally(() => setCargando(false));
+  }, [cicloParam, lineaParam]);
 
   useEffect(() => {
     if (esGestor) listarLineasVisita().then((ls) => { setLineas(ls); if (ls.length && !lineaId) setLineaId(ls[0].id); }).catch(() => {});
+    api.get<CicloOpt[]>('/admin/ciclos').then((r) => setCiclos(r.data)).catch(() => setCiclos([]));
   }, [esGestor]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!esGestor || lineaId) cargar(); }, [esGestor, lineaId, cargar]);
 
-  const setE = (k: keyof CostoEstructuraInput, v: number | string | null) => setEst((e) => e ? { ...e, [k]: v } : e);
-  const setP = (i: number, k: keyof CostoProdInput, v: number) => setProds((ps) => ps.map((p, idx) => idx === i ? { ...p, [k]: v } : p));
+  const setE = (k: keyof CostoEstructuraInput, v: number | string | null) => { if (cerrado) return; setEst((e) => e ? { ...e, [k]: v } : e); };
+  const setP = (i: number, k: keyof CostoProdInput, v: number) => { if (cerrado) return; setProds((ps) => ps.map((p, idx) => idx === i ? { ...p, [k]: v } : p)); };
 
   async function guardar() {
     if (!est) return;
     setGuardando(true); setMsg(null);
     try {
-      const f = await guardarCostoEstructura({ ...est, linea_id: lineaParam ?? null, productos: prods });
+      const f = await guardarCostoEstructura({ ...est, ciclo_id: cicloParam ?? null, linea_id: lineaParam ?? null, productos: prods });
       aplicar(f);
       setMsg({ tipo: 'success', texto: 'Estructura guardada y recalculada.' });
     } catch (e) {
@@ -73,7 +83,7 @@ export default function CostoRoiVisita() {
   async function importar(file: File) {
     setGuardando(true); setMsg(null);
     try {
-      const f = await importarCostoExcel(file, lineaParam);
+      const f = await importarCostoExcel(file, cicloParam, lineaParam);
       aplicar(f);
       setMsg({ tipo: 'success', texto: `Importados ${(f as { importados?: number }).importados ?? ''} productos desde Excel.` });
     } catch (e) {
@@ -86,7 +96,7 @@ export default function CostoRoiVisita() {
   const num = (label: string, val: number, k: keyof CostoEstructuraInput, sub?: string, width = 150) => (
     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ py: 0.75 }}>
       <Box><Typography variant="body2" fontWeight={600}>{label}</Typography>{sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}</Box>
-      <TextField size="small" type="number" value={val} sx={{ width }} onChange={(e) => setE(k, Number(e.target.value))} />
+      <TextField size="small" type="number" value={val} sx={{ width }} disabled={cerrado} onChange={(e) => setE(k, Number(e.target.value))} />
     </Stack>
   );
   const kpi = (label: string, valor: string, color = 'text.primary', sub?: string) => (
@@ -108,14 +118,21 @@ export default function CostoRoiVisita() {
         </Box>
         <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
           {esGestor && (
+            <TextField select size="small" label="Ciclo" value={cicloId} sx={{ minWidth: 170 }} onChange={(e) => setCicloId(Number(e.target.value))}>
+              <MenuItem value=""><em>Ciclo actual</em></MenuItem>
+              {ciclos.map((c) => <MenuItem key={c.id} value={c.id}>{c.nombre}{c.cerrado ? ' (cerrado)' : ''}</MenuItem>)}
+            </TextField>
+          )}
+          {esGestor && (
             <TextField select size="small" label="Línea" value={lineaId} sx={{ minWidth: 190 }} onChange={(e) => setLineaId(Number(e.target.value))}>
               {lineas.map((l) => <MenuItem key={l.id} value={l.id}>{l.nombre}</MenuItem>)}
             </TextField>
           )}
+          {cerrado && <Chip size="small" color="default" label="Ciclo cerrado — solo lectura" />}
           {esGestor && <>
             <input ref={fileRef} type="file" accept=".xlsx,.xls" hidden onChange={(e) => e.target.files?.[0] && importar(e.target.files[0])} />
-            <Button size="small" startIcon={<UploadFile />} onClick={() => fileRef.current?.click()} disabled={guardando}>Importar Excel</Button>
-            <Button size="small" variant="contained" startIcon={<Calculate />} onClick={guardar} disabled={guardando}>{guardando ? 'Guardando…' : 'Guardar y recalcular'}</Button>
+            <Button size="small" startIcon={<UploadFile />} onClick={() => fileRef.current?.click()} disabled={guardando || cerrado}>Importar Excel</Button>
+            <Button size="small" variant="contained" startIcon={<Calculate />} onClick={guardar} disabled={guardando || cerrado}>{guardando ? 'Guardando…' : 'Guardar y recalcular'}</Button>
           </>}
         </Stack>
       </Stack>
