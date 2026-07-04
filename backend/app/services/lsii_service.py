@@ -31,6 +31,15 @@ from loguru import logger
 
 from app.models.dimensiones import ReceptividadOpcion, ConfiguracionLsii
 from app.models.hechos import RankingRM, EvaluacionReceptividad, EvaluacionReceptividadDetalle
+from app.services import recalculo_service
+
+
+def _guard_ciclo_abierto(db, ciclo_id):
+    """Bloquea escrituras sobre ciclos cerrados (inmutables)."""
+    try:
+        recalculo_service.validar_ciclo_abierto(db, ciclo_id)
+    except recalculo_service.CicloCerradoError:
+        raise ValueError("El ciclo está cerrado — solo lectura")
 
 # Valores de respaldo: solo se usan si Config.DIM_ConfiguracionLSII no tiene
 # ninguna fila todavía (instalación sin la migración aplicada). El valor
@@ -220,6 +229,7 @@ def registrar_evaluacion(
     El score_oculto y peso_dimension SOLO se guardan en BD (detalle) —
     nunca se devuelven al evaluador en la respuesta del endpoint.
     """
+    _guard_ciclo_abierto(db, ciclo_id)
     opcion_ids = [s["opcion_id"] for s in selecciones]
     score_receptividad, opciones_resueltas = calcular_receptividad(db, opcion_ids)
     opciones_por_id = {o.id: o for o in opciones_resueltas}

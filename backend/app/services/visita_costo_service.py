@@ -57,6 +57,7 @@ def guardar_parametros(db: Session, datos: ParametroCostoGuardar, usuario_id: in
     ciclo_id = datos.ciclo_id or ciclo_por_defecto(db)
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
     q = db.query(ParametroCosto).filter(ParametroCosto.ciclo_id == ciclo_id)
     q = q.filter(ParametroCosto.linea_id == datos.linea_id) if datos.linea_id is not None \
         else q.filter(ParametroCosto.linea_id.is_(None))

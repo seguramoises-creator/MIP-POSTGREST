@@ -12,6 +12,15 @@ from sqlalchemy.orm import Session
 from app.models.visita import MedicoVisita, PlaneacionCiclo
 from app.schemas.visita import PlaneacionItem
 from app.services.visita_cobertura_service import ciclo_por_defecto, CICLO_DIAS_DEFAULT
+from app.services import recalculo_service
+
+
+def _guard_ciclo_abierto(db, ciclo_id):
+    """Bloquea escrituras sobre ciclos cerrados (inmutables)."""
+    try:
+        recalculo_service.validar_ciclo_abierto(db, ciclo_id)
+    except recalculo_service.CicloCerradoError:
+        raise ValueError("El ciclo está cerrado — solo lectura")
 
 
 def _validar(items: list[PlaneacionItem]) -> None:
@@ -40,6 +49,7 @@ def guardar_planeacion(db: Session, vm_id: int, ciclo_id: int | None,
     ciclo_id = ciclo_id or ciclo_por_defecto(db)
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
     _validar(items)
     db.query(PlaneacionCiclo).filter(
         PlaneacionCiclo.vm_id == vm_id, PlaneacionCiclo.ciclo_id == ciclo_id).delete(synchronize_session=False)

@@ -281,6 +281,7 @@ def test_parrilla_producto_duplicado_falla(monkeypatch):
 
 def test_muestras_medico_de_otro_panel_falla(monkeypatch):
     monkeypatch.setattr(ps, "ciclo_por_defecto", lambda db: 5)
+    monkeypatch.setattr(ps, "_guard_ciclo_abierto", lambda db, ciclo_id: None)
     db = MagicMock()
     db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(id=9, vm_id=2)
     with pytest.raises(ValueError):
@@ -357,6 +358,7 @@ def test_registrar_visita_persiste_gps(monkeypatch):
     db = MagicMock()
     monkeypatch.setattr(rs, "_medico_del_vm", lambda d, vm, m: None)
     monkeypatch.setattr(rs, "ciclo_por_defecto", lambda d: 7)
+    monkeypatch.setattr(rs, "_guard_ciclo_abierto", lambda d, c: None)
     capturado = {}
     db.add.side_effect = lambda obj: capturado.__setitem__("obj", obj)
     datos = SimpleNamespace(medico_id=3, tipo_visita="V", comentario="ok visita larga",

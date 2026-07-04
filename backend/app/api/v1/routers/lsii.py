@@ -78,7 +78,10 @@ def evaluar(
             observaciones=data.observaciones,
         )
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        mensaje = str(e)
+        if "cerrado" in mensaje.lower() or "solo lectura" in mensaje.lower():
+            raise HTTPException(409, mensaje)
+        raise HTTPException(400, mensaje)
     return cabecera
 
 

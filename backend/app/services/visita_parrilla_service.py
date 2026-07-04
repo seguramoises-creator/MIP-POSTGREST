@@ -178,6 +178,7 @@ def registrar_muestras(db: Session, vm_id: int, ciclo_id: int | None, medico_id:
     ciclo_id = ciclo_id or ciclo_por_defecto(db)
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
     medico = db.query(MedicoVisita).filter(MedicoVisita.id == medico_id).first()
     if not medico:
         raise ValueError("El médico no existe")

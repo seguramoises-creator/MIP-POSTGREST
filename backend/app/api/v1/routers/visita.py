@@ -43,6 +43,16 @@ def _scope_vm(current_user, vm_id: int | None) -> int | None:
     return vm_id
 
 
+def _raise_captura_error(e: ValueError) -> None:
+    """Traduce un ValueError de una función de captura ligada a un ciclo: 409 si el
+    motivo es el guard de ciclo cerrado (solo lectura), 400 para cualquier otra
+    validación de negocio."""
+    mensaje = str(e)
+    if "cerrado" in mensaje.lower() or "solo lectura" in mensaje.lower():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=mensaje)
+    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=mensaje)
+
+
 @router.get("/especialidades", response_model=list[dict])
 def listar_especialidades(db: Session = Depends(get_db), current_user=RequireVisita):
     """Catálogo de especialidades (para el selector al registrar médicos)."""
@@ -280,7 +290,7 @@ def registrar_visita(datos: VisitaRegistrar, vm_id: int | None = None,
         v = visita_registro_service.registrar_visita(db, _vm_registro(current_user, vm_id), datos, getattr(current_user, "id", None))
         return {"id": v.id, "tipo": v.tipo_visita, "hora": v.fecha_hora.isoformat() if v.fecha_hora else None}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        _raise_captura_error(e)
 
 
 @router.post("/no-visita", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -292,7 +302,7 @@ def registrar_no_visita(datos: VisitaNoVisita, vm_id: int | None = None,
         v = visita_registro_service.registrar_no_visita(db, _vm_registro(current_user, vm_id), datos, getattr(current_user, "id", None))
         return {"id": v.id, "causa": v.causa_no_visita}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        _raise_captura_error(e)
 
 
 @router.post("/{visita_id}/foto", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -344,7 +354,7 @@ def guardar_planeacion(datos: PlaneacionGuardar, vm_id: int | None = None, ciclo
             db, _vm_registro(current_user, vm_id), ciclo_id, datos.items, getattr(current_user, "id", None))
         return {"guardadas": n}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        _raise_captura_error(e)
 
 
 @router.get("/planeacion/resumen", response_model=dict)
@@ -447,7 +457,7 @@ def publicar_parrilla(linea_id: int, ciclo_id: int | None = None,
         n = visita_parrilla_service.publicar_parrilla(db, ciclo_id, linea_id, getattr(current_user, "id", None))
         return {"publicados": n}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        _raise_captura_error(e)
 
 
 @router.post("/parrilla", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -460,7 +470,7 @@ def guardar_parrilla(datos: ParrillaGuardar, db: Session = Depends(get_db), curr
             db, datos.ciclo_id, datos.linea_id, datos.items, getattr(current_user, "id", None))
         return {"guardados": n}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        _raise_captura_error(e)
 
 
 @router.post("/muestras", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -474,7 +484,7 @@ def registrar_muestras(datos: MuestrasRegistrar, vm_id: int | None = None,
             datos.entregas, getattr(current_user, "id", None))
         return {"registradas": n}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        _raise_captura_error(e)
 
 
 @router.get("/muestras/resumen", response_model=dict)
@@ -506,7 +516,7 @@ def guardar_parametros_costo(datos: ParametroCostoGuardar, db: Session = Depends
     try:
         return visita_costo_service.guardar_parametros(db, datos, getattr(current_user, "id", None))
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        _raise_captura_error(e)
 
 
 @router.get("/costo/roi", response_model=dict)
@@ -541,7 +551,7 @@ def guardar_costo_estructura(datos: CostoEstructuraGuardar, db: Session = Depend
     try:
         return visita_costo_service.guardar_estructura(db, datos, getattr(current_user, "id", None))
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        _raise_captura_error(e)
 
 
 @router.post("/costo/importar", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -559,6 +569,6 @@ async def importar_costo_excel(linea_id: int | None = None, ciclo_id: int | None
     try:
         return visita_costo_service.importar_excel(db, contenido, ciclo_id, linea_id, getattr(current_user, "id", None))
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        _raise_captura_error(e)
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"No se pudo leer el Excel: {e}")

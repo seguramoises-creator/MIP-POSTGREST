@@ -10,6 +10,15 @@ from sqlalchemy.orm import Session
 from app.models.visita import MedicoVisita, VisitaRegistro
 from app.schemas.visita import VisitaRegistrar, VisitaNoVisita
 from app.services.visita_cobertura_service import ciclo_por_defecto
+from app.services import recalculo_service
+
+
+def _guard_ciclo_abierto(db, ciclo_id):
+    """Bloquea escrituras sobre ciclos cerrados (inmutables)."""
+    try:
+        recalculo_service.validar_ciclo_abierto(db, ciclo_id)
+    except recalculo_service.CicloCerradoError:
+        raise ValueError("El ciclo está cerrado — solo lectura")
 
 
 def _medico_del_vm(db: Session, vm_id: int, medico_id: int) -> MedicoVisita:
@@ -27,6 +36,7 @@ def registrar_visita(db: Session, vm_id: int, datos: VisitaRegistrar, usuario_id
     ciclo_id = ciclo_por_defecto(db)
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
     # Hora del servidor menos los minutos indicados (ventana 60 min ya validada en el schema).
     fecha_hora = datetime.now(timezone.utc) - timedelta(minutes=datos.hace_minutos)
     productos = "|".join(f"{p.producto}:{p.mencion}" for p in datos.productos) or None
@@ -48,6 +58,7 @@ def registrar_no_visita(db: Session, vm_id: int, datos: VisitaNoVisita, usuario_
     ciclo_id = ciclo_por_defecto(db)
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
     v = VisitaRegistro(
         vm_id=vm_id, ciclo_id=ciclo_id, medico_id=datos.medico_id,
         tipo_visita="V", fecha_hora=datetime.now(timezone.utc),
