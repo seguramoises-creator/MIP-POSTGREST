@@ -3,7 +3,7 @@ import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Divider,
   Table, TableHead, TableRow, TableCell, TableBody, Tabs, Tab, Alert, Checkbox,
   FormControlLabel, CircularProgress, Divider as MuiDivider, IconButton, Autocomplete,
-  MenuItem, RadioGroup, Radio, InputAdornment, Switch,
+  MenuItem, RadioGroup, Radio, InputAdornment, Switch, Tooltip,
 } from '@mui/material';
 import { Add, AutoAwesome, UploadFile, CheckCircle, DeleteOutline, FileDownload } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
@@ -11,7 +11,7 @@ import {
   listarExamenes, crearExamen, agregarPregunta, publicarExamen, asignarExamen,
   resultadosExamen, analisisPreguntas, listarPreguntasExamen, eliminarPregunta,
   generarExamenIA, jobEstadoIA, exportarResultadosExcel, eliminarExamen, listarEvaluados,
-  respuestasAbiertas, calificarRespuesta, getIaDemo, setIaDemo,
+  respuestasAbiertas, calificarRespuesta, getIaDemo, setIaDemo, enviarCorrecciones,
   type Examen, type OpcionCrear, type EvaluadoRef, type ResultadosExamen,
   type AnalisisPregunta, type PreguntaConOpciones, type RespuestaAbierta,
 } from '../../services/examenes.service';
@@ -149,7 +149,7 @@ export default function Examenes() {
   useEffect(() => { if (sel && tab === 0) cargarPreguntas(sel.id); }, [sel, tab, cargarPreguntas]);
 
   // Pregunta
-  type TipoPreg = 'multi' | 'vf' | 'abierta' | 'caso' | 'caso_abierto';
+  type TipoPreg = 'multi' | 'vf' | 'abierta' | 'caso' | 'caso_abierto' | 'objecion';
   const [preg, setPreg] = useState({
     tipo: 'multi' as TipoPreg, texto: '', escenario: '', explicacion: '', peso: '',
     opciones: opcionesVacias(), vfCorrecta: 'V' as 'V' | 'F',
@@ -174,7 +174,8 @@ export default function Examenes() {
     }
     const esCaso = preg.tipo === 'caso' || preg.tipo === 'caso_abierto';
     const esAbierta = preg.tipo === 'abierta' || preg.tipo === 'caso_abierto';
-    const tipoBackend = esCaso ? 'caso' : preg.tipo;  // 'multi' | 'vf' | 'abierta' | 'caso'
+    const esObjecion = preg.tipo === 'objecion';
+    const tipoBackend = esCaso ? 'caso' : preg.tipo;  // 'multi' | 'vf' | 'abierta' | 'caso' | 'objecion'
     const opciones = preg.tipo === 'vf'
       ? [
           { texto_opcion: 'Verdadero', es_correcta: preg.vfCorrecta === 'V' },
@@ -184,7 +185,7 @@ export default function Examenes() {
     try {
       await agregarPregunta(sel.id, {
         tipo: tipoBackend, texto: preg.texto,
-        escenario: esCaso ? (preg.escenario || null) : null,
+        escenario: (esCaso || esObjecion) ? (preg.escenario || null) : null,
         explicacion: preg.explicacion || null,
         peso: preg.peso ? Number(preg.peso) : null, opciones,
       });
@@ -395,24 +396,39 @@ export default function Examenes() {
                         • Opción múltiple: <b>5 opciones (a–e)</b> homogéneas y plausibles; sin "todas/ninguna de las anteriores".
                       </Typography>
                     </Alert>
-                    <TextField select size="small" label="Tipo de pregunta" value={preg.tipo}
-                               onChange={(e) => setPreg({ ...preg, tipo: e.target.value as TipoPreg })}
-                               sx={{ maxWidth: 320 }}>
-                      <MenuItem value="multi">Opción múltiple (5 opciones)</MenuItem>
-                      <MenuItem value="vf">Verdadero / Falso</MenuItem>
-                      <MenuItem value="abierta">Abierta (respuesta libre)</MenuItem>
-                      <MenuItem value="caso">Caso — consigna de opción múltiple</MenuItem>
-                      <MenuItem value="caso_abierto">Caso — consigna abierta</MenuItem>
-                    </TextField>
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                      <TextField select size="small" label="Tipo de pregunta" value={preg.tipo}
+                                 onChange={(e) => setPreg({ ...preg, tipo: e.target.value as TipoPreg })}
+                                 sx={{ minWidth: 320 }}>
+                        <MenuItem value="multi">Opción múltiple (5 opciones)</MenuItem>
+                        <MenuItem value="vf">Verdadero / Falso</MenuItem>
+                        <MenuItem value="abierta">Abierta (respuesta libre)</MenuItem>
+                        <MenuItem value="caso">Caso — consigna de opción múltiple</MenuItem>
+                        <MenuItem value="caso_abierto">Caso — consigna abierta</MenuItem>
+                        <MenuItem value="objecion">🛡️ Objeción de Producto</MenuItem>
+                      </TextField>
+                      <Tooltip title="Evalúa cómo el visitador responde cuando el médico objeta una característica, efecto adverso o limitación del producto. Se muestra en un banner naranja destacado antes de las opciones.">
+                        <Button variant="outlined" color="warning" size="small"
+                                onClick={() => setPreg({ ...preg, tipo: 'objecion' })}>
+                          🛡️ + Objeción de Producto
+                        </Button>
+                      </Tooltip>
+                    </Stack>
                     {(preg.tipo === 'caso' || preg.tipo === 'caso_abierto') && (
                       <TextField label="Escenario (contexto de la visita médica)" multiline minRows={2}
                                  value={preg.escenario} onChange={(e) => setPreg({ ...preg, escenario: e.target.value })} />
                     )}
+                    {preg.tipo === 'objecion' && (
+                      <TextField label="Objeción del médico" multiline minRows={2}
+                                 value={preg.escenario} onChange={(e) => setPreg({ ...preg, escenario: e.target.value })}
+                                 placeholder="Ej: El Dr. García dice: No receto [Producto X] porque escuché que causa [efecto adverso]. El competidor no tiene ese problema." />
+                    )}
                     <TextField label={preg.tipo === 'vf' ? 'Afirmación'
                                        : (preg.tipo === 'caso' || preg.tipo === 'caso_abierto') ? 'Consigna'
+                                       : preg.tipo === 'objecion' ? 'Pregunta (¿cuál es la mejor respuesta técnica?)'
                                        : 'Enunciado'} multiline minRows={2}
                                value={preg.texto} onChange={(e) => setPreg({ ...preg, texto: e.target.value })} />
-                    {(preg.tipo === 'multi' || preg.tipo === 'caso') ? (
+                    {(preg.tipo === 'multi' || preg.tipo === 'caso' || preg.tipo === 'objecion') ? (
                       preg.opciones.map((op, i) => (
                         <Stack key={i} direction="row" spacing={1} alignItems="center">
                           <TextField fullWidth size="small" label={`Opción ${LETRAS[i] ?? i + 1}`} value={op.texto_opcion} onChange={(e) => setOpcion(i, 'texto_opcion', e.target.value)} />
@@ -602,27 +618,79 @@ export default function Examenes() {
                       <Chip size="small" sx={{ bgcolor: '#b71c1c', color: '#fff', height: 18 }} label="< 80% no aporta" />
                     </Stack>
                     <Divider sx={{ my: 2 }} />
-                    <Typography fontWeight={600} gutterBottom>% Error por pregunta</Typography>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1}>
+                      <Typography fontWeight={600}>Análisis por pregunta (pasa el cursor sobre las barras para ver los nombres)</Typography>
+                      <Button size="small" variant="outlined" startIcon={<span>📧</span>}
+                              onClick={async () => {
+                                try { const r = await enviarCorrecciones(sel.id);
+                                  setMsg({ tipo: 'success', texto: `Correcciones enviadas/simuladas a ${r.enviados} participante(s).` });
+                                } catch { setMsg({ tipo: 'error', texto: 'No se pudieron enviar las correcciones.' }); }
+                              }}>
+                        Enviar / Simular correcciones
+                      </Button>
+                    </Stack>
+                    {analisis.length > 0 && (() => {
+                      const mejor = [...analisis].sort((a, b) => b.acierto_pct - a.acierto_pct)[0];
+                      const peor = [...analisis].sort((a, b) => b.error_pct - a.error_pct)[0];
+                      return (
+                        <Stack direction="row" spacing={1.5} sx={{ my: 1.5, flexWrap: 'wrap' }}>
+                          <Card variant="outlined" sx={{ flex: 1, minWidth: 220, borderColor: 'success.light' }}>
+                            <CardContent sx={{ py: 1.25 }}>
+                              <Typography variant="caption" color="success.main" fontWeight={700}>MEJOR COMPRENDIDA</Typography>
+                              <Typography variant="body2" fontWeight={600}>{mejor.texto}</Typography>
+                              <Typography variant="caption">{mejor.acierto_pct}% acierto</Typography>
+                            </CardContent>
+                          </Card>
+                          <Card variant="outlined" sx={{ flex: 1, minWidth: 220, borderColor: 'error.light' }}>
+                            <CardContent sx={{ py: 1.25 }}>
+                              <Typography variant="caption" color="error.main" fontWeight={700}>MÁS FALLADA</Typography>
+                              <Typography variant="body2" fontWeight={600}>{peor.texto}</Typography>
+                              <Typography variant="caption">{peor.error_pct}% desacierto</Typography>
+                            </CardContent>
+                          </Card>
+                        </Stack>
+                      );
+                    })()}
                     <Table size="small" sx={{ '& thead th': { fontWeight: 700, color: 'primary.main', bgcolor: 'rgba(26,35,126,0.04)' } }}>
                       <TableHead><TableRow>
-                        <TableCell>Pregunta</TableCell><TableCell>Respuesta correcta</TableCell>
-                        <TableCell align="center">Respuestas</TableCell><TableCell align="center">% Error</TableCell>
+                        <TableCell>#</TableCell><TableCell>Pregunta</TableCell>
+                        <TableCell align="center" sx={{ width: 90 }}>% Acierto</TableCell>
+                        <TableCell align="center" sx={{ width: 90 }}>% Desacierto</TableCell>
+                        <TableCell>Etiqueta</TableCell>
                       </TableRow></TableHead>
                       <TableBody>
-                        {analisis.map((a) => (
+                        {analisis.map((a, i) => (
                           <TableRow key={a.pregunta_id} hover>
+                            <TableCell>{i + 1}</TableCell>
                             <TableCell>{a.texto}</TableCell>
-                            <TableCell sx={{ color: 'success.main', fontWeight: 600 }}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <CheckCircle fontSize="small" /> {a.respuesta_correcta ?? '—'}
-                              </Box>
+                            <TableCell align="center">
+                              <Tooltip arrow title={a.aciertan.length ? a.aciertan.join(', ') : 'Nadie acertó'}>
+                                <Box sx={{ bgcolor: 'success.light', color: '#000', borderRadius: 1, px: 0.5, cursor: 'help', fontWeight: 600 }}>{a.acierto_pct}%</Box>
+                              </Tooltip>
                             </TableCell>
-                            <TableCell align="center">{a.total_respuestas}</TableCell>
-                            <TableCell align="center">{a.error_pct}%</TableCell>
+                            <TableCell align="center">
+                              <Tooltip arrow title={a.fallan.length ? a.fallan.join(', ') : 'Nadie falló'}>
+                                <Box sx={{ bgcolor: a.error_pct > 0 ? 'error.light' : 'grey.200', color: '#000', borderRadius: 1, px: 0.5, cursor: 'help', fontWeight: 600 }}>{a.error_pct}%</Box>
+                              </Tooltip>
+                            </TableCell>
+                            <TableCell>{a.etiqueta}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
+                    {(() => {
+                      const recs = analisis.filter((a) => a.error_pct >= 40);
+                      return recs.length > 0 && (
+                        <Alert severity="warning" sx={{ mt: 1.5 }}>
+                          <Typography fontWeight={700}>Recomendaciones de refuerzo (desacierto ≥ 40%)</Typography>
+                          {recs.map((a) => (
+                            <Typography key={a.pregunta_id} variant="body2">
+                              • <b>{a.texto}</b> — {a.error_pct}% · fallaron: {a.fallan.join(', ') || '—'}
+                            </Typography>
+                          ))}
+                        </Alert>
+                      );
+                    })()}
                   </Box>
                 )}
 
