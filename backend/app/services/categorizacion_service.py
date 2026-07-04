@@ -64,6 +64,25 @@ def _as_decimal(value):
         return None
 
 
+def _as_bool(value, default=True):
+    """Convierte 1/0/'1'/'true'/'si'… a bool de Python.
+
+    Las columnas de estado (Activo/Requerido) son BOOLEAN en Postgres; psycopg2
+    NO castea int→boolean, así que hay que pasar bool nativo. `default=True`
+    replica el idiom heredado `_as_int(...) or 1` (activo por defecto).
+    """
+    v = _clean(value)
+    if v is None:
+        return default
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return bool(v)
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "t", "si", "sí", "y", "yes")
+    return default
+
+
 def _as_date(value):
     v = _clean(value)
     if v is None:
@@ -123,96 +142,109 @@ def _get_componente_key(db, codigo):
     return int(row[0])
 
 
+def _portable_upsert(db, tabla, claves, valores, solo_insert=None):
+    """UPSERT portable a PostgreSQL: SELECT de existencia + INSERT o UPDATE como
+    dos statements separados. Sustituye el patrón T-SQL ``IF NOT EXISTS ... ELSE ...``
+    (procedural, inválido en Postgres) sin requerir ``ON CONFLICT`` ni constraints
+    únicos sobre la clave natural.
+
+    - ``claves``      : columnas de la clave natural (van al WHERE y al INSERT)
+    - ``valores``     : columnas que se insertan **y** se actualizan
+    - ``solo_insert`` : columnas que solo se fijan al insertar (p.ej. FechaCargaUtc)
+
+    Los nombres de columna se usan como nombres de parámetro (no llevan espacios).
+    """
+    solo_insert = solo_insert or {}
+    where = " AND ".join(f'"{c}" = :{c}' for c in claves)
+    existe = db.execute(text(f'SELECT 1 FROM {tabla} WHERE {where}'), claves).first()
+    if existe:
+        if valores:
+            set_cols = ", ".join(f'"{c}" = :{c}' for c in valores)
+            db.execute(text(f'UPDATE {tabla} SET {set_cols} WHERE {where}'), {**claves, **valores})
+    else:
+        todas = {**claves, **valores, **solo_insert}
+        cols = ", ".join(f'"{c}"' for c in todas)
+        binds = ", ".join(f":{c}" for c in todas)
+        db.execute(text(f'INSERT INTO {tabla} ({cols}) VALUES ({binds})'), todas)
+
+
 def _upsert_pais(db, rows):
     for r in rows:
-        db.execute(text("""
-            IF NOT EXISTS (SELECT 1 FROM "cat"."DimPais" WHERE "CodigoPais" = :codigo)
-                INSERT INTO "cat"."DimPais" ("PaisIdOrigen","CodigoPais","NombrePais","Moneda","ZonaHoraria","Activo","FechaCargaUtc")
-                VALUES (:id,:codigo,:nombre,:moneda,:zona,:activo,:ahora)
-            ELSE
-                UPDATE "cat"."DimPais" SET "PaisIdOrigen"=:id,"NombrePais"=:nombre,"Moneda"=:moneda,"ZonaHoraria"=:zona,"Activo"=:activo
-                WHERE "CodigoPais"=:codigo
-        """), {"id": _as_int(r.get("id")), "codigo": r.get("codigo"), "nombre": r.get("nombre"),
-               "moneda": r.get("moneda"), "zona": r.get("zona_horaria"), "activo": _as_int(r.get("activo")) or 1,
-               "ahora": datetime.now(timezone.utc)})
+        _portable_upsert(
+            db, '"cat"."DimPais"',
+            claves={"CodigoPais": r.get("codigo")},
+            valores={"PaisIdOrigen": _as_int(r.get("id")), "NombrePais": r.get("nombre"),
+                     "Moneda": r.get("moneda"), "ZonaHoraria": r.get("zona_horaria"),
+                     "Activo": _as_bool(r.get("activo"))},
+            solo_insert={"FechaCargaUtc": datetime.now(timezone.utc)},
+        )
 
 
 def _upsert_componente(db, rows):
     for r in rows:
-        db.execute(text("""
-            IF NOT EXISTS (SELECT 1 FROM "cat"."DimComponenteCategoria" WHERE "CodigoComponente"=:codigo)
-                INSERT INTO "cat"."DimComponenteCategoria" ("CodigoComponente","NombreComponente","TipoEvaluacion","PesoComponentePct","Requerido","Activo","FechaCargaUtc")
-                VALUES (:codigo,:nombre,:tipo,:peso,:req,:activo,:ahora)
-            ELSE
-                UPDATE "cat"."DimComponenteCategoria" SET "NombreComponente"=:nombre,"TipoEvaluacion"=:tipo,"PesoComponentePct"=:peso,"Requerido"=:req,"Activo"=:activo
-                WHERE "CodigoComponente"=:codigo
-        """), {"codigo": r["CodigoComponente"], "nombre": r["NombreComponente"], "tipo": r["TipoEvaluacion"],
-               "peso": _as_decimal(r["PesoComponentePct"]), "req": _as_int(r["Requerido"]) or 1, "activo": _as_int(r["Activo"]) or 1,
-               "ahora": datetime.now(timezone.utc)})
+        _portable_upsert(
+            db, '"cat"."DimComponenteCategoria"',
+            claves={"CodigoComponente": r["CodigoComponente"]},
+            valores={"NombreComponente": r["NombreComponente"], "TipoEvaluacion": r["TipoEvaluacion"],
+                     "PesoComponentePct": _as_decimal(r["PesoComponentePct"]),
+                     "Requerido": _as_bool(r["Requerido"]), "Activo": _as_bool(r["Activo"])},
+            solo_insert={"FechaCargaUtc": datetime.now(timezone.utc)},
+        )
 
 
 def _upsert_clasificacion(db, rows):
     for r in rows:
         pk = _get_pais_key(db, r["pais_codigo"])
-        vd = _as_date(r["VigenteDesde"])
-        db.execute(text("""
-            IF NOT EXISTS (SELECT 1 FROM "cat"."DimClasificacionMedica" WHERE "PaisKey"=:pk AND "Clase"=:clase AND "VigenteDesde"=:vd)
-                INSERT INTO "cat"."DimClasificacionMedica" ("PaisKey","Clase","PuntajeMinPct","PuntajeMaxPct","OrdenClase","VigenteDesde","VigenteHasta","Activo","FechaCargaUtc")
-                VALUES (:pk,:clase,:min,:max,:orden,:vd,:vh,:activo,:ahora)
-            ELSE
-                UPDATE "cat"."DimClasificacionMedica" SET "PuntajeMinPct"=:min,"PuntajeMaxPct"=:max,"OrdenClase"=:orden,"VigenteHasta"=:vh,"Activo"=:activo
-                WHERE "PaisKey"=:pk AND "Clase"=:clase AND "VigenteDesde"=:vd
-        """), {"pk": pk, "clase": r["Clase"], "min": _as_decimal(r["PuntajeMinPct"]), "max": _as_decimal(r["PuntajeMaxPct"]),
-               "orden": _as_int(r["OrdenClase"]) or 0, "vd": vd, "vh": _as_date(r.get("VigenteHasta")), "activo": _as_int(r["Activo"]) or 1,
-               "ahora": datetime.now(timezone.utc)})
+        _portable_upsert(
+            db, '"cat"."DimClasificacionMedica"',
+            claves={"PaisKey": pk, "Clase": r["Clase"], "VigenteDesde": _as_date(r["VigenteDesde"])},
+            valores={"PuntajeMinPct": _as_decimal(r["PuntajeMinPct"]), "PuntajeMaxPct": _as_decimal(r["PuntajeMaxPct"]),
+                     "OrdenClase": _as_int(r["OrdenClase"]) or 0, "VigenteHasta": _as_date(r.get("VigenteHasta")),
+                     "Activo": _as_bool(r["Activo"])},
+            solo_insert={"FechaCargaUtc": datetime.now(timezone.utc)},
+        )
 
 
 def _upsert_regla(db, rows):
     for r in rows:
         pk = _get_pais_key(db, r["pais_codigo"])
         ck = _get_componente_key(db, r["CodigoComponente"])
-        vd = _as_date(r["VigenteDesde"])
-        db.execute(text("""
-            IF NOT EXISTS (SELECT 1 FROM "cat"."DimReglaCategoriaMedica" WHERE "PaisKey"=:pk AND "ComponenteKey"=:ck AND "CodigoRegla"=:cr AND "VigenteDesde"=:vd)
-                INSERT INTO "cat"."DimReglaCategoriaMedica" ("PaisKey","ComponenteKey","CodigoRegla","Detalle","ValorMinimo","ValorMaximo","ValorTexto","Criterio","PesoComponentePct","PuntajePct","VigenteDesde","VigenteHasta","Activo","FechaCargaUtc")
-                VALUES (:pk,:ck,:cr,:det,:vmin,:vmax,:vtxt,:crit,:peso,:puntaje,:vd,:vh,:activo,:ahora)
-            ELSE
-                UPDATE "cat"."DimReglaCategoriaMedica" SET "Detalle"=:det,"ValorMinimo"=:vmin,"ValorMaximo"=:vmax,"ValorTexto"=:vtxt,"Criterio"=:crit,"PesoComponentePct"=:peso,"PuntajePct"=:puntaje,"VigenteHasta"=:vh,"Activo"=:activo
-                WHERE "PaisKey"=:pk AND "ComponenteKey"=:ck AND "CodigoRegla"=:cr AND "VigenteDesde"=:vd
-        """), {"pk": pk, "ck": ck, "cr": r["CodigoRegla"], "det": str(r["Detalle"]),
-               "vmin": _as_decimal(r.get("ValorMinimo")), "vmax": _as_decimal(r.get("ValorMaximo")),
-               "vtxt": r.get("ValorTexto"), "crit": _as_int(r["Criterio"]),
-               "peso": _as_decimal(r["PesoComponentePct"]), "puntaje": _as_decimal(r["PuntajePct"]),
-               "vd": vd, "vh": _as_date(r.get("VigenteHasta")), "activo": _as_int(r["Activo"]) or 1,
-               "ahora": datetime.now(timezone.utc)})
+        _portable_upsert(
+            db, '"cat"."DimReglaCategoriaMedica"',
+            claves={"PaisKey": pk, "ComponenteKey": ck, "CodigoRegla": r["CodigoRegla"],
+                    "VigenteDesde": _as_date(r["VigenteDesde"])},
+            valores={"Detalle": str(r["Detalle"]), "ValorMinimo": _as_decimal(r.get("ValorMinimo")),
+                     "ValorMaximo": _as_decimal(r.get("ValorMaximo")), "ValorTexto": r.get("ValorTexto"),
+                     "Criterio": _as_int(r["Criterio"]), "PesoComponentePct": _as_decimal(r["PesoComponentePct"]),
+                     "PuntajePct": _as_decimal(r["PuntajePct"]), "VigenteHasta": _as_date(r.get("VigenteHasta")),
+                     "Activo": _as_bool(r["Activo"])},
+            solo_insert={"FechaCargaUtc": datetime.now(timezone.utc)},
+        )
 
 
 def _upsert_equipo(db, rows):
     for r in rows:
         pk = _get_pais_key(db, r["pais_codigo"])
-        db.execute(text("""
-            IF NOT EXISTS (SELECT 1 FROM "cat"."DimEquipo" WHERE "PaisKey"=:pk AND "CodigoEquipo"=:ce)
-                INSERT INTO "cat"."DimEquipo" ("PaisKey","CodigoEquipo","NombreEquipo","Descripcion","Activo") VALUES (:pk,:ce,:nombre,:desc,:activo)
-            ELSE
-                UPDATE "cat"."DimEquipo" SET "NombreEquipo"=:nombre,"Descripcion"=:desc,"Activo"=:activo WHERE "PaisKey"=:pk AND "CodigoEquipo"=:ce
-        """), {"pk": pk, "ce": r["codigo"], "nombre": r["nombre"], "desc": r.get("descripcion"), "activo": _as_int(r.get("activo")) or 1})
+        _portable_upsert(
+            db, '"cat"."DimEquipo"',
+            claves={"PaisKey": pk, "CodigoEquipo": r["codigo"]},
+            valores={"NombreEquipo": r["nombre"], "Descripcion": r.get("descripcion"),
+                     "Activo": _as_bool(r.get("activo"))},
+        )
 
 
 def _upsert_representante(db, rows):
     for r in rows:
         pk = _get_pais_key(db, r["pais_codigo"])
-        db.execute(text("""
-            IF NOT EXISTS (SELECT 1 FROM "cat"."DimRepresentanteMedico" WHERE "PaisKey"=:pk AND "CodigoRepresentante"=:cr)
-                INSERT INTO "cat"."DimRepresentanteMedico" ("PaisKey","RepresentanteIdOrigen","CodigoRepresentante","NombreRepresentante","LineaIdOrigen","GerenteIdOrigen","Email","Zona","FechaIngreso","Cedula","CodigoOrigenExcel","EquipoTexto","Activo")
-                VALUES (:pk,:id_origen,:cr,:nombre,:linea,:gerente,:email,:zona,:fi,:cedula,:cod_excel,:equipo,:activo)
-            ELSE
-                UPDATE "cat"."DimRepresentanteMedico" SET "RepresentanteIdOrigen"=:id_origen,"NombreRepresentante"=:nombre,"LineaIdOrigen"=:linea,"GerenteIdOrigen"=:gerente,"Email"=:email,"Zona"=:zona,"FechaIngreso"=:fi,"Cedula"=:cedula,"CodigoOrigenExcel"=:cod_excel,"EquipoTexto"=:equipo,"Activo"=:activo
-                WHERE "PaisKey"=:pk AND "CodigoRepresentante"=:cr
-        """), {"pk": pk, "id_origen": _as_int(r.get("id")), "cr": r["codigo_id"], "nombre": r["nombre"],
-               "linea": _as_int(r.get("linea_id")), "gerente": _as_int(r.get("gerente_id")),
-               "email": r.get("email"), "zona": r.get("zona"), "fi": _as_date(r.get("fecha_ingreso")),
-               "cedula": r.get("cedula"), "cod_excel": r.get("codigo_origen_excel"), "equipo": r.get("Equipo"),
-               "activo": _as_int(r.get("activo")) or 1})
+        _portable_upsert(
+            db, '"cat"."DimRepresentanteMedico"',
+            claves={"PaisKey": pk, "CodigoRepresentante": r["codigo_id"]},
+            valores={"RepresentanteIdOrigen": _as_int(r.get("id")), "NombreRepresentante": r["nombre"],
+                     "LineaIdOrigen": _as_int(r.get("linea_id")), "GerenteIdOrigen": _as_int(r.get("gerente_id")),
+                     "Email": r.get("email"), "Zona": r.get("zona"), "FechaIngreso": _as_date(r.get("fecha_ingreso")),
+                     "Cedula": r.get("cedula"), "CodigoOrigenExcel": r.get("codigo_origen_excel"),
+                     "EquipoTexto": r.get("Equipo"), "Activo": _as_bool(r.get("activo"))},
+        )
 
 
 def _insert_staging(db, load_batch_key, rows, periodo=None):
@@ -235,7 +267,7 @@ def _insert_staging(db, load_batch_key, rows, periodo=None):
             "pac": _as_decimal(r.get("PacientesSemana")), "costo": _as_decimal(r.get("CostoConsulta")),
             "recetas": r.get("RecetasSemana"), "ubic": r.get("UbicacionTerritorialCM"),
             "kol": r.get("KOL"), "cat_excel": r.get("CategoriaExcel"),
-            "activo": _as_int(r.get("Activo")) or 1,
+            "activo": _as_bool(r.get("Activo")),  # stg.Activo es BOOLEAN (psycopg2 no castea int→bool)
         })
 
 
@@ -303,28 +335,30 @@ def calcular_categorias_py(db: Session, load_batch_key: int) -> None:
     fc = {"fc": datetime.now(timezone.utc).date()}
 
     # 1-5: conformar dimensiones (SQL portable: TRIM/COALESCE)
-    db.execute(text("""INSERT INTO "cat"."DimEspecialidad" ("PaisKey", "Especialidad")
-        SELECT DISTINCT p."PaisKey", TRIM(s."Especialidad") FROM "stg"."MedicoCategoriaInput" s
+    # 'Activo' es NOT NULL en estas dimensiones; su default es client-side del ORM
+    # y NO aplica a INSERT...SELECT por text() crudo, así que se fija TRUE explícito.
+    db.execute(text("""INSERT INTO "cat"."DimEspecialidad" ("PaisKey", "Especialidad", "Activo")
+        SELECT DISTINCT p."PaisKey", TRIM(s."Especialidad"), TRUE FROM "stg"."MedicoCategoriaInput" s
         JOIN "cat"."DimPais" p ON p."CodigoPais"=s."CodigoPais"
         WHERE s."LoadBatchKey"=:b AND s."Especialidad" IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM "cat"."DimEspecialidad" d WHERE d."PaisKey"=p."PaisKey" AND d."Especialidad"=TRIM(s."Especialidad"))"""), b)
-    db.execute(text("""INSERT INTO "cat"."DimCentroMedico" ("PaisKey", "CentroMedico")
-        SELECT DISTINCT p."PaisKey", TRIM(s."CentroMedico") FROM "stg"."MedicoCategoriaInput" s
+    db.execute(text("""INSERT INTO "cat"."DimCentroMedico" ("PaisKey", "CentroMedico", "Activo")
+        SELECT DISTINCT p."PaisKey", TRIM(s."CentroMedico"), TRUE FROM "stg"."MedicoCategoriaInput" s
         JOIN "cat"."DimPais" p ON p."CodigoPais"=s."CodigoPais"
         WHERE s."LoadBatchKey"=:b AND s."CentroMedico" IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM "cat"."DimCentroMedico" d WHERE d."PaisKey"=p."PaisKey" AND d."CentroMedico"=TRIM(s."CentroMedico"))"""), b)
-    db.execute(text("""INSERT INTO "cat"."DimGeografia" ("PaisKey", "Provincia", "Municipio")
-        SELECT DISTINCT p."PaisKey", TRIM(s."Provincia"), TRIM(s."Municipio") FROM "stg"."MedicoCategoriaInput" s
+    db.execute(text("""INSERT INTO "cat"."DimGeografia" ("PaisKey", "Provincia", "Municipio", "Activo")
+        SELECT DISTINCT p."PaisKey", TRIM(s."Provincia"), TRIM(s."Municipio"), TRUE FROM "stg"."MedicoCategoriaInput" s
         JOIN "cat"."DimPais" p ON p."CodigoPais"=s."CodigoPais"
         WHERE s."LoadBatchKey"=:b AND s."Provincia" IS NOT NULL AND s."Municipio" IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM "cat"."DimGeografia" d WHERE d."PaisKey"=p."PaisKey" AND d."Provincia"=TRIM(s."Provincia") AND d."Municipio"=TRIM(s."Municipio"))"""), b)
     db.execute(text("""INSERT INTO "cat"."DimRepresentanteMedico" ("PaisKey", "CodigoRepresentante", "NombreRepresentante", "LineaIdOrigen", "EquipoTexto", "Activo")
-        SELECT DISTINCT p."PaisKey", s."CodigoRepresentante", TRIM(s."NombreRepresentante"), s."LineaIdOrigen", TRIM(s."Equipo"), 1
+        SELECT DISTINCT p."PaisKey", s."CodigoRepresentante", TRIM(s."NombreRepresentante"), s."LineaIdOrigen", TRIM(s."Equipo"), TRUE
         FROM "stg"."MedicoCategoriaInput" s JOIN "cat"."DimPais" p ON p."CodigoPais"=s."CodigoPais"
         WHERE s."LoadBatchKey"=:b AND s."CodigoRepresentante" IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM "cat"."DimRepresentanteMedico" d WHERE d."PaisKey"=p."PaisKey" AND d."CodigoRepresentante"=s."CodigoRepresentante")"""), b)
-    db.execute(text("""INSERT INTO "cat"."DimMedico" ("PaisKey", "CodigoMedico", "NombreMedico", "EspecialidadKey")
-        SELECT DISTINCT p."PaisKey", NULL, TRIM(s."Medico"), esp."EspecialidadKey"
+    db.execute(text("""INSERT INTO "cat"."DimMedico" ("PaisKey", "CodigoMedico", "NombreMedico", "EspecialidadKey", "Activo")
+        SELECT DISTINCT p."PaisKey", NULL, TRIM(s."Medico"), esp."EspecialidadKey", TRUE
         FROM "stg"."MedicoCategoriaInput" s JOIN "cat"."DimPais" p ON p."CodigoPais"=s."CodigoPais"
         LEFT JOIN "cat"."DimEspecialidad" esp ON esp."PaisKey"=p."PaisKey" AND esp."Especialidad"=TRIM(s."Especialidad")
         WHERE s."LoadBatchKey"=:b
@@ -347,11 +381,11 @@ def calcular_categorias_py(db: Session, load_batch_key: int) -> None:
         LEFT JOIN "cat"."DimRepresentanteMedico" rep ON rep."PaisKey"=p."PaisKey" AND rep."CodigoRepresentante"=s."CodigoRepresentante"
         WHERE s."LoadBatchKey"=:b"""), b).mappings().all()
 
-    comps = db.execute(text('SELECT "ComponenteKey", "CodigoComponente", "Requerido" FROM "cat"."DimComponenteCategoria" WHERE "Activo"=1')).mappings().all()
+    comps = db.execute(text('SELECT "ComponenteKey", "CodigoComponente", "Requerido" FROM "cat"."DimComponenteCategoria" WHERE "Activo"=TRUE')).mappings().all()
     reglas = db.execute(text("""SELECT "ReglaKey", "PaisKey", "ComponenteKey", "ValorMinimo", "ValorMaximo", "ValorTexto", "Criterio", "PuntajePct"
-        FROM "cat"."DimReglaCategoriaMedica" WHERE "Activo"=1 AND "VigenteDesde"<=:fc AND ("VigenteHasta" IS NULL OR "VigenteHasta">=:fc)"""), fc).mappings().all()
+        FROM "cat"."DimReglaCategoriaMedica" WHERE "Activo"=TRUE AND "VigenteDesde"<=:fc AND ("VigenteHasta" IS NULL OR "VigenteHasta">=:fc)"""), fc).mappings().all()
     clases = db.execute(text("""SELECT "ClasificacionKey", "PaisKey", "Clase", "PuntajeMinPct", "PuntajeMaxPct"
-        FROM "cat"."DimClasificacionMedica" WHERE "Activo"=1 AND "VigenteDesde"<=:fc AND ("VigenteHasta" IS NULL OR "VigenteHasta">=:fc)"""), fc).mappings().all()
+        FROM "cat"."DimClasificacionMedica" WHERE "Activo"=TRUE AND "VigenteDesde"<=:fc AND ("VigenteHasta" IS NULL OR "VigenteHasta">=:fc)"""), fc).mappings().all()
 
     reglas_idx = defaultdict(list)
     for r in reglas:
@@ -457,9 +491,11 @@ def cargar_excel_categorizacion(db: Session, excel_bytes: bytes, nombre_archivo:
         # Se hace el INSERT sin cláusula de salida y luego se relee la clave por MAX
         # sobre la clave natural (archivo+periodo+usuario). Es seguro porque
         # _limpiar_periodo() ya borró cualquier lote previo de este período.
+        # 'Estado' es NOT NULL; el default del ORM (default="RECIBIDO") es client-side
+        # y NO aplica a un INSERT por text() crudo, así que se pasa explícito.
         db.execute(text("""
-            INSERT INTO "cat"."LoadBatch" ("ArchivoOrigen","Periodo","CodigoPaisDefault","UsuarioCarga","FechaCargaUtc")
-            VALUES (:archivo,:periodo,'DO',:usuario,:ahora)
+            INSERT INTO "cat"."LoadBatch" ("ArchivoOrigen","Periodo","CodigoPaisDefault","UsuarioCarga","FechaCargaUtc","Estado")
+            VALUES (:archivo,:periodo,'DO',:usuario,:ahora,'RECIBIDO')
         """), {"archivo": nombre_archivo, "periodo": periodo, "usuario": usuario,
                "ahora": datetime.now(timezone.utc)})
         db.flush()
@@ -677,7 +713,7 @@ def get_filtros_medicos(db: Session, pais: str = None, provincia: str = None) ->
         prov_where_extra = ""
 
     paises = db.execute(text(
-        'SELECT "CodigoPais", "NombrePais" FROM "cat"."DimPais" WHERE "Activo"=1 ORDER BY "CodigoPais"'
+        'SELECT "CodigoPais", "NombrePais" FROM "cat"."DimPais" WHERE "Activo"=TRUE ORDER BY "CodigoPais"'
     )).mappings().all()
 
     provincias = db.execute(text(f"""
@@ -700,7 +736,7 @@ def get_filtros_medicos(db: Session, pais: str = None, provincia: str = None) ->
     especialidades = db.execute(text(f"""
         SELECT DISTINCT e."Especialidad"
         FROM "cat"."DimEspecialidad" e {esp_where}
-        WHERE e."Activo"=1 ORDER BY e."Especialidad"
+        WHERE e."Activo"=TRUE ORDER BY e."Especialidad"
     """), params).scalars().all()
 
     rep_where = ""
@@ -709,7 +745,7 @@ def get_filtros_medicos(db: Session, pais: str = None, provincia: str = None) ->
     representantes = db.execute(text(f"""
         SELECT DISTINCT r."NombreRepresentante", r."CodigoRepresentante"
         FROM "cat"."DimRepresentanteMedico" r {rep_where}
-        WHERE r."Activo"=1 ORDER BY r."NombreRepresentante"
+        WHERE r."Activo"=TRUE ORDER BY r."NombreRepresentante"
     """), params).mappings().all()
 
     return {
@@ -931,7 +967,7 @@ def upsert_regla(db: Session, data: dict) -> dict:
 
 
 def delete_regla(db: Session, regla_key: int) -> dict:
-    db.execute(text('UPDATE "cat"."DimReglaCategoriaMedica" SET "Activo"=0 WHERE "ReglaKey"=:key'),
+    db.execute(text('UPDATE "cat"."DimReglaCategoriaMedica" SET "Activo"=FALSE WHERE "ReglaKey"=:key'),
                {"key": regla_key})
     db.commit()
     return {"ok": True}
