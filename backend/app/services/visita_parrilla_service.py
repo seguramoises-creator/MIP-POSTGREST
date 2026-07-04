@@ -18,6 +18,15 @@ from app.models.visita import ParrillaPromocional, MuestraEntregada, MedicoVisit
 from app.models.dimensiones import RepresentanteMedico, Linea, Producto
 from app.schemas.visita import ParrillaItem, MuestraItem
 from app.services.visita_cobertura_service import ciclo_por_defecto
+from app.services import recalculo_service
+
+
+def _guard_ciclo_abierto(db, ciclo_id):
+    """Bloquea escrituras sobre ciclos cerrados (inmutables)."""
+    try:
+        recalculo_service.validar_ciclo_abierto(db, ciclo_id)
+    except recalculo_service.CicloCerradoError:
+        raise ValueError("El ciclo está cerrado — solo lectura")
 
 
 def linea_de_vm(db: Session, vm_id: int) -> int | None:
@@ -86,6 +95,7 @@ def guardar_parrilla(db: Session, ciclo_id: int | None, linea_id: int,
     ciclo_id = ciclo_id or ciclo_por_defecto(db)
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
     vistos = set()
     for it in items:
         clave = it.producto.lower()
@@ -111,6 +121,7 @@ def publicar_parrilla(db: Session, ciclo_id: int | None, linea_id: int, usuario_
     ciclo_id = ciclo_id or ciclo_por_defecto(db)
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
     filas = db.query(ParrillaPromocional).filter(
         ParrillaPromocional.ciclo_id == ciclo_id, ParrillaPromocional.linea_id == linea_id).all()
     if not filas:

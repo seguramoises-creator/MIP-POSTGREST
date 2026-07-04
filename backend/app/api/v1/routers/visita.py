@@ -295,6 +295,36 @@ def registrar_no_visita(datos: VisitaNoVisita, vm_id: int | None = None,
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
+@router.post("/{visita_id}/foto", response_model=dict, status_code=status.HTTP_201_CREATED)
+async def subir_foto_visita(
+    visita_id: int, archivo: UploadFile = File(...),
+    db: Session = Depends(get_db), current_user=RequireVisita,
+):
+    """Sube la foto del centro para una visita (JPEG/PNG, ≤ 3 MB). Se guarda como BLOB."""
+    from app.services import visita_registro_service
+    contenido = await archivo.read()
+    try:
+        visita_registro_service.guardar_foto_visita(
+            db, visita_id, contenido, archivo.content_type or "image/jpeg")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return {"id": visita_id, "bytes": len(contenido)}
+
+
+@router.get("/{visita_id}/foto")
+def obtener_foto_visita_endpoint(
+    visita_id: int, db: Session = Depends(get_db), current_user=RequireVisita,
+):
+    """Devuelve la imagen de la visita (BLOB). 404 si no tiene foto."""
+    from fastapi import Response
+    from app.services import visita_registro_service
+    data = visita_registro_service.obtener_foto_visita(db, visita_id)
+    if data is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sin foto")
+    contenido, mime = data
+    return Response(content=contenido, media_type=mime)
+
+
 # ── Planeación del ciclo (Parte 3) ────────────────────────────────────────────
 @router.get("/planeacion", response_model=list[dict])
 def obtener_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,

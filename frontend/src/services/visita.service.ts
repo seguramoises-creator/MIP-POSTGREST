@@ -161,8 +161,15 @@ export const agendaHoy = (vmId?: number) =>
 export const registrarVisita = (
   medico_id: number, tipo_visita: string, comentario: string, hace_minutos = 0,
   productos: ProductoDetalle[] = [], vmId?: number,
-) => api.post('/visita/registrar', { medico_id, tipo_visita, comentario, hace_minutos, productos },
-              { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+  latitud?: number | null, longitud?: number | null,
+) => api.post<{ id: number; tipo: string; hora: string | null }>(
+  '/visita/registrar',
+  { medico_id, tipo_visita, comentario, hace_minutos, productos, latitud: latitud ?? null, longitud: longitud ?? null },
+  { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export const subirFotoVisita = (visitaId: number, file: File) => {
+  const fd = new FormData(); fd.append('archivo', file);
+  return api.post(`/visita/${visitaId}/foto`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
+};
 export const registrarNoVisita = (medico_id: number, causa: string, comentario?: string, vmId?: number) =>
   api.post('/visita/no-visita', { medico_id, causa, comentario }, { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 
@@ -241,10 +248,10 @@ export interface PenetracionCiclo {
 }
 export const listarProductosDim = (lineaId?: number) =>
   api.get<ProductoDim[]>('/visita/productos', { params: lineaId ? { linea_id: lineaId } : {} }).then(r => r.data);
-export const publicarParrilla = (linea_id: number) =>
-  api.post<{ publicados: number }>('/visita/parrilla/publicar', null, { params: { linea_id } }).then(r => r.data);
-export const parrillaPenetracion = (lineaId?: number) =>
-  api.get<PenetracionCiclo>('/visita/parrilla/penetracion', { params: lineaId ? { linea_id: lineaId } : {} }).then(r => r.data);
+export const publicarParrilla = (linea_id: number, cicloId?: number) =>
+  api.post<{ publicados: number }>('/visita/parrilla/publicar', null, { params: { linea_id, ...(cicloId && { ciclo_id: cicloId }) } }).then(r => r.data);
+export const parrillaPenetracion = (lineaId?: number, cicloId?: number) =>
+  api.get<PenetracionCiclo>('/visita/parrilla/penetracion', { params: { ...(lineaId && { linea_id: lineaId }), ...(cicloId && { ciclo_id: cicloId }) } }).then(r => r.data);
 export interface MuestraResumenProducto {
   producto: string; mensaje_clave: string | null; entregadas: number;
   medicos_alcanzados: number; meta: number; cobertura_meta_pct: number | null; en_parrilla: boolean;
@@ -254,10 +261,10 @@ export interface MuestrasResumen {
   productos: MuestraResumenProducto[];
 }
 export const listarLineasVisita = () => api.get<Catalogo[]>('/visita/lineas').then(r => r.data);
-export const obtenerParrilla = (lineaId?: number) =>
-  api.get<ParrillaItem[]>('/visita/parrilla', { params: lineaId ? { linea_id: lineaId } : {} }).then(r => r.data);
-export const guardarParrilla = (linea_id: number, items: ParrillaItem[]) =>
-  api.post<{ guardados: number }>('/visita/parrilla', { linea_id, items }).then(r => r.data);
+export const obtenerParrilla = (lineaId?: number, cicloId?: number) =>
+  api.get<ParrillaItem[]>('/visita/parrilla', { params: { ...(lineaId && { linea_id: lineaId }), ...(cicloId && { ciclo_id: cicloId }) } }).then(r => r.data);
+export const guardarParrilla = (linea_id: number, items: ParrillaItem[], cicloId?: number) =>
+  api.post<{ guardados: number }>('/visita/parrilla', { linea_id, items, ciclo_id: cicloId ?? null }).then(r => r.data);
 export const registrarMuestras = (medico_id: number, entregas: { producto: string; cantidad: number }[]) =>
   api.post<{ registradas: number }>('/visita/muestras', { medico_id, entregas }).then(r => r.data);
 export const muestrasResumen = (vmId?: number) =>
@@ -317,14 +324,14 @@ export interface CostoFull {
   resumen: { costo_total_visita: number; retorno_prom_visita: number; roi_promedio: number | null; productos: { producto: string; costo_visita: number; retorno_visita: number; roi: number; estado: string }[] };
   impacto: { categorias: { categoria: string; medicos_sin_visitar: number; psp: number; venta_riesgo_bajo: number; venta_riesgo_alto: number }[]; venta_riesgo_bajo: number; venta_riesgo_alto: number; total_medicos_sin_visitar: number; headcount_equivalente: number };
 }
-export const costoEstructura = (lineaId?: number) =>
-  api.get<CostoFull>('/visita/costo/estructura', { params: lineaId ? { linea_id: lineaId } : {} }).then(r => r.data);
+export const costoEstructura = (cicloId?: number, lineaId?: number) =>
+  api.get<CostoFull>('/visita/costo/estructura', { params: { ...(cicloId && { ciclo_id: cicloId }), ...(lineaId && { linea_id: lineaId }) } }).then(r => r.data);
 export const guardarCostoEstructura = (datos: CostoEstructuraInput & { productos: CostoProdInput[] }) =>
   api.post<CostoFull>('/visita/costo/estructura', datos).then(r => r.data);
-export const importarCostoExcel = (file: File, lineaId?: number) => {
+export const importarCostoExcel = (file: File, cicloId?: number, lineaId?: number) => {
   const fd = new FormData(); fd.append('archivo', file);
   return api.post<CostoFull & { importados: number }>('/visita/costo/importar', fd,
-    { params: lineaId ? { linea_id: lineaId } : {}, headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
+    { params: { ...(cicloId && { ciclo_id: cicloId }), ...(lineaId && { linea_id: lineaId }) }, headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data);
 };
 
 // Devuelve { medico } si se creó, o { duplicados } si el backend respondió 409.

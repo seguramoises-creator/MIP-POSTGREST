@@ -317,3 +317,81 @@ def test_roi_sin_costo_devuelve_none():
     r = _calcular_roi(0, 0, 0, 0, 0, 0, ingresos=0)
     assert r["costo_total"] == 0.0
     assert r["roi_pct"] is None and r["ratio_ingreso_costo"] is None and r["rentable"] is None
+
+
+# ── Visita v2: guards de ciclo cerrado + GPS/foto ─────────────────────────
+def test_guardar_parrilla_rechaza_ciclo_cerrado(monkeypatch):
+    import app.services.visita_parrilla_service as ps
+    from unittest.mock import MagicMock
+    import pytest
+    db = MagicMock()
+    monkeypatch.setattr(ps, "ciclo_por_defecto", lambda d: 5)
+
+    def _cerrado(d, c):
+        raise ps.recalculo_service.CicloCerradoError("cerrado")
+    monkeypatch.setattr(ps.recalculo_service, "validar_ciclo_abierto", _cerrado)
+    with pytest.raises(ValueError):
+        ps.guardar_parrilla(db, ciclo_id=5, linea_id=1, items=[], usuario_id=1)
+
+
+def test_guardar_estructura_rechaza_ciclo_cerrado(monkeypatch):
+    import app.services.visita_costo_service as cs
+    from unittest.mock import MagicMock
+    from types import SimpleNamespace
+    import pytest
+    db = MagicMock()
+    monkeypatch.setattr(cs, "ciclo_por_defecto", lambda d: 5)
+
+    def _cerrado(d, c):
+        raise cs.recalculo_service.CicloCerradoError("cerrado")
+    monkeypatch.setattr(cs.recalculo_service, "validar_ciclo_abierto", _cerrado)
+    datos = SimpleNamespace(ciclo_id=5, linea_id=1, productos=[])
+    with pytest.raises(ValueError):
+        cs.guardar_estructura(db, datos, usuario_id=1)
+
+
+def test_registrar_visita_persiste_gps(monkeypatch):
+    import app.services.visita_registro_service as rs
+    from unittest.mock import MagicMock
+    from types import SimpleNamespace
+    db = MagicMock()
+    monkeypatch.setattr(rs, "_medico_del_vm", lambda d, vm, m: None)
+    monkeypatch.setattr(rs, "ciclo_por_defecto", lambda d: 7)
+    capturado = {}
+    db.add.side_effect = lambda obj: capturado.__setitem__("obj", obj)
+    datos = SimpleNamespace(medico_id=3, tipo_visita="V", comentario="ok visita larga",
+                            hace_minutos=0, productos=[], latitud=18.47, longitud=-69.9)
+    rs.registrar_visita(db, vm_id=1, datos=datos, usuario_id=1)
+    assert float(capturado["obj"].latitud) == 18.47
+    assert float(capturado["obj"].longitud) == -69.9
+
+
+def test_guardar_foto_rechaza_no_imagen():
+    import app.services.visita_registro_service as rs
+    from unittest.mock import MagicMock
+    import pytest
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = MagicMock()
+    with pytest.raises(ValueError):
+        rs.guardar_foto_visita(db, 1, b"NOTIMAGE", "image/jpeg")
+
+
+def test_guardar_foto_acepta_jpeg():
+    import app.services.visita_registro_service as rs
+    from unittest.mock import MagicMock
+    db = MagicMock()
+    v = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = v
+    rs.guardar_foto_visita(db, 1, b"\xff\xd8\xff\xe0resto", "image/jpeg")
+    assert v.foto == b"\xff\xd8\xff\xe0resto"
+    assert v.foto_mime == "image/jpeg"
+
+
+def test_guardar_foto_rechaza_grande():
+    import app.services.visita_registro_service as rs
+    from unittest.mock import MagicMock
+    import pytest
+    db = MagicMock()
+    big = b"\xff\xd8\xff" + b"x" * (rs.MAX_FOTO_BYTES + 1)
+    with pytest.raises(ValueError):
+        rs.guardar_foto_visita(db, 1, big, "image/jpeg")

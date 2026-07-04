@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { Add, Delete, Save, Campaign, Edit, Publish, Inventory2, BarChart, Person, SupervisorAccount } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import { api } from '../../services/api';
 import {
   listarLineasVisita, obtenerParrilla, guardarParrilla, publicarParrilla, parrillaPenetracion, listarProductosDim,
   type Catalogo, type ParrillaItem, type PenetracionCiclo, type ProductoDim,
@@ -26,6 +27,8 @@ export default function ParrillaVisita() {
 
   const [lineas, setLineas] = useState<Catalogo[]>([]);
   const [lineaId, setLineaId] = useState<number | ''>('');
+  const [ciclos, setCiclos] = useState<{ id: number; nombre: string; cerrado: boolean }[]>([]);
+  const [cicloId, setCicloId] = useState<number | ''>('');
   const [parrilla, setParrilla] = useState<ParrillaItem[]>([]);
   const [pen, setPen] = useState<PenetracionCiclo | null>(null);
   const [productosDim, setProductosDim] = useState<ProductoDim[]>([]);
@@ -37,19 +40,22 @@ export default function ParrillaVisita() {
   const [draft, setDraft] = useState<ParrillaItem[]>([]);
   const [vistaVM, setVistaVM] = useState(false);   // el gestor previsualiza como VM (solo lectura)
 
-  const soloLectura = !esGestor || vistaVM;
+  const cicloParam = cicloId || undefined;
+  const cerrado = !!ciclos.find((c) => c.id === cicloId)?.cerrado;
+  const soloLectura = !esGestor || vistaVM || cerrado;
   const lineaParam = esGestor ? (lineaId || undefined) : undefined;
 
   const cargarParrilla = useCallback(() => {
-    obtenerParrilla(lineaParam).then(setParrilla).catch(() => setParrilla([]));
-    parrillaPenetracion(lineaParam).then(setPen).catch(() => setPen(null));
-  }, [lineaParam]);
+    obtenerParrilla(lineaParam, cicloParam).then(setParrilla).catch(() => setParrilla([]));
+    parrillaPenetracion(lineaParam, cicloParam).then(setPen).catch(() => setPen(null));
+  }, [lineaParam, cicloParam]);
 
   useEffect(() => {
     const tareas: Promise<unknown>[] = [];
     if (esGestor) {
       tareas.push(listarLineasVisita().then((ls) => { setLineas(ls); if (ls.length && !lineaId) setLineaId(ls[0].id); }).catch(() => {}));
     }
+    api.get<{ id: number; nombre: string; cerrado: boolean }[]>('/admin/ciclos').then((r) => setCiclos(r.data)).catch(() => {});
     Promise.all(tareas).finally(() => setCargando(false));
   }, [esGestor]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -80,7 +86,7 @@ export default function ParrillaVisita() {
     const items = draft.filter((d) => d.producto.trim());
     setGuardando(true); setMsg(null);
     try {
-      await guardarParrilla(Number(lineaId), items);
+      await guardarParrilla(Number(lineaId), items, cicloParam);
       setMsg({ tipo: 'success', texto: 'Parrilla guardada como borrador. Publícala para que el equipo la reciba.' });
       setEditando(false); cargarParrilla();
     } catch (e) {
@@ -92,7 +98,7 @@ export default function ParrillaVisita() {
     if (!lineaId) return;
     setGuardando(true); setMsg(null);
     try {
-      const r = await publicarParrilla(Number(lineaId));
+      const r = await publicarParrilla(Number(lineaId), cicloParam);
       setMsg({ tipo: 'success', texto: `Parrilla publicada al equipo (${r.publicados} productos). Los visitadores ya la reciben.` });
       cargarParrilla();
     } catch (e) {
@@ -134,11 +140,17 @@ export default function ParrillaVisita() {
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
 
       {esGestor && (
-        <Stack direction="row" spacing={1.5} sx={{ mb: 2 }} alignItems="center">
+        <Stack direction="row" spacing={1.5} sx={{ mb: 2 }} alignItems="center" flexWrap="wrap">
+          <TextField select size="small" label="Ciclo" value={cicloId} sx={{ minWidth: 180 }}
+                     onChange={(e) => setCicloId(Number(e.target.value))}>
+            <MenuItem value=""><em>Ciclo actual</em></MenuItem>
+            {ciclos.map((c) => <MenuItem key={c.id} value={c.id}>{c.nombre}{c.cerrado ? ' (cerrado)' : ''}</MenuItem>)}
+          </TextField>
           <TextField select size="small" label="Línea" value={lineaId} sx={{ minWidth: 220 }}
                      onChange={(e) => setLineaId(Number(e.target.value))}>
             {lineas.map((l) => <MenuItem key={l.id} value={l.id}>{l.nombre}</MenuItem>)}
           </TextField>
+          {cerrado && <Chip size="small" label="Ciclo cerrado — solo lectura" />}
         </Stack>
       )}
 

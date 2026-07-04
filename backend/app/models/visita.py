@@ -9,7 +9,7 @@ Fase 1: Panel Médico (catálogo de médicos del universo de visita).
 from datetime import datetime, timezone, date
 
 from sqlalchemy import (
-    String, Boolean, Integer, DateTime, Date, ForeignKey, CHAR, Index, Numeric,
+    String, Boolean, Integer, DateTime, Date, ForeignKey, CHAR, Index, Numeric, LargeBinary,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -116,6 +116,11 @@ class VisitaRegistro(Base):
     causa_no_visita: Mapped[str | None] = mapped_column(String(80), nullable=True)
     registrado_por: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+    # Georreferencia y foto del centro capturadas al registrar (v2).
+    latitud: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
+    longitud: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
+    foto: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    foto_mime: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
 
 class PlaneacionCiclo(Base):

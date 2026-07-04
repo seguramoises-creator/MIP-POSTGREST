@@ -20,6 +20,15 @@ from app.models.hechos import Ventas
 from app.schemas.visita import ParametroCostoGuardar
 from app.services.visita_cobertura_service import ciclo_por_defecto
 from app.services.visita_parrilla_service import linea_de_vm
+from app.services import recalculo_service
+
+
+def _guard_ciclo_abierto(db, ciclo_id):
+    """Bloquea escrituras sobre ciclos cerrados (inmutables)."""
+    try:
+        recalculo_service.validar_ciclo_abierto(db, ciclo_id)
+    except recalculo_service.CicloCerradoError:
+        raise ValueError("El ciclo está cerrado — solo lectura")
 
 
 def obtener_parametros(db: Session, ciclo_id: int | None, linea_id: int | None) -> dict:
@@ -196,6 +205,7 @@ def guardar_estructura(db: Session, datos, usuario_id) -> dict:
     ciclo_id = datos.ciclo_id or ciclo_por_defecto(db)
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
     e = db.query(CostoEstructura).filter(
         CostoEstructura.ciclo_id == ciclo_id, CostoEstructura.linea_id == datos.linea_id).first()
     if not e:
@@ -339,6 +349,7 @@ def importar_excel(db: Session, contenido: bytes, ciclo_id, linea_id, usuario_id
     ciclo_id = ciclo_id or ciclo_por_defecto(db)
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
     xls = pd.ExcelFile(io.BytesIO(contenido))
     df = None
     for hoja in xls.sheet_names:

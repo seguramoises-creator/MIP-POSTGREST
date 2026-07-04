@@ -34,6 +34,7 @@ def registrar_visita(db: Session, vm_id: int, datos: VisitaRegistrar, usuario_id
         vm_id=vm_id, ciclo_id=ciclo_id, medico_id=datos.medico_id,
         tipo_visita=datos.tipo_visita, fecha_hora=fecha_hora,
         comentario=datos.comentario, productos=productos, ejecutada=True, registrado_por=usuario_id,
+        latitud=getattr(datos, "latitud", None), longitud=getattr(datos, "longitud", None),
     )
     db.add(v)
     db.commit()
@@ -151,3 +152,35 @@ def agenda_hoy(db: Session, vm_id: int) -> list[dict]:
         })
     agenda.sort(key=lambda a: (a["estado"] != "pendiente", a["hora_estimada"] or "99:99", a["nombre"]))
     return agenda
+
+
+# ── Foto de visita (BLOB) — v2 ────────────────────────────────────────────
+MAX_FOTO_BYTES = 3 * 1024 * 1024
+_MAGIC_JPEG = b"\xff\xd8\xff"
+_MAGIC_PNG = b"\x89PNG\r\n"
+
+
+def _es_imagen(contenido: bytes) -> bool:
+    return contenido[:3] == _MAGIC_JPEG or contenido[:6] == _MAGIC_PNG
+
+
+def guardar_foto_visita(db: Session, visita_id: int, contenido: bytes, mime: str) -> None:
+    """Valida (magic bytes JPEG/PNG + tamaño ≤ 3MB) y guarda la foto como BLOB."""
+    if len(contenido) > MAX_FOTO_BYTES:
+        raise ValueError("La foto excede el tamaño máximo (3 MB)")
+    if not _es_imagen(contenido):
+        raise ValueError("El archivo no es una imagen JPEG/PNG válida")
+    v = db.query(VisitaRegistro).filter(VisitaRegistro.id == visita_id).first()
+    if v is None:
+        raise ValueError("Visita no encontrada")
+    v.foto = contenido
+    v.foto_mime = mime or "image/jpeg"
+    db.commit()
+
+
+def obtener_foto_visita(db: Session, visita_id: int):
+    """Devuelve (bytes, mime) de la foto, o None si la visita no existe o no tiene foto."""
+    v = db.query(VisitaRegistro).filter(VisitaRegistro.id == visita_id).first()
+    if v is None or not v.foto:
+        return None
+    return bytes(v.foto), (v.foto_mime or "image/jpeg")
