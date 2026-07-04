@@ -129,7 +129,9 @@ C:\Users\Lenovo\Proyecto\MSM\
 │   │       ├── categorizacion_service.py        ← NUEVO — motor 100% Python (no usa SPs)
 │   │       ├── exportacion_service.py           ← NUEVO
 │   │       ├── lsii_service.py                  ← NUEVO
-│   │       └── notification_service.py          ← cableado a ranking/reconocimiento/examen (ver §22)
+│   │       ├── notification_service.py          ← cableado a ranking/reconocimiento/examen + correcciones (ver §22)
+│   │       ├── examen_consolidacion_service.py   ← gate EVAL_CONOCIMIENTOS por (ciclo,país) — ver §22 (Exámenes v2.0)
+│   │       └── scheduler.py (en app/core/)       ← APScheduler: correo de correcciones a fecha_limite+30min
 ├── frontend/
 │   ├── package.json
 │   ├── vite.config.ts
@@ -843,8 +845,9 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 | Cargar datos iniciales de Cobertura Predictiva en producción | Pendiente | Módulo desplegado, falta cargar `DIM_TargetMedico`/`FACT_Visita` reales |
 | Redesplegar web.config corregido y purgar caché | Pendiente | Ver nota en §21/§20 |
 | Capturar screenshots reales de la app MSM | Pendiente / en curso | Para materiales comerciales |
-| Notificaciones email | **Resuelto** | `notification_service.py` (smtplib, best-effort, no-op si `MAIL_SERVER=""`) cableado a 3 disparadores: `ranking_service` (`notificar_ranking_generado`), `reconocimiento_service` (`notificar_reconocimiento_otorgado`) y `examen_intento_service` (`notificar_resultado_examen`). Gmail SMTP configurado en `.env`; envío real verificado. |
-| Tests unitarios | **Resuelto (en curso)** | Suite `pytest` con **168 tests** en 11 archivos (`backend/tests/test_*.py`): IUP, puntaje, elegibilidad, token_store, módulo Exámenes (6 archivos) y módulo Visita (`test_visita_service.py`, 34 tests). CI de GitHub Actions corre pytest+build (ver §22 histórico). Cobertura ampliable a routers/ETL. |
+| Módulo de Exámenes v2.0 | **Resuelto** | Esquema `exam` (autocontenido). **Gate de integración al KPI**: la entrega de un examen ya NO alimenta `DW.FACT_ResultadoIndicador`; la nota EVAL_CONOCIMIENTOS de los RM entra **solo** cuando Capacitación consolida el (ciclo, país) vía `examen_consolidacion_service.consolidar_ciclo` (tabla `exam.FactConsolidacionCiclo`, migración `c1e7a2f4b9d0`; guard de ciclo abierto; re-ejecutable; 1 recálculo). Endpoints `GET/POST /examenes/consolidacion`; panel `ConsolidacionPanel.tsx`. **4 mejoras**: (1) nota real + banner Aprobado/No Aprobado/Provisional + flag `provisional` en el reporte; (2) correo de correcciones a `fecha_limite+30min` (`notification_service.notificar_correcciones_examen` + `app/core/scheduler.py` APScheduler + botón demo `POST /examenes/{id}/correcciones/enviar`); (3) `analisis_preguntas` con `acierto_pct`/`fallan`/`aciertan`/`etiqueta` + tooltip de nombres + recomendaciones ≥40%; (4) tipo de pregunta `objecion` (Objeción de Producto, reusa `Pregunta.escenario`, banner naranja). |
+| Notificaciones email | **Resuelto** | `notification_service.py` (smtplib, best-effort, no-op si `MAIL_SERVER=""`) cableado a: `ranking_service` (`notificar_ranking_generado`), `reconocimiento_service` (`notificar_reconocimiento_otorgado`), `examen_intento_service` (`notificar_resultado_examen`) y `notificar_correcciones_examen` (correcciones de examen, T+30min vía APScheduler). Gmail SMTP configurado en `.env`; envío real verificado. |
+| Tests unitarios | **Resuelto (en curso)** | Suite `pytest` con **181 tests** (`backend/tests/test_*.py`): IUP, puntaje, elegibilidad, token_store, módulo Exámenes (incl. `test_examen_consolidacion_service.py`) y módulo Visita (`test_visita_service.py`). CI de GitHub Actions corre pytest+build. Cobertura ampliable a routers/ETL. |
 | Refresh token en BD | **Resuelto** (FIX W-04 v2) | La blacklist vive en SQL Server (`Security.FACT_TokenRevocado`, modelo `TokenRevocado`). `token_store.revocar_token`/`token_esta_revocado` reciben `db`; revocación consistente entre workers y duradera tras reinicio. Purga oportuna de expirados con `purgar_expirados`. |
 | Dashboard Power BI | Pendiente | Sin conexión a Power BI Embedded |
 
