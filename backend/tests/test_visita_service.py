@@ -317,3 +317,34 @@ def test_roi_sin_costo_devuelve_none():
     r = _calcular_roi(0, 0, 0, 0, 0, 0, ingresos=0)
     assert r["costo_total"] == 0.0
     assert r["roi_pct"] is None and r["ratio_ingreso_costo"] is None and r["rentable"] is None
+
+
+# ── Visita v2: guards de ciclo cerrado + GPS/foto ─────────────────────────
+def test_guardar_parrilla_rechaza_ciclo_cerrado(monkeypatch):
+    import app.services.visita_parrilla_service as ps
+    from unittest.mock import MagicMock
+    import pytest
+    db = MagicMock()
+    monkeypatch.setattr(ps, "ciclo_por_defecto", lambda d: 5)
+
+    def _cerrado(d, c):
+        raise ps.recalculo_service.CicloCerradoError("cerrado")
+    monkeypatch.setattr(ps.recalculo_service, "validar_ciclo_abierto", _cerrado)
+    with pytest.raises(ValueError):
+        ps.guardar_parrilla(db, ciclo_id=5, linea_id=1, items=[], usuario_id=1)
+
+
+def test_guardar_estructura_rechaza_ciclo_cerrado(monkeypatch):
+    import app.services.visita_costo_service as cs
+    from unittest.mock import MagicMock
+    from types import SimpleNamespace
+    import pytest
+    db = MagicMock()
+    monkeypatch.setattr(cs, "ciclo_por_defecto", lambda d: 5)
+
+    def _cerrado(d, c):
+        raise cs.recalculo_service.CicloCerradoError("cerrado")
+    monkeypatch.setattr(cs.recalculo_service, "validar_ciclo_abierto", _cerrado)
+    datos = SimpleNamespace(ciclo_id=5, linea_id=1, productos=[])
+    with pytest.raises(ValueError):
+        cs.guardar_estructura(db, datos, usuario_id=1)
