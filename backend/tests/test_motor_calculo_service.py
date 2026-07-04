@@ -31,3 +31,30 @@ def test_puntos_escala_100_y_clamp():
     mc._calc_puntajes_filas([(ri, ind)])
     assert ri.resultado_porcentaje == Decimal("100")
     assert ri.puntos_obtenidos == Decimal("10.0")
+
+
+def test_rankear_desempate_por_rm():
+    # dos RM con mismo score: gana el rm_id menor (posicion_global 1)
+    rows = [
+        {"rm_id": 5, "linea_id": 1, "gerente_id": 2, "pais_codigo": "DO", "score_total": Decimal("80.0"), "categoria_id": None},
+        {"rm_id": 3, "linea_id": 1, "gerente_id": 2, "pais_codigo": "DO", "score_total": Decimal("80.0"), "categoria_id": None},
+        {"rm_id": 9, "linea_id": 2, "gerente_id": 4, "pais_codigo": "DO", "score_total": Decimal("95.0"), "categoria_id": None},
+    ]
+    out = {r["rm_id"]: r for r in mc._rankear(rows)}
+    assert out[9]["posicion_global"] == 1 and out[9]["elegible"] is True
+    assert out[3]["posicion_global"] == 2   # empate: rm 3 antes que rm 5
+    assert out[5]["posicion_global"] == 3
+    assert out[3]["posicion_linea"] == 1 and out[5]["posicion_linea"] == 2
+    assert out[9]["posicion_linea"] == 1    # otra línea
+    assert out[3]["elegible"] is False
+
+
+def test_categoria_de_rangos():
+    cats = [
+        SimpleNamespace(id=1, score_min=Decimal("90"), score_max=Decimal("100")),
+        SimpleNamespace(id=2, score_min=Decimal("70"), score_max=Decimal("89.9999")),
+        SimpleNamespace(id=3, score_min=None, score_max=Decimal("69.9999")),
+    ]
+    assert mc._categoria_de(cats, Decimal("95")) == 1
+    assert mc._categoria_de(cats, Decimal("80")) == 2
+    assert mc._categoria_de(cats, Decimal("50")) == 3
