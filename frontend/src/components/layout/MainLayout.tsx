@@ -12,6 +12,7 @@ import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
 import { miGerente, type MiGerente } from '../../services/visita.service';
 import CicloPaisBadge from '../CicloPaisBadge';
+import CicloPaisHeader from '../CicloPaisHeader';
 
 export default function MainLayout() {
   const navigate = useNavigate();
@@ -139,6 +140,7 @@ export default function MainLayout() {
         </Dialog>
 
         <Box sx={{ flexGrow: 1, p: 3, bgcolor: '#f5f6fa' }}>
+          <CicloPaisHeader />
           <Outlet />
         </Box>
       </Box>
