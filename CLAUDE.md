@@ -611,7 +611,9 @@ Base URL: `http://localhost:8000/api/v1`
 | GET/POST/PUT/DELETE | `/admin/indicadores` (+ `/tabla`) | ADMIN (lectura: cualquier autenticado) |
 | GET/POST/PUT/DELETE | `/admin/categorias-medicas` | ADMIN (lectura: cualquier autenticado) |
 | GET/POST/PUT/DELETE | `/admin/criterios-categoria` (+ `/tabla`) | ADMIN (lectura: cualquier autenticado) |
-| GET/POST | `/admin/ciclos`, PATCH `/cerrar` `/abrir` | ADMIN (+ lectura ampliada) |
+| GET/POST | `/admin/ciclos` (`?abierto=true` filtra solo abiertos) | ADMIN (+ lectura ampliada) |
+| GET | `/admin/ciclos/actual?pais_codigo=XX` | ADMIN (+ lectura) | Ciclo abierto más reciente por país |
+| PATCH | `/admin/ciclos/{id}/cerrar` `/abrir` | ADMIN | Cierra o reabre un ciclo |
 | POST | `/admin/reset` | ADMIN — borra datos por fase (`tipo=facts` o `tipo=dims`, ver nota abajo) |
 | GET/POST/PUT/DELETE | `/admin/reglas-elegibilidad` | ADMIN/GERENTE_PRODUCTIVIDAD |
 | GET/POST | `/admin/premios` | ADMIN/GERENTE_PRODUCTIVIDAD (alta: ADMIN) |
@@ -882,6 +884,7 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 - Pantallas de carga Excel: patrón Stepper + FormData (ver `ETL.tsx`, replicado en `CategorizacionAdmin.tsx`)
 - Páginas de administración de catálogos de un módulo nuevo: como tab dentro de `Admin.tsx` (patrón `LsiiAdmin.tsx`, `CoberturaPredictivaAdmin.tsx`, `CategorizacionAdmin.tsx`), no como ruta top-level separada
 - Selectores de relación (línea, gerente, etc.): usar selector relacional con nombre visible, nunca un campo de texto libre para un ID
+- **Contexto global País+Ciclo**: tienda Zustand en `frontend/src/store/ciclo.store.ts` (persiste en localStorage, defecto: ciclo abierto más reciente); componente `CicloPaisSelector.tsx` montado en `MainLayout` (barra superior); módulos Exámenes y Visita (Parrilla/Costo) leen del contexto global.
 
 ### Migraciones
 - Ningún cambio de esquema a mano con `ALTER TABLE`
