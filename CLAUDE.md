@@ -884,7 +884,7 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 - Pantallas de carga Excel: patrón Stepper + FormData (ver `ETL.tsx`, replicado en `CategorizacionAdmin.tsx`)
 - Páginas de administración de catálogos de un módulo nuevo: como tab dentro de `Admin.tsx` (patrón `LsiiAdmin.tsx`, `CoberturaPredictivaAdmin.tsx`, `CategorizacionAdmin.tsx`), no como ruta top-level separada
 - Selectores de relación (línea, gerente, etc.): usar selector relacional con nombre visible, nunca un campo de texto libre para un ID
-- **Contexto global País+Ciclo**: tienda Zustand en `frontend/src/store/ciclo.store.ts` (persiste en localStorage, defecto: ciclo abierto más reciente); componente `CicloPaisSelector.tsx` montado en `MainLayout` (barra superior); módulos Exámenes y Visita (Parrilla/Costo) leen del contexto global.
+- **Contexto global País+Ciclo**: tienda Zustand en `frontend/src/store/ciclo.store.ts` (transitorio, se resuelve al cargar; defecto: ciclo abierto más reciente vía `/admin/ciclos/actual`); componente `CicloPaisSelector.tsx` montado en `MainLayout` (barra superior); módulos Exámenes y Visita (Parrilla/Costo) leen del contexto global.
 
 ### Migraciones
 - Ningún cambio de esquema a mano con `ALTER TABLE`
