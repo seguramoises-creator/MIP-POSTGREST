@@ -61,6 +61,7 @@ from app.schemas.examenes import (
     ReporteIntento,
     RespuestaEnviar,
     CalificarRespuesta,
+    ConsolidarCiclo,
 )
 from app.services import examen_intento_service as intento_svc
 from app.services import examen_ia_service
@@ -462,6 +463,32 @@ def listar(
     current_user=RequireCapacitacion,
 ):
     return examen_service.listar_examenes(db)
+
+
+@router.get("/consolidacion", response_model=dict)
+def consolidacion_estado(
+    ciclo_id: int,
+    pais_codigo: str,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Preview del gate EVAL_CONOCIMIENTOS para un (ciclo, país): cuántos RM tienen
+    nota, quiénes, promedio, estado del gate y si el ciclo está abierto. No escribe."""
+    from app.services import examen_consolidacion_service
+    return examen_consolidacion_service.estado_consolidacion(db, ciclo_id, pais_codigo)
+
+
+@router.post("/consolidacion/consolidar", response_model=dict)
+def consolidacion_ejecutar(
+    body: ConsolidarCiclo,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Consolida el (ciclo, país): escribe la nota EVAL_CONOCIMIENTOS de cada RM a
+    DW.FACT_ResultadoIndicador y dispara un único recálculo. Solo Capacitación."""
+    from app.services import examen_consolidacion_service
+    return examen_consolidacion_service.consolidar_ciclo(
+        db, body.ciclo_id, body.pais_codigo, getattr(current_user, "id", None))
 
 
 @router.get("/{examen_id}", response_model=ExamenResponse)

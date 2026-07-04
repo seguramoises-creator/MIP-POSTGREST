@@ -192,3 +192,9 @@ class JobIAEstado(BaseModel):
     mensaje_error: str | None = None
     examen_id: int | None = None
     total_preguntas: int = 0
+
+
+# ── Consolidación EVAL_CONOCIMIENTOS (gate por ciclo/país) ────────────────
+class ConsolidarCiclo(BaseModel):
+    ciclo_id: int
+    pais_codigo: str = Field(min_length=1, max_length=10)
