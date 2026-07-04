@@ -31,7 +31,7 @@ export default function CostoRoiVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD';
 
-  const { cicloId, ciclo } = useCicloStore();
+  const { cicloId, esSoloLectura } = useCicloStore();
 
   const [lineas, setLineas] = useState<Catalogo[]>([]);
   const [lineaId, setLineaId] = useState<number | ''>('');
@@ -47,7 +47,7 @@ export default function CostoRoiVisita() {
   const money = (v: number) => `${moneda} ${Math.round(v).toLocaleString()}`;
   const lineaParam = esGestor ? (lineaId || undefined) : undefined;
   const cicloParam = cicloId || undefined;
-  const cerrado = !!ciclo?.cerrado;
+  const cerrado = esSoloLectura;               // "no editable" = ciclo != abierto (cubre cerrado y futuro)
   const editable = esGestor && !cerrado;
 
   const aplicar = (f: CostoFull) => { setFull(f); setEst({ ...f.estructura }); setProds(productosDe(f)); };

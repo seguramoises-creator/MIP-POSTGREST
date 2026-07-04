@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { CheckCircle, Save, EventBusy, AccessAlarm, Medication, ChatBubbleOutline, Assignment, FiberManualRecord, SupervisorAccount } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import { useCicloStore } from '../../store/ciclo.store';
 import {
   agendaHoy, listarCausas, misVisitasHoy, registrarVisita, registrarNoVisita, listarVMs, obtenerParrilla, miGerente, subirFotoVisita,
   type AgendaMedico, type VisitaHoy, type Catalogo, type ParrillaItem, type ProductoDetalle, type MiGerente,
@@ -37,6 +38,7 @@ interface Registrada extends VisitaHoy { sync: SyncEstado; }
 export default function RegistrarVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esVM = rol === 'REPRESENTANTE_MEDICO';
+  const esSoloLectura = useCicloStore((s) => s.esSoloLectura);
 
   const [vms, setVms] = useState<Catalogo[]>([]);
   const [vmId, setVmId] = useState<number | ''>('');
@@ -230,6 +232,12 @@ export default function RegistrarVisita() {
 
         {/* Formulario de la visita seleccionada */}
         {sel && (
+          <>
+          {esSoloLectura && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Ciclo en solo lectura — el registro de visitas solo está disponible en el ciclo abierto.
+            </Alert>
+          )}
           <Card variant="outlined" sx={{ mb: 2 }}>
             <Box sx={{ bgcolor: 'rgba(46,91,255,0.06)', px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5 }}>
               {avatar(sel.nombre, sel.categoria, sel.medico_id, 40)}
@@ -332,11 +340,12 @@ export default function RegistrarVisita() {
 
                 <Stack direction="row" spacing={1.5}>
                   <Button variant="contained" color="success" fullWidth startIcon={<Save />}
-                          disabled={guardando || (!modoNoVisita && comentario.trim().length < 10)}
+                          disabled={guardando || esSoloLectura || (!modoNoVisita && comentario.trim().length < 10)}
                           onClick={guardar}>
                     {guardando ? 'Guardando…' : (modoNoVisita ? 'Registrar no-visita' : 'Guardar Visita')}
                   </Button>
                   <Button variant="outlined" color={modoNoVisita ? 'primary' : 'error'} startIcon={<EventBusy />}
+                          disabled={esSoloLectura}
                           onClick={() => { setModoNoVisita(!modoNoVisita); setMsg(null); }}>
                     {modoNoVisita ? 'Fue visita' : 'No visité'}
                   </Button>
@@ -344,6 +353,7 @@ export default function RegistrarVisita() {
               </Stack>
             </CardContent>
           </Card>
+          </>
         )}
 
         {/* Registradas hoy */}

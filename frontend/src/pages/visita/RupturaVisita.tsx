@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { Warning, ErrorOutline, ReportProblem, LockClock, HistoryToggleOff } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import { useCicloStore } from '../../store/ciclo.store';
 import {
   estadoRuptura, previsualizarCierre, cerrarCiclo, historialCierres,
   type RupturaEstado, type RupturaMedico, type CierrePreview, type CierreHist,
@@ -29,6 +30,7 @@ const SEVERIDADES: { key: 'critica' | 'grave' | 'alerta'; label: string; color: 
 export default function RupturaVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD';
+  const esSoloLectura = useCicloStore((s) => s.esSoloLectura);
 
   const [estado, setEstado] = useState<RupturaEstado | null>(null);
   const [preview, setPreview] = useState<CierrePreview | null>(null);
@@ -146,6 +148,12 @@ export default function RupturaVisita() {
             Solo puede hacerse una vez por ciclo.
           </Typography>
 
+          {esSoloLectura && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Ciclo en solo lectura — el registro de visitas solo está disponible en el ciclo abierto.
+            </Alert>
+          )}
+
           {preview && (
             <Card variant="outlined" sx={{ mb: 2 }}>
               <CardContent>
@@ -161,7 +169,7 @@ export default function RupturaVisita() {
                       Este ciclo ya fue cerrado{preview.fecha_cierre ? ` el ${new Date(preview.fecha_cierre).toLocaleString()}` : ''}. No puede cerrarse de nuevo.
                     </Alert>
                   ) : (
-                    <Button variant="contained" color="primary" startIcon={<LockClock />} onClick={() => setConfirmar(true)}>
+                    <Button variant="contained" color="primary" startIcon={<LockClock />} disabled={esSoloLectura} onClick={() => setConfirmar(true)}>
                       Cerrar ciclo ahora
                     </Button>
                   )}
@@ -219,7 +227,7 @@ export default function RupturaVisita() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmar(false)} disabled={cerrando}>Cancelar</Button>
-          <Button variant="contained" color="primary" onClick={confirmarCierre} disabled={cerrando}>
+          <Button variant="contained" color="primary" onClick={confirmarCierre} disabled={cerrando || esSoloLectura}>
             {cerrando ? 'Cerrando…' : 'Sí, cerrar ciclo'}
           </Button>
         </DialogActions>

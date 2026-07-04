@@ -25,7 +25,7 @@ export default function ParrillaVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD' || rol === 'GERENTE_MARCA';
 
-  const { cicloId, ciclo } = useCicloStore();
+  const { cicloId, ciclo, esSoloLectura } = useCicloStore();
 
   const [lineas, setLineas] = useState<Catalogo[]>([]);
   const [lineaId, setLineaId] = useState<number | ''>('');
@@ -41,8 +41,8 @@ export default function ParrillaVisita() {
   const [vistaVM, setVistaVM] = useState(false);   // el gestor previsualiza como VM (solo lectura)
 
   const cicloParam = cicloId || undefined;
-  const cerrado = !!ciclo?.cerrado;
-  const soloLectura = !esGestor || vistaVM || cerrado;
+  const cerrado = esSoloLectura;               // "no editable" = ciclo != abierto (cubre cerrado y futuro)
+  const soloLectura = !esGestor || vistaVM || esSoloLectura;
   const lineaParam = esGestor ? (lineaId || undefined) : undefined;
 
   const cargarParrilla = useCallback(() => {

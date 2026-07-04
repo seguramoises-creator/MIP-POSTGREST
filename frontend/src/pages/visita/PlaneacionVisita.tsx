@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { Save, EventNote, Warning, CheckCircle } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import { useCicloStore } from '../../store/ciclo.store';
 import {
   listarMedicos, obtenerPlaneacion, planeacionResumen, guardarPlaneacion, listarVMs,
   type MedicoVisita, type PlaneacionItem, type PlaneacionResumen, type Catalogo,
@@ -25,6 +26,7 @@ const SEMANAS = [1, 2, 3, 4];
 export default function PlaneacionVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esVM = rol === 'REPRESENTANTE_MEDICO';
+  const esSoloLectura = useCicloStore((s) => s.esSoloLectura);
 
   const [vms, setVms] = useState<Catalogo[]>([]);
   const [vmId, setVmId] = useState<number | ''>('');        // solo ADMIN/GERENTE
@@ -122,6 +124,11 @@ export default function PlaneacionVisita() {
       </Typography>
 
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
+      {esSoloLectura && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Ciclo en solo lectura — el registro de visitas solo está disponible en el ciclo abierto.
+        </Alert>
+      )}
 
       {/* Selector de visitador: solo ADMIN/GERENTE. El RM planifica su propio panel. */}
       {!esVM && (
@@ -208,7 +215,7 @@ export default function PlaneacionVisita() {
       </Card>
 
       <Stack direction="row" spacing={2} alignItems="center">
-        <Button variant="contained" startIcon={<Save />} disabled={guardando || medicos.length === 0} onClick={guardar}>
+        <Button variant="contained" startIcon={<Save />} disabled={guardando || esSoloLectura || medicos.length === 0} onClick={guardar}>
           {guardando ? 'Guardando…' : 'Guardar planeación'}
         </Button>
         {resumen && (
