@@ -578,11 +578,47 @@ def asignar(
     current_user=RequireCapacitacion,
 ):
     try:
-        return examen_service.asignar_examen(
+        asignaciones = examen_service.asignar_examen(
             db, examen_id, datos.evaluados, datos.fecha_limite, datos.intentos_max, datos.notif_activa
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    # Programa el correo de correcciones a fecha_límite + 30 min (spec §2.2).
+    if datos.fecha_limite is not None:
+        try:
+            from datetime import datetime, time
+            from app.core import scheduler
+            fl = datos.fecha_limite
+            if not isinstance(fl, datetime):
+                fl = datetime.combine(fl, time(23, 59))
+            scheduler.programar_correcciones(examen_id, fl)
+        except Exception:  # noqa: BLE001
+            pass
+    return asignaciones
+
+
+@router.post("/{examen_id}/correcciones/enviar", response_model=dict)
+def enviar_correcciones(
+    examen_id: int,
+    db: Session = Depends(get_db),
+    current_user=RequireCapacitacion,
+):
+    """Envía (o simula en modo demo) las correcciones de las preguntas incorrectas a
+    todos los participantes ahora mismo. Devuelve el número de correos."""
+    from app.services import notification_service
+    n = notification_service.notificar_correcciones_examen(db, examen_id)
+    return {"enviados": n}
+
+
+@router.get("/{examen_id}/recomendaciones", response_model=list[dict])
+def examen_recomendaciones(
+    examen_id: int,
+    db: Session = Depends(get_db),
+    current_user=RequireEquipo,
+):
+    """Preguntas con desacierto ≥ 40% (brecha crítica) + quiénes fallaron."""
+    from app.services import examen_resultados_service
+    return examen_resultados_service.recomendaciones(db, examen_id)
 
 
 @router.post("/{examen_id}/iniciar", response_model=IntentoIniciado)

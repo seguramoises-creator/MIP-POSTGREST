@@ -267,3 +267,66 @@ def notificar_resultado_examen(
 
     asunto = f"Resultado de Examen - {examen_nombre} - {score}%"
     return _enviar(destinatario, asunto, cuerpo)
+
+
+def _correo_evaluado(db, intento) -> Optional[str]:
+    """Resuelve el email del evaluado (RM/Gerente) de un intento. None si no tiene."""
+    from app.models.dimensiones import RepresentanteMedico, Gerente
+    if intento.evaluado_rm_id:
+        rm = db.query(RepresentanteMedico).filter(
+            RepresentanteMedico.id == intento.evaluado_rm_id).first()
+        return getattr(rm, "email", None) if rm else None
+    g = db.query(Gerente).filter(Gerente.id == intento.evaluado_gerente_id).first()
+    return getattr(g, "email", None) if g else None
+
+
+def notificar_correcciones_examen(db, examen_id: int) -> int:
+    """Envía a cada participante (último intento por asignación) la corrección de sus
+    preguntas incorrectas: enunciado, opción elegida (✗), opción correcta (✓) y
+    explicación. Best-effort: en modo demo (correo deshabilitado) NO envía pero cuenta
+    los que habría notificado. Devuelve el número de correos (enviados o simulados)."""
+    from app.models.exam_models import (
+        Examen, IntentoRespuesta, Pregunta, PreguntaOpcion)
+    from app.services.examen_resultados_service import (
+        _ultimo_intento_por_asignacion, _nombres_por_intento)
+
+    examen = db.query(Examen).filter(Examen.id == examen_id).first()
+    if examen is None:
+        return 0
+    ultimos = _ultimo_intento_por_asignacion(db, examen_id)
+    nombres = _nombres_por_intento(db, examen_id)
+    habilitado = _habilitado()
+    contador = 0
+    for intento in ultimos.values():
+        incorrectas = db.query(IntentoRespuesta).filter(
+            IntentoRespuesta.intento_id == intento.id,
+            IntentoRespuesta.es_correcta == False,
+        ).all()
+        if not incorrectas:
+            continue
+        filas = []
+        for r in incorrectas:
+            p = db.query(Pregunta).filter(Pregunta.id == r.pregunta_id).first()
+            elegida = (db.query(PreguntaOpcion).filter(
+                PreguntaOpcion.id == r.opcion_elegida_id).first()
+                if r.opcion_elegida_id else None)
+            correcta = next((o for o in (p.opciones if p else []) if o.es_correcta), None)
+            filas.append(
+                f"<li style='margin-bottom:10px;'><strong>{p.texto if p else ''}</strong><br>"
+                f"<span style='color:#c62828;'>✗ Tu respuesta: {elegida.texto_opcion if elegida else '—'}</span><br>"
+                f"<span style='color:#2e7d32;'>✓ Correcta: {correcta.texto_opcion if correcta else '—'}</span><br>"
+                f"<em>{(p.explicacion if p else '') or ''}</em></li>")
+        cuerpo = (f"<html><body style=\"font-family:Arial,sans-serif;color:#333;\">"
+                  f"<h2>Correcciones — {examen.nombre}</h2>"
+                  f"<p>Hola <strong>{nombres.get(intento.id, '')}</strong>, estas son las "
+                  f"correcciones de las preguntas que respondiste incorrectamente:</p>"
+                  f"<ul>{''.join(filas)}</ul>{_pie_pagina()}</body></html>")
+        asunto = f"Correcciones de tu examen — {examen.nombre}"
+        destinatario = _correo_evaluado(db, intento)
+        if habilitado and destinatario:
+            if _enviar(destinatario, asunto, cuerpo):
+                contador += 1
+        elif not habilitado:
+            contador += 1  # modo demo: cuenta como simulado
+    logger.info(f"Correcciones examen {examen_id}: {contador} correos (enviados/simulados)")
+    return contador

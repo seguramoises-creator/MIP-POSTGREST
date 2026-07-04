@@ -523,12 +523,21 @@ def generar_reporte(db: Session, intento_id: int) -> dict:
             correctas += 1
         detalle.append({
             "pregunta_texto": pregunta.texto if pregunta else "",
+            "tipo": getattr(pregunta, "tipo", "multi") if pregunta else "multi",
+            "escenario": getattr(pregunta, "escenario", None) if pregunta else None,
             "explicacion": pregunta.explicacion if pregunta else None,
             "indice_elegido_presentado": r.indice_opcion_presentada,
             "texto_elegido": elegida.texto_opcion if elegida else None,
             "texto_correcto": correcta.texto_opcion if correcta else "",
             "es_correcta": bool(r.es_correcta),
         })
+
+    # Resultado provisional: quedan preguntas abiertas de texto sin calificar por el
+    # Gerente (respuesta de texto presente pero sin puntos asignados).
+    provisional = any(
+        getattr(r, "respuesta_texto", None) is not None and getattr(r, "puntos", None) is None
+        for r in respuestas
+    )
 
     return {
         "intento_id": intento.id,
@@ -537,6 +546,7 @@ def generar_reporte(db: Session, intento_id: int) -> dict:
         "score": float(intento.score or 0),
         "aprobado": bool(intento.aprobado),
         "nota_minima": examen.nota_minima,
+        "provisional": provisional,
         "correctas": correctas,
         "total": total,
         "fecha_fin": intento.fecha_fin,

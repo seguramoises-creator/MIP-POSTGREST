@@ -95,27 +95,73 @@ def resumen_examen(db: Session, examen_id: int) -> dict:
     }
 
 
+def _etiqueta(error_pct: float) -> str:
+    """Clasificación de la pregunta según su % de desacierto."""
+    if error_pct >= 40:
+        return "⚠️ Brecha crítica"
+    if error_pct >= 20:
+        return "⚡ Requiere refuerzo"
+    return "✓ Bien comprendida"
+
+
+def _nombres_por_intento(db: Session, examen_id: int) -> dict[int, str]:
+    """intento_id (último por asignación) → nombre del evaluado (RM o Gerente)."""
+    from app.models.dimensiones import RepresentanteMedico, Gerente
+    ultimos = _ultimo_intento_por_asignacion(db, examen_id)
+    rm_ids = {it.evaluado_rm_id for it in ultimos.values() if it.evaluado_rm_id}
+    ger_ids = {it.evaluado_gerente_id for it in ultimos.values() if it.evaluado_gerente_id}
+    rm_nombres = dict(db.query(RepresentanteMedico.id, RepresentanteMedico.nombre)
+                      .filter(RepresentanteMedico.id.in_(rm_ids)).all()) if rm_ids else {}
+    ger_nombres = dict(db.query(Gerente.id, Gerente.nombre)
+                       .filter(Gerente.id.in_(ger_ids)).all()) if ger_ids else {}
+    out: dict[int, str] = {}
+    for it in ultimos.values():
+        if it.evaluado_rm_id:
+            out[it.id] = rm_nombres.get(it.evaluado_rm_id) or f"RM #{it.evaluado_rm_id}"
+        else:
+            out[it.id] = ger_nombres.get(it.evaluado_gerente_id) or f"Gerente #{it.evaluado_gerente_id}"
+    return out
+
+
 def analisis_preguntas(db: Session, examen_id: int) -> list[dict]:
-    """% de error por pregunta sobre TODOS los intentos del examen (RN-08)."""
+    """% de acierto/desacierto por pregunta con los nombres de quiénes acertaron y
+    quiénes fallaron. Usa el ÚLTIMO intento por asignación (consistente con el ranking)."""
+    nombres = _nombres_por_intento(db, examen_id)
+    intento_ids = set(nombres.keys())
     preguntas = db.query(Pregunta).filter(
         Pregunta.examen_id == examen_id, Pregunta.activo == True).order_by(Pregunta.orden).all()
     salida = []
     for p in preguntas:
-        respuestas = db.query(IntentoRespuesta).filter(
-            IntentoRespuesta.pregunta_id == p.id).all()
+        respuestas = [
+            r for r in db.query(IntentoRespuesta).filter(
+                IntentoRespuesta.pregunta_id == p.id).all()
+            if r.intento_id in intento_ids
+        ]
         total = len(respuestas)
-        incorrectas = sum(1 for r in respuestas if r.es_correcta is False)
+        aciertan = [nombres[r.intento_id] for r in respuestas if r.es_correcta is True]
+        fallan = [nombres[r.intento_id] for r in respuestas if r.es_correcta is False]
+        error_pct = _porcentaje(len(fallan), total)
         correcta = next((o.texto_opcion for o in p.opciones if o.es_correcta), None)
         salida.append({
             "pregunta_id": p.id,
             "texto": p.texto,
             "orden": p.orden,
+            "tipo": p.tipo,
             "respuesta_correcta": correcta,
             "total_respuestas": total,
-            "incorrectas": incorrectas,
-            "error_pct": _porcentaje(incorrectas, total),
+            "incorrectas": len(fallan),
+            "acierto_pct": _porcentaje(len(aciertan), total),
+            "error_pct": error_pct,
+            "aciertan": aciertan,
+            "fallan": fallan,
+            "etiqueta": _etiqueta(error_pct),
         })
     return salida
+
+
+def recomendaciones(db: Session, examen_id: int) -> list[dict]:
+    """Preguntas con desacierto ≥ 40% (brecha crítica) + quiénes fallaron."""
+    return [it for it in analisis_preguntas(db, examen_id) if it["error_pct"] >= 40]
 
 
 def resumen_equipo(db: Session, gerente_id: int) -> list[dict]:
