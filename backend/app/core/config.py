@@ -25,11 +25,11 @@ class Settings(BaseSettings):
     PORT: int = 8000
     WORKERS: int = 1
 
-    # ── Base de Datos
+    # ── Base de Datos (edición PostgreSQL)
     DB_SERVER: str = "localhost"
-    DB_PORT: int = 1433
-    DB_NAME: str = "SCGCPR"
-    DB_USER: str = "sa"
+    DB_PORT: int = 5432
+    DB_NAME: str = "scgcpr"
+    DB_USER: str = "segura"
     DB_PASSWORD: str = ""
     DATABASE_URL: str = ""
 
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
             return v
         data = info.data  # Pydantic v2: ValidationInfo.data
         return (
-            f"mssql+pymssql://{data.get('DB_USER')}:{data.get('DB_PASSWORD')}"
+            f"postgresql+psycopg2://{data.get('DB_USER')}:{data.get('DB_PASSWORD')}"
             f"@{data.get('DB_SERVER')}:{data.get('DB_PORT')}/{data.get('DB_NAME')}"
         )
 
