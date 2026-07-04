@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import { Add, Delete, Save, Campaign, Edit, Publish, Inventory2, BarChart, Person, SupervisorAccount } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
-import { api } from '../../services/api';
+import { useCicloStore } from '../../store/ciclo.store';
 import {
   listarLineasVisita, obtenerParrilla, guardarParrilla, publicarParrilla, parrillaPenetracion, listarProductosDim,
   type Catalogo, type ParrillaItem, type PenetracionCiclo, type ProductoDim,
@@ -25,10 +25,10 @@ export default function ParrillaVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD' || rol === 'GERENTE_MARCA';
 
+  const { cicloId, ciclo } = useCicloStore();
+
   const [lineas, setLineas] = useState<Catalogo[]>([]);
   const [lineaId, setLineaId] = useState<number | ''>('');
-  const [ciclos, setCiclos] = useState<{ id: number; nombre: string; cerrado: boolean }[]>([]);
-  const [cicloId, setCicloId] = useState<number | ''>('');
   const [parrilla, setParrilla] = useState<ParrillaItem[]>([]);
   const [pen, setPen] = useState<PenetracionCiclo | null>(null);
   const [productosDim, setProductosDim] = useState<ProductoDim[]>([]);
@@ -41,7 +41,7 @@ export default function ParrillaVisita() {
   const [vistaVM, setVistaVM] = useState(false);   // el gestor previsualiza como VM (solo lectura)
 
   const cicloParam = cicloId || undefined;
-  const cerrado = !!ciclos.find((c) => c.id === cicloId)?.cerrado;
+  const cerrado = !!ciclo?.cerrado;
   const soloLectura = !esGestor || vistaVM || cerrado;
   const lineaParam = esGestor ? (lineaId || undefined) : undefined;
 
@@ -55,7 +55,6 @@ export default function ParrillaVisita() {
     if (esGestor) {
       tareas.push(listarLineasVisita().then((ls) => { setLineas(ls); if (ls.length && !lineaId) setLineaId(ls[0].id); }).catch(() => {}));
     }
-    api.get<{ id: number; nombre: string; cerrado: boolean }[]>('/admin/ciclos').then((r) => setCiclos(r.data)).catch(() => {});
     Promise.all(tareas).finally(() => setCargando(false));
   }, [esGestor]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -141,11 +140,6 @@ export default function ParrillaVisita() {
 
       {esGestor && (
         <Stack direction="row" spacing={1.5} sx={{ mb: 2 }} alignItems="center" flexWrap="wrap">
-          <TextField select size="small" label="Ciclo" value={cicloId} sx={{ minWidth: 180 }}
-                     onChange={(e) => setCicloId(Number(e.target.value))}>
-            <MenuItem value=""><em>Ciclo actual</em></MenuItem>
-            {ciclos.map((c) => <MenuItem key={c.id} value={c.id}>{c.nombre}{c.cerrado ? ' (cerrado)' : ''}</MenuItem>)}
-          </TextField>
           <TextField select size="small" label="Línea" value={lineaId} sx={{ minWidth: 220 }}
                      onChange={(e) => setLineaId(Number(e.target.value))}>
             {lineas.map((l) => <MenuItem key={l.id} value={l.id}>{l.nombre}</MenuItem>)}
@@ -159,7 +153,7 @@ export default function ParrillaVisita() {
         <Grid item xs={12} sm={6}>
           <Card variant="outlined"><CardContent sx={{ py: 1.75 }}>
             <Typography variant="caption" color="text.secondary" fontWeight={600}>CICLO ACTIVO</Typography>
-            <Typography variant="h5" fontWeight={700} color="primary.main">Ciclo actual</Typography>
+            <Typography variant="h5" fontWeight={700} color="primary.main">{ciclo?.nombre ?? 'Ciclo actual'}</Typography>
             <Typography variant="caption" color={publicada ? 'success.main' : 'warning.main'}>
               {publicada ? 'Parrilla publicada ✓' : 'Parrilla en borrador'}
             </Typography>

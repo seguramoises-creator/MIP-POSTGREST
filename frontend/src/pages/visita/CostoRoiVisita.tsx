@@ -5,13 +5,11 @@ import {
 } from '@mui/material';
 import { Paid, Save, UploadFile, Calculate, Inventory2, MonetizationOn, CalendarMonth, Assessment, WarningAmber } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
-import { api } from '../../services/api';
+import { useCicloStore } from '../../store/ciclo.store';
 import {
   costoEstructura, guardarCostoEstructura, importarCostoExcel, listarLineasVisita,
   type CostoFull, type CostoEstructuraInput, type CostoProdInput, type Catalogo,
 } from '../../services/visita.service';
-
-type CicloOpt = { id: number; nombre: string; cerrado: boolean };
 
 function errMsg(e: unknown, fallback: string): string {
   const d = (e as { response?: { data?: { detalle?: { msg?: string }[]; detail?: string } } })?.response?.data;
@@ -33,10 +31,10 @@ export default function CostoRoiVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD';
 
+  const { cicloId, ciclo } = useCicloStore();
+
   const [lineas, setLineas] = useState<Catalogo[]>([]);
   const [lineaId, setLineaId] = useState<number | ''>('');
-  const [ciclos, setCiclos] = useState<CicloOpt[]>([]);
-  const [cicloId, setCicloId] = useState<number | ''>('');
   const [full, setFull] = useState<CostoFull | null>(null);
   const [est, setEst] = useState<CostoEstructuraInput | null>(null);
   const [prods, setProds] = useState<CostoProdInput[]>([]);
@@ -49,8 +47,7 @@ export default function CostoRoiVisita() {
   const money = (v: number) => `${moneda} ${Math.round(v).toLocaleString()}`;
   const lineaParam = esGestor ? (lineaId || undefined) : undefined;
   const cicloParam = cicloId || undefined;
-  const cicloSel = ciclos.find((c) => c.id === cicloId);
-  const cerrado = !!cicloSel?.cerrado;
+  const cerrado = !!ciclo?.cerrado;
   const editable = esGestor && !cerrado;
 
   const aplicar = (f: CostoFull) => { setFull(f); setEst({ ...f.estructura }); setProds(productosDe(f)); };
@@ -61,7 +58,6 @@ export default function CostoRoiVisita() {
 
   useEffect(() => {
     if (esGestor) listarLineasVisita().then((ls) => { setLineas(ls); if (ls.length && !lineaId) setLineaId(ls[0].id); }).catch(() => {});
-    api.get<CicloOpt[]>('/admin/ciclos').then((r) => setCiclos(r.data)).catch(() => setCiclos([]));
   }, [esGestor]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!esGestor || lineaId) cargar(); }, [esGestor, lineaId, cargar]);
 
@@ -117,12 +113,6 @@ export default function CostoRoiVisita() {
           <Typography variant="body2" color="text.secondary">Configurado por Finanzas · Pool de ventas ingresado por Gerencia al cierre del ciclo</Typography>
         </Box>
         <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap">
-          {esGestor && (
-            <TextField select size="small" label="Ciclo" value={cicloId} sx={{ minWidth: 170 }} onChange={(e) => setCicloId(Number(e.target.value))}>
-              <MenuItem value=""><em>Ciclo actual</em></MenuItem>
-              {ciclos.map((c) => <MenuItem key={c.id} value={c.id}>{c.nombre}{c.cerrado ? ' (cerrado)' : ''}</MenuItem>)}
-            </TextField>
-          )}
           {esGestor && (
             <TextField select size="small" label="Línea" value={lineaId} sx={{ minWidth: 190 }} onChange={(e) => setLineaId(Number(e.target.value))}>
               {lineas.map((l) => <MenuItem key={l.id} value={l.id}>{l.nombre}</MenuItem>)}
