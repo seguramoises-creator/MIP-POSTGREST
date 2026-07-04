@@ -13,7 +13,7 @@
  *   D3 tl → alto desempeño + baja receptividad   → Apoyar
  *   D4 tr → alto desempeño + alta receptividad   → Delegar
  */
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
@@ -200,26 +200,17 @@ export default function Lsii() {
   const puedeEvaluar = !!rol && ROLES_EVALUADOR.includes(rol);
   const qc = useQueryClient();
 
+  const paisCodigo = useCicloStore((s) => s.paisCodigo);
   const cicloGlobal = useCicloStore((s) => s.cicloId);
+  const esSoloLectura = useCicloStore((s) => s.esSoloLectura);
+  const paisId = paisCodigo ?? '';
+  const cicloId = cicloGlobal != null ? String(cicloGlobal) : '';
   const [tab, setTab] = useState(0);
-  const [paisId, setPaisId] = useState('');
-  const [cicloId, setCicloId] = useState('');
   const [gerenteId, setGerenteId] = useState('');
 
-  useEffect(() => {
-    if (cicloGlobal && !cicloId) setCicloId(String(cicloGlobal));
-  }, [cicloGlobal]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const { data: paises } = useQuery({ queryKey: ['paises'], queryFn: () => api.get('/admin/paises').then(r => r.data) });
   const { data: ciclos } = useQuery({ queryKey: ['ciclos', paisId], queryFn: () => api.get('/admin/ciclos', { params: paisId ? { pais_codigo: paisId } : {} }).then(r => r.data) });
   const { data: gerentes } = useQuery({ queryKey: ['gerentes', paisId], queryFn: () => api.get('/admin/gerentes', { params: paisId ? { pais_codigo: paisId } : {} }).then(r => r.data), enabled: !!paisId });
   const { data: rms } = useQuery({ queryKey: ['rms', paisId, gerenteId], queryFn: () => api.get('/admin/rms', { params: { ...(paisId && { pais_codigo: paisId }), ...(gerenteId && { gerente_id: gerenteId }) } }).then(r => r.data), enabled: !!paisId });
-
-  useEffect(() => {
-    if (!(paises as unknown[])?.length || paisId) return;
-    const rd = (paises as { id: number; codigo: string; nombre: string }[]).find(p => p.codigo?.toUpperCase() === 'RD' || p.nombre?.toLowerCase().includes('dominicana'));
-    if (rd) setPaisId(rd.codigo);
-  }, [paises]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Matriz ──────────────────────────────────────────────────────────────────
   const { data: matriz, isLoading: loadMatriz } = useQuery({
@@ -291,7 +282,6 @@ export default function Lsii() {
   const ciclosArr = (ciclos as { id: number; nombre_canonico?: string; nombre?: string }[]) || [];
   const rmsArr = (rms as { id: number; nombre: string; codigo: string }[]) || [];
   const gerentesArr = (gerentes as { id: number; nombre: string }[]) || [];
-  const paisesArr = (paises as { id: number; codigo: string; nombre: string }[]) || [];
   const cicloLabel = ciclosArr.find(c => String(c.id) === cicloId)?.nombre_canonico ?? ciclosArr.find(c => String(c.id) === cicloId)?.nombre ?? '';
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -323,18 +313,6 @@ export default function Lsii() {
       <Card elevation={0} sx={{ mb: 2.5, border: '1px solid #e0e7ef', borderRadius: 2 }}>
         <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
           <Grid container spacing={2}>
-            <Grid item xs={12} sm={4}>
-              <TextField select fullWidth size="small" label="Pais" value={paisId}
-                onChange={e => { setPaisId(e.target.value); setCicloId(''); setGerenteId(''); setEvalRmId(''); }}>
-                {paisesArr.map(p => <MenuItem key={p.id} value={p.codigo}>{p.nombre}</MenuItem>)}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} sm={4}>
-              <TextField select fullWidth size="small" label="Ciclo" value={cicloId} onChange={e => setCicloId(e.target.value)}>
-                <MenuItem value="">Todos los ciclos</MenuItem>
-                {ciclosArr.map(c => <MenuItem key={c.id} value={c.id}>{c.nombre_canonico || c.nombre}</MenuItem>)}
-              </TextField>
-            </Grid>
             <Grid item xs={12} sm={4}>
               <TextField select fullWidth size="small" label="Gerente de Distrito" value={gerenteId} onChange={e => { setGerenteId(e.target.value); setEvalRmId(''); }}>
                 <MenuItem value="">Todos los gerentes</MenuItem>
@@ -617,6 +595,12 @@ export default function Lsii() {
                 <Typography sx={{ color: 'rgba(255,255,255,0.82)', fontSize: '0.78rem', mt: 0.3 }}>Seleccione el comportamiento que mejor describe al colaborador en cada dimension</Typography>
               </Box>
               <CardContent>
+                {esSoloLectura && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Estás consultando un ciclo cerrado/no abierto — solo lectura. Cambia al ciclo abierto para evaluar.
+                  </Alert>
+                )}
+
                 <Grid container spacing={2} mb={2.5}>
                   <Grid item xs={12} sm={6}>
                     <TextField select fullWidth size="small" label="Representante Medico" value={evalRmId}
@@ -627,7 +611,7 @@ export default function Lsii() {
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <TextField fullWidth size="small" label="Ciclo seleccionado" value={cicloLabel} disabled
-                      helperText={!cicloId ? 'Selecciona un ciclo en los filtros superiores' : ' '} />
+                      helperText={!cicloId ? 'Selecciona un ciclo en el encabezado' : ' '} />
                   </Grid>
                 </Grid>
 
@@ -708,7 +692,7 @@ export default function Lsii() {
                   </Alert>
                 )}
 
-                <Button variant="contained" disabled={!formListo || mutEvaluar.isPending} size="large" fullWidth
+                <Button variant="contained" disabled={!formListo || mutEvaluar.isPending || esSoloLectura} size="large" fullWidth
                   onClick={() => mutEvaluar.mutate()}
                   sx={{ borderRadius: 2, fontWeight: 700, py: 1.2, background: formListo ? 'linear-gradient(135deg,#1a237e,#1565c0)' : undefined }}>
                   {mutEvaluar.isPending ? 'Registrando...' : 'Registrar Evaluacion LSII'}
