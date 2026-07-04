@@ -80,6 +80,8 @@ def visitas_del_dia(db: Session, vm_id: int) -> list[dict]:
         "tipo_visita": v.tipo_visita, "ejecutada": v.ejecutada,
         "causa_no_visita": v.causa_no_visita, "comentario": v.comentario,
         "productos": _prods(v.productos),
+        "tiene_gps": v.latitud is not None and v.longitud is not None,
+        "tiene_foto": v.foto is not None,
         "hora": v.fecha_hora.isoformat() if v.fecha_hora else None,
     } for v in vs]
 

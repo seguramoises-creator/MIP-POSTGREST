@@ -366,7 +366,11 @@ export default function RegistrarVisita() {
                     <Stack key={v.id} direction="row" alignItems="center" spacing={1.5} sx={{ py: 1 }}>
                       <FiberManualRecord sx={{ fontSize: 12, color: rojo ? 'error.main' : verde ? 'success.main' : 'warning.main' }} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" fontWeight={600} noWrap>{v.medico}</Typography>
+                        <Typography variant="body2" fontWeight={600} noWrap>
+                          {v.medico}
+                          {v.tiene_gps && <span title="Con ubicación" style={{ marginLeft: 6 }}>📍</span>}
+                          {v.tiene_foto && <span title="Con foto del centro" style={{ marginLeft: 4 }}>📷</span>}
+                        </Typography>
                         <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
                           {[v.ejecutada ? (v.tipo_visita === 'R' ? 'Revisita' : 'Vista') : `No-visita: ${v.causa_no_visita ?? ''}`,
                             v.hora ? new Date(v.hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : null,
