@@ -39,6 +39,7 @@ export default function RegistrarVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esVM = rol === 'REPRESENTANTE_MEDICO';
   const esSoloLectura = useCicloStore((s) => s.esSoloLectura);
+  const cicloCtx = useCicloStore((s) => s.cicloId);   // ciclo del contexto (país+ciclo) para resolver la parrilla
 
   const [vms, setVms] = useState<Catalogo[]>([]);
   const [vmId, setVmId] = useState<number | ''>('');
@@ -94,7 +95,7 @@ export default function RegistrarVisita() {
     if (m.estado === 'registrada') return;
     setSel(m); setTipo((m.tipo_visita === 'R' ? 'R' : 'V')); setHora(hhmm(new Date()));
     setComentario(''); setModoNoVisita(false); setCausa(''); setDetallados({}); setMsg(null);
-    obtenerParrilla(m.linea_id ?? undefined).then(setProductos).catch(() => setProductos([]));
+    obtenerParrilla(m.linea_id ?? undefined, cicloCtx ?? undefined).then(setProductos).catch(() => setProductos([]));
   }
 
   // Minutos transcurridos desde la hora indicada (para la ventana de 60 min).
