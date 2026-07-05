@@ -17,9 +17,10 @@ import CicloPaisHeader from '../CicloPaisHeader';
 export default function MainLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  // Registrar Visita monta el encabezado País+Ciclo dentro de su formulario (centrado);
-  // ahí ocultamos la franja global para no duplicarlo.
-  const headerEnLayout = pathname !== '/visita/registrar';
+  // Franja global País+Ciclo: se oculta en /visita/registrar (la monta dentro de su
+  // formulario) y en /dashboard (que ya tiene sus propios filtros de País/Ciclo).
+  const HEADER_OCULTO = ['/visita/registrar', '/dashboard'];
+  const headerEnLayout = !HEADER_OCULTO.includes(pathname);
   const { nombreCompleto, accessToken, rol, logout } = useAuthStore();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [gd, setGd] = useState<MiGerente | null>(null);
