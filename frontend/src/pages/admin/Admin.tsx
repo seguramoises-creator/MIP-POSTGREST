@@ -154,6 +154,40 @@ function GerenteSelector({ value, onChange, paisCodigo, label = 'Gerente' }: {
   );
 }
 
+/**
+ * GerenteProductoSelector — Select de "Gerente de Producto" alimentado desde DIM_Gerente
+ * filtrado por CÓDIGO que inicia con "GP" (Gerente de Producto). La columna
+ * DIM_Producto.gerente_producto es texto, así que se guarda el NOMBRE (no el ID).
+ * Formato "GP01 — Ana Ruiz". Conserva un valor histórico de texto libre que no esté
+ * en la lista GP para no perderlo al editar.
+ */
+function GerenteProductoSelector({ value, onChange, paisCodigo, label = 'Gerente de Producto (responsable)' }: {
+  value: string | number;
+  onChange: (v: string) => void;
+  paisCodigo: string | number | '';
+  label?: string;
+}) {
+  const { data: gerentes } = useGerentes(paisCodigo);
+  const gp = (gerentes || []).filter((g) => g.codigo?.toUpperCase().startsWith('GP'));
+  const val = value ? String(value) : '';
+  const faltante = !!val && !gp.some((g) => g.nombre === val);
+  return (
+    <FormControl fullWidth size="small" disabled={!paisCodigo}>
+      <InputLabel>{label}</InputLabel>
+      <Select label={label} value={val} onChange={(e) => onChange(String(e.target.value))}>
+        {faltante && <MenuItem value={val}>{val} (actual)</MenuItem>}
+        {gp.map((g) => (
+          <MenuItem key={g.id} value={g.nombre}>{g.codigo} — {g.nombre}</MenuItem>
+        ))}
+        {gp.length === 0 && !faltante && (
+          <MenuItem value="" disabled>Sin gerentes con código GP…</MenuItem>
+        )}
+      </Select>
+      {!paisCodigo && <FormHelperText>Seleccione primero el país</FormHelperText>}
+    </FormControl>
+  );
+}
+
 // ── Botón de importación desde Excel ──────────────────────────────────
 /**
  * ImportButton — Botón que abre un selector de archivo Excel.
@@ -208,6 +242,7 @@ type FieldDef = {
   isPais?: boolean;    // true = usar PaisSelector en vez de TextField
   isLinea?: boolean;   // true = usar LineaSelector (filtrado por pais_codigo del mismo form)
   isGerente?: boolean; // true = usar GerenteSelector (filtrado por pais_codigo del mismo form)
+  isGerenteProducto?: boolean; // true = usar GerenteProductoSelector (DIM_Gerente con código GP*)
 };
 
 // ── Pestaña genérica de catálogo ──────────────────────────────────────
@@ -345,6 +380,13 @@ function CatalogoTab({
       ) : f.isGerente ? (
         // Campo especial: selector de gerente con formato "GD001 — Juan Pérez (DISTRITO)" (nunca ID crudo)
         <GerenteSelector
+          value={form[f.key] || ''}
+          paisCodigo={form['pais_codigo'] || ''}
+          onChange={(v) => setForm({ ...form, [f.key]: v })}
+        />
+      ) : f.isGerenteProducto ? (
+        // Campo especial: gerente de producto desde DIM_Gerente filtrado por código "GP*"
+        <GerenteProductoSelector
           value={form[f.key] || ''}
           paisCodigo={form['pais_codigo'] || ''}
           onChange={(v) => setForm({ ...form, [f.key]: v })}
@@ -1393,9 +1435,9 @@ const TABS_DIM = [
       { key: 'descripcion', label: 'Descripción (Inhibidor selectivo...)' },
       { key: 'segmento_target', label: 'Segmento Target (Cat. A + B Oncología)' },
       { key: 'meta_muestras_visita', label: 'Meta muestras / visita', type: 'number' },
-      { key: 'gerente_producto', label: 'Gerente de Producto (responsable)' },
       { key: 'pais_codigo', label: 'País (para elegir línea)', isPais: true },
       { key: 'linea_id', label: 'Línea', isLinea: true },
+      { key: 'gerente_producto', label: 'Gerente de Producto (responsable)', isGerenteProducto: true },
     ],
   },
   {
