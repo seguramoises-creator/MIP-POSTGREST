@@ -92,6 +92,14 @@ export const listarMedicos = (vmId?: number, incluirInactivos = false) =>
     params: { ...(vmId ? { vm_id: vmId } : {}), ...(incluirInactivos ? { incluir_inactivos: true } : {}) },
   }).then(r => r.data);
 
+// Médico existente (ya registrado por otro VM del país) que se puede COPIAR al panel.
+export type MedicoExistente = MedicoVisita & { vm_nombre?: string | null };
+
+export const listarMedicosExistentes = (vmId?: number) =>
+  api.get<MedicoExistente[]>('/visita/medicos/existentes', {
+    params: vmId ? { vm_id: vmId } : {},
+  }).then(r => r.data);
+
 export type MedicoActualizar = Partial<Omit<MedicoCrear, 'vm_id' | 'confirmar_duplicado'>>;
 export const actualizarMedico = (id: number, datos: MedicoActualizar) =>
   api.put<MedicoVisita>(`/visita/medicos/${id}`, datos).then(r => r.data);

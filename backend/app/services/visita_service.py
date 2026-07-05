@@ -190,3 +190,51 @@ def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None =
             "ciclo_baja_id": m.ciclo_baja_id,
         })
     return salida
+
+
+def listar_medicos_existentes(db: Session, vm_id: int) -> list[dict]:
+    """Médicos ya registrados por CUALQUIER visitador del mismo país que `vm_id`, para
+    COPIARLOS al panel del VM sin reescribir la ficha. Deduplicados por nombre y
+    excluyendo los que ya están en el panel del VM. Devuelve los campos que precargan
+    el formulario de alta."""
+    vm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
+    if not vm:
+        return []
+    vm_ids_pais = [r[0] for r in db.query(RepresentanteMedico.id)
+                   .filter(RepresentanteMedico.pais_codigo == vm.pais_codigo).all()]
+    if not vm_ids_pais:
+        return []
+    # Nombres ya presentes en el panel del VM (para no ofrecer un médico que ya tiene).
+    ya = {n[0].upper() for n in db.query(MedicoVisita.nombre_completo)
+          .filter(MedicoVisita.vm_id == vm_id).all()}
+    esp_nom = dict(db.query(Especialidad.id, Especialidad.nombre).all())
+    vm_nom = dict(db.query(RepresentanteMedico.id, RepresentanteMedico.nombre)
+                  .filter(RepresentanteMedico.id.in_(vm_ids_pais)).all())
+    medicos = (db.query(MedicoVisita)
+               .filter(MedicoVisita.vm_id.in_(vm_ids_pais), MedicoVisita.activo == True)  # noqa: E712
+               .order_by(MedicoVisita.nombre_completo).all())
+    vistos: set[str] = set()
+    salida = []
+    for m in medicos:
+        clave = m.nombre_completo.upper()
+        if clave in ya or clave in vistos:
+            continue
+        vistos.add(clave)
+        salida.append({
+            "id": m.id, "vm_id": m.vm_id, "vm_nombre": vm_nom.get(m.vm_id),
+            "codigo": m.codigo, "nombre_completo": m.nombre_completo,
+            "nombre": m.nombre, "apellidos": m.apellidos,
+            "especialidad_id": m.especialidad_id, "especialidad_nombre": esp_nom.get(m.especialidad_id),
+            "subespecialidad": m.subespecialidad, "categoria": m.categoria,
+            "centro_trabajo": m.centro_trabajo, "institucion_tipo": m.institucion_tipo,
+            "tipo_consultorio": m.tipo_consultorio, "provincia": m.provincia,
+            "municipio": m.municipio, "sector": m.sector, "direccion": m.direccion,
+            "latitud": float(m.latitud) if m.latitud is not None else None,
+            "longitud": float(m.longitud) if m.longitud is not None else None,
+            "telefono": m.telefono, "email": m.email, "exequatur": m.exequatur,
+            "dias_consulta": m.dias_consulta, "horario_consulta": m.horario_consulta,
+            "frecuencia_visita": m.frecuencia_visita, "acepta_visita": m.acepta_visita,
+            "potencial_prescripcion": m.potencial_prescripcion, "kol": m.kol,
+            "segmento": m.segmento, "observaciones": m.observaciones,
+        })
+    return salida

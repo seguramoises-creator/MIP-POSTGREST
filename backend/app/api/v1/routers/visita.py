@@ -103,6 +103,18 @@ def listar_medicos(vm_id: int | None = None, incluir_inactivos: bool = False,
     return visita_service.listar_medicos(db, vm_id=vm, incluir_inactivos=incluir_inactivos)
 
 
+@router.get("/medicos/existentes", response_model=list[dict])
+def listar_medicos_existentes(vm_id: int | None = None, db: Session = Depends(get_db),
+                              current_user=RequireVisita):
+    """Médicos ya registrados en otros paneles del mismo país, para COPIAR al panel del
+    VM (evita reescribir la ficha). El VM se fuerza a su propio rm_id; ADMIN/GERENTE
+    deben indicar el visitador destino con ?vm_id=."""
+    vm = _scope_vm(current_user, vm_id)
+    if not vm:
+        raise HTTPException(status_code=400, detail="Indica el visitador destino (vm_id).")
+    return visita_service.listar_medicos_existentes(db, vm)
+
+
 @router.put("/medicos/{medico_id}", response_model=MedicoVisitaResponse)
 def actualizar_medico(medico_id: int, datos: MedicoVisitaActualizar,
                       db: Session = Depends(get_db), current_user=RequireVisita):

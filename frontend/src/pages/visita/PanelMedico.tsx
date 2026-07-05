@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert, Grid,
-  MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
+  Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
   Avatar, InputAdornment, Divider, Switch, FormControlLabel, IconButton, Tooltip,
 } from '@mui/material';
 import { Add, PersonAddAlt1, Warning, Search, FiberManualRecord, Edit, Block, Restore, HowToReg, ThumbUp, ThumbDown } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import {
-  listarMedicos, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
+  listarMedicos, listarMedicosExistentes, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
   solicitarBajaMedico, reactivarMedico, listarAprobaciones, aprobarMedico, rechazarMedico,
-  type MedicoVisita, type Catalogo, type PosibleDuplicado, type MedicoCrear, type AprobacionPendiente,
+  type MedicoVisita, type MedicoExistente, type Catalogo, type PosibleDuplicado, type MedicoCrear, type AprobacionPendiente,
 } from '../../services/visita.service';
 
 const TIPOS = ['Clínica privada', 'Hospital público', 'Hospital privado', 'Consultorio independiente'];
@@ -73,6 +73,11 @@ export default function PanelMedico() {
   const [abierto, setAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [duplicados, setDuplicados] = useState<PosibleDuplicado[] | null>(null);
+  // "Agregar médico existente": copiar la ficha de un médico ya registrado por otro VM.
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [modoExistente, setModoExistente] = useState(false);
+  const [existentes, setExistentes] = useState<MedicoExistente[]>([]);
+  const [existenteSel, setExistenteSel] = useState<number | ''>('');
 
   const cargar = useCallback(() => {
     setCargando(true);
@@ -120,8 +125,48 @@ export default function PanelMedico() {
           || (m.linea_nombre ?? '').toUpperCase().includes(q)));
   }, [medicos, busqueda, catFiltro, lineaFiltro, espFiltro, estadoFiltro]);
 
-  const abrirNuevo = () => { setEditId(null); setForm({ ...vacio, vm_id: esVM ? 0 : (vmFiltro || 0) }); setDuplicados(null); setAbierto(true); };
+  const abrirNuevo = () => {
+    setMenuAnchor(null); setModoExistente(false); setExistenteSel('');
+    setEditId(null); setForm({ ...vacio, vm_id: esVM ? 0 : (vmFiltro || 0) }); setDuplicados(null); setAbierto(true);
+  };
+  // "Médico existente": carga los médicos ya registrados por otros VM del país y abre el
+  // formulario con un selector arriba para copiar la ficha del elegido.
+  const abrirExistente = async () => {
+    setMenuAnchor(null);
+    const targetVm = esVM ? undefined : (vmFiltro || undefined);
+    if (!esVM && !targetVm) {
+      setMsg({ tipo: 'error', texto: 'Selecciona primero el visitador (VM) para copiar el médico a su panel.' });
+      return;
+    }
+    try {
+      const lista = await listarMedicosExistentes(targetVm);
+      setExistentes(lista);
+      setModoExistente(true); setExistenteSel(''); setEditId(null); setDuplicados(null);
+      setForm({ ...vacio, vm_id: esVM ? 0 : (vmFiltro || 0) });
+      setAbierto(true);
+    } catch {
+      setMsg({ tipo: 'error', texto: 'No se pudieron cargar los médicos existentes.' });
+    }
+  };
+  // Precarga la ficha del médico existente elegido (editable antes de guardar la copia).
+  const elegirExistente = (id: number) => {
+    setExistenteSel(id);
+    const m = existentes.find((x) => x.id === id);
+    if (!m) return;
+    setForm({
+      vm_id: esVM ? 0 : (vmFiltro || 0),
+      codigo: m.codigo, nombre_completo: m.nombre_completo, nombre: m.nombre, apellidos: m.apellidos,
+      especialidad_id: m.especialidad_id, subespecialidad: m.subespecialidad, categoria: m.categoria,
+      centro_trabajo: m.centro_trabajo, institucion_tipo: m.institucion_tipo, tipo_consultorio: m.tipo_consultorio,
+      provincia: m.provincia, municipio: m.municipio, sector: m.sector, direccion: m.direccion,
+      latitud: m.latitud, longitud: m.longitud, telefono: m.telefono, email: m.email, exequatur: m.exequatur,
+      dias_consulta: m.dias_consulta, horario_consulta: m.horario_consulta, frecuencia_visita: m.frecuencia_visita,
+      acepta_visita: m.acepta_visita ?? true, potencial_prescripcion: m.potencial_prescripcion, kol: m.kol ?? false,
+      segmento: m.segmento, observaciones: m.observaciones,
+    });
+  };
   const abrirEditar = (m: MedicoVisita) => {
+    setModoExistente(false); setExistenteSel('');
     setEditId(m.id); setDuplicados(null);
     setForm({
       vm_id: m.vm_id, codigo: m.codigo, nombre_completo: m.nombre_completo, nombre: m.nombre,
@@ -171,7 +216,8 @@ export default function PanelMedico() {
         await actualizarMedico(editId, cambios);
         setMsg({ tipo: 'success', texto: 'Médico actualizado.' });
       } else {
-        const res = await crearMedico({ ...form, confirmar_duplicado: confirmar });
+        // Al copiar un médico existente, la duplicidad es intencional → se confirma directo.
+        const res = await crearMedico({ ...form, confirmar_duplicado: confirmar || modoExistente });
         if (res.duplicados && res.duplicados.length) { setDuplicados(res.duplicados); return; }
         setMsg({ tipo: 'success', texto: 'Médico registrado — pendiente de aprobación del Gerente de Distrito (contará desde el próximo ciclo).' });
       }
@@ -240,7 +286,16 @@ export default function PanelMedico() {
             <MenuItem value="inactivos">Inactivos</MenuItem>
             <MenuItem value="todos">Todos</MenuItem>
           </TextField>
-          <Button variant="contained" startIcon={<PersonAddAlt1 />} onClick={abrirNuevo}>Agregar Médico</Button>
+          <Button variant="contained" startIcon={<PersonAddAlt1 />}
+                  onClick={(e) => setMenuAnchor(e.currentTarget)}>Agregar Médico</Button>
+          <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
+            <MenuItem onClick={abrirNuevo}>
+              <PersonAddAlt1 fontSize="small" style={{ marginRight: 8 }} /> Médico nuevo
+            </MenuItem>
+            <MenuItem onClick={abrirExistente}>
+              <HowToReg fontSize="small" style={{ marginRight: 8 }} /> Médico existente (copiar al panel)
+            </MenuItem>
+          </Menu>
         </Stack>
       </Stack>
 
@@ -359,9 +414,26 @@ export default function PanelMedico() {
         <DialogTitle>
           {editId !== null
             ? <><Edit sx={{ verticalAlign: 'middle', mr: 1 }} />Editar médico</>
-            : <><Add sx={{ verticalAlign: 'middle', mr: 1 }} />Agregar médico</>}
+            : modoExistente
+              ? <><HowToReg sx={{ verticalAlign: 'middle', mr: 1 }} />Copiar médico existente al panel</>
+              : <><Add sx={{ verticalAlign: 'middle', mr: 1 }} />Agregar médico</>}
         </DialogTitle>
         <DialogContent dividers>
+          {modoExistente && (
+            <Box sx={{ mb: 1.5 }}>
+              <TextField select fullWidth size="small" label="Copiar de médico existente"
+                         value={existenteSel} onChange={(e) => elegirExistente(Number(e.target.value))}
+                         helperText={existentes.length
+                           ? 'Elige un médico ya registrado; se precargan sus datos (puedes ajustarlos antes de guardar).'
+                           : 'No hay médicos de otros visitadores para copiar.'}>
+                {existentes.map((m) => (
+                  <MenuItem key={m.id} value={m.id}>
+                    {m.nombre_completo} · Cat {m.categoria}{m.especialidad_nombre ? ` · ${m.especialidad_nombre}` : ''}{m.vm_nombre ? ` — ${m.vm_nombre}` : ''}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Box>
+          )}
           {(() => {
             const seccion = (t: string) => (
               <Grid item xs={12}><Typography variant="overline" color="primary" fontWeight={700}>{t}</Typography></Grid>
