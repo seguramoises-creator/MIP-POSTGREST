@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, AppBar, Toolbar, Typography, IconButton,
   Tooltip, Avatar, Menu, MenuItem, Divider, Chip,
@@ -16,6 +16,10 @@ import CicloPaisHeader from '../CicloPaisHeader';
 
 export default function MainLayout() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // Registrar Visita monta el encabezado País+Ciclo dentro de su formulario (centrado);
+  // ahí ocultamos la franja global para no duplicarlo.
+  const headerEnLayout = pathname !== '/visita/registrar';
   const { nombreCompleto, accessToken, rol, logout } = useAuthStore();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [gd, setGd] = useState<MiGerente | null>(null);
@@ -140,7 +144,7 @@ export default function MainLayout() {
         </Dialog>
 
         <Box sx={{ flexGrow: 1, p: 3, bgcolor: '#f5f6fa' }}>
-          <CicloPaisHeader />
+          {headerEnLayout && <CicloPaisHeader />}
           <Outlet />
         </Box>
       </Box>

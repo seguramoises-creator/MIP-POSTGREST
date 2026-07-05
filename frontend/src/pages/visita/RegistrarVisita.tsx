@@ -7,6 +7,7 @@ import {
 import { CheckCircle, Save, EventBusy, AccessAlarm, Medication, ChatBubbleOutline, Assignment, FiberManualRecord, SupervisorAccount } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
+import CicloPaisHeader from '../../components/CicloPaisHeader';
 import {
   agendaHoy, listarCausas, misVisitasHoy, registrarVisita, registrarNoVisita, listarVMs, obtenerParrilla, miGerente, subirFotoVisita,
   type AgendaMedico, type VisitaHoy, type Catalogo, type ParrillaItem, type ProductoDetalle, type MiGerente,
@@ -166,6 +167,8 @@ export default function RegistrarVisita() {
 
   return (
     <Box sx={{ maxWidth: 620, mx: 'auto', p: { xs: 1.5, sm: 3 } }}>
+      {/* País+Ciclo al tope del formulario (alineado con él), no en la franja global. */}
+      <CicloPaisHeader />
       <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1} sx={{ mb: 1 }}>
         <Typography variant="h5" fontWeight={700}>Registrar Visita</Typography>
         {gd?.gerente && (
