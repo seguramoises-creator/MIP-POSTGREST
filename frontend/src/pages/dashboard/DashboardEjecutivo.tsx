@@ -185,7 +185,8 @@ function TendenciaChart({ tendencia }: { tendencia: any[] }) {
   const min = Math.min(...scores);
   const max = Math.max(...scores);
   const avg = scores.reduce((s, v) => s + v, 0) / scores.length;
-  const growth = scores.length >= 2 ? scores[scores.length - 1] - scores[0] : 0;
+  // Crecimiento vs. el CICLO ANTERIOR (no vs. el primero): en C03 se compara con C02.
+  const growth = scores.length >= 2 ? scores[scores.length - 1] - scores[scores.length - 2] : 0;
   const yMin = Math.max(0, Math.floor(min / 10) * 10 - 10);
 
   return (
@@ -791,7 +792,7 @@ export default function DashboardEjecutivo() {
                         {[
                           { label: 'Total RMs',  value: total_rms,                        color: '#1565c0' },
                           { label: 'Elegibles',  value: d.total_elegibles ?? 0,           color: '#2e7d32' },
-                          { label: 'IUP Prom.',  value: `${iupProm.toFixed(0)}%`,         color: scoreColor(iupProm) },
+                          { label: 'IUP Prom.',  value: `${iupProm.toFixed(1)}%`,         color: scoreColor(iupProm) },
                         ].map(stat => (
                           <Box key={stat.label} sx={{ textAlign: 'center' }}>
                             <Typography sx={{ fontSize: 22, fontWeight: 900, color: stat.color, lineHeight: 1 }}>
