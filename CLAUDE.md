@@ -884,7 +884,14 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 - Pantallas de carga Excel: patrón Stepper + FormData (ver `ETL.tsx`, replicado en `CategorizacionAdmin.tsx`)
 - Páginas de administración de catálogos de un módulo nuevo: como tab dentro de `Admin.tsx` (patrón `LsiiAdmin.tsx`, `CoberturaPredictivaAdmin.tsx`, `CategorizacionAdmin.tsx`), no como ruta top-level separada
 - Selectores de relación (línea, gerente, etc.): usar selector relacional con nombre visible, nunca un campo de texto libre para un ID
-- **Contexto global País+Ciclo**: tienda Zustand en `frontend/src/store/ciclo.store.ts` (transitorio, se resuelve al cargar; defecto: ciclo abierto más reciente vía `/admin/ciclos/actual`); componente `CicloPaisSelector.tsx` montado en `MainLayout` (barra superior); módulos Exámenes y Visita (Parrilla/Costo) leen del contexto global.
+- **Contexto global País+Ciclo (v2)**: tienda Zustand en `frontend/src/store/ciclo.store.ts` distingue
+  `cicloAbierto` (de trabajo, único editable) de `cicloId`/`ciclo` (en consulta, default = abierto);
+  `esSoloLectura` se deriva de compararlos. La barra superior (`CicloPaisBadge`) es **informativa**;
+  el `CicloPaisHeader` (montado 1 vez en `MainLayout`, arriba del `Outlet`) da país (Select solo para
+  roles multipaís) y ciclo (default abierto) a todos los módulos. Los módulos de **captura** leen
+  `esSoloLectura` para apagar sus controles; el backend rechaza (409) cualquier escritura sobre un ciclo
+  cerrado vía `recalculo_service.validar_ciclo_abierto`. RM/Gerentes ven su país fijo; nadie edita ciclos
+  cerrados/futuros (sin excepción para ADMIN).
 
 ### Migraciones
 - Ningún cambio de esquema a mano con `ALTER TABLE`
