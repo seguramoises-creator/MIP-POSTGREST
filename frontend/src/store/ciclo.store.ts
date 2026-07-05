@@ -40,7 +40,13 @@ export const useCicloStore = create<CicloState>((set, get) => ({
       paises = me.pais_codigo ? [me.pais_codigo] : [];
     }
     set({ puedeCambiarPais: multipais, paisesDisponibles: paises });
-    const inicial = me.pais_codigo || paises[0] || null;
+    // País inicial: el propio del usuario; si no tiene (ADMIN), el país con operación/datos
+    // (el de más RMs) para no arrancar en un país vacío; fallback: el primero de la lista.
+    let inicial = me.pais_codigo || null;
+    if (!inicial && multipais) {
+      try { inicial = (await api.get('/admin/pais-defecto')).data as string | null; } catch { /* noop */ }
+    }
+    inicial = inicial || paises[0] || null;
     if (inicial) await get().setPais(inicial);
   },
 

@@ -469,6 +469,19 @@ def ciclo_actual(pais_codigo: str, db: Session = Depends(get_db), _=AnyAuth):
               .all())
     return _ciclo_actual_de(ciclos)
 
+@router.get("/pais-defecto", response_model=Optional[str],
+            summary="País por defecto del contexto (el que tiene operación/datos)")
+def pais_defecto(db: Session = Depends(get_db), _=AnyAuth):
+    """País donde arranca el contexto para un usuario sin país propio (ADMIN): el que
+    tiene más Representantes Médicos (donde está la operación). None si ninguno tiene RMs."""
+    from sqlalchemy import func
+    from app.models.dimensiones import RepresentanteMedico
+    row = (db.query(RepresentanteMedico.pais_codigo)
+           .group_by(RepresentanteMedico.pais_codigo)
+           .order_by(func.count(RepresentanteMedico.id).desc())
+           .first())
+    return row[0] if row else None
+
 @router.post("/ciclos", response_model=CicloResponse, status_code=201, summary="Crear ciclo")
 def create_ciclo(data: CicloCreate, db: Session = Depends(get_db), _=AdminOnly):
     obj = Ciclo(**data.model_dump())
