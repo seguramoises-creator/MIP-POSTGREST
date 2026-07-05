@@ -247,24 +247,6 @@ def cobertura_ranking(metrica: str = "cobertura", ciclo_id: int | None = None,
     return visita_cobertura_service.ranking_visitadores(db, ciclo_id, metrica)
 
 
-@router.get("/proyeccion", response_model=dict)
-def proyeccion_visita(vm_id: int | None = None, dia_actual: int | None = None,
-                      db: Session = Depends(get_db), current_user=RequireVisita):
-    """Proyección de cobertura al cierre del ciclo (ritmo actual vs requerido).
-    `dia_actual` permite simular. El VM ve la suya; ADMIN/GERENTE el equipo o ?vm_id=."""
-    from app.services import visita_cobertura_service
-    vm = _scope_vm(current_user, vm_id)
-    return visita_cobertura_service.proyeccion(db, None, vm, dia_actual)
-
-
-@router.get("/proyeccion/ranking", response_model=dict)
-def proyeccion_ranking(dia_actual: int | None = None,
-                       db: Session = Depends(get_db), current_user=RequireVisita):
-    """Detalle desplegable de Proyección: por VM, la proyección final y si alcanza el objetivo."""
-    from app.services import visita_cobertura_service
-    return visita_cobertura_service.ranking_proyeccion(db, None, dia_actual)
-
-
 # ── Registro de visita (Parte 4) ──────────────────────────────────────────────
 def _vm_registro(current_user, vm_id: int | None) -> int:
     vm = _scope_vm(current_user, vm_id)

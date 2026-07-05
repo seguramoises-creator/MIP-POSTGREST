@@ -182,19 +182,6 @@ export const subirFotoVisita = (visitaId: number, file: File) => {
 export const registrarNoVisita = (medico_id: number, causa: string, comentario?: string, vmId?: number) =>
   api.post('/visita/no-visita', { medico_id, causa, comentario }, { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 
-// ── Proyección ────────────────────────────────────────────────────────
-export interface Proyeccion {
-  ciclo_dias: number; dia_actual: number; dias_restantes: number;
-  panel: number; visitados: number; objetivo_pct: number; obj_medicos: number;
-  ritmo_actual: number; proyeccion_final: number; gap_al_objetivo: number;
-  ritmo_requerido: number | null; cumple_proyeccion: boolean;
-  categorias: Record<string, { panel: number; visitados: number; proyeccion: number }>;
-}
-export const proyeccionVisita = (diaActual?: number) =>
-  api.get<Proyeccion>('/visita/proyeccion', { params: diaActual ? { dia_actual: diaActual } : {} }).then(r => r.data);
-export const proyeccionRanking = (diaActual?: number) =>
-  api.get<RankingVM>('/visita/proyeccion/ranking', { params: diaActual ? { dia_actual: diaActual } : {} }).then(r => r.data);
-
 // ── Planeación del ciclo ──────────────────────────────────────────────
 export interface PlaneacionItem {
   medico_id: number; tipo_visita: string; semana: number;
