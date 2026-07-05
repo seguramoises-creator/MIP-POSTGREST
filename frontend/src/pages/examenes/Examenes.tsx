@@ -66,7 +66,7 @@ export default function Examenes() {
   useEffect(() => { cargar(); }, [cargar]);
 
   // Ciclo/país activos del control global — todo examen nuevo se crea contra el ciclo operativo actual.
-  const { cicloId } = useCicloStore();
+  const { cicloId, esSoloLectura } = useCicloStore();
 
   // Crear examen
   const [nuevo, setNuevo] = useState({ nombre: '', producto: '', nota_minima: 70, tiempo_limite_min: '' as string });
@@ -271,6 +271,11 @@ export default function Examenes() {
           <Card variant="outlined" sx={{ mb: 2 }}>
             <CardContent>
               <Typography fontWeight={600} gutterBottom>Nuevo examen</Typography>
+              {esSoloLectura && (
+                <Alert severity="info" sx={{ mb: 1.5 }}>
+                  Estás viendo un ciclo distinto al abierto. Solo se pueden crear exámenes en el ciclo abierto.
+                </Alert>
+              )}
               <Stack spacing={1.5}>
                 <TextField label="Nombre" size="small" value={nuevo.nombre} onChange={(e) => setNuevo({ ...nuevo, nombre: e.target.value })} />
                 <TextField label="Producto" size="small" value={nuevo.producto} onChange={(e) => setNuevo({ ...nuevo, producto: e.target.value })} />
@@ -278,7 +283,7 @@ export default function Examenes() {
                   <TextField label="Nota mínima %" type="number" size="small" value={nuevo.nota_minima} onChange={(e) => setNuevo({ ...nuevo, nota_minima: Number(e.target.value) })} />
                   <TextField label="Tiempo (min)" type="number" size="small" value={nuevo.tiempo_limite_min} onChange={(e) => setNuevo({ ...nuevo, tiempo_limite_min: e.target.value })} />
                 </Stack>
-                <Button variant="contained" startIcon={<Add />} onClick={handleCrear} disabled={!nuevo.nombre}>Crear borrador</Button>
+                <Button variant="contained" startIcon={<Add />} onClick={handleCrear} disabled={!nuevo.nombre || esSoloLectura}>Crear borrador</Button>
               </Stack>
             </CardContent>
           </Card>
@@ -291,6 +296,11 @@ export default function Examenes() {
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
                 Sube el manual/documento (PDF, Word o PPT) o pega el texto, y la IA elabora las preguntas (quedan en borrador para tu revisión).
               </Typography>
+              {esSoloLectura && (
+                <Alert severity="info" sx={{ mb: 1.5 }}>
+                  Estás viendo un ciclo distinto al abierto. Solo se pueden crear exámenes en el ciclo abierto.
+                </Alert>
+              )}
               {esAdmin && (
                 <Box sx={{ mb: 1.5, p: 1, borderRadius: 1, bgcolor: iaDemo ? 'rgba(255,152,0,0.08)' : 'rgba(27,94,32,0.08)',
                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
@@ -338,7 +348,7 @@ export default function Examenes() {
                            value={ia.texto_pegado} onChange={(e) => setIa({ ...ia, texto_pegado: e.target.value })} />
                 <Button variant="contained" color="secondary" startIcon={<AutoAwesome />}
                         onClick={handleGenerarIA}
-                        disabled={!ia.nombre || iaJob?.estado === 'procesando' || iaJob?.estado === 'enviando'}>
+                        disabled={!ia.nombre || iaJob?.estado === 'procesando' || iaJob?.estado === 'enviando' || esSoloLectura}>
                   Generar con IA
                 </Button>
                 {iaJob && (iaJob.estado === 'enviando' || iaJob.estado === 'procesando') && (

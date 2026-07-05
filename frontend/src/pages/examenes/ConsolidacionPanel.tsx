@@ -18,7 +18,7 @@ import {
  * un desplegable local — evita listar los ~72 ciclos históricos de todos los países.
  */
 export default function ConsolidacionPanel() {
-  const { cicloId, paisCodigo, ciclo } = useCicloStore();
+  const { cicloId, paisCodigo, ciclo, esSoloLectura } = useCicloStore();
   const [estado, setEstado] = useState<ConsolidacionEstado | null>(null);
   const [cargando, setCargando] = useState(false);
   const [ejecutando, setEjecutando] = useState(false);
@@ -116,7 +116,8 @@ export default function ConsolidacionPanel() {
               </Typography>
             )}
             <Box sx={{ mt: 1.5 }}>
-              <Button variant="contained" startIcon={<Lock />} disabled={!estado.ciclo_abierto || ejecutando || estado.rms_con_nota === 0}
+              <Button variant="contained" startIcon={<Lock />}
+                      disabled={!estado.ciclo_abierto || ejecutando || estado.rms_con_nota === 0 || esSoloLectura}
                       onClick={consolidar}>
                 {ejecutando ? 'Consolidando…' : 'Consolidar ciclo → KPI'}
               </Button>
@@ -124,6 +125,11 @@ export default function ConsolidacionPanel() {
                 <Typography variant="caption" color="text.secondary" sx={{ ml: 1.5 }}>
                   No hay RM con nota de exámenes en este ciclo todavía.
                 </Typography>
+              )}
+              {esSoloLectura && (
+                <Alert severity="info" sx={{ mt: 1 }}>
+                  La consolidación solo se ejecuta sobre el ciclo abierto.
+                </Alert>
               )}
             </Box>
           </>
