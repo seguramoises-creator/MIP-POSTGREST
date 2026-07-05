@@ -70,9 +70,11 @@ export default function ParrillaVisita() {
   const filaVacia = (): ParrillaItem => ({ producto: '', prioridad: draft.length + 1, meta_muestras: 1 });
   const iniciarEdicion = () => { setDraft(parrilla.length ? parrilla.map((p) => ({ ...p })) : [filaVacia()]); setEditando(true); setMsg(null); };
   const setFila = (i: number, patch: Partial<ParrillaItem>) => setDraft((d) => d.map((x, idx) => idx === i ? { ...x, ...patch } : x));
-  const elegirProducto = (i: number, codigo: string) => {
-    const p = productosDim.find((x) => x.codigo === codigo);
-    if (!p) { setFila(i, { producto: codigo, producto_id: null }); return; }
+  // El Select empata por producto_id (robusto). Si el valor no corresponde a un producto
+  // del catálogo (fila de texto libre sin id), se conserva como texto.
+  const elegirProducto = (i: number, val: string | number) => {
+    const p = productosDim.find((x) => x.id === Number(val));
+    if (!p) { setFila(i, { producto: String(val), producto_id: null }); return; }
     setFila(i, {
       producto: p.codigo, producto_id: p.id, nombre: p.nombre, area_terapeutica: p.area_terapeutica,
       descripcion: p.descripcion, segmento_target: p.segmento_target, meta_muestras: p.meta_muestras_visita,
@@ -198,10 +200,14 @@ export default function ParrillaVisita() {
                       <TableCell><TextField size="small" type="number" value={it.prioridad} sx={{ width: 60 }}
                                             onChange={(e) => setFila(i, { prioridad: Number(e.target.value) })} /></TableCell>
                       <TableCell>
-                        <TextField select size="small" fullWidth value={it.producto}
+                        <TextField select size="small" fullWidth
+                                   value={it.producto_id ?? (it.producto || '')}
                                    onChange={(e) => elegirProducto(i, e.target.value)}>
                           <MenuItem value=""><em>— Producto —</em></MenuItem>
-                          {productosDim.map((p) => <MenuItem key={p.id} value={p.codigo}>{p.codigo} · {p.area_terapeutica}</MenuItem>)}
+                          {productosDim.map((p) => <MenuItem key={p.id} value={p.id}>{(p.codigo || '').trim()} · {p.area_terapeutica}</MenuItem>)}
+                          {it.producto_id == null && it.producto && !productosDim.some((p) => (p.codigo || '').trim() === (it.producto || '').trim()) && (
+                            <MenuItem value={it.producto}>{it.producto}</MenuItem>
+                          )}
                         </TextField>
                       </TableCell>
                       <TableCell><TextField size="small" fullWidth value={it.mensaje_clave ?? ''}
