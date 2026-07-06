@@ -36,6 +36,7 @@ class Usuario(Base):
     intentos_fallidos: Mapped[int] = mapped_column(Integer, default=0)
     bloqueado_hasta: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     ultimo_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    password_actualizado_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -62,3 +63,17 @@ class TokenRevocado(Base):
     motivo: Mapped[str | None] = mapped_column(String(40), nullable=True)
     expira_en: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     revocado_en: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class PasswordHistorial(Base):
+    """Hashes de contraseñas previas por usuario, para impedir la reutilización
+    de las últimas N. Se poda al insertar (ver password_policy_service)."""
+    __tablename__ = "FACT_PasswordHistorial"
+    __table_args__ = {"schema": "Security"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    usuario_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), index=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    creado_en: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc))

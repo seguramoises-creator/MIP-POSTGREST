@@ -24,6 +24,16 @@ def obtener_bool(db: Session, clave: str, por_defecto: bool) -> bool:
     return val.strip().lower() in _VERDADERO
 
 
+def obtener_int(db: Session, clave: str, por_defecto: int) -> int:
+    val = obtener(db, clave)
+    if val is None:
+        return por_defecto
+    try:
+        return int(str(val).strip())
+    except (ValueError, TypeError):
+        return por_defecto
+
+
 def fijar(db: Session, clave: str, valor: str) -> None:
     fila = db.query(ParametroSistema).filter(ParametroSistema.clave == clave).first()
     if fila is None:
