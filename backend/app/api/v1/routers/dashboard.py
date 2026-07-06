@@ -284,8 +284,11 @@ def dashboard_ejecutivo(
             "score_total": round(float(r.RankingRM.score_total or 0), 2),
         }
 
-    top5    = [_fmt_rm(r) for r in _query_rm_rank().order_by(RankingRM.posicion_global.asc()).limit(5).all()]
-    bottom5 = [_fmt_rm(r) for r in reversed(_query_rm_rank().order_by(RankingRM.posicion_global.desc()).limit(5).all())]
+    # Top 5 y Bottom 5 DISJUNTOS: si hay menos de 10 RMs, el Bottom excluye a los del
+    # Top para que ningún RM aparezca en ambas listas (bottom = peores que no están en top).
+    _ranked = _query_rm_rank().order_by(RankingRM.posicion_global.asc()).all()
+    top5    = [_fmt_rm(r) for r in _ranked[:5]]
+    bottom5 = [_fmt_rm(r) for r in _ranked[5:][-5:]]
 
     # ── 4. Top Gerentes de Distrito ──────────────────────────────────────────
     top_gerentes = [
