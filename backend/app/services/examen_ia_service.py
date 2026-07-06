@@ -55,20 +55,25 @@ def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | Non
     """
     texto_acotado = texto[:_TEXTO_MAX_CHARS]
     total = n_multi + n_casos + n_vf
-    ref = f"sobre el producto {producto}" if producto else "sobre el producto / tema correspondiente"
+    tema = (f" El material se relaciona con: {producto} (úsalo solo como tema/contexto; "
+            "NO exijas que el material lo nombre explícitamente)." if producto else "")
     return (
-        "Eres un experto en capacitación farmacéutica. A partir de la siguiente "
-        "información —que debes tomar como VERDADERA y VÁLIDA, pues proviene de la "
-        "ficha técnica de un producto y/o de estudios clínicos— genera exactamente "
-        f"{total} preguntas de evaluación profesional {ref}:\n"
+        "Eres un experto en capacitación farmacéutica y en elaboración de exámenes. "
+        "A partir del siguiente material de referencia —que debes tomar como VERDADERO "
+        "y VÁLIDO— genera exactamente "
+        f"{total} preguntas de evaluación profesional SOBRE EL CONTENIDO del material." + tema + "\n"
         f"- {n_multi} de opción múltiple (tipo 'multi', EXACTAMENTE 5 opciones a–e, 1 correcta)\n"
         f"- {n_casos} casos clínicos (tipo 'caso', con 'escenario', EXACTAMENTE 5 opciones a–e, 1 correcta)\n"
         f"- {n_vf} de Verdadero/Falso (tipo 'vf', EXACTAMENTE 2 opciones [\"Verdadero\",\"Falso\"] en ese orden; "
         "'correcta'=0 si la afirmación es verdadera, 1 si es falsa)\n\n"
         "REGLAS DE REDACCIÓN (obligatorias):\n"
-        "- Formula cada pregunta como conocimiento profesional sobre el producto, el "
-        "principio activo, la indicación, la dosis, las contraindicaciones, los efectos "
-        "adversos o el estudio clínico correspondiente.\n"
+        "- Genera SIEMPRE las preguntas a partir del CONTENIDO real del material "
+        "(conceptos, principios, indicaciones, dosis, contraindicaciones, efectos, datos, etc.). "
+        "Si el material trata un tema general (p. ej. nutrición, fisiología, farmacología) y "
+        "no menciona un producto de marca, formula las preguntas sobre ese TEMA/CONTENIDO.\n"
+        "- NUNCA te niegues ni respondas con explicaciones, disculpas o comentarios fuera del "
+        "JSON. Aunque el material no mencione el producto indicado, DEBES generar el examen a "
+        "partir del contenido disponible y devolver el arreglo JSON de preguntas.\n"
         "- NUNCA menciones 'el documento', 'este documento', 'el texto', 'el material' "
         "ni la fuente. La pregunta debe entenderse por sí sola, como en un examen real.\n"
         "- Trata la información provista como un hecho establecido; no la cuestiones ni "
@@ -77,7 +82,7 @@ def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | Non
         "(nada de ```), sin texto antes ni después. Cada pregunta con este esquema:\n"
         "tipo: 'multi'|'caso'|'vf'; escenario: string (solo caso); texto: string; "
         "opciones: array de strings (5 para multi/caso, 2 para vf); correcta: índice 0-based de la opción correcta; "
-        "explicacion: string.\n\nINFORMACIÓN DE REFERENCIA:\n" + texto_acotado)
+        "explicacion: string.\n\nMATERIAL DE REFERENCIA:\n" + texto_acotado)
 
 
 # Maximum characters fed into the prompt to bound token cost.
@@ -226,8 +231,26 @@ def generar_preguntas_ia(texto: str, n_multi: int, n_casos: int,
     max_tokens = min(16000, 2000 + total * 800)
     respuesta = client.messages.create(
         model=model, max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}])
-    texto_resp = "".join(getattr(b, "text", "") for b in respuesta.content)
+        messages=[{"role": "user", "content": prompt}],
+        # Desactiva el "extended thinking" (activo por defecto en modelos Claude
+        # nuevos como sonnet-5): de lo contrario el razonamiento consume el
+        # presupuesto de tokens y el bloque de texto (el JSON) puede llegar
+        # vacío/truncado ("Expecting value: line 1 column 1"). Se pasa por
+        # extra_body porque el SDK instalado no acepta el kwarg `thinking` nativo.
+        extra_body={"thinking": {"type": "disabled"}})
+    # Une solo el texto de bloques de tipo texto. Algunos modelos/SDK devuelven
+    # bloques cuyo `.text` es None (p. ej. bloques de razonamiento): `or ""` evita
+    # el TypeError de join ("expected str instance, NoneType found") y los ignora.
+    texto_resp = "".join((getattr(b, "text", "") or "") for b in respuesta.content)
+    # Red de seguridad: si el modelo responde en prosa (p. ej. negándose porque el
+    # material no coincide con el producto) en vez de JSON, damos un error claro y
+    # accionable en lugar del críptico "Expecting value: line 1 column 1 (char 0)".
+    if "[" not in texto_resp and "{" not in texto_resp:
+        motivo = texto_resp.strip()[:300] or "(respuesta vacía)"
+        raise ValueError(
+            "La IA no generó preguntas a partir del material. Respondió: "
+            f"«{motivo}». Revisa que el documento tenga contenido suficiente, o "
+            "ajusta/vacía el campo Producto para que coincida con el tema del material.")
     data = _extraer_json(texto_resp)
     return validar_preguntas_generadas(data)
 
