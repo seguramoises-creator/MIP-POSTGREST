@@ -284,11 +284,18 @@ def dashboard_ejecutivo(
             "score_total": round(float(r.RankingRM.score_total or 0), 2),
         }
 
-    # Top 5 y Bottom 5 DISJUNTOS: si hay menos de 10 RMs, el Bottom excluye a los del
-    # Top para que ningún RM aparezca en ambas listas (bottom = peores que no están en top).
-    _ranked = _query_rm_rank().order_by(RankingRM.posicion_global.asc()).all()
-    top5    = [_fmt_rm(r) for r in _ranked[:5]]
-    bottom5 = [_fmt_rm(r) for r in _ranked[5:][-5:]]
+    # Top y Bottom por CATEGORÍA de color, disjuntos (un RM nunca en ambas listas):
+    #   verde (score>=90) solo puede ir en Top; rojo (score<60) solo en Bottom;
+    #   azul (80-90) y naranja (60-80) pueden ir en cualquiera de los dos.
+    _ranked = _query_rm_rank().order_by(RankingRM.posicion_global.asc()).all()  # mejor→peor
+    def _score(r):
+        return float(r.RankingRM.score_total or 0)
+    top_rows = [r for r in _ranked if _score(r) >= 60][:5]          # Top: nunca rojos
+    _top_ids = {r.RankingRM.rm_id for r in top_rows}
+    bottom_rows = [r for r in reversed(_ranked)                       # peor→mejor
+                   if _score(r) < 90 and r.RankingRM.rm_id not in _top_ids][:5]  # Bottom: nunca verdes
+    top5    = [_fmt_rm(r) for r in top_rows]
+    bottom5 = [_fmt_rm(r) for r in reversed(bottom_rows)]
 
     # ── 4. Top Gerentes de Distrito ──────────────────────────────────────────
     top_gerentes = [
