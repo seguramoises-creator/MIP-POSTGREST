@@ -284,16 +284,16 @@ def dashboard_ejecutivo(
             "score_total": round(float(r.RankingRM.score_total or 0), 2),
         }
 
-    # Top y Bottom por CATEGORÍA de color, disjuntos (un RM nunca en ambas listas):
-    #   verde (score>=90) solo puede ir en Top; rojo (score<60) solo en Bottom;
-    #   azul (80-90) y naranja (60-80) pueden ir en cualquiera de los dos.
+    # Top y Bottom disjuntos por UMBRAL de desempeño (score 80):
+    #   >=80 (verde >=90 / azul 80-90) -> solo Top, los mejores primero.
+    #   <80  (naranja 60-80 / rojo <60) -> solo Bottom, los peores primero.
+    # Al partir por 80 las listas son disjuntas por construcción: un RM está por
+    # encima o por debajo del umbral, nunca en ambas. Cada lista se limita a 5.
     _ranked = _query_rm_rank().order_by(RankingRM.posicion_global.asc()).all()  # mejor→peor
     def _score(r):
         return float(r.RankingRM.score_total or 0)
-    top_rows = [r for r in _ranked if _score(r) >= 60][:5]          # Top: nunca rojos
-    _top_ids = {r.RankingRM.rm_id for r in top_rows}
-    bottom_rows = [r for r in reversed(_ranked)                       # peor→mejor
-                   if _score(r) < 90 and r.RankingRM.rm_id not in _top_ids][:5]  # Bottom: nunca verdes
+    top_rows    = [r for r in _ranked if _score(r) >= 80][:5]            # buenos: mejores primero
+    bottom_rows = [r for r in reversed(_ranked) if _score(r) < 80][:5]   # a mejorar: peores primero
     top5    = [_fmt_rm(r) for r in top_rows]
     bottom5 = [_fmt_rm(r) for r in reversed(bottom_rows)]
 
