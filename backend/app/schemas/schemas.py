@@ -35,6 +35,8 @@ class UsuarioResponse(BaseModel):
     gerente_id: Optional[int] = None
     activo: bool
     ultimo_login: Optional[datetime]
+    debe_cambiar_password: bool = False
+    password_expira_en_dias: Optional[int] = None
 
 class UsuarioUpdate(BaseModel):
     nombre_completo: Optional[str] = None
@@ -48,19 +50,8 @@ class UsuarioUpdate(BaseModel):
 class PasswordChange(BaseModel):
     password_actual: str
     password_nuevo: str
-
-    @field_validator("password_nuevo")
-    @classmethod
-    def validate_password(cls, v: str) -> str:
-        if len(v) < 12:
-            raise ValueError("La contraseña debe tener al menos 12 caracteres")
-        if not any(c.isupper() for c in v):
-            raise ValueError("Debe contener al menos una mayúscula")
-        if not any(c.islower() for c in v):
-            raise ValueError("Debe contener al menos una minúscula")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Debe contener al menos un número")
-        return v
+    # La complejidad se valida en el endpoint (depende del rol + BD, ver
+    # password_policy_service.validar_complejidad), no en el schema.
 
 
 # ── Catálogos ─────────────────────────────────────────────────────────────────

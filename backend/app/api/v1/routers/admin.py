@@ -707,8 +707,16 @@ def list_usuarios(db: Session = Depends(get_db), _=AdminOnly):
 def create_usuario(data: UsuarioCreate, db: Session = Depends(get_db), _=AdminOnly):
     if db.query(Usuario).filter(Usuario.username == data.username).first():
         raise HTTPException(400, "Username ya existe")
+    from datetime import datetime, timezone
+    from app.services import password_policy_service
+    try:
+        password_policy_service.validar_complejidad(db, data.password, data.rol)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     payload = data.model_dump()
     payload["hashed_password"] = hash_password(payload.pop("password"))
+    payload["debe_cambiar_password"] = True
+    payload["password_actualizado_en"] = datetime.now(timezone.utc)
     obj = Usuario(**payload)
     db.add(obj); db.commit(); db.refresh(obj)
     return obj
@@ -748,3 +756,36 @@ def set_examen_ia_demo(body: dict, db: Session = Depends(get_db), _=AdminOnly):
     demo = bool(body.get("demo"))
     _cfg.fijar(db, "EXAMEN_IA_DEMO", "true" if demo else "false")
     return {"demo": demo}
+
+
+@router.get("/config/password-policy", summary="Política de contraseñas vigente")
+def get_password_policy(db: Session = Depends(get_db), _=AdminOnly):
+    return {
+        "expiracion_activa":  _cfg.obtener_bool(db, "PASSWORD_EXPIRACION_ACTIVA", True),
+        "expiracion_dias":    _cfg.obtener_int(db, "PASSWORD_EXPIRACION_DIAS", 90),
+        "aviso_dias":         _cfg.obtener_int(db, "PASSWORD_AVISO_DIAS", 7),
+        "historial_n":        _cfg.obtener_int(db, "PASSWORD_HISTORIAL_N", 5),
+        "min_longitud":       _cfg.obtener_int(db, "PASSWORD_MIN_LONGITUD", 8),
+        "min_longitud_admin": _cfg.obtener_int(db, "PASSWORD_MIN_LONGITUD_ADMIN", 12),
+    }
+
+
+@router.put("/config/password-policy", summary="Actualizar política de contraseñas")
+def set_password_policy(body: dict, db: Session = Depends(get_db), _=AdminOnly):
+    def _int(clave, k, minimo):
+        if k in body:
+            try:
+                v = int(body[k])
+            except (ValueError, TypeError):
+                raise HTTPException(400, f"{k} debe ser un entero")
+            if v < minimo:
+                raise HTTPException(400, f"{k} debe ser >= {minimo}")
+            _cfg.fijar(db, clave, str(v))
+    if "expiracion_activa" in body:
+        _cfg.fijar(db, "PASSWORD_EXPIRACION_ACTIVA", "true" if body["expiracion_activa"] else "false")
+    _int("PASSWORD_EXPIRACION_DIAS", "expiracion_dias", 1)
+    _int("PASSWORD_AVISO_DIAS", "aviso_dias", 0)
+    _int("PASSWORD_HISTORIAL_N", "historial_n", 0)
+    _int("PASSWORD_MIN_LONGITUD", "min_longitud", 8)
+    _int("PASSWORD_MIN_LONGITUD_ADMIN", "min_longitud_admin", 8)
+    return get_password_policy(db, _)

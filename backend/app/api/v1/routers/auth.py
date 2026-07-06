@@ -30,6 +30,7 @@ from app.models.hechos import Auditoria
 from app.schemas.common import Msg, TokenResponse
 from app.schemas.schemas import UsuarioResponse, PasswordChange
 from app.core.config import settings
+from app.services import password_policy_service
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
@@ -120,10 +121,14 @@ def login(
 
     _registrar_auditoria(db, user, "LOGIN", request, True)
 
+    estado = password_policy_service.estado_password(db, user)
     return TokenResponse(
         access_token  = access_token,
         refresh_token = refresh_token,
         expires_in    = settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        debe_cambiar_password   = estado["debe_cambiar"],
+        password_expira_en_dias = estado["dias_para_expirar"],
+        password_motivo         = estado["motivo"],
     )
 
 
@@ -200,9 +205,14 @@ def refresh_token_endpoint(
 
 
 @router.get("/me", response_model=UsuarioResponse, summary="Usuario actual")
-def get_me(current_user: Usuario = Depends(get_current_active_user)):
-    """Retorna los datos del usuario autenticado."""
-    return current_user
+def get_me(current_user: Usuario = Depends(get_current_active_user),
+           db: Session = Depends(get_db)):
+    """Retorna los datos del usuario autenticado + estado de su contraseña."""
+    estado = password_policy_service.estado_password(db, current_user)
+    resp = UsuarioResponse.model_validate(current_user)
+    resp.debe_cambiar_password = estado["debe_cambiar"]
+    resp.password_expira_en_dias = estado["dias_para_expirar"]
+    return resp
 
 
 @router.post("/change-password", response_model=Msg, summary="Cambiar contraseña")
@@ -218,7 +228,16 @@ def change_password(
         _registrar_auditoria(db, current_user, "CHANGE_PASSWORD", request, False,
                              "Contraseña actual incorrecta")
         raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta")
+    try:
+        password_policy_service.validar_complejidad(db, datos.password_nuevo, current_user.rol)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    if password_policy_service.contrasena_reutilizada(db, current_user, datos.password_nuevo):
+        raise HTTPException(status_code=400, detail="No puedes reutilizar una contraseña reciente")
+    password_policy_service.registrar_historial(db, current_user.id, current_user.hashed_password)
     current_user.hashed_password = hash_password(datos.password_nuevo)
+    current_user.password_actualizado_en = datetime.now(timezone.utc)
+    current_user.debe_cambiar_password = False
     db.commit()
     _registrar_auditoria(db, current_user, "CHANGE_PASSWORD", request, True)
     return Msg(message="Contraseña actualizada correctamente")

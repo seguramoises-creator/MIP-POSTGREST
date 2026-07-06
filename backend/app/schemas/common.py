@@ -24,6 +24,9 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int  # segundos
+    debe_cambiar_password: bool = False
+    password_expira_en_dias: Optional[int] = None
+    password_motivo: str = "ok"
 
 
 class TokenData(BaseModel):
