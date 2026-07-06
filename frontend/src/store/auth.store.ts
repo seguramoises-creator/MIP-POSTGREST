@@ -9,12 +9,24 @@ interface AuthState {
   rol: Rol | null;
   nombreCompleto: string | null;
   isAuthenticated: boolean;
+  // Estado de la contraseña (política): fuerza cambio y avisa de vencimiento.
+  debeCambiarPassword: boolean;
+  passwordExpiraEnDias: number | null;
+  passwordMotivo: string;
   setAuth: (data: {
     accessToken: string;
     refreshToken: string;
     username: string;
     rol: Rol;
     nombreCompleto: string;
+    debeCambiarPassword?: boolean;
+    passwordExpiraEnDias?: number | null;
+    passwordMotivo?: string;
+  }) => void;
+  setPasswordEstado: (data: {
+    debeCambiarPassword: boolean;
+    passwordExpiraEnDias: number | null;
+    passwordMotivo: string;
   }) => void;
   logout: () => void;
 }
@@ -28,6 +40,9 @@ export const useAuthStore = create<AuthState>()(
       rol: null,
       nombreCompleto: null,
       isAuthenticated: false,
+      debeCambiarPassword: false,
+      passwordExpiraEnDias: null,
+      passwordMotivo: 'ok',
       setAuth: (data) =>
         set({
           accessToken: data.accessToken,
@@ -36,6 +51,15 @@ export const useAuthStore = create<AuthState>()(
           rol: data.rol,
           nombreCompleto: data.nombreCompleto,
           isAuthenticated: true,
+          debeCambiarPassword: data.debeCambiarPassword ?? false,
+          passwordExpiraEnDias: data.passwordExpiraEnDias ?? null,
+          passwordMotivo: data.passwordMotivo ?? 'ok',
+        }),
+      setPasswordEstado: (data) =>
+        set({
+          debeCambiarPassword: data.debeCambiarPassword,
+          passwordExpiraEnDias: data.passwordExpiraEnDias,
+          passwordMotivo: data.passwordMotivo,
         }),
       logout: () =>
         set({
@@ -45,6 +69,9 @@ export const useAuthStore = create<AuthState>()(
           rol: null,
           nombreCompleto: null,
           isAuthenticated: false,
+          debeCambiarPassword: false,
+          passwordExpiraEnDias: null,
+          passwordMotivo: 'ok',
         }),
     }),
     {
@@ -56,6 +83,9 @@ export const useAuthStore = create<AuthState>()(
         rol: s.rol,
         nombreCompleto: s.nombreCompleto,
         isAuthenticated: s.isAuthenticated,
+        debeCambiarPassword: s.debeCambiarPassword,
+        passwordExpiraEnDias: s.passwordExpiraEnDias,
+        passwordMotivo: s.passwordMotivo,
       }),
     }
   )

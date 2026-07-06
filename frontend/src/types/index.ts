@@ -16,6 +16,9 @@ export interface TokenResponse {
   refresh_token: string;
   token_type: string;
   expires_in: number;
+  debe_cambiar_password?: boolean;
+  password_expira_en_dias?: number | null;
+  password_motivo?: string;
 }
 
 export interface Usuario {

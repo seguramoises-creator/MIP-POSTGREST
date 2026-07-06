@@ -1,4 +1,4 @@
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import {
   Box, AppBar, Toolbar, Typography, IconButton,
   Tooltip, Avatar, Menu, MenuItem, Divider, Chip,
@@ -22,6 +22,9 @@ export default function MainLayout() {
   const HEADER_OCULTO = ['/visita/registrar', '/dashboard'];
   const headerEnLayout = !HEADER_OCULTO.includes(pathname);
   const { nombreCompleto, accessToken, rol, logout } = useAuthStore();
+  const debeCambiarPassword = useAuthStore((s) => s.debeCambiarPassword);
+  const passwordMotivo = useAuthStore((s) => s.passwordMotivo);
+  const passwordExpiraEnDias = useAuthStore((s) => s.passwordExpiraEnDias);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [gd, setGd] = useState<MiGerente | null>(null);
 
@@ -57,6 +60,12 @@ export default function MainLayout() {
       setPwMsg({ tipo: 'error', texto: String(texto) });
     } finally { setPwSaving(false); }
   };
+
+  // Cambio forzoso: si la política exige cambiar la contraseña, no se puede
+  // usar el sistema hasta hacerlo (se manda a la pantalla dedicada).
+  if (debeCambiarPassword) return <Navigate to="/cambiar-password" replace />;
+
+  const avisoVencimiento = passwordMotivo === 'por_expirar' && passwordExpiraEnDias != null;
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
@@ -145,6 +154,19 @@ export default function MainLayout() {
         </Dialog>
 
         <Box sx={{ flexGrow: 1, p: 3, bgcolor: '#f5f6fa' }}>
+          {avisoVencimiento && (
+            <Alert
+              severity="warning"
+              sx={{ mb: 2 }}
+              action={
+                <Button color="inherit" size="small" onClick={() => navigate('/cambiar-password')}>
+                  Cambiar ahora
+                </Button>
+              }
+            >
+              Tu contraseña vence en {passwordExpiraEnDias} día(s). Te recomendamos cambiarla.
+            </Alert>
+          )}
           {headerEnLayout && <CicloPaisHeader />}
           <Outlet />
         </Box>

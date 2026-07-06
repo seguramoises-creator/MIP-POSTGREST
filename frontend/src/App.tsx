@@ -7,6 +7,7 @@ import { useAuthStore } from './store/auth.store';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import MainLayout from './components/layout/MainLayout';
 import Login from './pages/auth/Login';
+import CambiarPassword from './pages/auth/CambiarPassword';
 import Setup from './pages/setup/Setup';
 import DashboardEjecutivo from './pages/dashboard/DashboardEjecutivo';
 import { NAV_ITEMS } from './components/layout/Sidebar';
@@ -97,6 +98,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/setup" element={<Setup />} />
       <Route path="/login" element={isAuthenticated ? <Navigate to={inicio} /> : <Login />} />
+      <Route path="/cambiar-password" element={isAuthenticated ? <CambiarPassword /> : <Navigate to="/login" />} />
       <Route path="/sin-acceso" element={<SinAcceso />} />
       <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
         <Route index element={<Navigate to={inicio} />} />

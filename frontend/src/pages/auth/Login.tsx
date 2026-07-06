@@ -38,8 +38,11 @@ export default function Login() {
         username,
         rol,
         nombreCompleto,
+        debeCambiarPassword: tokens.debe_cambiar_password ?? false,
+        passwordExpiraEnDias: tokens.password_expira_en_dias ?? null,
+        passwordMotivo: tokens.password_motivo ?? 'ok',
       });
-      navigate('/dashboard');
+      navigate(tokens.debe_cambiar_password ? '/cambiar-password' : '/dashboard');
     } catch (err: any) {
       const msg = err.response?.data?.detail || err.response?.data?.error || 'Credenciales incorrectas';
       setError(typeof msg === 'string' ? msg : 'Error al iniciar sesión');
