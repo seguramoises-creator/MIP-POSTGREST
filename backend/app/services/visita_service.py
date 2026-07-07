@@ -105,6 +105,18 @@ def actualizar_medico(db: Session, medico: MedicoVisita,
     """Aplica solo los campos enviados (patrón PATCH). Sirve tanto para editar el
     médico como para activar/desactivar (campo `activo`)."""
     cambios = datos.model_dump(exclude_unset=True)
+    # El alta/baja (campo `activo`) se gestiona solo por el flujo de aprobación
+    # (solicitar_baja / reactivar), nunca por edición directa del médico.
+    cambios.pop("activo", None)
+    # El nombre solo se valida (sin puntos, ≥2 palabras) si REALMENTE cambia, para no
+    # bloquear la edición de otros campos en médicos con nombre heredado no conforme.
+    if "nombre_completo" in cambios:
+        nuevo = cambios["nombre_completo"]
+        if nuevo == medico.nombre_completo:
+            cambios.pop("nombre_completo")  # sin cambio → no re-validar ni re-escribir
+        else:
+            from app.schemas.visita import validar_nombre_medico
+            cambios["nombre_completo"] = validar_nombre_medico(nuevo)  # ValueError → 400
     for campo, valor in cambios.items():
         setattr(medico, campo, valor)
     db.commit()

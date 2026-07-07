@@ -397,3 +397,48 @@ def test_guardar_foto_rechaza_grande():
     big = b"\xff\xd8\xff" + b"x" * (rs.MAX_FOTO_BYTES + 1)
     with pytest.raises(ValueError):
         rs.guardar_foto_visita(db, 1, big, "image/jpeg")
+
+
+def test_actualizar_medico_ignora_activo():
+    """Regresión: editar un médico NUNCA debe tocar `activo` (alta/baja va por
+    aprobación). Antes, el endpoint asignaba `datos.activo = None`, lo que marcaba
+    el campo como 'set' en Pydantic y generaba UPDATE activo=NULL (viola NOT NULL)."""
+    from types import SimpleNamespace
+    from app.schemas.visita import MedicoVisitaActualizar
+    from app.services import visita_service
+    medico = SimpleNamespace(id=1, activo=True, categoria="B",
+                             dias_consulta=None, horario_consulta=None, frecuencia_visita=None)
+    db = SimpleNamespace(commit=lambda: None, refresh=lambda _x: None)
+    datos = MedicoVisitaActualizar(activo=False, categoria="A",
+                                   dias_consulta="Lunes, Miércoles", horario_consulta="Todo el día",
+                                   frecuencia_visita="F2")
+    visita_service.actualizar_medico(db, medico, datos, usuario_id=1)
+    assert medico.activo is True                      # activo NO cambió
+    assert medico.categoria == "A"                    # el resto sí se aplicó
+    assert medico.dias_consulta == "Lunes, Miércoles"
+    assert medico.horario_consulta == "Todo el día"
+    assert medico.frecuencia_visita == "F2"
+
+
+def test_actualizar_medico_nombre_solo_valida_si_cambia():
+    """El nombre heredado no conforme (con punto) NO debe bloquear editar otros
+    campos si el nombre no cambia; pero cambiarlo a uno inválido sí debe fallar."""
+    from types import SimpleNamespace
+    import pytest
+    from app.schemas.visita import MedicoVisitaActualizar
+    from app.services import visita_service
+    db = SimpleNamespace(commit=lambda: None, refresh=lambda _x: None)
+
+    # (a) nombre heredado con punto, sin cambiarlo → edita otros campos sin error
+    medico = SimpleNamespace(id=1, activo=True, nombre_completo="DR. PEREZ GARCIA",
+                             categoria="B", frecuencia_visita=None)
+    datos = MedicoVisitaActualizar(nombre_completo="DR. PEREZ GARCIA", frecuencia_visita="F2")
+    visita_service.actualizar_medico(db, medico, datos, usuario_id=1)
+    assert medico.nombre_completo == "DR. PEREZ GARCIA"   # intacto
+    assert medico.frecuencia_visita == "F2"               # el resto se aplicó
+
+    # (b) cambiar el nombre a uno inválido (con punto) → ValueError
+    medico2 = SimpleNamespace(id=1, activo=True, nombre_completo="DR. PEREZ GARCIA")
+    datos2 = MedicoVisitaActualizar(nombre_completo="DR. NUEVO")
+    with pytest.raises(ValueError):
+        visita_service.actualizar_medico(db, medico2, datos2, usuario_id=1)

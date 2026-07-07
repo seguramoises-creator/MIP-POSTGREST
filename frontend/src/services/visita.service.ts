@@ -119,6 +119,16 @@ export const rechazarMedico = (id: number, motivo?: string) =>
 export const listarEspecialidades = () =>
   api.get<Catalogo[]>('/visita/especialidades').then(r => r.data);
 
+// Catálogos geográficos (dropdowns del maestro de médicos).
+export interface Provincia { id: number; nombre: string; pais_codigo?: string; }
+export interface Municipio { id: number; nombre: string; provincia_id?: number; }
+export const listarProvincias = (paisCodigo?: string) =>
+  api.get<Provincia[]>('/visita/provincias', { params: paisCodigo ? { pais_codigo: paisCodigo } : {} }).then(r => r.data);
+export const listarMunicipios = (provinciaId: number) =>
+  api.get<Municipio[]>('/visita/municipios', { params: { provincia_id: provinciaId } }).then(r => r.data);
+export const listarCentros = (paisCodigo?: string) =>
+  api.get<Catalogo[]>('/visita/centros', { params: paisCodigo ? { pais_codigo: paisCodigo } : {} }).then(r => r.data);
+
 export const listarVMs = () =>
   api.get<Catalogo[]>('/visita/vms').then(r => r.data);
 

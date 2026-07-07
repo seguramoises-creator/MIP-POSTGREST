@@ -8,7 +8,7 @@
  */
 import { useState } from 'react';
 import {
-  Box, Button, Typography, Alert, LinearProgress, Paper,
+  Box, Button, Typography, Alert, LinearProgress, Paper, Stack,
   Table, TableHead, TableBody, TableRow, TableCell,
   Chip, Stepper, Step, StepLabel, Divider,
   FormControl, InputLabel, Select, MenuItem, Tabs, Tab,
@@ -568,6 +568,135 @@ function TabReglas() {
 }
 
 // ── Componente principal ───────────────────────────────────────────────────────
+// ── Sub-componente: Catálogos geográficos (Especialidad / Provincia / Municipio / Centro) ──
+interface Pais { id: number; codigo: string; nombre: string; }
+interface GeoItem { id: number; nombre: string; pais_codigo?: string; provincia_id?: number; }
+
+function TabGeo() {
+  const qc = useQueryClient();
+  const [cat, setCat] = useState<'especialidad' | 'provincia' | 'municipio' | 'centro'>('provincia');
+  const [pais, setPais] = useState('');
+  const [provinciaId, setProvinciaId] = useState<number | ''>('');
+  const [nombre, setNombre] = useState('');
+  const [error, setError] = useState('');
+
+  const { data: paises = [] } = useQuery<Pais[]>({ queryKey: ['geo-paises'], queryFn: async () => (await api.get('/admin/paises')).data });
+  const { data: provincias = [] } = useQuery<GeoItem[]>({
+    queryKey: ['geo-prov', pais], queryFn: async () => (await api.get('/categorizacion/geo/provincias', { params: pais ? { pais_codigo: pais } : {} })).data,
+  });
+  const necesitaPais = cat === 'provincia' || cat === 'centro';
+  const necesitaProv = cat === 'municipio';
+
+  const { data: items = [], isLoading } = useQuery<GeoItem[]>({
+    queryKey: ['geo-items', cat, pais, provinciaId],
+    queryFn: async () => {
+      if (cat === 'especialidad') return (await api.get('/categorizacion/geo/especialidades')).data;
+      if (cat === 'provincia') return (await api.get('/categorizacion/geo/provincias', { params: pais ? { pais_codigo: pais } : {} })).data;
+      if (cat === 'centro') return (await api.get('/categorizacion/geo/centros', { params: pais ? { pais_codigo: pais } : {} })).data;
+      if (!provinciaId) return [];
+      return (await api.get('/categorizacion/geo/municipios', { params: { provincia_id: provinciaId } })).data;
+    },
+  });
+
+  const crear = useMutation({
+    mutationFn: async () => {
+      setError('');
+      if (cat === 'especialidad') return api.post('/categorizacion/geo/especialidades', { nombre });
+      if (cat === 'provincia') return api.post('/categorizacion/geo/provincias', { pais_codigo: pais, nombre });
+      if (cat === 'centro') return api.post('/categorizacion/geo/centros', { pais_codigo: pais, nombre });
+      return api.post('/categorizacion/geo/municipios', { provincia_id: provinciaId, nombre });
+    },
+    onSuccess: () => { setNombre(''); qc.invalidateQueries({ queryKey: ['geo-items'] }); qc.invalidateQueries({ queryKey: ['geo-prov'] }); },
+    onError: (e: any) => setError(e?.response?.data?.detail ?? 'No se pudo crear'),
+  });
+  const eliminar = useMutation({
+    mutationFn: async (id: number) => api.delete(`/categorizacion/geo/${cat}/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['geo-items'] }),
+  });
+
+  const puedeCrear = nombre.trim().length >= 2 && (!necesitaPais || !!pais) && (!necesitaProv || !!provinciaId);
+
+  return (
+    <Box>
+      <Typography variant="body2" color="text.secondary" mb={2}>
+        Mantenimiento de catálogos usados como listas desplegables en el maestro de médicos
+        (Panel Médico). La baja es lógica (no borra el histórico).
+      </Typography>
+      <Grid container spacing={1.5} alignItems="center" sx={{ mb: 2 }}>
+        <Grid item xs={12} sm={3}>
+          <FormControl size="small" fullWidth>
+            <InputLabel>Catálogo</InputLabel>
+            <Select label="Catálogo" value={cat} onChange={(e) => { setCat(e.target.value as any); setProvinciaId(''); }}>
+              <MenuItem value="especialidad">Especialidades</MenuItem>
+              <MenuItem value="provincia">Provincias</MenuItem>
+              <MenuItem value="municipio">Municipios</MenuItem>
+              <MenuItem value="centro">Centros médicos</MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        {(necesitaPais || cat === 'municipio') && (
+          <Grid item xs={12} sm={3}>
+            <FormControl size="small" fullWidth>
+              <InputLabel>País</InputLabel>
+              <Select label="País" value={pais} onChange={(e) => { setPais(e.target.value); setProvinciaId(''); }}>
+                <MenuItem value="">Todos</MenuItem>
+                {paises.map((p) => <MenuItem key={p.id} value={p.codigo}>{p.nombre}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Grid>
+        )}
+        {necesitaProv && (
+          <Grid item xs={12} sm={3}>
+            <FormControl size="small" fullWidth>
+              <InputLabel>Provincia</InputLabel>
+              <Select label="Provincia" value={provinciaId} onChange={(e) => setProvinciaId(Number(e.target.value))}>
+                {provincias.map((p) => <MenuItem key={p.id} value={p.id}>{p.nombre}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Grid>
+        )}
+      </Grid>
+
+      <Stack direction="row" spacing={1} sx={{ mb: 2 }} alignItems="center">
+        <TextField size="small" label="Nuevo nombre" value={nombre} onChange={(e) => setNombre(e.target.value)}
+                   onKeyDown={(e) => { if (e.key === 'Enter' && puedeCrear) crear.mutate(); }} sx={{ minWidth: 260 }} />
+        <Button variant="contained" startIcon={<AddIcon />} disabled={!puedeCrear || crear.isPending}
+                onClick={() => crear.mutate()}>Agregar</Button>
+      </Stack>
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      <Paper variant="outlined">
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ fontWeight: 700 }}>Nombre</TableCell>
+              <TableCell align="right" sx={{ fontWeight: 700 }}>Acciones</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {isLoading && <TableRow><TableCell colSpan={2}>Cargando…</TableCell></TableRow>}
+            {!isLoading && items.length === 0 && (
+              <TableRow><TableCell colSpan={2} sx={{ color: 'text.secondary', py: 3, textAlign: 'center' }}>
+                {necesitaProv && !provinciaId ? 'Elige una provincia' : 'Sin registros'}
+              </TableCell></TableRow>
+            )}
+            {items.map((it) => (
+              <TableRow key={it.id} hover>
+                <TableCell>{it.nombre}</TableCell>
+                <TableCell align="right">
+                  <Tooltip title="Desactivar (baja lógica)">
+                    <IconButton size="small" color="error" onClick={() => eliminar.mutate(it.id)}><DeleteIcon fontSize="small" /></IconButton>
+                  </Tooltip>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Paper>
+    </Box>
+  );
+}
+
 export default function CategorizacionAdmin() {
   const [tab, setTab] = useState(0);
 
@@ -581,10 +710,12 @@ export default function CategorizacionAdmin() {
         <Tab label="Carga de Excel" />
         <Tab label="Clasificación A/B/C/D" />
         <Tab label="Componentes y Reglas" />
+        <Tab label="Catálogos geográficos" />
       </Tabs>
       {tab === 0 && <TabCarga />}
       {tab === 1 && <TabClasificacion />}
       {tab === 2 && <TabReglas />}
+      {tab === 3 && <TabGeo />}
     </Box>
   );
 }

@@ -1,6 +1,54 @@
 """Schemas del Módulo de Visita Médica — Fase 1 (Panel Médico)."""
+import re
 from datetime import date
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+# Formato estándar de contacto para el maestro de médicos (República Dominicana).
+_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
+
+def _validar_email(v: str | None) -> str | None:
+    """Valida y normaliza (minúsculas) un correo. '' → None (campo limpiado)."""
+    if v is None:
+        return None
+    v = v.strip().lower()
+    if not v:
+        return None
+    if not _EMAIL_RE.match(v):
+        raise ValueError("Correo electrónico inválido (formato esperado: nombre@dominio.com)")
+    return v
+
+
+def validar_nombre_medico(v: str) -> str:
+    """Normaliza (MAYÚSCULAS, espacios) y valida el nombre completo de un médico:
+    sin abreviaciones con punto y con al menos 2 palabras. Compartida por el alta
+    (siempre) y la edición (solo cuando el nombre realmente cambia — así un nombre
+    heredado no conforme no bloquea editar los demás campos)."""
+    v = " ".join((v or "").strip().upper().split())
+    if "." in v:  # abreviaciones con punto (Dr. / M. / Manuel P.)
+        raise ValueError("El nombre no debe llevar abreviaciones con punto (ej. Dr. o M.)")
+    if len(v.split()) < 2:
+        raise ValueError("El nombre debe tener al menos 2 palabras (nombre + apellido)")
+    return v
+
+
+def _validar_telefono(v: str | None) -> str | None:
+    """Valida un teléfono dominicano y lo normaliza a 'XXX-XXX-XXXX'.
+    Acepta espacios, guiones, paréntesis y un '+1'/'1' de país opcional.
+    '' → None (campo limpiado)."""
+    if v is None:
+        return None
+    raw = v.strip()
+    if not raw:
+        return None
+    digitos = re.sub(r"\D", "", raw)
+    if len(digitos) == 11 and digitos.startswith("1"):  # +1 país
+        digitos = digitos[1:]
+    if len(digitos) != 10:
+        raise ValueError("Teléfono inválido: debe tener 10 dígitos (ej. 809-555-1234)")
+    if digitos[:3] not in ("809", "829", "849"):
+        raise ValueError("Código de área inválido para RD (debe ser 809, 829 o 849)")
+    return f"{digitos[:3]}-{digitos[3:6]}-{digitos[6:]}"
 
 
 class MedicoVisitaCrear(BaseModel):
@@ -43,12 +91,7 @@ class MedicoVisitaCrear(BaseModel):
     @field_validator("nombre_completo")
     @classmethod
     def _nombre_valido(cls, v: str) -> str:
-        v = " ".join(v.strip().upper().split())  # MAYÚSCULAS, espacios normalizados
-        if "." in v:  # abreviaciones con punto (Dr. / M. / Manuel P.)
-            raise ValueError("El nombre no debe llevar abreviaciones con punto (ej. Dr. o M.)")
-        if len(v.split()) < 2:
-            raise ValueError("El nombre debe tener al menos 2 palabras (nombre + apellido)")
-        return v
+        return validar_nombre_medico(v)
 
     @field_validator("categoria")
     @classmethod
@@ -57,6 +100,16 @@ class MedicoVisitaCrear(BaseModel):
         if v not in ("A", "B", "C", "D"):
             raise ValueError("La categoría debe ser A, B, C o D")
         return v
+
+    @field_validator("email")
+    @classmethod
+    def _email_valido(cls, v: str | None) -> str | None:
+        return _validar_email(v)
+
+    @field_validator("telefono")
+    @classmethod
+    def _telefono_valido(cls, v: str | None) -> str | None:
+        return _validar_telefono(v)
 
 
 class MedicoVisitaActualizar(BaseModel):
@@ -92,17 +145,14 @@ class MedicoVisitaActualizar(BaseModel):
     fecha_alta: date | None = None
     activo: bool | None = None
 
+    # Nota: el nombre NO se valida a nivel de schema en la edición. La validación
+    # (sin puntos, ≥2 palabras) se aplica en `visita_service.actualizar_medico`
+    # SOLO si el nombre realmente cambia, para no bloquear la edición de otros
+    # campos en médicos con nombre heredado no conforme (ej. "DR. PEREZ GARCIA").
     @field_validator("nombre_completo")
     @classmethod
-    def _nombre_valido(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        v = " ".join(v.strip().upper().split())
-        if "." in v:
-            raise ValueError("El nombre no debe llevar abreviaciones con punto (ej. Dr. o M.)")
-        if len(v.split()) < 2:
-            raise ValueError("El nombre debe tener al menos 2 palabras (nombre + apellido)")
-        return v
+    def _nombre_normaliza(cls, v: str | None) -> str | None:
+        return " ".join(v.strip().upper().split()) if v is not None else v
 
     @field_validator("categoria")
     @classmethod
@@ -113,6 +163,16 @@ class MedicoVisitaActualizar(BaseModel):
         if v not in ("A", "B", "C", "D"):
             raise ValueError("La categoría debe ser A, B, C o D")
         return v
+
+    @field_validator("email")
+    @classmethod
+    def _email_valido(cls, v: str | None) -> str | None:
+        return _validar_email(v)
+
+    @field_validator("telefono")
+    @classmethod
+    def _telefono_valido(cls, v: str | None) -> str | None:
+        return _validar_telefono(v)
 
 
 class MedicoVisitaResponse(BaseModel):

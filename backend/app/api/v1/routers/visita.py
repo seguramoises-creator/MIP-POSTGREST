@@ -56,10 +56,32 @@ def _raise_captura_error(e: ValueError) -> None:
 @router.get("/especialidades", response_model=list[dict])
 def listar_especialidades(db: Session = Depends(get_db), current_user=RequireVisita):
     """Catálogo de especialidades (para el selector al registrar médicos)."""
-    from app.models.dimensiones import Especialidad
-    return [{"id": e.id, "nombre": e.nombre}
-            for e in db.query(Especialidad).filter(Especialidad.activo == True)  # noqa: E712
-            .order_by(Especialidad.nombre).all()]
+    from app.services import geo_catalogo_service
+    return geo_catalogo_service.listar_especialidades(db)
+
+
+@router.get("/provincias", response_model=list[dict])
+def listar_provincias(pais_codigo: str | None = None, db: Session = Depends(get_db),
+                      current_user=RequireVisita):
+    """Provincias (dropdown del maestro de médicos). Filtra por país si se indica."""
+    from app.services import geo_catalogo_service
+    return geo_catalogo_service.listar_provincias(db, pais_codigo)
+
+
+@router.get("/municipios", response_model=list[dict])
+def listar_municipios(provincia_id: int | None = None, db: Session = Depends(get_db),
+                      current_user=RequireVisita):
+    """Municipios de una provincia (dropdown en cascada)."""
+    from app.services import geo_catalogo_service
+    return geo_catalogo_service.listar_municipios(db, provincia_id)
+
+
+@router.get("/centros", response_model=list[dict])
+def listar_centros(pais_codigo: str | None = None, db: Session = Depends(get_db),
+                   current_user=RequireVisita):
+    """Centros médicos (dropdown del maestro de médicos). Filtra por país si se indica."""
+    from app.services import geo_catalogo_service
+    return geo_catalogo_service.listar_centros(db, pais_codigo)
 
 
 @router.get("/mi-gerente", response_model=dict)
@@ -128,7 +150,8 @@ def actualizar_medico(medico_id: int, datos: MedicoVisitaActualizar,
         if m.vm_id != rm:
             raise HTTPException(status_code=403, detail="Este médico no pertenece a tu panel.")
     # El alta/baja (campo `activo`) NO se cambia por edición directa: pasa por aprobación.
-    datos.activo = None
+    # (actualizar_medico ignora `activo` explícitamente; no lo asignamos aquí para no
+    #  marcarlo como "set" en Pydantic, lo que haría un UPDATE activo=NULL — bug histórico.)
     try:
         return visita_service.actualizar_medico(db, m, datos, getattr(current_user, "id", None))
     except ValueError as e:

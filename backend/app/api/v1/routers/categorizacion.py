@@ -328,3 +328,81 @@ def delete_regla(
     db: Session = Depends(get_db),
 ):
     return svc.delete_regla(db, regla_key)
+
+
+# ── Catálogos geográficos / especialidad (dropdowns del maestro de médicos) ────
+# Mantenimiento centralizado en Categorización (alta/baja lógica). Los mismos
+# catálogos se leen también desde el módulo de Visita (GET /visita/provincias, etc.).
+from app.services import geo_catalogo_service as _geo  # noqa: E402
+
+
+@router.get("/geo/provincias", summary="Listar provincias")
+def geo_listar_provincias(pais_codigo: Optional[str] = Query(None),
+                          _u: Usuario = RequireAuth, db: Session = Depends(get_db)):
+    return _geo.listar_provincias(db, pais_codigo)
+
+
+@router.get("/geo/municipios", summary="Listar municipios de una provincia")
+def geo_listar_municipios(provincia_id: Optional[int] = Query(None),
+                          _u: Usuario = RequireAuth, db: Session = Depends(get_db)):
+    return _geo.listar_municipios(db, provincia_id)
+
+
+@router.get("/geo/centros", summary="Listar centros médicos")
+def geo_listar_centros(pais_codigo: Optional[str] = Query(None),
+                       _u: Usuario = RequireAuth, db: Session = Depends(get_db)):
+    return _geo.listar_centros(db, pais_codigo)
+
+
+@router.get("/geo/especialidades", summary="Listar especialidades")
+def geo_listar_especialidades(_u: Usuario = RequireAuth, db: Session = Depends(get_db)):
+    return _geo.listar_especialidades(db)
+
+
+@router.post("/geo/provincias", summary="Crear provincia", status_code=201)
+def geo_crear_provincia(body: dict, _u: Usuario = RequireAdminCat, db: Session = Depends(get_db)):
+    try:
+        return _geo.crear_provincia(db, body["pais_codigo"], body["nombre"])
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Faltan campos: pais_codigo, nombre")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/geo/municipios", summary="Crear municipio", status_code=201)
+def geo_crear_municipio(body: dict, _u: Usuario = RequireAdminCat, db: Session = Depends(get_db)):
+    try:
+        return _geo.crear_municipio(db, int(body["provincia_id"]), body["nombre"])
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Faltan campos: provincia_id, nombre")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/geo/centros", summary="Crear centro médico", status_code=201)
+def geo_crear_centro(body: dict, _u: Usuario = RequireAdminCat, db: Session = Depends(get_db)):
+    try:
+        return _geo.crear_centro(db, body["pais_codigo"], body["nombre"])
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Faltan campos: pais_codigo, nombre")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/geo/especialidades", summary="Crear especialidad", status_code=201)
+def geo_crear_especialidad(body: dict, _u: Usuario = RequireAdminCat, db: Session = Depends(get_db)):
+    try:
+        return _geo.crear_especialidad(db, body["nombre"])
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Falta campo: nombre")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/geo/{tipo}/{id_}", summary="Baja lógica de un elemento del catálogo geográfico")
+def geo_desactivar(tipo: str, id_: int, _u: Usuario = RequireAdminCat, db: Session = Depends(get_db)):
+    try:
+        _geo.desactivar(db, tipo, id_)
+        return {"ok": True}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

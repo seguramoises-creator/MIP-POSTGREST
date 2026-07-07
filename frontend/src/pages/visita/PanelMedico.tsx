@@ -2,18 +2,29 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert, Grid,
   Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
-  Avatar, InputAdornment, Divider, Switch, FormControlLabel, IconButton, Tooltip,
+  Avatar, InputAdornment, Divider, Switch, FormControlLabel, IconButton, Tooltip, Autocomplete,
 } from '@mui/material';
 import { Add, PersonAddAlt1, Warning, Search, FiberManualRecord, Edit, Block, Restore, HowToReg, ThumbUp, ThumbDown } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import {
   listarMedicos, listarMedicosExistentes, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
   solicitarBajaMedico, reactivarMedico, listarAprobaciones, aprobarMedico, rechazarMedico,
+  listarProvincias, listarMunicipios, listarCentros,
   type MedicoVisita, type MedicoExistente, type Catalogo, type PosibleDuplicado, type MedicoCrear, type AprobacionPendiente,
+  type Provincia, type Municipio,
 } from '../../services/visita.service';
 
-const TIPOS = ['Clínica privada', 'Hospital público', 'Hospital privado', 'Consultorio independiente'];
-const FRECUENCIAS = ['Semanal', 'Quincenal', 'Mensual', 'Bimestral', 'Trimestral'];
+// Tipos de consultorio válidos en RD (sin "Hospital privado", que no aplica).
+const TIPOS = ['Clínica privada', 'Hospital público', 'Consultorio independiente'];
+// Días hábiles para el selector múltiple de "Días de consulta".
+const DIAS_SEMANA = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+// Frecuencia de visita: F1 = una vez al mes, F2 = dos veces al mes (alinea con COB_MD_F1/F2).
+const FRECUENCIAS = [
+  { value: 'F1', label: 'F1 — una vez al mes' },
+  { value: 'F2', label: 'F2 — dos veces al mes' },
+];
+const parseDias = (s?: string | null): string[] =>
+  (s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
 const POTENCIAL = ['Alto', 'Medio', 'Bajo'];
 const INSTITUCION = ['Pública', 'Privada'];
 const vacio: MedicoCrear = {
@@ -50,6 +61,23 @@ function iniciales(nombre: string): string {
   return ((p[0]?.[0] ?? '') + (p[1]?.[0] ?? '')).toUpperCase();
 }
 
+// Extrae un mensaje legible del error del backend. El handler de validación de
+// este app devuelve `detalle` (lista de errores Pydantic, texto limpio en
+// `ctx.error`); otros endpoints devuelven `detail` (string). Cae a genérico.
+function mensajeError(err: unknown): string {
+  const data = (err as { response?: { data?: Record<string, unknown> } })?.response?.data ?? {};
+  const detail = data.detail;
+  if (typeof detail === 'string') return detail;
+  const lista = (Array.isArray(data.detalle) ? data.detalle : Array.isArray(detail) ? detail : []) as Array<Record<string, any>>;
+  if (lista.length) {
+    const msgs = lista
+      .map((d) => d?.ctx?.error ?? (d?.msg ?? '').replace(/^Value error,\s*/i, ''))
+      .filter(Boolean);
+    if (msgs.length) return msgs.join(' · ');
+  }
+  return 'No se pudo guardar (revisa nombre en MAYÚSCULAS, ≥2 palabras, categoría A/B/C/D).';
+}
+
 export default function PanelMedico() {
   const rol = useAuthStore((s) => s.rol);
   const esVM = rol === 'REPRESENTANTE_MEDICO';
@@ -58,6 +86,10 @@ export default function PanelMedico() {
   const [medicos, setMedicos] = useState<MedicoVisita[]>([]);
   const [especialidades, setEspecialidades] = useState<Catalogo[]>([]);
   const [vms, setVms] = useState<Catalogo[]>([]);
+  // Catálogos geográficos (dropdowns del formulario de médico).
+  const [provincias, setProvincias] = useState<Provincia[]>([]);
+  const [municipios, setMunicipios] = useState<Municipio[]>([]);
+  const [centros, setCentros] = useState<Catalogo[]>([]);
   const [vmFiltro, setVmFiltro] = useState<number | ''>('');
   const [busqueda, setBusqueda] = useState('');
   const [catFiltro, setCatFiltro] = useState('');
@@ -92,9 +124,18 @@ export default function PanelMedico() {
   useEffect(() => { cargar(); }, [cargar]);
   useEffect(() => {
     listarEspecialidades().then(setEspecialidades).catch(() => {});
+    listarProvincias().then(setProvincias).catch(() => {});
+    listarCentros().then(setCentros).catch(() => {});
     if (!esVM) listarVMs().then(setVms).catch(() => {});
     cargarPendientes();
   }, [esVM, cargarPendientes]);
+
+  // Municipios en cascada: al elegir provincia (o abrir en edición), cargar sus municipios.
+  useEffect(() => {
+    const p = provincias.find((x) => x.nombre === form.provincia);
+    if (p) listarMunicipios(p.id).then(setMunicipios).catch(() => setMunicipios([]));
+    else setMunicipios([]);
+  }, [form.provincia, provincias]);
 
   // KPIs del panel (del ciclo actual) — solo sobre médicos activos.
   const kpis = useMemo(() => {
@@ -207,6 +248,20 @@ export default function PanelMedico() {
   };
   const set = (k: keyof MedicoCrear, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
+  // Días de consulta (multi-selección): se guarda como CSV ordenado L→V.
+  const toggleDia = (d: string) => {
+    const cur = parseDias(form.dias_consulta);
+    const next = cur.includes(d) ? cur.filter((x) => x !== d) : [...cur, d];
+    set('dias_consulta', DIAS_SEMANA.filter((x) => next.includes(x)).join(', '));
+  };
+  // Horario: "Todo el día" o "HH:MM-HH:MM" (desde/hasta).
+  const horarioRaw = form.horario_consulta ?? '';
+  const todoDia = horarioRaw.trim().toLowerCase() === 'todo el día';
+  const [hDesde, hHasta] = (!todoDia && horarioRaw.includes('-'))
+    ? horarioRaw.split('-').map((s) => s.trim()) : ['', ''];
+  const setHorario = (desde: string, hasta: string) =>
+    set('horario_consulta', desde || hasta ? `${desde}-${hasta}` : '');
+
   async function guardar(confirmar = false) {
     if (editId === null && !esVM && !form.vm_id) { setMsg({ tipo: 'error', texto: 'Selecciona el visitador (VM).' }); return; }
     setGuardando(true); setDuplicados(null);
@@ -222,8 +277,8 @@ export default function PanelMedico() {
         setMsg({ tipo: 'success', texto: 'Médico registrado — pendiente de aprobación del Gerente de Distrito (contará desde el próximo ciclo).' });
       }
       setAbierto(false); cargar(); cargarPendientes();
-    } catch {
-      setMsg({ tipo: 'error', texto: 'No se pudo guardar (revisa nombre en MAYÚSCULAS, ≥2 palabras, categoría A/B/C/D).' });
+    } catch (err: unknown) {
+      setMsg({ tipo: 'error', texto: mensajeError(err) });
     } finally { setGuardando(false); }
   }
 
@@ -484,7 +539,13 @@ export default function PanelMedico() {
 
                 {seccion('Ubicación / Zonificación')}
                 <Grid item xs={12} sm={6}>
-                  <TextField fullWidth size="small" label="Centro de trabajo principal" value={form.centro_trabajo ?? ''} onChange={(e) => set('centro_trabajo', e.target.value)} />
+                  <Autocomplete
+                    freeSolo size="small" options={centros.map((c) => c.nombre)}
+                    value={form.centro_trabajo ?? ''}
+                    onChange={(_, val) => set('centro_trabajo', val ?? '')}
+                    onInputChange={(_, val) => set('centro_trabajo', val)}
+                    renderInput={(params) => <TextField {...params} label="Centro de trabajo principal" />}
+                  />
                 </Grid>
                 <Grid item xs={6} sm={3}>
                   <TextField select fullWidth size="small" label="Institución" value={form.institucion_tipo ?? ''} onChange={(e) => set('institucion_tipo', e.target.value)}>
@@ -499,10 +560,26 @@ export default function PanelMedico() {
                   </TextField>
                 </Grid>
                 <Grid item xs={12} sm={4}>
-                  <TextField fullWidth size="small" label="Provincia" value={form.provincia ?? ''} onChange={(e) => set('provincia', e.target.value)} />
+                  <Autocomplete
+                    freeSolo size="small"
+                    options={Array.from(new Set([...provincias.map((p) => p.nombre), form.provincia].filter(Boolean) as string[]))}
+                    value={form.provincia ?? null}
+                    onChange={(_, val) => setForm((f) => ({ ...f, provincia: val ?? '', municipio: '' }))}
+                    onInputChange={(_, val, reason) => { if (reason === 'input') setForm((f) => ({ ...f, provincia: val })); }}
+                    renderInput={(params) => <TextField {...params} label="Provincia" />}
+                  />
                 </Grid>
                 <Grid item xs={12} sm={4}>
-                  <TextField fullWidth size="small" label="Ciudad / Municipio" value={form.municipio ?? ''} onChange={(e) => set('municipio', e.target.value)} />
+                  <Autocomplete
+                    freeSolo size="small"
+                    options={Array.from(new Set([...municipios.map((m) => m.nombre), form.municipio].filter(Boolean) as string[]))}
+                    value={form.municipio ?? null}
+                    disabled={!form.provincia}
+                    onChange={(_, val) => set('municipio', val ?? '')}
+                    onInputChange={(_, val, reason) => { if (reason === 'input') set('municipio', val); }}
+                    renderInput={(params) => <TextField {...params} label="Ciudad / Municipio"
+                      helperText={!form.provincia ? 'Elige una provincia primero' : undefined} />}
+                  />
                 </Grid>
                 <Grid item xs={12} sm={4}>
                   <TextField fullWidth size="small" label="Sector" value={form.sector ?? ''} onChange={(e) => set('sector', e.target.value)} />
@@ -529,16 +606,46 @@ export default function PanelMedico() {
                 </Grid>
 
                 {seccion('Consulta y visita')}
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth size="small" label="Días de consulta" value={form.dias_consulta ?? ''} placeholder="Lun, Mié, Vie" onChange={(e) => set('dias_consulta', e.target.value)} />
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    Días de consulta
+                  </Typography>
+                  <Stack direction="row" flexWrap="wrap" gap={0.5}>
+                    {DIAS_SEMANA.map((d) => {
+                      const sel = parseDias(form.dias_consulta).includes(d);
+                      return (
+                        <Chip key={d} label={d.slice(0, 3)} size="small" clickable
+                              color={sel ? 'primary' : 'default'} variant={sel ? 'filled' : 'outlined'}
+                              onClick={() => toggleDia(d)} />
+                      );
+                    })}
+                  </Stack>
                 </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField fullWidth size="small" label="Horario de consulta" value={form.horario_consulta ?? ''} placeholder="8:00–12:00" onChange={(e) => set('horario_consulta', e.target.value)} />
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                    Horario de consulta
+                  </Typography>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <TextField size="small" type="time" label="Desde" value={hDesde} disabled={todoDia}
+                               InputLabelProps={{ shrink: true }}
+                               onChange={(e) => setHorario(e.target.value, hHasta)} sx={{ width: 130 }} />
+                    <TextField size="small" type="time" label="Hasta" value={hHasta} disabled={todoDia}
+                               InputLabelProps={{ shrink: true }}
+                               onChange={(e) => setHorario(hDesde, e.target.value)} sx={{ width: 130 }} />
+                    <FormControlLabel
+                      control={<Switch size="small" checked={todoDia}
+                        onChange={(e) => set('horario_consulta', e.target.checked ? 'Todo el día' : '')} />}
+                      label="Todo el día" />
+                  </Stack>
                 </Grid>
                 <Grid item xs={12} sm={4}>
                   <TextField select fullWidth size="small" label="Frecuencia de visita" value={form.frecuencia_visita ?? ''} onChange={(e) => set('frecuencia_visita', e.target.value)}>
                     <MenuItem value="">—</MenuItem>
-                    {FRECUENCIAS.map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+                    {FRECUENCIAS.map((f) => <MenuItem key={f.value} value={f.value}>{f.label}</MenuItem>)}
+                    {/* Preserva un valor heredado (ej. "Mensual") que ya no está en el catálogo. */}
+                    {form.frecuencia_visita && !FRECUENCIAS.some((f) => f.value === form.frecuencia_visita) && (
+                      <MenuItem value={form.frecuencia_visita}>{form.frecuencia_visita} (actual)</MenuItem>
+                    )}
                   </TextField>
                 </Grid>
 
