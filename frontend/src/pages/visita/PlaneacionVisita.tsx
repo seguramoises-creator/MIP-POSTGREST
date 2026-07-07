@@ -19,9 +19,15 @@ function msgError(e: unknown, fallback: string): string {
   return fallback;
 }
 
-// Estado por médico: semana de Vista (0 = no planeada) y semana de Revisita (0 = ninguna).
-interface Fila { vSemana: number; rSemana: number; }
+// Estado por médico: semana + día de la Vista, y (opcional) Revisita con su semana + día.
+interface Fila { vSemana: number; vDia: string; revisita: boolean; rSemana: number; rDia: string; }
+const F0: Fila = { vSemana: 0, vDia: '', revisita: false, rSemana: 0, rDia: '' };
 const SEMANAS = [1, 2, 3, 4];
+const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+
+// La revisita se intercala 2 semanas después (Sem 1→3, Sem 2→4); solo aplica a Vistas en Sem 1 o 2.
+const revisitaPermitida = (vSemana: number) => vSemana === 1 || vSemana === 2;
+const propuestaRevisita = (vSemana: number) => vSemana + 2;
 
 export default function PlaneacionVisita() {
   const rol = useAuthStore((s) => s.rol);
@@ -53,11 +59,17 @@ export default function PlaneacionVisita() {
       setMedicos(m);
       setResumen(r);
       const mapa: Record<number, Fila> = {};
-      m.forEach((med) => { mapa[med.id] = { vSemana: 0, rSemana: 0 }; });
+      m.forEach((med) => { mapa[med.id] = { ...F0 }; });
       p.forEach((it: PlaneacionItem) => {
-        if (!mapa[it.medico_id]) mapa[it.medico_id] = { vSemana: 0, rSemana: 0 };
-        if (it.tipo_visita === 'V') mapa[it.medico_id].vSemana = it.semana;
-        else mapa[it.medico_id].rSemana = it.semana;
+        if (!mapa[it.medico_id]) mapa[it.medico_id] = { ...F0 };
+        if (it.tipo_visita === 'V') {
+          mapa[it.medico_id].vSemana = it.semana;
+          mapa[it.medico_id].vDia = it.dia_semana ?? '';
+        } else {
+          mapa[it.medico_id].revisita = true;
+          mapa[it.medico_id].rSemana = it.semana;
+          mapa[it.medico_id].rDia = it.dia_semana ?? '';
+        }
       });
       setPlan(mapa);
     } catch {
@@ -66,21 +78,44 @@ export default function PlaneacionVisita() {
   }, [listo, vmParam]);
   useEffect(() => { cargar(); }, [cargar]);
 
-  const setV = (id: number, v: number) =>
-    setPlan((p) => ({ ...p, [id]: { vSemana: v, rSemana: v === 0 ? 0 : p[id]?.rSemana ?? 0 } }));
-  const setR = (id: number, r: number) =>
-    setPlan((p) => ({ ...p, [id]: { ...p[id], rSemana: r } }));
+  // Semana de la Vista. Si pasa a 0 (sin Vista) o a una semana sin revisita permitida (3/4),
+  // apaga la Revisita. Si sigue permitida, re-propone la semana intercalada.
+  const setVSemana = (id: number, v: number) => setPlan((p) => {
+    const cur = p[id] ?? F0;
+    if (v === 0) return { ...p, [id]: { ...F0 } };
+    const revisita = cur.revisita && revisitaPermitida(v);
+    return { ...p, [id]: {
+      ...cur, vSemana: v, revisita,
+      rSemana: revisita ? propuestaRevisita(v) : 0,
+      rDia: revisita ? cur.vDia : '',
+    } };
+  });
+  // Día de la Vista. El día de la Revisita queda espejado (debe ser el mismo día).
+  const setVDia = (id: number, dia: string) => setPlan((p) => {
+    const cur = p[id] ?? F0;
+    return { ...p, [id]: { ...cur, vDia: dia, rDia: cur.revisita ? dia : cur.rDia } };
+  });
+  // Revisita Sí/No. Al activar, auto-propone semana intercalada + mismo día de la Vista.
+  const toggleRevisita = (id: number, on: boolean) => setPlan((p) => {
+    const cur = p[id] ?? F0;
+    if (on && revisitaPermitida(cur.vSemana)) {
+      return { ...p, [id]: { ...cur, revisita: true, rSemana: propuestaRevisita(cur.vSemana), rDia: cur.vDia } };
+    }
+    return { ...p, [id]: { ...cur, revisita: false, rSemana: 0, rDia: '' } };
+  });
+  // La semana de la Revisita es una propuesta editable (debe ser posterior a la Vista).
+  const setRSemana = (id: number, s: number) => setPlan((p) => ({ ...p, [id]: { ...(p[id] ?? F0), rSemana: s } }));
 
   // Métricas en vivo (previa a guardar) para feedback inmediato.
   const vivo = useMemo(() => {
     const filas = Object.values(plan);
     const conVista = filas.filter((f) => f.vSemana > 0).length;
-    const total = filas.reduce((s, f) => s + (f.vSemana > 0 ? 1 : 0) + (f.rSemana > 0 ? 1 : 0), 0);
+    const conR = filas.filter((f) => f.revisita && f.rSemana > 0).length;
     const catA = medicos.filter((m) => m.categoria === 'A');
-    const catASinRe = catA.filter((m) => (plan[m.id]?.rSemana ?? 0) === 0).length;
+    const catASinRe = catA.filter((m) => !plan[m.id]?.revisita).length;
     const panel = medicos.length;
     return {
-      conVista, total, catASinRe, panel,
+      conVista, total: conVista + conR, catASinRe, panel,
       cobertura: panel ? Math.round((conVista / panel) * 1000) / 10 : 0,
     };
   }, [plan, medicos]);
@@ -90,8 +125,10 @@ export default function PlaneacionVisita() {
     const items: PlaneacionItem[] = [];
     for (const [idStr, f] of Object.entries(plan)) {
       const id = Number(idStr);
-      if (f.vSemana > 0) items.push({ medico_id: id, tipo_visita: 'V', semana: f.vSemana });
-      if (f.rSemana > 0) items.push({ medico_id: id, tipo_visita: 'R', semana: f.rSemana });
+      if (f.vSemana > 0) items.push({ medico_id: id, tipo_visita: 'V', semana: f.vSemana, dia_semana: f.vDia || null });
+      if (f.revisita && f.rSemana > 0) {
+        items.push({ medico_id: id, tipo_visita: 'R', semana: f.rSemana, dia_semana: (f.rDia || f.vDia) || null });
+      }
     }
     try {
       const res = await guardarPlaneacion(items, vmParam);
@@ -119,8 +156,9 @@ export default function PlaneacionVisita() {
         <Typography variant="h5" fontWeight={700}>Planeación del Ciclo</Typography>
       </Stack>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Asigna a cada médico su semana de Vista (V) y, opcionalmente, una Revisita (R) en la misma
-        semana o posterior. La Revisita requiere una Vista. Máximo 1 V + 1 R por médico.
+        Ciclo de 4 semanas. Asigna a cada médico la <b>semana</b> (1-4) y el <b>día</b> (Lun-Vie) de la Vista.
+        Si marcas <b>Revisita = Sí</b>, se propone la semana intercalada (Sem 1→3, Sem 2→4) el mismo día.
+        Máximo 1 Vista + 1 Revisita por médico.
       </Typography>
 
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
@@ -166,18 +204,22 @@ export default function PlaneacionVisita() {
               <TableRow>
                 <TableCell>Médico</TableCell>
                 <TableCell align="center">Cat.</TableCell>
-                <TableCell align="center">Vista (semana)</TableCell>
-                <TableCell align="center">Revisita (semana)</TableCell>
+                <TableCell align="center">Semana visita</TableCell>
+                <TableCell align="center">Día visita</TableCell>
+                <TableCell align="center">Revisita</TableCell>
+                <TableCell align="center">Semana revisita</TableCell>
+                <TableCell align="center">Día revisita</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {medicos.length === 0 && (
-                <TableRow><TableCell colSpan={4}>
+                <TableRow><TableCell colSpan={7}>
                   <Alert severity="info" sx={{ my: 1 }}>No hay médicos en tu panel. Regístralos en Panel Médico.</Alert>
                 </TableCell></TableRow>
               )}
               {medicos.map((m) => {
-                const f = plan[m.id] ?? { vSemana: 0, rSemana: 0 };
+                const f = plan[m.id] ?? F0;
+                const rOk = revisitaPermitida(f.vSemana);
                 return (
                   <TableRow key={m.id} hover>
                     <TableCell>{m.nombre_completo}</TableCell>
@@ -185,26 +227,55 @@ export default function PlaneacionVisita() {
                       <Chip size="small" label={m.categoria}
                             color={m.categoria === 'A' ? 'error' : m.categoria === 'B' ? 'warning' : 'default'} />
                     </TableCell>
+                    {/* Semana de la Vista */}
                     <TableCell align="center">
-                      <FormControl size="small" sx={{ minWidth: 90 }}>
-                        <Select value={f.vSemana} onChange={(e) => setV(m.id, Number(e.target.value))}>
+                      <FormControl size="small" sx={{ minWidth: 92 }}>
+                        <Select value={f.vSemana} onChange={(e) => setVSemana(m.id, Number(e.target.value))}>
                           <MenuItem value={0}><em>—</em></MenuItem>
                           {SEMANAS.map((s) => <MenuItem key={s} value={s}>Sem {s}</MenuItem>)}
                         </Select>
                       </FormControl>
                     </TableCell>
+                    {/* Día de la Vista */}
                     <TableCell align="center">
-                      <Tooltip title={f.vSemana === 0 ? 'Primero asigna la Vista' : `Debe ir en semana ≥ ${f.vSemana}`}>
-                        <FormControl size="small" sx={{ minWidth: 90 }}>
-                          <Select value={f.rSemana} disabled={f.vSemana === 0}
-                                  onChange={(e) => setR(m.id, Number(e.target.value))}>
-                            <MenuItem value={0}><em>Sin R</em></MenuItem>
-                            {SEMANAS.filter((s) => s >= f.vSemana).map((s) => (
-                              <MenuItem key={s} value={s}>Sem {s}</MenuItem>
-                            ))}
+                      <FormControl size="small" sx={{ minWidth: 110 }}>
+                        <Select value={f.vDia} displayEmpty disabled={f.vSemana === 0}
+                                onChange={(e) => setVDia(m.id, String(e.target.value))}>
+                          <MenuItem value=""><em>— día —</em></MenuItem>
+                          {DIAS.map((d) => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+                        </Select>
+                      </FormControl>
+                    </TableCell>
+                    {/* Revisita Sí / No */}
+                    <TableCell align="center">
+                      <Tooltip title={f.vSemana === 0 ? 'Primero asigna la Vista'
+                        : rOk ? '' : 'La revisita solo aplica a Vistas en Sem 1 o 2'}>
+                        <FormControl size="small" sx={{ minWidth: 80 }}>
+                          <Select value={f.revisita ? 'Si' : 'No'} disabled={!rOk}
+                                  onChange={(e) => toggleRevisita(m.id, e.target.value === 'Si')}>
+                            <MenuItem value="No">No</MenuItem>
+                            <MenuItem value="Si">Sí</MenuItem>
                           </Select>
                         </FormControl>
                       </Tooltip>
+                    </TableCell>
+                    {/* Semana de la Revisita (propuesta editable, posterior a la Vista) */}
+                    <TableCell align="center">
+                      <FormControl size="small" sx={{ minWidth: 92 }}>
+                        <Select value={f.revisita ? f.rSemana : 0} disabled={!f.revisita}
+                                onChange={(e) => setRSemana(m.id, Number(e.target.value))}>
+                          <MenuItem value={0}><em>—</em></MenuItem>
+                          {SEMANAS.filter((s) => s > f.vSemana).map((s) => (
+                            <MenuItem key={s} value={s}>Sem {s}</MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                    </TableCell>
+                    {/* Día de la Revisita (fijo = día de la Vista) */}
+                    <TableCell align="center">
+                      {f.revisita
+                        ? <Chip size="small" variant="outlined" label={f.rDia || f.vDia || '—'} />
+                        : <Typography variant="body2" color="text.disabled">—</Typography>}
                     </TableCell>
                   </TableRow>
                 );
