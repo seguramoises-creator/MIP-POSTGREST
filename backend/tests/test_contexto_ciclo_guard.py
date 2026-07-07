@@ -72,7 +72,7 @@ def test_registrar_visita_rechaza_ciclo_cerrado(monkeypatch):
 
     db = MagicMock()
     monkeypatch.setattr(rs, "_medico_del_vm", lambda d, vm, m: None)
-    monkeypatch.setattr(rs, "ciclo_por_defecto", lambda d: 5)
+    monkeypatch.setattr(rs, "ciclo_por_defecto", lambda d, vm=None: 5)
 
     def _cerrado(d, c):
         raise rs.recalculo_service.CicloCerradoError("cerrado")
@@ -89,7 +89,7 @@ def test_registrar_no_visita_rechaza_ciclo_cerrado(monkeypatch):
 
     db = MagicMock()
     monkeypatch.setattr(rs, "_medico_del_vm", lambda d, vm, m: None)
-    monkeypatch.setattr(rs, "ciclo_por_defecto", lambda d: 5)
+    monkeypatch.setattr(rs, "ciclo_por_defecto", lambda d, vm=None: 5)
 
     def _cerrado(d, c):
         raise rs.recalculo_service.CicloCerradoError("cerrado")
@@ -108,7 +108,7 @@ def test_guardar_planeacion_rechaza_ciclo_cerrado(monkeypatch):
     import app.services.visita_planeacion_service as ps
 
     db = MagicMock()
-    monkeypatch.setattr(ps, "ciclo_por_defecto", lambda d: 5)
+    monkeypatch.setattr(ps, "ciclo_por_defecto", lambda d, vm=None: 5)
 
     def _cerrado(d, c):
         raise ps.recalculo_service.CicloCerradoError("cerrado")
@@ -150,7 +150,7 @@ def test_registrar_muestras_rechaza_ciclo_cerrado(monkeypatch):
     from app.schemas.visita import MuestraItem
 
     db = MagicMock()
-    monkeypatch.setattr(ps, "ciclo_por_defecto", lambda d: 5)
+    monkeypatch.setattr(ps, "ciclo_por_defecto", lambda d, vm=None: 5)
 
     def _cerrado(d, c):
         raise ps.recalculo_service.CicloCerradoError("cerrado")
@@ -166,7 +166,7 @@ def test_guardar_parametros_costo_rechaza_ciclo_cerrado(monkeypatch):
     from app.schemas.visita import ParametroCostoGuardar
 
     db = MagicMock()
-    monkeypatch.setattr(cs, "ciclo_por_defecto", lambda d: 5)
+    monkeypatch.setattr(cs, "ciclo_por_defecto", lambda d, vm=None: 5)
 
     def _cerrado(d, c):
         raise cs.recalculo_service.CicloCerradoError("cerrado")

@@ -17,8 +17,9 @@ import CicloPaisHeader from '../CicloPaisHeader';
 export default function MainLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  // Franja global País+Ciclo: se oculta en /visita/registrar (la monta dentro de su
-  // formulario), en /dashboard y en /lsii (tienen sus propios filtros de Ciclo).
+  // Franja global País+Ciclo: se oculta en /visita/registrar (el registro siempre
+  // va al ciclo abierto — el contexto es redundante ahí), en /dashboard y en /lsii
+  // (tienen sus propios filtros de Ciclo).
   const HEADER_OCULTO = ['/visita/registrar', '/dashboard', '/lsii'];
   const headerEnLayout = !HEADER_OCULTO.includes(pathname);
   const { nombreCompleto, accessToken, rol, logout } = useAuthStore();

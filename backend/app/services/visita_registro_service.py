@@ -33,7 +33,7 @@ def _medico_del_vm(db: Session, vm_id: int, medico_id: int) -> MedicoVisita:
 
 def registrar_visita(db: Session, vm_id: int, datos: VisitaRegistrar, usuario_id: int | None) -> VisitaRegistro:
     _medico_del_vm(db, vm_id, datos.medico_id)
-    ciclo_id = ciclo_por_defecto(db)
+    ciclo_id = ciclo_por_defecto(db, vm_id)  # ciclo ABIERTO del país del VM
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
     _guard_ciclo_abierto(db, ciclo_id)
@@ -55,7 +55,7 @@ def registrar_visita(db: Session, vm_id: int, datos: VisitaRegistrar, usuario_id
 
 def registrar_no_visita(db: Session, vm_id: int, datos: VisitaNoVisita, usuario_id: int | None) -> VisitaRegistro:
     _medico_del_vm(db, vm_id, datos.medico_id)
-    ciclo_id = ciclo_por_defecto(db)
+    ciclo_id = ciclo_por_defecto(db, vm_id)  # ciclo ABIERTO del país del VM
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
     _guard_ciclo_abierto(db, ciclo_id)
@@ -72,13 +72,8 @@ def registrar_no_visita(db: Session, vm_id: int, datos: VisitaNoVisita, usuario_
     return v
 
 
-def visitas_del_dia(db: Session, vm_id: int) -> list[dict]:
-    """Visitas registradas HOY por el VM (para el feed del móvil)."""
-    hoy = datetime.now(timezone.utc).date()
-    inicio = datetime(hoy.year, hoy.month, hoy.day, tzinfo=timezone.utc)
-    vs = db.query(VisitaRegistro).filter(
-        VisitaRegistro.vm_id == vm_id, VisitaRegistro.fecha_hora >= inicio,
-    ).order_by(VisitaRegistro.fecha_hora.desc()).all()
+def _serializar_visitas(db: Session, vs: list) -> list[dict]:
+    """Serializa registros de visita al dict del feed (con nombre del médico)."""
     mids = {v.medico_id for v in vs}
     nombres = dict(db.query(MedicoVisita.id, MedicoVisita.nombre_completo)
                    .filter(MedicoVisita.id.in_(mids)).all()) if mids else {}
@@ -97,6 +92,31 @@ def visitas_del_dia(db: Session, vm_id: int) -> list[dict]:
     } for v in vs]
 
 
+def visitas_del_dia(db: Session, vm_id: int) -> list[dict]:
+    """Visitas registradas HOY por el VM (para el feed del móvil)."""
+    hoy = datetime.now(timezone.utc).date()
+    inicio = datetime(hoy.year, hoy.month, hoy.day, tzinfo=timezone.utc)
+    vs = db.query(VisitaRegistro).filter(
+        VisitaRegistro.vm_id == vm_id, VisitaRegistro.fecha_hora >= inicio,
+    ).order_by(VisitaRegistro.fecha_hora.desc()).all()
+    return _serializar_visitas(db, vs)
+
+
+def historial_visitas(db: Session, vm_id: int, dias: int = 30, limite: int = 200) -> list[dict]:
+    """Visitas ANTERIORES del VM (últimos `dias` días, más recientes primero).
+
+    SOLO LECTURA por diseño: el RM puede consultar sus visitas registradas y
+    ver su comentario, pero no existe ningún endpoint de edición/borrado de
+    visitas — el registro es inmutable."""
+    dias = max(1, min(int(dias or 30), 365))
+    desde = datetime.now(timezone.utc) - timedelta(days=dias)
+    vs = (db.query(VisitaRegistro)
+          .filter(VisitaRegistro.vm_id == vm_id, VisitaRegistro.fecha_hora >= desde)
+          .order_by(VisitaRegistro.fecha_hora.desc())
+          .limit(limite).all())
+    return _serializar_visitas(db, vs)
+
+
 # Días de la semana (Mon=0 .. Sun=6) para casar con PlaneacionCiclo.dia_semana.
 _DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
 
@@ -108,7 +128,7 @@ def agenda_hoy(db: Session, vm_id: int) -> list[dict]:
     existe una visita ejecutada hoy para ese médico."""
     from app.models.visita import PlaneacionCiclo
     from app.models.dimensiones import Especialidad, RepresentanteMedico
-    ciclo_id = ciclo_por_defecto(db)
+    ciclo_id = ciclo_por_defecto(db, vm_id)  # ciclo ABIERTO del país del VM
     rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
     linea_id = rm.linea_id if rm else None
     hoy = datetime.now(timezone.utc).date()

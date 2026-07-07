@@ -17,7 +17,22 @@ OBJ_COMPLETA = 60.0
 CICLO_DIAS_DEFAULT = 19  # días hábiles del ciclo (parámetro operativo RD, spec Parte 1)
 
 
-def ciclo_por_defecto(db: Session) -> int | None:
+def ciclo_por_defecto(db: Session, vm_id: int | None = None) -> int | None:
+    """Ciclo de trabajo por defecto.
+
+    Con `vm_id`: el ciclo ABIERTO más reciente del PAÍS del VM — es el ciclo al
+    que se registran visitas/muestras y del que se lee la parrilla.
+    FIX jul-2026: sin este filtro se tomaba el ciclo más reciente GLOBAL (de
+    cualquier país, incluso cerrado), y los registros de un VM de DO caían en
+    el ciclo de otro país."""
+    if vm_id:
+        rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
+        if rm and rm.pais_codigo:
+            c = (db.query(Ciclo)
+                 .filter(Ciclo.pais_codigo == rm.pais_codigo, Ciclo.cerrado == False)  # noqa: E712
+                 .order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first())
+            if c:
+                return c.id
     c = db.query(Ciclo).order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first()
     return c.id if c else None
 

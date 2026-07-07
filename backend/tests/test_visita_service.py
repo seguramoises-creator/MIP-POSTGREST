@@ -357,7 +357,7 @@ def test_registrar_visita_persiste_gps(monkeypatch):
     from types import SimpleNamespace
     db = MagicMock()
     monkeypatch.setattr(rs, "_medico_del_vm", lambda d, vm, m: None)
-    monkeypatch.setattr(rs, "ciclo_por_defecto", lambda d: 7)
+    monkeypatch.setattr(rs, "ciclo_por_defecto", lambda d, vm=None: 7)
     monkeypatch.setattr(rs, "_guard_ciclo_abierto", lambda d, c: None)
     capturado = {}
     db.add.side_effect = lambda obj: capturado.__setitem__("obj", obj)

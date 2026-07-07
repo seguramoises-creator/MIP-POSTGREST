@@ -268,6 +268,16 @@ def mis_visitas_hoy(vm_id: int | None = None, db: Session = Depends(get_db), cur
     return visita_registro_service.visitas_del_dia(db, _vm_registro(current_user, vm_id))
 
 
+@router.get("/historial", response_model=list[dict])
+def historial_visitas(vm_id: int | None = None, dias: int = 30,
+                      db: Session = Depends(get_db), current_user=RequireVisita):
+    """Visitas anteriores del VM (SOLO LECTURA): el RM consulta sus registros y
+    ve su comentario, pero nunca puede modificarlos — no existen endpoints de
+    edición/borrado de visitas."""
+    from app.services import visita_registro_service
+    return visita_registro_service.historial_visitas(db, _vm_registro(current_user, vm_id), dias)
+
+
 @router.get("/agenda-hoy", response_model=list[dict])
 def agenda_hoy(vm_id: int | None = None, db: Session = Depends(get_db), current_user=RequireVisita):
     """Médicos programados del VM para hoy (agenda), con su estado pendiente/registrada."""
@@ -409,12 +419,14 @@ def listar_lineas(db: Session = Depends(get_db), current_user=RequireVisita):
 
 @router.get("/parrilla", response_model=list[dict])
 def obtener_parrilla(linea_id: int | None = None, ciclo_id: int | None = None,
+                     vm_id: int | None = None,
                      db: Session = Depends(get_db), current_user=RequireVisita):
-    """Parrilla del ciclo para una línea. El VM usa su propia línea si no se indica y
-    SOLO ve parrillas publicadas; el Gerente de Producto ve también los borradores."""
+    """Parrilla del ciclo para una línea. Sin `linea_id` se usa la línea del VM
+    (el RM usa la suya propia; gestión puede indicar `vm_id`). El VM SOLO ve
+    parrillas publicadas; el Gerente de Producto ve también los borradores."""
     from app.services import visita_parrilla_service
     if linea_id is None:
-        vm = _scope_vm(current_user, None)
+        vm = _scope_vm(current_user, vm_id)
         linea_id = visita_parrilla_service.linea_de_vm(db, vm) if vm else None
     if linea_id is None:
         raise HTTPException(status_code=400, detail="Indica la línea (linea_id).")

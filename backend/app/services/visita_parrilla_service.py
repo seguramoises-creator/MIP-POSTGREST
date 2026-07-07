@@ -53,8 +53,21 @@ def listar_productos(db: Session, linea_id: int | None = None) -> list[dict]:
     } for p in q.order_by(Producto.codigo).all()]
 
 
+def _ciclo_abierto_de_linea(db: Session, linea_id: int) -> int | None:
+    """Ciclo ABIERTO más reciente del PAÍS de la línea (la parrilla es por ciclo+línea).
+    FIX jul-2026: el default global tomaba el ciclo más reciente de CUALQUIER país."""
+    from app.models.dimensiones import Ciclo
+    ln = db.query(Linea).filter(Linea.id == linea_id).first()
+    if not ln:
+        return None
+    c = (db.query(Ciclo)
+         .filter(Ciclo.pais_codigo == ln.pais_codigo, Ciclo.cerrado == False)  # noqa: E712
+         .order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first())
+    return c.id if c else None
+
+
 def listar_parrilla(db: Session, ciclo_id: int | None, linea_id: int, solo_publicada: bool = False) -> list[dict]:
-    ciclo_id = ciclo_id or ciclo_por_defecto(db)
+    ciclo_id = ciclo_id or _ciclo_abierto_de_linea(db, linea_id) or ciclo_por_defecto(db)
     q = db.query(ParrillaPromocional).filter(
         ParrillaPromocional.ciclo_id == ciclo_id,
         ParrillaPromocional.linea_id == linea_id,
@@ -175,7 +188,7 @@ def penetracion_ciclo(db: Session, ciclo_id: int | None, linea_id: int) -> dict:
 
 def registrar_muestras(db: Session, vm_id: int, ciclo_id: int | None, medico_id: int,
                        entregas: list[MuestraItem], usuario_id: int | None) -> int:
-    ciclo_id = ciclo_id or ciclo_por_defecto(db)
+    ciclo_id = ciclo_id or ciclo_por_defecto(db, vm_id)  # ciclo ABIERTO del país del VM
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
     _guard_ciclo_abierto(db, ciclo_id)

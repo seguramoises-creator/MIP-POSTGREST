@@ -165,6 +165,10 @@ export interface ProductoDetalle { producto: string; mencion: number; }
 export const listarCausas = () => api.get<string[]>('/visita/causas').then(r => r.data);
 export const misVisitasHoy = (vmId?: number) =>
   api.get<VisitaHoy[]>('/visita/mis-visitas-hoy', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+// Historial SOLO LECTURA: el RM consulta sus visitas anteriores (y su comentario),
+// nunca puede editarlas — no existen endpoints de edición de visitas.
+export const historialVisitas = (vmId?: number, dias = 30) =>
+  api.get<VisitaHoy[]>('/visita/historial', { params: { dias, ...(vmId ? { vm_id: vmId } : {}) } }).then(r => r.data);
 export const agendaHoy = (vmId?: number) =>
   api.get<AgendaMedico[]>('/visita/agenda-hoy', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 export const registrarVisita = (
@@ -257,12 +261,12 @@ export interface MuestrasResumen {
   productos: MuestraResumenProducto[];
 }
 export const listarLineasVisita = () => api.get<Catalogo[]>('/visita/lineas').then(r => r.data);
-export const obtenerParrilla = (lineaId?: number, cicloId?: number) =>
-  api.get<ParrillaItem[]>('/visita/parrilla', { params: { ...(lineaId && { linea_id: lineaId }), ...(cicloId && { ciclo_id: cicloId }) } }).then(r => r.data);
+export const obtenerParrilla = (lineaId?: number, cicloId?: number, vmId?: number) =>
+  api.get<ParrillaItem[]>('/visita/parrilla', { params: { ...(lineaId && { linea_id: lineaId }), ...(cicloId && { ciclo_id: cicloId }), ...(vmId && { vm_id: vmId }) } }).then(r => r.data);
 export const guardarParrilla = (linea_id: number, items: ParrillaItem[], cicloId?: number) =>
   api.post<{ guardados: number }>('/visita/parrilla', { linea_id, items, ciclo_id: cicloId ?? null }).then(r => r.data);
-export const registrarMuestras = (medico_id: number, entregas: { producto: string; cantidad: number }[]) =>
-  api.post<{ registradas: number }>('/visita/muestras', { medico_id, entregas }).then(r => r.data);
+export const registrarMuestras = (medico_id: number, entregas: { producto: string; cantidad: number }[], vmId?: number) =>
+  api.post<{ registradas: number }>('/visita/muestras', { medico_id, entregas }, { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 export const muestrasResumen = (vmId?: number) =>
   api.get<MuestrasResumen>('/visita/muestras/resumen', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 
