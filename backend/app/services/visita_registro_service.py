@@ -188,7 +188,7 @@ def agenda_hoy(db: Session, vm_id: int) -> list[dict]:
 
 
 # ── Foto de visita (BLOB) — v2 ────────────────────────────────────────────
-MAX_FOTO_BYTES = 3 * 1024 * 1024
+MAX_FOTO_BYTES = 15 * 1024 * 1024   # 15 MB — servidor sin límite; permite fotos de buena calidad
 _MAGIC_JPEG = b"\xff\xd8\xff"
 _MAGIC_PNG = b"\x89PNG\r\n"
 
@@ -198,9 +198,10 @@ def _es_imagen(contenido: bytes) -> bool:
 
 
 def guardar_foto_visita(db: Session, visita_id: int, contenido: bytes, mime: str) -> None:
-    """Valida (magic bytes JPEG/PNG + tamaño ≤ 3MB) y guarda la foto como BLOB."""
+    """Valida (magic bytes JPEG/PNG + tamaño ≤ 15MB) y guarda la foto como BLOB.
+    El frontend ya normaliza la foto a JPEG comprimido antes de subir."""
     if len(contenido) > MAX_FOTO_BYTES:
-        raise ValueError("La foto excede el tamaño máximo (3 MB)")
+        raise ValueError("La foto excede el tamaño máximo (15 MB)")
     if not _es_imagen(contenido):
         raise ValueError("El archivo no es una imagen JPEG/PNG válida")
     v = db.query(VisitaRegistro).filter(VisitaRegistro.id == visita_id).first()

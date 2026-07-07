@@ -40,6 +40,41 @@ function msgError(e: unknown, fallback: string): string {
 }
 function hhmm(d: Date): string { return d.toTimeString().slice(0, 5); }
 
+// Normaliza cualquier foto (incluida HEIC de iPhone que el navegador pueda decodificar)
+// a JPEG redimensionado y comprimido: garantiza formato válido y tamaño subible, con
+// buena calidad. Si algo falla, devuelve el archivo original (el backend tiene margen).
+async function comprimirImagen(file: File, maxLado = 2200, calidad = 0.85): Promise<File> {
+  try {
+    const dataUrl = await new Promise<string>((res, rej) => {
+      const fr = new FileReader();
+      fr.onload = () => res(fr.result as string);
+      fr.onerror = () => rej(new Error('read'));
+      fr.readAsDataURL(file);
+    });
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error('decode'));
+      i.src = dataUrl;
+    });
+    let { width, height } = img;
+    if (!width || !height) return file;
+    const mayor = Math.max(width, height);
+    if (mayor > maxLado) { const f = maxLado / mayor; width = Math.round(width * f); height = Math.round(height * f); }
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(img, 0, 0, width, height);
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', calidad));
+    if (!blob) return file;
+    const nombre = (file.name.replace(/\.[^.]+$/, '') || 'foto') + '.jpg';
+    return new File([blob], nombre, { type: 'image/jpeg' });
+  } catch {
+    return file;
+  }
+}
+
 // Estado de sincronización local de una visita del feed "Registradas hoy".
 type SyncEstado = 'local' | 'sincronizado' | 'error';
 interface Registrada extends VisitaHoy { sync: SyncEstado; }
@@ -171,8 +206,11 @@ export default function RegistrarVisita() {
           catch { setMsg({ tipo: 'error', texto: 'Visita registrada, pero las muestras no se pudieron registrar.' }); }
         }
         if (foto && r?.id) {
-          try { await subirFotoVisita(r.id, foto); }
-          catch { setMsg({ tipo: 'error', texto: 'Visita registrada, pero la foto no se pudo subir.' }); }
+          try {
+            // Convertir/comprimir a JPEG antes de subir (evita HEIC y exceso de tamaño del iPhone).
+            const fotoLista = await comprimirImagen(foto);
+            await subirFotoVisita(r.id, fotoLista);
+          } catch { setMsg({ tipo: 'error', texto: 'Visita registrada, pero la foto no se pudo subir.' }); }
         }
       }
       setMsg((m) => m ?? { tipo: 'success', texto: modoNoVisita ? 'No-visita registrada.' : 'Visita registrada y confirmada en el servidor.' });
@@ -410,36 +448,45 @@ export default function RegistrarVisita() {
                             const on = det !== undefined;
                             const base = { mencion: Math.min(idx + 1, 3), muestras: p.meta_muestras || 0 };
                             return (
-                              <Stack key={p.producto} direction="row" alignItems="center" spacing={1}
-                                     sx={{ py: 0.9, px: 0.5, borderRadius: 1, flexWrap: 'wrap', rowGap: 0.75,
-                                           bgcolor: on ? 'rgba(46,91,255,0.05)' : 'transparent' }}>
-                                <Checkbox size="small" checked={on} onChange={() => toggleProd(p, idx)} sx={{ p: 0.5 }} />
-                                <Avatar sx={{ width: 22, height: 22, fontSize: 11, fontWeight: 800,
-                                              bgcolor: p.prioridad === 1 ? '#1a237e' : p.prioridad === 2 ? '#1565c0' : '#90a4ae' }}>
-                                  {p.prioridad}
-                                </Avatar>
-                                <Box sx={{ flex: 1, minWidth: 110 }}>
-                                  <Typography variant="body2" fontWeight={700} noWrap>{p.producto}</Typography>
-                                  <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-                                    Propuesto: {p.meta_muestras} muestra{p.meta_muestras === 1 ? '' : 's'} · {Math.min(idx + 1, 3)}ª mención
-                                  </Typography>
+                              <Box key={p.producto}
+                                   sx={{ py: 1, px: 0.5, borderRadius: 1.5, bgcolor: on ? 'rgba(46,91,255,0.05)' : 'transparent',
+                                         display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1, rowGap: 1 }}>
+                                {/* Grupo 1: check + prioridad + nombre (nombre con fuente fluida) */}
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0,
+                                           flex: { xs: '1 1 100%', sm: '1 1 40%' } }}>
+                                  <Checkbox size="small" checked={on} onChange={() => toggleProd(p, idx)} sx={{ p: 0.5 }} />
+                                  <Avatar sx={{ width: 22, height: 22, fontSize: 11, fontWeight: 800, flexShrink: 0,
+                                                bgcolor: p.prioridad === 1 ? '#1a237e' : p.prioridad === 2 ? '#1565c0' : '#90a4ae' }}>
+                                    {p.prioridad}
+                                  </Avatar>
+                                  <Box sx={{ minWidth: 0, flex: 1 }}>
+                                    <Typography fontWeight={700} noWrap sx={{ fontSize: 'clamp(0.78rem, 3vw, 0.9rem)', lineHeight: 1.2 }}>
+                                      {p.producto}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', fontSize: '0.66rem' }}>
+                                      Propuesto: {p.meta_muestras} muestra{p.meta_muestras === 1 ? '' : 's'} · {Math.min(idx + 1, 3)}ª mención
+                                    </Typography>
+                                  </Box>
                                 </Box>
-                                {/* Cantidad de muestras al lado del producto: propuesta por la
-                                    parrilla, editable si se entrega más o menos al médico. */}
-                                <TextField size="small" type="number" label="Muestras" disabled={!on}
-                                           value={det?.muestras ?? p.meta_muestras}
-                                           onChange={(e) => {
-                                             const q = Math.max(0, Math.min(999, Number(e.target.value) || 0));
-                                             setDetallados((d) => ({ ...d, [p.producto]: { ...(d[p.producto] ?? base), muestras: q } }));
-                                           }}
-                                           inputProps={{ min: 0, max: 999 }} sx={{ width: 88 }} />
-                                <FormControl size="small" sx={{ minWidth: { xs: 104, sm: 118 } }}>
-                                  <Select value={det?.mencion ?? base.mencion} disabled={!on}
-                                          onChange={(e) => setDetallados((d) => ({ ...d, [p.producto]: { ...(d[p.producto] ?? base), mencion: Number(e.target.value) } }))}>
-                                    {MENCIONES.map((m) => <MenuItem key={m} value={m}>{m}ª mención</MenuItem>)}
-                                  </Select>
-                                </FormControl>
-                              </Stack>
+                                {/* Grupo 2: cantidad (compacta) + mención — agrupados, indentados en móvil. */}
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1,
+                                           pl: { xs: 4.5, sm: 0 }, width: { xs: '100%', sm: 'auto' }, ml: { sm: 'auto' } }}>
+                                  <TextField size="small" type="number" label="Muestras" disabled={!on}
+                                             value={det?.muestras ?? p.meta_muestras}
+                                             onChange={(e) => {
+                                               const q = Math.max(0, Math.min(999, Number(e.target.value) || 0));
+                                               setDetallados((d) => ({ ...d, [p.producto]: { ...(d[p.producto] ?? base), muestras: q } }));
+                                             }}
+                                             inputProps={{ min: 0, max: 999 }}
+                                             sx={{ width: 72, flexShrink: 0, '& input': { textAlign: 'center', fontWeight: 700 } }} />
+                                  <FormControl size="small" sx={{ minWidth: 108, flex: { xs: 1, sm: 'none' } }}>
+                                    <Select value={det?.mencion ?? base.mencion} disabled={!on}
+                                            onChange={(e) => setDetallados((d) => ({ ...d, [p.producto]: { ...(d[p.producto] ?? base), mencion: Number(e.target.value) } }))}>
+                                      {MENCIONES.map((m) => <MenuItem key={m} value={m}>{m}ª mención</MenuItem>)}
+                                    </Select>
+                                  </FormControl>
+                                </Box>
+                              </Box>
                             );
                           })}
                         </Stack>

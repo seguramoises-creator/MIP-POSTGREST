@@ -314,7 +314,8 @@ async def subir_foto_visita(
     visita_id: int, archivo: UploadFile = File(...),
     db: Session = Depends(get_db), current_user=RequireVisita,
 ):
-    """Sube la foto del centro para una visita (JPEG/PNG, ≤ 3 MB). Se guarda como BLOB."""
+    """Sube la foto del centro para una visita (JPEG/PNG, ≤ 15 MB). Se guarda como BLOB.
+    El frontend convierte/comprime a JPEG antes de subir (incl. HEIC de iPhone)."""
     from app.services import visita_registro_service
     contenido = await archivo.read()
     try:
