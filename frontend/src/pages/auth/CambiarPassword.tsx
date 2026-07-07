@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Card, CardContent, TextField, Button, Typography, Alert, Stack,
   List, ListItem, ListItemIcon, ListItemText,
 } from '@mui/material';
-import { CheckCircle, RadioButtonUnchecked, LockReset } from '@mui/icons-material';
+import { CheckCircle, RadioButtonUnchecked, LockReset, Logout } from '@mui/icons-material';
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/auth.store';
+import { authService } from '../../services/auth.service';
 
 const ESPECIAL = /[!@#$%^&*()_+\-=\[\]{};:,.<>?/|~]/;
 
@@ -15,6 +16,8 @@ export default function CambiarPassword() {
   const rol = useAuthStore((s) => s.rol);
   const debeCambiar = useAuthStore((s) => s.debeCambiarPassword);
   const setPasswordEstado = useAuthStore((s) => s.setPasswordEstado);
+  const accessToken = useAuthStore((s) => s.accessToken);
+  const logout = useAuthStore((s) => s.logout);
 
   const minLen = rol === 'ADMIN' ? 12 : 8;
   const [actual, setActual] = useState('');
@@ -22,6 +25,31 @@ export default function CambiarPassword() {
   const [confirmar, setConfirmar] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Auto-verificación: el estado persistido en el navegador puede quedar viejo
+  // (p. ej. tras una corrección en la BD). Se consulta /auth/me: si el servidor
+  // dice que NO hay que cambiar la contraseña, se sale solo de esta pantalla.
+  useEffect(() => {
+    api.get('/auth/me')
+      .then(({ data }) => {
+        if (!data.debe_cambiar_password) {
+          setPasswordEstado({
+            debeCambiarPassword: false,
+            passwordExpiraEnDias: data.password_expira_en_dias ?? null,
+            passwordMotivo: 'ok',
+          });
+          navigate('/dashboard', { replace: true });
+        }
+      })
+      .catch(() => { /* sin red o token vencido: se queda en la pantalla */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleLogout = async () => {
+    await authService.logout(accessToken || '');
+    logout();
+    navigate('/login', { replace: true });
+  };
 
   // Requisitos evaluados en vivo (guía visual; el backend es la validación real).
   const reglas = [
@@ -101,6 +129,10 @@ export default function CambiarPassword() {
                       disabled={saving || !actual || !todasOk || !coincide}
                       sx={{ py: 1.3, borderRadius: 2, fontWeight: 700 }}>
                 {saving ? 'Guardando…' : 'Cambiar contraseña'}
+              </Button>
+              <Button startIcon={<Logout />} color="inherit" size="small" onClick={handleLogout}
+                      sx={{ alignSelf: 'center', color: 'text.secondary', textTransform: 'none' }}>
+                Cerrar sesión
               </Button>
             </Stack>
           </form>

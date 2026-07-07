@@ -26,9 +26,17 @@ function catInfo(v: number) {
   return              { label: 'Riesgo',        color: '#c62828', bg: '#ffebee' };
 }
 
+// Signo de variación vs el resultado anterior: verde si sube, rojo si baja,
+// amarillo si se mantiene igual.
+function trendInfo(diff: number) {
+  if (diff > 0) return { simbolo: '▲', color: '#2e7d32' };
+  if (diff < 0) return { simbolo: '▼', color: '#c62828' };
+  return { simbolo: '▬', color: '#f9a825' };
+}
+
 // ── stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, color = '#1565c0' }: {
-  label: string; value: string | number; sub?: string; color?: string;
+function StatCard({ label, value, sub, color = '#1565c0', subColor }: {
+  label: string; value: string | number; sub?: string; color?: string; subColor?: string;
 }) {
   return (
     <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, height: '100%',
@@ -39,7 +47,12 @@ function StatCard({ label, value, sub, color = '#1565c0' }: {
           {label}
         </Typography>
         <Typography variant="h4" fontWeight={800} sx={{ color, lineHeight: 1.1, mt: 0.5 }}>{value}</Typography>
-        {sub && <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>{sub}</Typography>}
+        {sub && (
+          <Typography variant="caption"
+            sx={{ color: subColor || 'text.secondary', fontWeight: subColor ? 700 : 400, fontSize: '0.7rem' }}>
+            {sub}
+          </Typography>
+        )}
       </CardContent>
     </Card>
   );
@@ -277,21 +290,28 @@ export default function Coaching() {
       {/* KPI cards */}
       <Grid container spacing={2} mb={3}>
         {[
+          // El color del VALOR respeta la carta de los indicadores (catColor:
+          // verde >=90, azul 80-89, naranja 60-79, rojo <60). El signo de la
+          // variación se colorea por dirección (trendInfo).
           { label: 'Total RMs',     value: dist?.total ?? '—',   sub: '— Equipo completo',  color: '#5c6bc0' },
           { label: 'Prom. MIP',     value: dist ? dist.avgPts.toFixed(1) : '—',
-            sub: dist ? `▲ ${Math.max(0, dist.avgPts - 80).toFixed(1)} pts` : '—', color: '#1565c0' },
+            sub: dist ? `${trendInfo(dist.avgPts - 80).simbolo} ${Math.abs(dist.avgPts - 80).toFixed(1)} pts` : '—',
+            color: dist ? catColor(dist.avgPts) : '#1565c0',
+            subColor: dist ? trendInfo(dist.avgPts - 80).color : undefined },
           { label: 'Puntaje Máx.',  value: dist ? dist.maxPts.toFixed(1) : '—',
-            sub: cicloNombre, color: '#2e7d32' },
+            sub: cicloNombre, color: dist ? catColor(dist.maxPts) : '#2e7d32' },
           { label: 'RMs ≥ 90 pts',  value: dist ? `${dist.excelentes} / ${dist.total}` : '—',
             sub: dist ? `▲ ${dist.elegibles} elegibles` : '—', color: '#2e7d32' },
           { label: 'EVO IR Prom.',
             value: destInd.evoIR ? `${destInd.evoIR.avg.toFixed(1)}%` : '—',
-            sub: destInd.evoIR ? `${destInd.evoIR.diffPp >= 0 ? '▲' : '▼'} ${Math.abs(destInd.evoIR.diffPp).toFixed(1)} pp` : '—',
-            color: '#00838f' },
+            sub: destInd.evoIR ? `${trendInfo(destInd.evoIR.diffPp).simbolo} ${Math.abs(destInd.evoIR.diffPp).toFixed(1)} pp` : '—',
+            color: destInd.evoIR ? catColor(destInd.evoIR.avg) : '#00838f',
+            subColor: destInd.evoIR ? trendInfo(destInd.evoIR.diffPp).color : undefined },
           { label: 'Cob. Méd. F2',
             value: destInd.cobF2 ? `${destInd.cobF2.avg.toFixed(1)}%` : '—',
-            sub: destInd.cobF2 ? `${destInd.cobF2.diffPp >= 0 ? '▲' : '▼'} ${Math.abs(destInd.cobF2.diffPp).toFixed(1)} pp` : '—',
-            color: '#7b1fa2' },
+            sub: destInd.cobF2 ? `${trendInfo(destInd.cobF2.diffPp).simbolo} ${Math.abs(destInd.cobF2.diffPp).toFixed(1)} pp` : '—',
+            color: destInd.cobF2 ? catColor(destInd.cobF2.avg) : '#7b1fa2',
+            subColor: destInd.cobF2 ? trendInfo(destInd.cobF2.diffPp).color : undefined },
         ].map(c => (
           <Grid item xs={6} sm={4} md={2} key={c.label}>
             <StatCard {...c} />

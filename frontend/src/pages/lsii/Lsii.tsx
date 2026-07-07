@@ -19,12 +19,13 @@ import { useCicloStore } from '../../store/ciclo.store';
 import {
   Box, Typography, Card, CardContent, Grid, Chip, CircularProgress,
   TextField, MenuItem, Alert, Tabs, Tab, Button, Divider,
-  LinearProgress,
+  LinearProgress, Popover,
+  Dialog, DialogTitle, DialogContent, DialogActions,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
   Tooltip,
 } from '@mui/material';
 import {
-  Groups, Star, CheckCircle, PersonSearch,
+  Groups, Star, CheckCircle, PersonSearch, Leaderboard,
 } from '@mui/icons-material';
 import {
   ScatterChart, Scatter, XAxis, YAxis, CartesianGrid,
@@ -42,21 +43,23 @@ const ROLES_EVALUADOR = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', '
 
 const CORTE = 80;
 
-// ── paleta LSII — alineada a la carta de colores del sistema ─────────────────
-// D1 Dirigir  = Ambar   → tiene actitud, necesita guia
-// D2 Entrenar = Rojo    → critico, necesita entrenamiento + motivacion
-// D3 Apoyar   = Azul    → alto desempeno, necesita apoyo emocional
-// D4 Delegar  = Teal    → estrella, alta autonomia
-type PalEntry = { color: string; light: string; grad: string; label: string };
+// ── paleta LSII — carta oficial SLII (nomenclatura D) ────────────────────────
+// D1 Dirigir             = Rojo     → bajo desempeno + alta receptividad
+// D2 Entrenar            = Mamey    → bajo desempeno + baja receptividad
+// D3 Apoyar              = Amarillo → alto desempeno + baja receptividad
+// D4 Delegar/Empoderar   = Verde ⭐ → nivel estrella, alta autonomia
+// `fill` = color solido del cuadrante en la matriz (como la carta SLII);
+// `color`/`light` = variantes legibles para chips, textos y tarjetas.
+type PalEntry = { color: string; light: string; fill: string; grad: string; label: string };
 const NIVEL_PAL: Record<string, PalEntry> = {
-  D1: { color: '#ef6c00', light: '#fff3e0', grad: 'linear-gradient(135deg,#e65100,#ef6c00)', label: 'D1 · Dirigir' },
-  D2: { color: '#c62828', light: '#ffebee', grad: 'linear-gradient(135deg,#b71c1c,#c62828)', label: 'D2 · Entrenar' },
-  D3: { color: '#1565c0', light: '#e3f2fd', grad: 'linear-gradient(135deg,#1a237e,#1565c0)', label: 'D3 · Apoyar' },
-  D4: { color: '#00695c', light: '#e0f2f1', grad: 'linear-gradient(135deg,#004d40,#00695c)', label: 'D4 · Delegar' },
+  D1: { color: '#d32f2f', light: '#ffebee', fill: '#f04438', grad: 'linear-gradient(135deg,#b71c1c,#e53935)', label: 'D1 · Dirigir' },
+  D2: { color: '#ef6c00', light: '#fff3e0', fill: '#f09d4e', grad: 'linear-gradient(135deg,#e65100,#f57c00)', label: 'D2 · Entrenar' },
+  D3: { color: '#f9a825', light: '#fff8e1', fill: '#ffde59', grad: 'linear-gradient(135deg,#f9a825,#fbc02d)', label: 'D3 · Apoyar' },
+  D4: { color: '#2e7d32', light: '#e8f5e9', fill: '#3dbd6d', grad: 'linear-gradient(135deg,#1b5e20,#2e7d32)', label: 'D4 · Delegar/Empoderar' },
 };
 function nivPal(nivel: string): PalEntry {
   return NIVEL_PAL[nivel]
-    ?? { color: '#546e7a', light: '#eceff1', grad: 'linear-gradient(135deg,#37474f,#546e7a)', label: nivel };
+    ?? { color: '#546e7a', light: '#eceff1', fill: '#cfd8dc', grad: 'linear-gradient(135deg,#37474f,#546e7a)', label: nivel };
 }
 
 // ── descripciones de cuadrante ────────────────────────────────────────────────
@@ -96,7 +99,10 @@ function initials(nombre: string) {
 }
 
 // ── etiquetas de esquina SVG ──────────────────────────────────────────────────
-function cornerLabel(corner: 'tl' | 'tr' | 'bl' | 'br', title: string, sub: string, color: string) {
+// `onInfo` (opcional) agrega un símbolo ⓘ clicable junto al título del cuadrante:
+// al hacer clic abre el detalle de los colaboradores de ese cuadrante (Popover).
+function cornerLabel(corner: 'tl' | 'tr' | 'bl' | 'br', title: string, sub: string, color: string,
+                     onInfo?: (e: React.MouseEvent) => void) {
   return (props: Record<string, unknown>) => {
     const vb = props.viewBox as { x: number; y: number; width: number; height: number } | undefined;
     if (!vb) return null;
@@ -108,8 +114,10 @@ function cornerLabel(corner: 'tl' | 'tr' | 'bl' | 'br', title: string, sub: stri
     const y1 = isBottom ? vb.y + vb.height - pad - 16 : vb.y + pad + 12;
     const y2 = isBottom ? vb.y + vb.height - pad : vb.y + pad + 27;
     return (
-      <g>
-        <text x={x} y={y1} textAnchor={anchor} fontSize={11.5} fontWeight={900} fill={color}>{title}</text>
+      <g onClick={onInfo} style={onInfo ? { cursor: 'pointer' } : undefined}>
+        <text x={x} y={y1} textAnchor={anchor} fontSize={11.5} fontWeight={900} fill={color}>
+          {onInfo && isRight ? 'ⓘ  ' : ''}{title}{onInfo && !isRight ? '  ⓘ' : ''}
+        </text>
         <text x={x} y={y2} textAnchor={anchor} fontSize={9} fill={color} fillOpacity={0.72}>{sub}</text>
       </g>
     );
@@ -203,10 +211,26 @@ export default function Lsii() {
   const paisCodigo = useCicloStore((s) => s.paisCodigo);
   const cicloGlobal = useCicloStore((s) => s.cicloId);
   const esSoloLectura = useCicloStore((s) => s.esSoloLectura);
+  const setCicloVer = useCicloStore((s) => s.setCicloVer);
   const paisId = paisCodigo ?? '';
   const cicloId = cicloGlobal != null ? String(cicloGlobal) : '';
   const [tab, setTab] = useState(0);
   const [gerenteId, setGerenteId] = useState('');
+  // Detalle por cuadrante: clic en el ⓘ de la matriz → lista de colaboradores
+  // de ese nivel (mismo dato que el tooltip de cada punto, pero en lista).
+  const [cuadrantePop, setCuadrantePop] = useState<{ nivel: NivelLsii; x: number; y: number } | null>(null);
+  const abrirCuadrante = (nivel: NivelLsii) => (e: React.MouseEvent) =>
+    setCuadrantePop({ nivel, x: e.clientX, y: e.clientY });
+
+  // Cortes vigentes (configurables por admin): desempeño y receptividad pueden
+  // tener cortes DISTINTOS — el gráfico debe usar los mismos que el backend usa
+  // al clasificar, o los puntos aparecen "fuera" de su cuadrante.
+  const { data: cfgLsii } = useQuery({
+    queryKey: ['lsii-config'],
+    queryFn: () => api.get('/lsii/configuracion').then(r => r.data as { corte_desempeno: number; corte_receptividad: number }),
+  });
+  const corteD = Number(cfgLsii?.corte_desempeno ?? CORTE);
+  const corteR = Number(cfgLsii?.corte_receptividad ?? CORTE);
 
   const { data: ciclos } = useQuery({ queryKey: ['ciclos', paisId], queryFn: () => api.get('/admin/ciclos', { params: paisId ? { pais_codigo: paisId } : {} }).then(r => r.data) });
   const { data: gerentes } = useQuery({ queryKey: ['gerentes', paisId], queryFn: () => api.get('/admin/gerentes', { params: paisId ? { pais_codigo: paisId } : {} }).then(r => r.data), enabled: !!paisId });
@@ -218,8 +242,34 @@ export default function Lsii() {
     queryFn: () => api.get('/lsii/matriz', { params: { ...(paisId && { pais_codigo: paisId }), ...(cicloId && { ciclo_id: Number(cicloId) }), ...(gerenteId && { gerente_id: Number(gerenteId) }) } }).then(r => r.data as MatrizLsiiItem[]),
   });
 
+  // Clasificación EN VIVO con los cortes vigentes: el nivel guardado en cada
+  // evaluación es un snapshot de los cortes de aquel momento; si el admin los
+  // cambia después, los puntos quedarían "fuera" de su cuadrante. Para la matriz
+  // y sus resúmenes, el nivel se recalcula siempre con los cortes actuales —
+  // una sola regla para el plano, los puntos, el resumen y el detalle.
+  const matrizV = useMemo(() => {
+    // Coordenadas de DIBUJO (des_plot/rec_plot): se apartan un margen mínimo de
+    // las líneas de corte y de los bordes para que el círculo completo del punto
+    // quede dentro de su cuadrante (un score pegado al corte, p. ej. rec 100 con
+    // corte 95, derramaría medio círculo al cuadrante vecino). Los scores REALES
+    // no cambian: son los que muestran el tooltip y el detalle.
+    const mX = corteD * 0.2, mY = corteR * 0.2;   // 10% del dominio de cada eje —
+    // mayor que el radio del punto: el círculo queda claramente DENTRO de su D.
+    const aj = (v: number, corte: number, max: number, m: number) =>
+      v >= corte ? Math.min(Math.max(v, corte + m), max - m)
+                 : Math.max(Math.min(v, corte - m), m);
+    return (matriz || []).map(m => {
+      const d = Number(m.score_desempeno), r = Number(m.score_receptividad);
+      const altoD = d >= corteD, altaR = r >= corteR;
+      const nivel: NivelLsii = altoD ? (altaR ? 'D4' : 'D3') : (altaR ? 'D1' : 'D2');
+      return { ...m, nivel_lsii: nivel,
+               des_plot: aj(d, corteD, corteD * 2, mX),
+               rec_plot: aj(r, corteR, corteR * 2, mY) };
+    });
+  }, [matriz, corteD, corteR]);
+
   const resumen = useMemo(() => {
-    const items = matriz || [];
+    const items = matrizV;
     if (!items.length) return null;
     const porNivel: Record<string, number> = { D1: 0, D2: 0, D3: 0, D4: 0 };
     let sumaD = 0, sumaR = 0;
@@ -227,15 +277,11 @@ export default function Lsii() {
     const total = items.length;
     const dominante = (Object.entries(porNivel) as [NivelLsii, number][]).sort((a, b) => b[1] - a[1])[0][0];
     return { total, porNivel, promedioDesempeno: sumaD / total, promedioReceptividad: sumaR / total, dominante };
-  }, [matriz]);
+  }, [matrizV]);
 
-  const ejeMax = useMemo(() => {
-    const items = matriz || [];
-    const mD = items.reduce((m, d) => Math.max(m, Number(d.score_desempeno) || 0), 100);
-    const mR = items.reduce((m, d) => Math.max(m, Number(d.score_receptividad) || 0), 100);
-    const ceil = (v: number) => Math.ceil((v + 5) / 10) * 10;
-    return { y: Math.max(ceil(mD), CORTE + 10), x: Math.max(ceil(mR), CORTE + 10) };
-  }, [matriz]);
+  // Cuadrantes de igual tamaño (como la carta SLII): cada corte queda exactamente
+  // al centro de su eje → los 4 cuadrados miden lo mismo, aun con cortes distintos.
+  const ejeMax = useMemo(() => ({ x: corteD * 2, y: corteR * 2 }), [corteD, corteR]);
 
   const distribucionData = useMemo(() => {
     if (!resumen) return [];
@@ -257,6 +303,15 @@ export default function Lsii() {
   const [selecciones, setSelecciones] = useState<Record<string, number>>({});
   const [observaciones, setObservaciones] = useState('');
   const [resultado, setResultado] = useState<Record<string, unknown> | null>(null);
+
+  // Aviso de re-evaluación: si el RM seleccionado ya tiene evaluación en el
+  // ciclo, se advierte (ciclo + fecha) y se pide confirmación Sí/No antes de
+  // permitir reemplazarla. "Reemplazar" = registrar una nueva evaluación; la
+  // matriz siempre muestra la última por RM (el histórico se conserva).
+  const [reemplazoAceptado, setReemplazoAceptado] = useState(false);
+  const evalPrevia = useMemo(
+    () => matrizV.find(m => String(m.rm_id) === String(evalRmId)) || null,
+    [matrizV, evalRmId]);
 
   const dimensiones = catalogo || [];
   const completadas = dimensiones.filter(d => selecciones[d.dimension_codigo] != null).length;
@@ -281,7 +336,10 @@ export default function Lsii() {
 
   const ciclosArr = (ciclos as { id: number; nombre_canonico?: string; nombre?: string }[]) || [];
   const rmsArr = (rms as { id: number; nombre: string; codigo: string }[]) || [];
-  const gerentesArr = (gerentes as { id: number; nombre: string }[]) || [];
+  // Solo Gerentes de DISTRITO: el catálogo DIM_Gerente también trae gerentes
+  // de Marca/Producto (tipo MARCA), que no evalúan LSII.
+  const gerentesArr = ((gerentes as { id: number; nombre: string; tipo?: string }[]) || [])
+    .filter(g => (g.tipo || '').toUpperCase() === 'DISTRITO');
   const cicloLabel = ciclosArr.find(c => String(c.id) === cicloId)?.nombre_canonico ?? ciclosArr.find(c => String(c.id) === cicloId)?.nombre ?? '';
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -309,19 +367,66 @@ export default function Lsii() {
         </Box>
       </Box>
 
-      {/* Filtros */}
+      {/* Filtros — orden: Ciclo → Gerente de Distrito → Representante Médico.
+          El Ciclo escribe en el contexto global (la franja País+Ciclo del layout
+          se oculta en esta página para no duplicar filtros). */}
       <Card elevation={0} sx={{ mb: 2.5, border: '1px solid #e0e7ef', borderRadius: 2 }}>
         <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
           <Grid container spacing={2}>
+            <Grid item xs={12} sm={4}>
+              <TextField select fullWidth size="small" label="Ciclo" value={cicloId}
+                onChange={e => { setCicloVer(Number(e.target.value)); setReemplazoAceptado(false); setResultado(null); }}>
+                {ciclosArr.map(c => (
+                  <MenuItem key={c.id} value={String(c.id)}>{c.nombre_canonico || c.nombre}</MenuItem>
+                ))}
+              </TextField>
+            </Grid>
             <Grid item xs={12} sm={4}>
               <TextField select fullWidth size="small" label="Gerente de Distrito" value={gerenteId} onChange={e => { setGerenteId(e.target.value); setEvalRmId(''); }}>
                 <MenuItem value="">Todos los gerentes</MenuItem>
                 {gerentesArr.map(g => <MenuItem key={g.id} value={g.id}>{g.nombre}</MenuItem>)}
               </TextField>
             </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField select fullWidth size="small" label="Representante Medico" value={evalRmId}
+                onChange={e => { setEvalRmId(e.target.value); setReemplazoAceptado(false); setResultado(null); }}
+                disabled={!paisId || !rmsArr.length}>
+                <MenuItem value="">Seleccionar colaborador...</MenuItem>
+                {rmsArr.map(r => <MenuItem key={r.id} value={r.id}>{r.nombre} ({r.codigo})</MenuItem>)}
+              </TextField>
+            </Grid>
           </Grid>
         </CardContent>
       </Card>
+
+      {/* Aviso: RM ya evaluado en este ciclo → confirmar reemplazo (Sí/No).
+          "No" deselecciona al RM; "Sí" habilita el formulario para re-evaluar. */}
+      <Dialog
+        open={tab === 1 && !!evalPrevia && !reemplazoAceptado && !resultado}
+        onClose={() => setEvalRmId('')}
+        maxWidth="xs" fullWidth
+      >
+        <DialogTitle sx={{ color: '#e65100', fontWeight: 800, display: 'flex', alignItems: 'center', gap: 1 }}>
+          ⚠️ Representante Médico ya evaluado
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            <b>{evalPrevia?.rm_nombre}</b> ya tiene una evaluación registrada en el ciclo{' '}
+            <b>{cicloLabel || cicloId}</b> con fecha{' '}
+            <b>{evalPrevia ? new Date(evalPrevia.fecha_evaluacion).toLocaleDateString() : ''}</b>
+            {' '}(resultado: <b>{evalPrevia?.nivel_lsii}</b>).
+          </Typography>
+          <Typography variant="body2" mt={1.5} fontWeight={700}>
+            ¿Desea reemplazar la evaluación ya realizada?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button color="inherit" onClick={() => setEvalRmId('')}>No</Button>
+          <Button variant="contained" color="warning" onClick={() => setReemplazoAceptado(true)}>
+            Sí, reemplazar
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Tabs */}
       <Box mb={3}>
@@ -368,7 +473,8 @@ export default function Lsii() {
                 <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, height: '100%' }}>
                   <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1.5, '&:last-child': { pb: 1.5 } }}>
                     <Box sx={{ width: 48, height: 48, borderRadius: '50%', bgcolor: nivPal(resumen!.dominante).light, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Star sx={{ color: nivPal(resumen!.dominante).color, fontSize: 24 }} />
+                      {/* La estrella identifica a D4 (nivel meta); el dominante es un dato → Leaderboard. */}
+                      <Leaderboard sx={{ color: nivPal(resumen!.dominante).color, fontSize: 24 }} />
                     </Box>
                     <Box sx={{ minWidth: 0 }}>
                       <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.58rem', color: 'text.secondary', display: 'block', letterSpacing: 0.5 }}>Nivel Dominante</Typography>
@@ -389,41 +495,109 @@ export default function Lsii() {
                     <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.92rem', letterSpacing: 0.5, flexGrow: 1 }}>MATRIZ LSII - DESEMPENO x RECEPTIVIDAD</Typography>
                     <Chip label={`${resumen?.total} VMs`} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.18)', color: '#fff', fontWeight: 700, fontSize: '0.72rem' }} />
                   </Box>
-                  <Box sx={{ flex: 1, p: 2, minHeight: 420 }}>
-                    <ResponsiveContainer width="100%" height="100%">
+                  {/* Lienzo CUADRADO (aspect 1:1) centrado: los 4 cuadrantes quedan
+                      con el mismo largo que ancho, como la carta SLII. */}
+                  <Box sx={{ flex: 1, p: 2, display: 'flex', justifyContent: 'center' }}>
+                    <Box sx={{ width: '100%', maxWidth: 700 }}>
+                      <ResponsiveContainer width="100%" aspect={1}>
                       <ScatterChart margin={{ top: 24, right: 32, left: 8, bottom: 30 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#e8eaf6" />
                         {/* Sin reversed: Y alto arriba = alto desempeno
                             D2 bl (x<80,y<80)  |  D1 br (x>=80,y<80)
                             D3 tl (x<80,y>=80) |  D4 tr (x>=80,y>=80) */}
-                        <ReferenceArea x1={0} x2={CORTE} y1={0} y2={CORTE}
-                          fill={NIVEL_PAL.D2.light} fillOpacity={0.7}
-                          label={cornerLabel('bl', 'D2 - Entrenar', 'Bajo desempeno - Baja rec.', NIVEL_PAL.D2.color)} />
-                        <ReferenceArea x1={CORTE} x2={ejeMax.x} y1={0} y2={CORTE}
-                          fill={NIVEL_PAL.D1.light} fillOpacity={0.7}
-                          label={cornerLabel('br', 'D1 - Dirigir', 'Bajo desempeno - Alta rec.', NIVEL_PAL.D1.color)} />
-                        <ReferenceArea x1={0} x2={CORTE} y1={CORTE} y2={ejeMax.y}
-                          fill={NIVEL_PAL.D3.light} fillOpacity={0.7}
-                          label={cornerLabel('tl', 'D3 - Apoyar', 'Alto desempeno - Baja rec.', NIVEL_PAL.D3.color)} />
-                        <ReferenceArea x1={CORTE} x2={ejeMax.x} y1={CORTE} y2={ejeMax.y}
-                          fill={NIVEL_PAL.D4.light} fillOpacity={0.7}
-                          label={cornerLabel('tr', 'D4 - Delegar', 'Alto desempeno - Alta rec.', NIVEL_PAL.D4.color)} />
-                        <ReferenceLine x={CORTE} stroke="#78909c" strokeWidth={1.5} strokeDasharray="5 4"
-                          label={{ value: `${CORTE}`, position: 'top', fontSize: 10, fill: '#78909c' }} />
-                        <ReferenceLine y={CORTE} stroke="#78909c" strokeWidth={1.5} strokeDasharray="5 4"
-                          label={{ value: `${CORTE}`, position: 'right', fontSize: 10, fill: '#78909c' }} />
-                        <XAxis type="number" dataKey="score_receptividad" name="Receptividad" domain={[0, ejeMax.x]}
-                          tick={{ fontSize: 11, fill: '#78909c' }}
-                          label={{ value: 'Receptividad / Compromiso', position: 'insideBottom', offset: -16, fontSize: 12, fill: '#546e7a', fontWeight: 600 }} />
-                        <YAxis type="number" dataKey="score_desempeno" name="Desempeno" domain={[0, ejeMax.y]}
-                          tick={{ fontSize: 11, fill: '#78909c' }}
-                          label={{ value: 'Desempeno / Competencia', angle: -90, position: 'insideLeft', offset: 10, fontSize: 12, fill: '#546e7a', fontWeight: 600 }} />
+                        {/* Layout idéntico a la carta SLII: D3 amarillo tl, D2 mamey tr,
+                            D4 verde bl, D1 rojo br. Se logra usando los ejes del LÍDER
+                            (inversos de los del colaborador):
+                              X = comportamiento directivo requerido = desempeño INVERTIDO
+                              Y = comportamiento de apoyo requerido  = receptividad INVERTIDA
+                            Así cada VM cae matemáticamente en su cuadrante correcto. */}
+                        <ReferenceArea x1={corteD} x2={ejeMax.x} y1={0} y2={corteR}
+                          fill={NIVEL_PAL.D3.fill} fillOpacity={0.88}
+                          label={cornerLabel('tl', 'D3 - Apoyar', 'Alto desempeno - Baja rec.', '#3e2723', abrirCuadrante('D3'))} />
+                        <ReferenceArea x1={0} x2={corteD} y1={0} y2={corteR}
+                          fill={NIVEL_PAL.D2.fill} fillOpacity={0.88}
+                          label={cornerLabel('tr', 'D2 - Entrenar', 'Bajo desempeno - Baja rec.', '#3e2723', abrirCuadrante('D2'))} />
+                        <ReferenceArea x1={corteD} x2={ejeMax.x} y1={corteR} y2={ejeMax.y}
+                          fill={NIVEL_PAL.D4.fill} fillOpacity={0.88}
+                          label={cornerLabel('bl', 'D4 - Delegar/Empoderar ⭐', 'Alto desempeno - Alta rec.', '#1b3a1e', abrirCuadrante('D4'))} />
+                        <ReferenceArea x1={0} x2={corteD} y1={corteR} y2={ejeMax.y}
+                          fill={NIVEL_PAL.D1.fill} fillOpacity={0.88}
+                          label={cornerLabel('br', 'D1 - Dirigir', 'Bajo desempeno - Alta rec.', '#3e2723', abrirCuadrante('D1'))} />
+                        <ReferenceLine x={corteD} stroke="#ffffff" strokeWidth={2}
+                          label={{ value: `${corteD}`, position: 'top', fontSize: 10, fill: '#78909c' }} />
+                        <ReferenceLine y={corteR} stroke="#ffffff" strokeWidth={2}
+                          label={{ value: `${corteR}`, position: 'right', fontSize: 10, fill: '#78909c' }} />
+                        <XAxis type="number" dataKey="des_plot" name="Desempeno" domain={[0, ejeMax.x]} reversed
+                          tick={false} axisLine={{ stroke: '#90a4ae' }}
+                          label={{ value: 'Comportamiento directivo  (Bajo → Alto)', position: 'insideBottom', offset: -16,
+                                   style: { textAnchor: 'middle', fontSize: 12, fill: '#546e7a', fontWeight: 600 } }} />
+                        <YAxis type="number" dataKey="rec_plot" name="Receptividad" domain={[0, ejeMax.y]} reversed
+                          tick={false} axisLine={{ stroke: '#90a4ae' }}
+                          label={{ value: 'Comportamiento de apoyo  (Bajo → Alto)', angle: -90, position: 'insideLeft', offset: 12,
+                                   style: { textAnchor: 'middle', fontSize: 12, fill: '#546e7a', fontWeight: 600 } }} />
                         <RTooltip content={<MatrizTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-                        <Scatter data={matriz} shape={CustomDot} />
+                        <Scatter data={matrizV} shape={CustomDot} />
                       </ScatterChart>
-                    </ResponsiveContainer>
+                      </ResponsiveContainer>
+                    </Box>
                   </Box>
                 </Card>
+
+                {/* Detalle por cuadrante (clic en el ⓘ): lista de colaboradores del
+                    nivel con el mismo dato del tooltip — patrón del Dashboard de
+                    Cobertura ("por visitador"). */}
+                <Popover
+                  open={!!cuadrantePop}
+                  onClose={() => setCuadrantePop(null)}
+                  anchorReference="anchorPosition"
+                  anchorPosition={cuadrantePop ? { top: cuadrantePop.y, left: cuadrantePop.x } : undefined}
+                >
+                  {cuadrantePop && (() => {
+                    const pal = nivPal(cuadrantePop.nivel);
+                    const desc = CUAD[cuadrantePop.nivel];
+                    const items = matrizV
+                      .filter(m => m.nivel_lsii === cuadrantePop.nivel)
+                      .sort((a, b) => Number(b.score_desempeno) - Number(a.score_desempeno));
+                    return (
+                      <Box sx={{ p: 1.8, minWidth: 300, maxWidth: 360 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.4 }}>
+                          <Box sx={{ width: 30, height: 30, borderRadius: '50%', background: pal.grad, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.7rem' }}>{cuadrantePop.nivel}</Typography>
+                          </Box>
+                          <Box>
+                            <Typography fontWeight={800} fontSize="0.85rem" sx={{ color: pal.color }}>{pal.label}</Typography>
+                            <Typography fontSize="0.68rem" color="text.secondary">
+                              {items.length} colaborador{items.length === 1 ? '' : 'es'} · {desc.rec}
+                            </Typography>
+                          </Box>
+                        </Box>
+                        <Typography fontSize="0.68rem" color="text.secondary" mb={1}>{desc.accion}</Typography>
+                        <Divider sx={{ mb: 1 }} />
+                        {items.length === 0 ? (
+                          <Typography fontSize="0.75rem" color="text.secondary" sx={{ py: 1, textAlign: 'center' }}>
+                            Sin colaboradores en este cuadrante.
+                          </Typography>
+                        ) : items.map(m => (
+                          <Box key={m.rm_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.6,
+                            borderBottom: '1px solid #f0f3f8', '&:last-child': { borderBottom: 'none' } }}>
+                            <Box sx={{ width: 26, height: 26, borderRadius: '50%', background: pal.grad, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <Typography sx={{ color: '#fff', fontWeight: 900, fontSize: '0.6rem' }}>{initials(m.rm_nombre)}</Typography>
+                            </Box>
+                            <Typography fontSize="0.78rem" fontWeight={700} sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {m.rm_nombre}
+                            </Typography>
+                            <Typography fontSize="0.72rem" sx={{ color: '#00695c', fontWeight: 800 }}>
+                              D {Number(m.score_desempeno).toFixed(1)}
+                            </Typography>
+                            <Typography fontSize="0.72rem" sx={{ color: '#1565c0', fontWeight: 800 }}>
+                              R {Number(m.score_receptividad).toFixed(1)}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    );
+                  })()}
+                </Popover>
               </Grid>
 
               <Grid item xs={12} md={4}>
@@ -444,7 +618,10 @@ export default function Lsii() {
                           </Box>
                           <Box sx={{ minWidth: 0, flex: 1 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <Typography sx={{ color: pal.color, fontWeight: 800, fontSize: '0.75rem' }}>{pal.label}</Typography>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.4 }}>
+                                <Typography sx={{ color: pal.color, fontWeight: 800, fontSize: '0.75rem' }}>{pal.label}</Typography>
+                                {n === 'D4' && <Star sx={{ color: '#f9a825', fontSize: 15 }} />}
+                              </Box>
                               <Typography sx={{ color: pal.color, fontWeight: 800, fontSize: '0.75rem' }}>{count} <span style={{ opacity: 0.7 }}>({pct}%)</span></Typography>
                             </Box>
                             <Typography fontSize="0.7rem" sx={{ color: pal.color, fontWeight: 600, opacity: 0.85 }}>{desc.perfil}</Typography>
@@ -455,7 +632,7 @@ export default function Lsii() {
                     })}
                     <Divider />
                     <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.63rem', lineHeight: 1.5 }}>
-                      Corte en <b>{CORTE} pts</b> en ambos ejes. La receptividad se calcula a partir de comportamientos observados — los puntajes son internos y no se muestran al evaluador.
+                      Cortes vigentes: desempeño ≥ <b>{corteD}</b> · receptividad ≥ <b>{corteR}</b>. La receptividad se calcula a partir de comportamientos observados — los puntajes son internos y no se muestran al evaluador.
                     </Typography>
                   </Box>
                 </Card>
@@ -532,7 +709,7 @@ export default function Lsii() {
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {[...(matriz || [])].sort((a, b) => a.rm_nombre.localeCompare(b.rm_nombre)).map(r => {
+                        {[...matrizV].sort((a, b) => a.rm_nombre.localeCompare(b.rm_nombre)).map(r => {
                           const pal = nivPal(r.nivel_lsii);
                           const desc = CUAD[r.nivel_lsii];
                           return (
@@ -601,19 +778,19 @@ export default function Lsii() {
                   </Alert>
                 )}
 
-                <Grid container spacing={2} mb={2.5}>
-                  <Grid item xs={12} sm={6}>
-                    <TextField select fullWidth size="small" label="Representante Medico" value={evalRmId}
-                      onChange={e => setEvalRmId(e.target.value)} disabled={!paisId || !rmsArr.length}>
-                      <MenuItem value="">Seleccionar colaborador...</MenuItem>
-                      {rmsArr.map(r => <MenuItem key={r.id} value={r.id}>{r.nombre} ({r.codigo})</MenuItem>)}
-                    </TextField>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField fullWidth size="small" label="Ciclo seleccionado" value={cicloLabel} disabled
-                      helperText={!cicloId ? 'Selecciona un ciclo en el encabezado' : ' '} />
-                  </Grid>
-                </Grid>
+                {/* Ciclo y Representante Médico se eligen en la fila de filtros
+                    de arriba (Ciclo → Gerente de Distrito → Representante Médico). */}
+                {!evalRmId && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Selecciona el <b>Representante Médico</b> en los filtros de arriba para iniciar la evaluación.
+                  </Alert>
+                )}
+                {evalPrevia && reemplazoAceptado && !resultado && (
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    Esta evaluación <b>reemplazará</b> la registrada el{' '}
+                    {new Date(evalPrevia.fecha_evaluacion).toLocaleDateString()} (resultado {evalPrevia.nivel_lsii}).
+                  </Alert>
+                )}
 
                 {dimensiones.length > 0 && (
                   <Box mb={2.5} sx={{ p: 1.5, bgcolor: '#f8fafd', borderRadius: 2, border: '1px solid #e0e7ef' }}>
@@ -718,9 +895,14 @@ export default function Lsii() {
                 ) : (() => {
                   const pal = nivPal(String(resultado.nivel_lsii));
                   const desc = CUAD[resultado.nivel_lsii as NivelLsii];
-                  const rmNombre = rmsArr.find(r => String(r.id) === evalRmId)?.nombre || '';
+                  // String() en ambos lados: el MenuItem entrega el id numérico y
+                  // el estado lo guarda tal cual — sin normalizar, el nombre no aparecía.
+                  const rmNombre = rmsArr.find(r => String(r.id) === String(evalRmId))?.nombre || '';
                   return (
                     <Box>
+                      <Alert severity="success" sx={{ mb: 2 }}>
+                        La evaluación se ha guardado exitosamente.
+                      </Alert>
                       {rmNombre && (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
                           <Box sx={{ width: 44, height: 44, borderRadius: '50%', background: pal.grad, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>

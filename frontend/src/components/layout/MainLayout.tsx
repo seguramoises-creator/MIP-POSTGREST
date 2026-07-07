@@ -18,8 +18,8 @@ export default function MainLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   // Franja global País+Ciclo: se oculta en /visita/registrar (la monta dentro de su
-  // formulario) y en /dashboard (que ya tiene sus propios filtros de País/Ciclo).
-  const HEADER_OCULTO = ['/visita/registrar', '/dashboard'];
+  // formulario), en /dashboard y en /lsii (tienen sus propios filtros de Ciclo).
+  const HEADER_OCULTO = ['/visita/registrar', '/dashboard', '/lsii'];
   const headerEnLayout = !HEADER_OCULTO.includes(pathname);
   const { nombreCompleto, accessToken, rol, logout } = useAuthStore();
   const debeCambiarPassword = useAuthStore((s) => s.debeCambiarPassword);

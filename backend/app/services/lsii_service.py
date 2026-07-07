@@ -50,9 +50,13 @@ CORTE_DESEMPENO = Decimal("80")
 CORTE_RECEPTIVIDAD = Decimal("80")
 
 # (banda_desempeño, banda_receptividad) -> (nivel_lsii, estilo_liderazgo)
+# D1 = bajo desempeño + ALTA receptividad (actitud positiva, necesita dirección)
+# D2 = bajo desempeño + BAJA receptividad (requiere entrenamiento + motivación)
+# FIX jul-2026: D1/D2 estaban invertidos (bajo+baja clasificaba D1), lo que
+# contradecía la definición del módulo y la matriz del frontend.
 NIVELES_LSII = {
-    ("BAJO", "BAJO"): ("D1", "Dirigir"),
-    ("BAJO", "ALTO"): ("D2", "Entrenar"),
+    ("BAJO", "BAJO"): ("D2", "Entrenar"),
+    ("BAJO", "ALTO"): ("D1", "Dirigir"),
     ("ALTO", "BAJO"): ("D3", "Apoyar"),
     ("ALTO", "ALTO"): ("D4", "Delegar"),
 }

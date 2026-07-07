@@ -232,6 +232,22 @@ def admin_actualizar_opcion(
 
 
 @router.get(
+    "/configuracion",
+    response_model=ConfiguracionLsiiPublic,
+    summary="Umbrales de corte D1-D4 vigentes (para dibujar la matriz)",
+)
+def obtener_configuracion_publica(
+    db: Session = Depends(get_db),
+    current_user=AnyAuth,
+):
+    """Devuelve SOLO los cortes (sin campos ocultos del catálogo): la matriz del
+    frontend los necesita para ubicar los cuadrantes con el mismo criterio con
+    que el backend clasifica (corte_desempeno y corte_receptividad pueden ser
+    distintos entre sí)."""
+    return lsii_service.obtener_configuracion(db)
+
+
+@router.get(
     "/admin/configuracion",
     response_model=ConfiguracionLsiiPublic,
     summary="[Admin] Umbral de corte vigente para los cuadrantes D1-D4",
