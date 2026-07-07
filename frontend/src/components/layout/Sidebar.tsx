@@ -103,7 +103,8 @@ export const NAV_SECTIONS: NavSection[] = [
 // Lista plana (en el orden agrupado) — la usa App.tsx para resolver la ruta inicial por rol.
 export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);
 
-export default function Sidebar() {
+export default function Sidebar({ mobileOpen = false, onMobileClose }:
+  { mobileOpen?: boolean; onMobileClose?: () => void } = {}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { rol }  = useAuthStore();
@@ -136,22 +137,22 @@ export default function Sidebar() {
 
   const width = collapsed ? DRAWER_WIDTH_COLLAPSED : DRAWER_WIDTH;
 
-  // Fila de navegación (item real que navega).
-  const renderItem = (item: NavItem, indent = false) => {
+  // Fila de navegación (item real que navega). `colap` = versión solo-iconos.
+  const renderItem = (item: NavItem, colap: boolean, indent = false) => {
     const active =
       location.pathname.startsWith(item.path) &&
       (item.path !== '/dashboard' || location.pathname === '/dashboard');
     const button = (
       <ListItemButton
-        onClick={() => navigate(item.path)}
+        onClick={() => { navigate(item.path); onMobileClose?.(); }}
         selected={active}
         sx={{
           borderRadius: 2,
           mb: 0.4,
           minHeight: 42,
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          pl: collapsed ? 1 : (indent ? 2.2 : 1.5),
-          pr: collapsed ? 1 : 1.5,
+          justifyContent: colap ? 'center' : 'flex-start',
+          pl: colap ? 1 : (indent ? 2.2 : 1.5),
+          pr: colap ? 1 : 1.5,
           color: active ? TXT_ON : TXT_OFF,
           bgcolor: active ? 'rgba(255,255,255,0.18) !important' : 'transparent',
           borderLeft: active ? '3px solid rgba(150,200,255,0.95)' : '3px solid transparent',
@@ -162,12 +163,12 @@ export default function Sidebar() {
         <ListItemIcon sx={{
           color: active ? ICO_ON : ICO_OFF,
           minWidth: 0,
-          mr: collapsed ? 0 : 1.5,
+          mr: colap ? 0 : 1.5,
           justifyContent: 'center',
         }}>
           {item.icon}
         </ListItemIcon>
-        {!collapsed && (
+        {!colap && (
           <ListItemText
             primary={item.label}
             primaryTypographyProps={{ fontSize: '0.83rem', fontWeight: active ? 700 : 400 }}
@@ -175,7 +176,7 @@ export default function Sidebar() {
         )}
       </ListItemButton>
     );
-    return collapsed
+    return colap
       ? <Tooltip key={item.path} title={item.label} placement="right" arrow>{button}</Tooltip>
       : <Box key={item.path}>{button}</Box>;
   };
@@ -208,88 +209,99 @@ export default function Sidebar() {
     );
   };
 
-  return (
-    <Drawer
-      variant="permanent"
-      sx={{
-        width,
-        flexShrink: 0,
-        whiteSpace: 'nowrap',
-        transition: 'width 0.2s ease',
-        '& .MuiDrawer-paper': {
-          width,
-          boxSizing: 'border-box',
-          background: SIDEBAR_BG,
-          color: 'white',
-          overflow: 'hidden auto',
-          transition: 'width 0.2s ease',
-          borderRight: 'none',
-        },
-      }}
-    >
+  // Cuerpo del menú, reutilizado por ambos drawers.
+  //  `colap`       = versión solo-iconos (escritorio colapsado).
+  //  `showCollapse`= muestra el botón de colapsar (solo en el drawer de escritorio).
+  const body = (colap: boolean, showCollapse: boolean) => (
+    <>
       {/* ── Área del logo ── */}
       <Box sx={{
-        width: '100%',
-        overflow: 'hidden',
-        borderRadius: '0 0 16px 16px',
-        boxShadow: '0 4px 20px rgba(0,0,0,0.30)',
-        lineHeight: 0,
-        flexShrink: 0,
+        width: '100%', overflow: 'hidden', borderRadius: '0 0 16px 16px',
+        boxShadow: '0 4px 20px rgba(0,0,0,0.30)', lineHeight: 0, flexShrink: 0,
       }}>
-        <img
-          src={logoImg}
-          alt="VISTA — Inteligencia Comercial"
-          style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'cover' }}
-        />
+        <img src={logoImg} alt="VISTA — Inteligencia Comercial"
+             style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'cover' }} />
       </Box>
 
-      {/* ── Botón de colapso del sidebar completo ── */}
-      <Box sx={{ display: 'flex', justifyContent: collapsed ? 'center' : 'flex-end', px: 1, py: 0.5 }}>
-        <Tooltip title={collapsed ? 'Expandir menú' : 'Colapsar menú'} placement="right" arrow>
-          <IconButton size="small" onClick={() => setCollapsed((c) => !c)}
-                      aria-label={collapsed ? 'Expandir menú' : 'Colapsar menú'}
-                      sx={{ color: 'rgba(255,255,255,0.8)' }}>
-            {collapsed ? <ChevronRight /> : <ChevronLeft />}
-          </IconButton>
-        </Tooltip>
-      </Box>
+      {/* ── Botón de colapso (solo escritorio) ── */}
+      {showCollapse && (
+        <Box sx={{ display: 'flex', justifyContent: colap ? 'center' : 'flex-end', px: 1, py: 0.5 }}>
+          <Tooltip title={colap ? 'Expandir menú' : 'Colapsar menú'} placement="right" arrow>
+            <IconButton size="small" onClick={() => setCollapsed((c) => !c)}
+                        aria-label={colap ? 'Expandir menú' : 'Colapsar menú'}
+                        sx={{ color: 'rgba(255,255,255,0.8)' }}>
+              {colap ? <ChevronRight /> : <ChevronLeft />}
+            </IconButton>
+          </Tooltip>
+        </Box>
+      )}
 
       <Divider sx={{ borderColor: DIV_COLOR, mx: 1.5, mb: 0.5 }} />
 
-      {/* ── Navegación: secciones en acordeón (o iconos planos si está colapsado) ── */}
+      {/* ── Navegación ── */}
       <List dense component="div" sx={{ px: 1, pt: 0.5 }}>
         {NAV_SECTIONS.map((section, si) => {
           const items = section.items.filter(puedeVer);
           if (items.length === 0) return null;
-
-          // Home (sin título): siempre visible, sin acordeón.
           if (section.title === null) {
-            return <Box key={si}>{items.map((it) => renderItem(it))}</Box>;
+            return <Box key={si}>{items.map((it) => renderItem(it, colap))}</Box>;
           }
-
-          // Colapsado (solo iconos): sin acordeón — divisor + iconos con tooltip.
-          if (collapsed) {
+          if (colap) {
             return (
               <Box key={si}>
                 <Divider sx={{ borderColor: DIV_COLOR, my: 0.9, mx: 1 }} />
-                {items.map((it) => renderItem(it))}
+                {items.map((it) => renderItem(it, colap))}
               </Box>
             );
           }
-
-          // Expandido: encabezado (+/−) + items ocultos dentro de un Collapse.
           const open = !!openSections[si];
           return (
             <Box key={si}>
               {renderHeader(section.title, si)}
               <Collapse in={open} timeout="auto" unmountOnExit>
-                <Box>{items.map((it) => renderItem(it, true))}</Box>
+                <Box>{items.map((it) => renderItem(it, colap, true))}</Box>
               </Collapse>
             </Box>
           );
         })}
       </List>
-    </Drawer>
+    </>
+  );
+
+  const paperSx = {
+    boxSizing: 'border-box', background: SIDEBAR_BG, color: 'white',
+    overflow: 'hidden auto', borderRight: 'none',
+  } as const;
+
+  return (
+    <>
+      {/* ESCRITORIO (md+): drawer permanente y colapsable. */}
+      <Drawer
+        variant="permanent"
+        sx={{
+          display: { xs: 'none', md: 'block' },
+          width, flexShrink: 0, whiteSpace: 'nowrap', transition: 'width 0.2s ease',
+          '& .MuiDrawer-paper': { ...paperSx, width, transition: 'width 0.2s ease' },
+        }}
+      >
+        {body(collapsed, true)}
+      </Drawer>
+
+      {/* MÓVIL/TABLET (< md): drawer temporal en overlay — como app nativa.
+          Oculto por defecto; se abre con el botón ☰ del AppBar y se cierra al navegar. */}
+      <Drawer
+        variant="temporary"
+        open={mobileOpen}
+        onClose={onMobileClose}
+        ModalProps={{ keepMounted: true }}
+        sx={{
+          display: { xs: 'block', md: 'none' },
+          '& .MuiDrawer-paper': { ...paperSx, width: DRAWER_WIDTH },
+        }}
+      >
+        {body(false, false)}
+      </Drawer>
+    </>
   );
 }
 

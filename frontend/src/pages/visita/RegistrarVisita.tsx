@@ -283,7 +283,12 @@ export default function RegistrarVisita() {
                                  opacity: reg ? 0.7 : 1, '&:hover': { bgcolor: reg ? 'transparent' : 'action.hover' } }}>
                       {avatar(a.nombre, a.categoria, a.medico_id, 36)}
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" fontWeight={700} noWrap>{a.nombre}</Typography>
+                        {/* Tipografía fluida: la letra se encoge con el ancho (clamp) y
+                            solo cae a 2 líneas cuando ya no puede achicarse más. */}
+                        <Typography fontWeight={700} sx={{ fontSize: 'clamp(0.72rem, 2.6vw, 0.875rem)', lineHeight: 1.25,
+                                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                          {a.nombre}
+                        </Typography>
                         <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
                           {[a.especialidad, a.tipo_visita === 'R' ? 'Revisita' : 'Vista programada', a.hora_estimada].filter(Boolean).join(' · ')}
                         </Typography>
@@ -310,9 +315,14 @@ export default function RegistrarVisita() {
                        borderBottom: '1px solid #eef1f6', px: 2, py: 1.5, display: 'flex', alignItems: 'center',
                        gap: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
               {avatar(sel.nombre, sel.categoria, sel.medico_id, 42)}
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body1" fontWeight={800} noWrap sx={{ color: INK }}>{sel.nombre}</Typography>
-                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+              <Box sx={{ flex: 1, minWidth: 120 }}>
+                {/* Tipografía fluida: encoge con clamp; a 2 líneas solo si no cabe. */}
+                <Typography fontWeight={800} sx={{ color: INK, fontSize: 'clamp(0.82rem, 3.2vw, 1.05rem)', lineHeight: 1.2,
+                            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  {sel.nombre}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {[sel.especialidad, sel.centro_trabajo, sel.provincia].filter(Boolean).join(' · ') || 'Sin datos'}
                 </Typography>
               </Box>
@@ -530,7 +540,8 @@ export default function RegistrarVisita() {
                     <Stack key={v.id} direction="row" alignItems="center" spacing={1.5} sx={{ py: 1 }}>
                       <FiberManualRecord sx={{ fontSize: 12, color: rojo ? 'error.main' : verde ? 'success.main' : 'warning.main' }} />
                       <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" fontWeight={600} noWrap>
+                        <Typography fontWeight={600} sx={{ fontSize: 'clamp(0.75rem, 2.6vw, 0.875rem)', lineHeight: 1.25,
+                                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                           {v.medico}
                           {v.tiene_gps && <span title="Con ubicación" style={{ marginLeft: 6 }}>📍</span>}
                           {v.tiene_foto && <span title="Con foto del centro" style={{ marginLeft: 4 }}>📷</span>}

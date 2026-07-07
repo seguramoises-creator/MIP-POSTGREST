@@ -4,7 +4,7 @@ import {
   Tooltip, Avatar, Menu, MenuItem, Divider, Chip,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Alert, Stack,
 } from '@mui/material';
-import { Logout, AccountCircle, LockReset, SupervisorAccount } from '@mui/icons-material';
+import { Logout, AccountCircle, LockReset, SupervisorAccount, Menu as MenuIcon } from '@mui/icons-material';
 import { useState, useEffect } from 'react';
 import Sidebar, { DRAWER_WIDTH } from './Sidebar';
 import { useAuthStore } from '../../store/auth.store';
@@ -28,6 +28,7 @@ export default function MainLayout() {
   const passwordExpiraEnDias = useAuthStore((s) => s.passwordExpiraEnDias);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [gd, setGd] = useState<MiGerente | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);   // menú lateral en móvil (overlay)
 
   // El representante ve su Gerente de Distrito de la línea arriba a la derecha.
   useEffect(() => {
@@ -70,8 +71,8 @@ export default function MainLayout() {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar />
-      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
+      <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+      <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <AppBar
           position="sticky"
           elevation={0}
@@ -82,11 +83,20 @@ export default function MainLayout() {
             color: 'text.primary',
           }}
         >
-          <Toolbar sx={{ justifyContent: 'space-between' }}>
-            <Typography variant="subtitle1" fontWeight={600} color="text.secondary">
-              Sistema Corporativo de Gestión Comercial
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Toolbar sx={{ justifyContent: 'space-between', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+              {/* Botón ☰ — solo en móvil/tablet; abre el menú lateral en overlay. */}
+              <IconButton edge="start" onClick={() => setMobileOpen(true)}
+                          aria-label="Abrir menú" sx={{ display: { xs: 'inline-flex', md: 'none' } }}>
+                <MenuIcon />
+              </IconButton>
+              {/* Título largo: oculto en teléfono (app-like); visible desde tablet. */}
+              <Typography variant="subtitle1" fontWeight={600} color="text.secondary" noWrap
+                          sx={{ fontSize: { sm: '0.9rem', md: '1rem' }, display: { xs: 'none', sm: 'block' } }}>
+                Sistema Corporativo de Gestión Comercial
+              </Typography>
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.75, sm: 1.5 } }}>
               <CicloPaisBadge />
               {gd?.gerente && (
                 <Tooltip title={`Gerente de Distrito${gd.linea ? ` · Línea ${gd.linea}` : ''}`}>
@@ -96,7 +106,7 @@ export default function MainLayout() {
                     variant="outlined"
                     icon={<SupervisorAccount />}
                     label={`Gerente de Distrito: ${gd.gerente}`}
-                    sx={{ fontWeight: 600 }}
+                    sx={{ fontWeight: 600, display: { xs: 'none', md: 'inline-flex' } }}
                   />
                 </Tooltip>
               )}
@@ -104,7 +114,8 @@ export default function MainLayout() {
                 <Typography
                   variant="body2"
                   fontWeight={600}
-                  sx={{ color: 'text.primary', letterSpacing: '0.2px' }}
+                  noWrap
+                  sx={{ color: 'text.primary', letterSpacing: '0.2px', display: { xs: 'none', md: 'block' } }}
                 >
                   {nombreCompleto}
                 </Typography>
@@ -154,7 +165,7 @@ export default function MainLayout() {
           </DialogActions>
         </Dialog>
 
-        <Box sx={{ flexGrow: 1, p: 3, bgcolor: '#f5f6fa' }}>
+        <Box sx={{ flexGrow: 1, p: { xs: 1.5, sm: 3 }, bgcolor: '#f5f6fa', minWidth: 0, overflowX: 'hidden' }}>
           {avisoVencimiento && (
             <Alert
               severity="warning"

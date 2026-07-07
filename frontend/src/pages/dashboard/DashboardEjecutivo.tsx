@@ -543,7 +543,13 @@ export default function DashboardEjecutivo() {
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: `repeat(${Math.min(Math.max(kpisInd.length, 4), 8)}, 1fr)`,
+                // Responsive: 2 columnas en teléfono (legibles), 3 en tablet,
+                // y todas (hasta 8) en escritorio — no 8 diminutas en móvil.
+                gridTemplateColumns: {
+                  xs: 'repeat(2, 1fr)',
+                  sm: 'repeat(4, 1fr)',
+                  md: `repeat(${Math.min(Math.max(kpisInd.length, 4), 8)}, 1fr)`,
+                },
                 gap: 1.5,
                 mt: 1,
                 mb: 2.5,
