@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert,
   MenuItem, ToggleButton, ToggleButtonGroup, CircularProgress, Avatar, Checkbox,
@@ -94,6 +94,9 @@ export default function RegistrarVisita() {
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
   const [sel, setSel] = useState<AgendaMedico | null>(null);
+  const [catFiltro, setCatFiltro] = useState('');   // filtro de la agenda: '' = todas
+  const [busqueda, setBusqueda] = useState('');
+  const formRef = useRef<HTMLDivElement>(null);       // para enfocar el formulario al seleccionar
   const [tipo, setTipo] = useState<'V' | 'R'>('V');
   const [hora, setHora] = useState(hhmm(new Date()));
   const [comentario, setComentario] = useState('');
@@ -157,7 +160,17 @@ export default function RegistrarVisita() {
     // Parrilla de la LÍNEA DEL REPRESENTANTE (no la del médico), del ciclo abierto
     // de su país — la misma parrilla contra la que promociona y entrega muestras.
     obtenerParrilla(undefined, undefined, vmParam).then(setProductos).catch(() => setProductos([]));
+    // Enfocar el formulario del médico seleccionado (queda justo a la vista).
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   }
+
+  // Agenda filtrada por categoría y nombre (el filtro va en la parte superior del formulario).
+  const agendaVisible = useMemo(() => {
+    const q = busqueda.trim().toUpperCase();
+    return agenda.filter((a) =>
+      (!catFiltro || a.categoria === catFiltro) &&
+      (!q || (a.nombre ?? '').toUpperCase().includes(q)));
+  }, [agenda, catFiltro, busqueda]);
 
   // Minutos transcurridos desde la hora indicada (para la ventana de 60 min).
   const haceMin = useMemo(() => {
@@ -306,11 +319,23 @@ export default function RegistrarVisita() {
               <Chip size="small" color={pendientes ? 'warning' : 'success'} variant={pendientes ? 'filled' : 'outlined'}
                     label={pendientes ? `${pendientes} pendiente${pendientes > 1 ? 's' : ''}` : 'Al día'} sx={{ fontWeight: 700 }} />
             </Stack>
+            {/* Filtro por categoría y nombre (parte superior de la lista a visitar) */}
+            <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+              <TextField size="small" fullWidth placeholder="Buscar médico…" value={busqueda}
+                         onChange={(e) => setBusqueda(e.target.value)} />
+              <TextField select size="small" label="Cat." value={catFiltro} sx={{ minWidth: 96 }}
+                         onChange={(e) => setCatFiltro(e.target.value)}>
+                <MenuItem value="">Todas</MenuItem>
+                {['A', 'B', 'C', 'D'].map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              </TextField>
+            </Stack>
             {agenda.length === 0 ? (
               <Alert severity="info">No hay médicos programados. Puedes registrar desde el panel.</Alert>
+            ) : agendaVisible.length === 0 ? (
+              <Alert severity="info">Ningún médico coincide con el filtro.</Alert>
             ) : (
               <Stack divider={<Divider />}>
-                {agenda.map((a) => {
+                {agendaVisible.map((a) => {
                   const activa = sel?.medico_id === a.medico_id;
                   const reg = a.estado === 'registrada';
                   return (
@@ -347,7 +372,7 @@ export default function RegistrarVisita() {
 
         {/* Formulario de la visita seleccionada */}
         {sel && (
-          <>
+          <div ref={formRef}>
           <Card elevation={0} sx={{ ...cardSx, mb: 2 }}>
             <Box sx={{ background: `linear-gradient(120deg, ${NAVY}0d 0%, ${TEAL}0d 100%)`,
                        borderBottom: '1px solid #eef1f6', px: 2, py: 1.5, display: 'flex', alignItems: 'center',
@@ -562,7 +587,7 @@ export default function RegistrarVisita() {
               </Stack>
             </CardContent>
           </Card>
-          </>
+          </div>
         )}
 
         {/* Registradas hoy */}

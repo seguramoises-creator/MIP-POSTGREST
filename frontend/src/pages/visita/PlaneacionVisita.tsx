@@ -42,6 +42,16 @@ export default function PlaneacionVisita() {
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
+  const [catFiltro, setCatFiltro] = useState('');   // '' = todas
+  const [busqueda, setBusqueda] = useState('');
+
+  // Filtro visual (no afecta el guardado: se persiste TODO el plan, no solo lo visible).
+  const medicosVisibles = useMemo(() => {
+    const q = busqueda.trim().toUpperCase();
+    return medicos.filter((m) =>
+      (!catFiltro || m.categoria === catFiltro) &&
+      (!q || (m.nombre_completo ?? '').toUpperCase().includes(q)));
+  }, [medicos, catFiltro, busqueda]);
 
   // El RM planifica su propio panel (backend fuerza rm_id); ADMIN/GERENTE eligen un VM.
   const vmParam = esVM ? undefined : (vmId || undefined);
@@ -197,6 +207,22 @@ export default function PlaneacionVisita() {
         </Alert>
       )}
 
+      {/* Filtros (solo afectan lo mostrado; el guardado persiste TODO el panel) */}
+      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 2 }} alignItems={{ sm: 'center' }}>
+        <TextField size="small" label="Buscar médico" value={busqueda} sx={{ minWidth: 240 }}
+                   onChange={(e) => setBusqueda(e.target.value)} placeholder="Nombre del médico…" />
+        <TextField select size="small" label="Categoría" value={catFiltro} sx={{ minWidth: 150 }}
+                   onChange={(e) => setCatFiltro(e.target.value)}>
+          <MenuItem value="">Todas</MenuItem>
+          {['A', 'B', 'C', 'D'].map((c) => <MenuItem key={c} value={c}>Categoría {c}</MenuItem>)}
+        </TextField>
+        {(busqueda || catFiltro) && (
+          <Typography variant="caption" color="text.secondary">
+            {medicosVisibles.length} de {medicos.length}
+          </Typography>
+        )}
+      </Stack>
+
       <Card variant="outlined" sx={{ mb: 2 }}>
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small" stickyHeader>
@@ -217,7 +243,12 @@ export default function PlaneacionVisita() {
                   <Alert severity="info" sx={{ my: 1 }}>No hay médicos en tu panel. Regístralos en Panel Médico.</Alert>
                 </TableCell></TableRow>
               )}
-              {medicos.map((m) => {
+              {medicos.length > 0 && medicosVisibles.length === 0 && (
+                <TableRow><TableCell colSpan={7}>
+                  <Alert severity="info" sx={{ my: 1 }}>Ningún médico coincide con el filtro.</Alert>
+                </TableCell></TableRow>
+              )}
+              {medicosVisibles.map((m) => {
                 const f = plan[m.id] ?? F0;
                 const rOk = revisitaPermitida(f.vSemana);
                 return (
