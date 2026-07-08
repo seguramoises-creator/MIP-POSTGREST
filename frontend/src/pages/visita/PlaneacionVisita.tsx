@@ -4,7 +4,7 @@ import {
   Select, FormControl, CircularProgress, Table, TableHead, TableRow, TableCell,
   TableBody, Grid, Tooltip, TextField,
 } from '@mui/material';
-import { Save, EventNote, Warning, CheckCircle } from '@mui/icons-material';
+import { Save, EventNote, Warning, CheckCircle, FilterList, Search } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
@@ -208,20 +208,33 @@ export default function PlaneacionVisita() {
       )}
 
       {/* Filtros (solo afectan lo mostrado; el guardado persiste TODO el panel) */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mb: 2 }} alignItems={{ sm: 'center' }}>
-        <TextField size="small" label="Buscar médico" value={busqueda} sx={{ minWidth: 240 }}
-                   onChange={(e) => setBusqueda(e.target.value)} placeholder="Nombre del médico…" />
-        <TextField select size="small" label="Categoría" value={catFiltro} sx={{ minWidth: 150 }}
-                   onChange={(e) => setCatFiltro(e.target.value)}>
-          <MenuItem value="">Todas</MenuItem>
-          {['A', 'B', 'C', 'D'].map((c) => <MenuItem key={c} value={c}>Categoría {c}</MenuItem>)}
-        </TextField>
-        {(busqueda || catFiltro) && (
-          <Typography variant="caption" color="text.secondary">
-            {medicosVisibles.length} de {medicos.length}
-          </Typography>
-        )}
-      </Stack>
+      <Card variant="outlined" sx={{ mb: 2, bgcolor: '#f5f8ff', borderColor: '#bbdefb' }}>
+        <Box sx={{ p: 1.5 }}>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
+          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: 'primary.main' }}>
+            <FilterList fontSize="small" />
+            <Typography variant="body2" fontWeight={700}>Filtrar</Typography>
+          </Stack>
+          <TextField size="small" label="Buscar médico" value={busqueda} sx={{ minWidth: 240, bgcolor: '#fff' }}
+                     onChange={(e) => setBusqueda(e.target.value)} placeholder="Nombre del médico…"
+                     InputProps={{ startAdornment: <Search fontSize="small" sx={{ mr: 0.5, color: 'text.disabled' }} /> }} />
+          <TextField select size="small" label="Categoría" value={catFiltro} sx={{ minWidth: 160, bgcolor: '#fff' }}
+                     onChange={(e) => setCatFiltro(e.target.value)}>
+            <MenuItem value="">Todas las categorías</MenuItem>
+            {['A', 'B', 'C', 'D'].map((c) => <MenuItem key={c} value={c}>Categoría {c}</MenuItem>)}
+          </TextField>
+          {(busqueda || catFiltro) && (
+            <Button size="small" onClick={() => { setBusqueda(''); setCatFiltro(''); }}>Limpiar</Button>
+          )}
+          <Box sx={{ flex: 1 }} />
+          {(busqueda || catFiltro) && (
+            <Typography variant="caption" color="text.secondary" fontWeight={600}>
+              Mostrando {medicosVisibles.length} de {medicos.length}
+            </Typography>
+          )}
+        </Stack>
+        </Box>
+      </Card>
 
       <Card variant="outlined" sx={{ mb: 2 }}>
         <Box sx={{ overflowX: 'auto' }}>
