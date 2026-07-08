@@ -43,8 +43,8 @@ function Flag({ value }: { value: number }) {
 
 /* ── pódium ───────────────────────────────────────────────── */
 const PODIUM_CFG = [
-  { pos: 2, icon: '🥈', label: 'Plata',  color: '#455a64', border: '#90a4ae', bg: 'linear-gradient(160deg,#eceff1,#f5f5f5)', shadow: '#90a4ae44' },
   { pos: 1, icon: '🏆', label: 'Oro',    color: '#e65100', border: '#f9a825', bg: 'linear-gradient(160deg,#fffde7,#fff8e1)', shadow: '#f9a82566', large: true },
+  { pos: 2, icon: '🥈', label: 'Plata',  color: '#455a64', border: '#90a4ae', bg: 'linear-gradient(160deg,#eceff1,#f5f5f5)', shadow: '#90a4ae44' },
   { pos: 3, icon: '🥉', label: 'Bronce', color: '#bf360c', border: '#ff7043', bg: 'linear-gradient(160deg,#fff3e0,#fbe9e7)', shadow: '#ff704344' },
 ];
 

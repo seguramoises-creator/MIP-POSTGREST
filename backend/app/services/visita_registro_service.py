@@ -28,6 +28,10 @@ def _medico_del_vm(db: Session, vm_id: int, medico_id: int) -> MedicoVisita:
         raise ValueError("Médico no encontrado")
     if m.vm_id != vm_id:
         raise ValueError("El médico no pertenece a tu panel")
+    # Un médico pendiente de aprobación (o rechazado) aún no forma parte oficial del
+    # panel: no se le puede registrar visita hasta que el Gerente de Distrito lo apruebe.
+    if m.estado_aprobacion != "APROBADO":
+        raise ValueError("El médico está pendiente de aprobación del Gerente de Distrito — aún no puedes registrarle visita.")
     return m
 
 
@@ -150,13 +154,16 @@ def agenda_hoy(db: Session, vm_id: int) -> list[dict]:
 
     medico_ids = list(por_medico)
     fuente_plan = True
-    if not medico_ids:  # fallback: panel activo vigente
+    if not medico_ids:  # fallback: panel activo vigente (solo médicos APROBADOS)
         fuente_plan = False
         meds = db.query(MedicoVisita).filter(
-            MedicoVisita.vm_id == vm_id, MedicoVisita.activo == True).all()  # noqa: E712
+            MedicoVisita.vm_id == vm_id, MedicoVisita.activo == True,
+            MedicoVisita.estado_aprobacion == "APROBADO").all()
         medico_ids = [m.id for m in meds]
 
-    medicos = {m.id: m for m in db.query(MedicoVisita).filter(MedicoVisita.id.in_(medico_ids)).all()} if medico_ids else {}
+    # Solo médicos APROBADOS entran a la agenda (los pendientes no son visitables aún).
+    medicos = {m.id: m for m in db.query(MedicoVisita).filter(
+        MedicoVisita.id.in_(medico_ids), MedicoVisita.estado_aprobacion == "APROBADO").all()} if medico_ids else {}
     esp_ids = {m.especialidad_id for m in medicos.values() if m.especialidad_id}
     esp = dict(db.query(Especialidad.id, Especialidad.nombre).filter(Especialidad.id.in_(esp_ids)).all()) if esp_ids else {}
 

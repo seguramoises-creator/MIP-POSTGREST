@@ -572,7 +572,7 @@ function TabReglas() {
 interface Pais { id: number; codigo: string; nombre: string; }
 interface GeoItem { id: number; nombre: string; pais_codigo?: string; provincia_id?: number; }
 
-function TabGeo() {
+export function TabGeo() {
   const qc = useQueryClient();
   const [cat, setCat] = useState<'especialidad' | 'provincia' | 'municipio' | 'centro'>('provincia');
   const [pais, setPais] = useState('');

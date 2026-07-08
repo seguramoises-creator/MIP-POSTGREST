@@ -9,7 +9,7 @@ import { useAuthStore } from '../../store/auth.store';
 import {
   listarMedicos, listarMedicosExistentes, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
   solicitarBajaMedico, reactivarMedico, listarAprobaciones, aprobarMedico, rechazarMedico,
-  listarProvincias, listarMunicipios, listarCentros,
+  listarProvincias, listarMunicipios, listarCentros, importarMedicosCategorizacion,
   type MedicoVisita, type MedicoExistente, type Catalogo, type PosibleDuplicado, type MedicoCrear, type AprobacionPendiente,
   type Provincia, type Municipio,
 } from '../../services/visita.service';
@@ -107,6 +107,8 @@ export default function PanelMedico() {
   const [duplicados, setDuplicados] = useState<PosibleDuplicado[] | null>(null);
   // "Agregar médico existente": copiar la ficha de un médico ya registrado por otro VM.
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [confirmImport, setConfirmImport] = useState(false);
+  const [importando, setImportando] = useState(false);
   const [modoExistente, setModoExistente] = useState(false);
   const [existentes, setExistentes] = useState<MedicoExistente[]>([]);
   const [existenteSel, setExistenteSel] = useState<number | ''>('');
@@ -248,6 +250,18 @@ export default function PanelMedico() {
   };
   const set = (k: keyof MedicoCrear, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
+  // Carga masiva: crea en el Panel los médicos ya cargados en Categorización.
+  const importarCat = async () => {
+    setConfirmImport(false); setImportando(true); setMsg(null);
+    try {
+      const r = await importarMedicosCategorizacion();
+      setMsg({ tipo: 'success', texto: `Importados desde Categorización: ${r.creados} creados · ${r.omitidos} ya existían · ${r.invalidos} con nombre inválido (de ${r.total_origen}). Quedan pendientes de aprobación del Gerente de Distrito.` });
+      cargar(); cargarPendientes();
+    } catch {
+      setMsg({ tipo: 'error', texto: 'No se pudo importar desde Categorización. Verifica que haya datos cargados en Categorización.' });
+    } finally { setImportando(false); }
+  };
+
   // Días de consulta (multi-selección): se guarda como CSV ordenado L→V.
   const toggleDia = (d: string) => {
     const cur = parseDias(form.dias_consulta);
@@ -341,6 +355,12 @@ export default function PanelMedico() {
             <MenuItem value="inactivos">Inactivos</MenuItem>
             <MenuItem value="todos">Todos</MenuItem>
           </TextField>
+          {esAprobador && !esVM && (
+            <Button variant="outlined" startIcon={<HowToReg />} disabled={importando}
+                    onClick={() => setConfirmImport(true)}>
+              {importando ? 'Importando…' : 'Importar desde Categorización'}
+            </Button>
+          )}
           <Button variant="contained" startIcon={<PersonAddAlt1 />}
                   onClick={(e) => setMenuAnchor(e.currentTarget)}>Agregar Médico</Button>
           <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
@@ -701,6 +721,24 @@ export default function PanelMedico() {
               {guardando ? 'Guardando…' : 'Guardar'}
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Confirmación de importación masiva desde Categorización */}
+      <Dialog open={confirmImport} onClose={() => setConfirmImport(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Importar médicos desde Categorización</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            Se crearán en el Panel los médicos ya cargados en Categorización, cada uno asignado a su
+            visitador y con su especialidad, provincia, municipio, centro y categoría. Los médicos
+            que ya existan se omiten. Quedarán <b>pendientes de aprobación</b> del Gerente de Distrito.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmImport(false)}>Cancelar</Button>
+          <Button variant="contained" onClick={importarCat} disabled={importando}>
+            {importando ? 'Importando…' : 'Importar'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

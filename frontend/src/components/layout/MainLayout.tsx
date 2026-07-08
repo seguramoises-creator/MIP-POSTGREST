@@ -17,10 +17,15 @@ import CicloPaisHeader from '../CicloPaisHeader';
 export default function MainLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  // Franja global País+Ciclo: se oculta en /visita/registrar (el registro siempre
-  // va al ciclo abierto — el contexto es redundante ahí), en /dashboard y en /lsii
-  // (tienen sus propios filtros de Ciclo).
-  const HEADER_OCULTO = ['/visita/registrar', '/dashboard', '/lsii'];
+  // Franja global País+Ciclo: se oculta donde es redundante — en /visita/registrar
+  // (el registro siempre va al ciclo abierto) y en las páginas que ya traen sus
+  // propios selectores de País/Ciclo o no dependen del ciclo (dashboard, LSII, los
+  // módulos de análisis, ETL/Reportes con filtros propios, y Admin/Usuarios).
+  const HEADER_OCULTO = [
+    '/visita/registrar', '/dashboard', '/lsii',
+    '/coaching', '/productividad', '/ranking', '/reconocimiento', '/cobertura-predictiva',
+    '/etl', '/reportes', '/usuarios', '/admin',
+  ];
   const headerEnLayout = !HEADER_OCULTO.includes(pathname);
   const { nombreCompleto, accessToken, rol, logout } = useAuthStore();
   const debeCambiarPassword = useAuthStore((s) => s.debeCambiarPassword);

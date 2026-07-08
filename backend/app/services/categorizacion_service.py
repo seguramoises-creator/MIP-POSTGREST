@@ -326,6 +326,56 @@ def _regla_aplica(regla, valor_num, valor_txt):
     return False
 
 
+# SQL de sincronización de dimensiones maestras: cat.* (cargado del Excel) → Config.DIM_*
+# (fuente única del sistema, usada por Panel Médico / Productos). Aditivo (insert-if-not-exists,
+# case-insensitive) y portable PG / SQL Server. El país se toma de cat.DimPais.CodigoPais y se
+# valida contra Config.DIM_Pais para no romper la FK.
+_SYNC_ESPECIALIDAD = """
+INSERT INTO "Config"."DIM_Especialidad" (nombre, activo)
+SELECT DISTINCT TRIM(e."Especialidad"), TRUE FROM "cat"."DimEspecialidad" e
+WHERE e."Especialidad" IS NOT NULL AND TRIM(e."Especialidad") <> ''
+  AND NOT EXISTS (SELECT 1 FROM "Config"."DIM_Especialidad" d WHERE LOWER(d.nombre)=LOWER(TRIM(e."Especialidad")))
+"""
+_SYNC_CENTRO = """
+INSERT INTO "Config"."DIM_CentroMedico" (pais_codigo, nombre, activo)
+SELECT DISTINCT pa."CodigoPais", TRIM(c."CentroMedico"), TRUE
+FROM "cat"."DimCentroMedico" c JOIN "cat"."DimPais" pa ON pa."PaisKey"=c."PaisKey"
+WHERE c."CentroMedico" IS NOT NULL AND TRIM(c."CentroMedico") <> ''
+  AND EXISTS (SELECT 1 FROM "Config"."DIM_Pais" cp WHERE cp.codigo=pa."CodigoPais")
+  AND NOT EXISTS (SELECT 1 FROM "Config"."DIM_CentroMedico" d WHERE d.pais_codigo=pa."CodigoPais" AND d.nombre=TRIM(c."CentroMedico"))
+"""
+_SYNC_PROVINCIA = """
+INSERT INTO "Config"."DIM_Provincia" (pais_codigo, nombre, activo)
+SELECT DISTINCT pa."CodigoPais", TRIM(g."Provincia"), TRUE
+FROM "cat"."DimGeografia" g JOIN "cat"."DimPais" pa ON pa."PaisKey"=g."PaisKey"
+WHERE g."Provincia" IS NOT NULL AND TRIM(g."Provincia") <> ''
+  AND EXISTS (SELECT 1 FROM "Config"."DIM_Pais" cp WHERE cp.codigo=pa."CodigoPais")
+  AND NOT EXISTS (SELECT 1 FROM "Config"."DIM_Provincia" d WHERE d.pais_codigo=pa."CodigoPais" AND LOWER(d.nombre)=LOWER(TRIM(g."Provincia")))
+"""
+_SYNC_MUNICIPIO = """
+INSERT INTO "Config"."DIM_Municipio" (provincia_id, nombre, activo)
+SELECT DISTINCT pr.id, TRIM(g."Municipio"), TRUE
+FROM "cat"."DimGeografia" g JOIN "cat"."DimPais" pa ON pa."PaisKey"=g."PaisKey"
+JOIN "Config"."DIM_Provincia" pr ON pr.pais_codigo=pa."CodigoPais" AND LOWER(pr.nombre)=LOWER(TRIM(g."Provincia"))
+WHERE g."Municipio" IS NOT NULL AND TRIM(g."Municipio") <> ''
+  AND NOT EXISTS (SELECT 1 FROM "Config"."DIM_Municipio" d WHERE d.provincia_id=pr.id AND LOWER(d.nombre)=LOWER(TRIM(g."Municipio")))
+"""
+
+
+def sincronizar_dims_maestras(db: Session) -> dict:
+    """Puebla las dimensiones compartidas Config.DIM_* con los valores reales cargados
+    en cat.* (Especialidad, Centro Médico, Provincia, Municipio). Aditivo e idempotente:
+    solo inserta lo que falta. Es la fuente única usada por todo el sistema."""
+    r = {}
+    r["especialidades"] = db.execute(text(_SYNC_ESPECIALIDAD)).rowcount
+    r["provincias"] = db.execute(text(_SYNC_PROVINCIA)).rowcount
+    r["municipios"] = db.execute(text(_SYNC_MUNICIPIO)).rowcount   # tras provincias (dependen de ellas)
+    r["centros"] = db.execute(text(_SYNC_CENTRO)).rowcount
+    db.flush()
+    logger.info(f"Dims maestras sincronizadas desde cat.*: {r}")
+    return r
+
+
 def calcular_categorias_py(db: Session, load_batch_key: int) -> None:
     """Equivalente Python de cat.sp_CalcularCategoriaMedica (ETL dimensional + scoring).
     Conforma dimensiones, calcula puntaje por reglas y escribe Snapshot + Detalle."""
@@ -365,6 +415,11 @@ def calcular_categorias_py(db: Session, load_batch_key: int) -> None:
           AND NOT EXISTS (SELECT 1 FROM "cat"."DimMedico" d WHERE d."PaisKey"=p."PaisKey" AND d."NombreMedico"=TRIM(s."Medico")
             AND COALESCE(d."EspecialidadKey",-1)=COALESCE(esp."EspecialidadKey",-1))"""), b)
     db.flush()
+
+    # Unificación: las dimensiones compartidas del sistema viven en Config.DIM_* (las
+    # usan Panel Médico, Productos, etc.). Al cargar Categorización, poblamos ahí las
+    # especialidades/provincias/municipios/centros reales del Excel — fuente única.
+    sincronizar_dims_maestras(db)
 
     # 6-7: filas enriquecidas con las keys de dimensión
     rows = db.execute(text("""

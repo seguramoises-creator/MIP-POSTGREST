@@ -21,14 +21,14 @@ import {
   TableRow, Paper, Button, Chip, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, Grid, Alert,
   CircularProgress, MenuItem, Select, FormControl, InputLabel, FormHelperText,
-  IconButton, Tooltip,
+  IconButton, Tooltip, Autocomplete,
 } from '@mui/material';
 import { Add, Refresh, TableChart, Edit, Upload, ToggleOn, ToggleOff, LockOpen, Lock, Delete, Psychology, TrendingUp, LocalHospital } from '@mui/icons-material';
 import { api } from '../../services/api';
 import ImportDims from './ImportDims';
 import LsiiAdmin from './LsiiAdmin';
 import CoberturaPredictivaAdmin from './CoberturaPredictivaAdmin';
-import CategorizacionAdmin from './CategorizacionAdmin';
+import CategorizacionAdmin, { TabGeo } from './CategorizacionAdmin';
 import PasswordPolicyTab from './PasswordPolicyTab';
 
 // ── Hook: carga la lista de países y la reutiliza en toda la página ──
@@ -240,6 +240,7 @@ type FieldDef = {
   label: string;
   type?: string;
   options?: string[];
+  freeSoloFrom?: string; // key: Autocomplete con opciones = valores distintos ya usados en esa columna (dropdown + escribir nuevo)
   isPais?: boolean;    // true = usar PaisSelector en vez de TextField
   isLinea?: boolean;   // true = usar LineaSelector (filtrado por pais_codigo del mismo form)
   isGerente?: boolean; // true = usar GerenteSelector (filtrado por pais_codigo del mismo form)
@@ -400,6 +401,23 @@ function CatalogoTab({
             {f.options.map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
           </Select>
         </FormControl>
+      ) : f.freeSoloFrom ? (
+        // Desplegable con los valores ya usados en esa columna (permite elegir o escribir uno nuevo).
+        <Autocomplete
+          freeSolo size="small"
+          options={(() => {
+            const seen = new Set<string>(); const out: string[] = [];
+            for (const r of ((data as any[]) ?? [])) {
+              const v = String(r?.[f.freeSoloFrom as string] ?? '').trim();
+              if (v && !seen.has(v.toLowerCase())) { seen.add(v.toLowerCase()); out.push(v); }
+            }
+            return out.sort((a, b) => a.localeCompare(b));
+          })()}
+          value={form[f.key] || ''}
+          onChange={(_, v) => setForm({ ...form, [f.key]: v ?? '' })}
+          onInputChange={(_, v, reason) => { if (reason === 'input') setForm({ ...form, [f.key]: v }); }}
+          renderInput={(params) => <TextField {...params} label={f.label} />}
+        />
       ) : (
         <TextField fullWidth size="small" label={f.label} type={f.type || 'text'}
           value={form[f.key] || ''}
@@ -1432,9 +1450,9 @@ const TABS_DIM = [
     addFields: [
       { key: 'codigo', label: 'Código (ONCX-301...)' },
       { key: 'nombre', label: 'Nombre del Producto' },
-      { key: 'area_terapeutica', label: 'Área Terapéutica (Oncología...)' },
+      { key: 'area_terapeutica', label: 'Área Terapéutica', freeSoloFrom: 'area_terapeutica' },
       { key: 'descripcion', label: 'Descripción (Inhibidor selectivo...)' },
-      { key: 'segmento_target', label: 'Segmento Target (Cat. A + B Oncología)' },
+      { key: 'segmento_target', label: 'Segmento Target', freeSoloFrom: 'segmento_target' },
       { key: 'meta_muestras_visita', label: 'Meta muestras / visita', type: 'number' },
       { key: 'pais_codigo', label: 'País (para elegir línea)', isPais: true },
       { key: 'linea_id', label: 'Línea', isLinea: true },
@@ -1503,6 +1521,7 @@ const TAB_LSII_INDEX       = TABS_DIM.length + 3;
 const TAB_COBERTURA_INDEX  = TABS_DIM.length + 4;
 const TAB_CATEGORIZACION_INDEX = TABS_DIM.length + 5;
 const TAB_PASSWORD_INDEX   = TABS_DIM.length + 6;
+const TAB_GEO_INDEX        = TABS_DIM.length + 7;
 
 // ── Componente principal ──────────────────────────────────────────────
 export default function Admin() {
@@ -1565,6 +1584,7 @@ export default function Admin() {
             <Tab label="Cobertura Predictiva" icon={<TrendingUp fontSize="small" />} iconPosition="start" />
             <Tab label="Categorización Médica" icon={<LocalHospital fontSize="small" />} iconPosition="start" />
             <Tab label="Política de contraseñas" icon={<Lock fontSize="small" />} iconPosition="start" />
+            <Tab label="Especialidades y Geografía" icon={<LocalHospital fontSize="small" />} iconPosition="start" />
           </Tabs>
 
           <Box sx={{ mt: 3 }}>
@@ -1582,6 +1602,8 @@ export default function Admin() {
               <CategorizacionAdmin />
             ) : tab === TAB_PASSWORD_INDEX ? (
               <PasswordPolicyTab />
+            ) : tab === TAB_GEO_INDEX ? (
+              <TabGeo />
             ) : (TABS_DIM[tab] as any).isCiclos ? (
               <CiclosPorPaisTab />
             ) : (TABS_DIM[tab] as any).hasPaisFilter ? (

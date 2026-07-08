@@ -250,3 +250,70 @@ def listar_medicos_existentes(db: Session, vm_id: int) -> list[dict]:
             "segmento": m.segmento, "observaciones": m.observaciones,
         })
     return salida
+
+
+# ── Puente: importar médicos del Panel desde los datos de Categorización ──────
+# Fuente: cat.FactMedicoCategoriaSnapshot (médico → VM → categoría → geografía →
+# centro), ya cargado del Excel. Crea en Visita.DIM_MedicoVisita los médicos que
+# falten, asignados a su VM y en estado PENDIENTE_ALTA (aprobación del GD).
+_SQL_MEDICOS_CAT = """
+SELECT rm.id AS vm_id, m."NombreMedico" AS nombre, ce.id AS especialidad_id,
+       COALESCE(sn."CategoriaCalculada", sn."CategoriaExcel") AS categoria,
+       cm."CentroMedico" AS centro, sn."Provincia" AS provincia, sn."Municipio" AS municipio,
+       sn."Periodo" AS periodo
+FROM "cat"."FactMedicoCategoriaSnapshot" sn
+JOIN "cat"."DimMedico" m ON m."MedicoKey"=sn."MedicoKey"
+JOIN "cat"."DimRepresentanteMedico" dr ON dr."RepresentanteKey"=sn."RepresentanteKey"
+JOIN "Config"."DIM_RM" rm ON rm.codigo=dr."CodigoRepresentante"
+LEFT JOIN "cat"."DimEspecialidad" ecat ON ecat."EspecialidadKey"=m."EspecialidadKey"
+LEFT JOIN "Config"."DIM_Especialidad" ce ON LOWER(ce.nombre)=LOWER(TRIM(ecat."Especialidad")) AND ce.activo=TRUE
+LEFT JOIN "cat"."DimCentroMedico" cm ON cm."CentroMedicoKey"=sn."CentroMedicoKey"
+ORDER BY rm.id, m."NombreMedico", sn."Periodo" DESC
+"""
+
+
+def importar_desde_categorizacion(db: Session, usuario_id: int | None = None) -> dict:
+    """Crea en el Panel Médico los médicos cargados en Categorización que aún no
+    existan (dedup por VM + nombre). Quedan en PENDIENTE_ALTA. Idempotente."""
+    from datetime import date as _date, datetime as _dt, timezone as _tz
+    from sqlalchemy import text
+    from app.schemas.visita import validar_nombre_medico
+    from app.services.visita_aprobacion_service import ciclo_actual_id
+
+    ahora = _dt.now(_tz.utc)
+    filas = db.execute(text(_SQL_MEDICOS_CAT)).mappings().all()
+    ciclo_id = ciclo_actual_id(db)
+    # Médicos ya existentes en el panel (vm_id + nombre en MAYÚSCULAS) para no duplicar.
+    existentes = {(m.vm_id, (m.nombre_completo or "").upper())
+                  for m in db.query(MedicoVisita.vm_id, MedicoVisita.nombre_completo).all()}
+    vistos: set[tuple[int, str]] = set()
+    creados = omitidos = invalidos = 0
+    for f in filas:
+        try:
+            nombre = validar_nombre_medico(f["nombre"])   # MAYÚSCULAS, ≥2 palabras, sin puntos
+        except (ValueError, AttributeError):
+            invalidos += 1
+            continue
+        clave = (f["vm_id"], nombre)
+        if clave in vistos or clave in existentes:
+            omitidos += 1
+            continue
+        vistos.add(clave)
+        cat = (f["categoria"] or "").strip().upper()
+        if cat not in ("A", "B", "C", "D"):
+            cat = "C"
+        db.add(MedicoVisita(
+            vm_id=f["vm_id"], nombre_completo=nombre, especialidad_id=f["especialidad_id"],
+            categoria=cat, centro_trabajo=f["centro"], provincia=f["provincia"], municipio=f["municipio"],
+            acepta_visita=True, kol=False, ciclos_sin_visita=0, activo=True,
+            # Carga masiva autoritativa (admin/gerente): quedan APROBADOS directamente,
+            # sin requerir aprobación uno-por-uno del GD. El alta individual por un RM
+            # sí queda PENDIENTE_ALTA (ver crear_medico).
+            estado_aprobacion="APROBADO", ciclo_alta_id=ciclo_id,
+            fecha_alta=_date.today(), solicitado_por=usuario_id,
+            fecha_solicitud=ahora, aprobado_por=usuario_id, fecha_aprobacion=ahora,
+            registrado_por=usuario_id))
+        creados += 1
+    db.commit()
+    logger.info(f"Importación Panel←Categorización: creados={creados} omitidos={omitidos} invalidos={invalidos}")
+    return {"creados": creados, "omitidos": omitidos, "invalidos": invalidos, "total_origen": len(filas)}

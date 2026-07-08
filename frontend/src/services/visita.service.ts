@@ -119,6 +119,11 @@ export const rechazarMedico = (id: number, motivo?: string) =>
 export const listarEspecialidades = () =>
   api.get<Catalogo[]>('/visita/especialidades').then(r => r.data);
 
+// Carga masiva del Panel Médico desde los datos ya cargados en Categorización.
+export const importarMedicosCategorizacion = () =>
+  api.post<{ creados: number; omitidos: number; invalidos: number; total_origen: number }>(
+    '/visita/medicos/importar-categorizacion').then(r => r.data);
+
 // Catálogos geográficos (dropdowns del maestro de médicos).
 export interface Provincia { id: number; nombre: string; pais_codigo?: string; }
 export interface Municipio { id: number; nombre: string; provincia_id?: number; }

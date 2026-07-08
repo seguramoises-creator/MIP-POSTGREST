@@ -251,6 +251,14 @@ def crear_medico(datos: MedicoVisitaCrear, db: Session = Depends(get_db), curren
         )
 
 
+@router.post("/medicos/importar-categorizacion", response_model=dict)
+def importar_medicos_categorizacion(db: Session = Depends(get_db), current_user=RequireCierre):
+    """Carga masiva del Panel Médico desde los datos ya cargados en Categorización:
+    crea los médicos faltantes (dedup por VM + nombre), asignados a su VM y en estado
+    PENDIENTE_ALTA. Solo ADMIN / GERENTE_PRODUCTIVIDAD."""
+    return visita_service.importar_desde_categorizacion(db, getattr(current_user, "id", None))
+
+
 @router.get("/cobertura/resumen", response_model=dict)
 def cobertura_resumen(ciclo_id: int | None = None, vm_id: int | None = None,
                       db: Session = Depends(get_db), current_user=RequireVisita):

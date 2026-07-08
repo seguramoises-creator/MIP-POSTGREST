@@ -442,3 +442,20 @@ def test_actualizar_medico_nombre_solo_valida_si_cambia():
     datos2 = MedicoVisitaActualizar(nombre_completo="DR. NUEVO")
     with pytest.raises(ValueError):
         visita_service.actualizar_medico(db, medico2, datos2, usuario_id=1)
+
+
+def test_medico_pendiente_no_visitable():
+    """Regresión: un médico PENDIENTE_ALTA no puede recibir visita hasta ser aprobado."""
+    from unittest.mock import MagicMock
+    from types import SimpleNamespace
+    import pytest
+    import app.services.visita_registro_service as rs
+    db = MagicMock()
+    pend = SimpleNamespace(id=5, vm_id=3, activo=True, estado_aprobacion="PENDIENTE_ALTA")
+    db.query.return_value.filter.return_value.first.return_value = pend
+    with pytest.raises(ValueError, match="pendiente de aprob"):
+        rs._medico_del_vm(db, 3, 5)
+    # Aprobado sí pasa
+    aprob = SimpleNamespace(id=5, vm_id=3, activo=True, estado_aprobacion="APROBADO")
+    db.query.return_value.filter.return_value.first.return_value = aprob
+    assert rs._medico_del_vm(db, 3, 5) is aprob
