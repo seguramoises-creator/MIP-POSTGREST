@@ -20,6 +20,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import Block from '@mui/icons-material/Block';
 import SaveIcon from '@mui/icons-material/Save';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
@@ -570,7 +571,7 @@ function TabReglas() {
 // ── Componente principal ───────────────────────────────────────────────────────
 // ── Sub-componente: Catálogos geográficos (Especialidad / Provincia / Municipio / Centro) ──
 interface Pais { id: number; codigo: string; nombre: string; }
-interface GeoItem { id: number; nombre: string; pais_codigo?: string; provincia_id?: number; }
+interface GeoItem { id: number; nombre: string; pais_codigo?: string; provincia_id?: number; activo?: boolean; }
 
 type GeoTipo = 'especialidad' | 'provincia' | 'municipio' | 'centro';
 const GEO_LABEL: Record<GeoTipo, string> = {
@@ -594,14 +595,16 @@ export function TabGeo({ tipos = ['especialidad', 'provincia', 'municipio', 'cen
   const necesitaPais = cat === 'provincia' || cat === 'centro';
   const necesitaProv = cat === 'municipio';
 
+  // En el admin se muestran también los inactivos (para poder reactivarlos).
   const { data: items = [], isLoading } = useQuery<GeoItem[]>({
     queryKey: ['geo-items', cat, pais, provinciaId],
     queryFn: async () => {
-      if (cat === 'especialidad') return (await api.get('/categorizacion/geo/especialidades')).data;
-      if (cat === 'provincia') return (await api.get('/categorizacion/geo/provincias', { params: pais ? { pais_codigo: pais } : {} })).data;
-      if (cat === 'centro') return (await api.get('/categorizacion/geo/centros', { params: pais ? { pais_codigo: pais } : {} })).data;
+      const inc = { incluir_inactivos: true };
+      if (cat === 'especialidad') return (await api.get('/categorizacion/geo/especialidades', { params: inc })).data;
+      if (cat === 'provincia') return (await api.get('/categorizacion/geo/provincias', { params: { ...inc, ...(pais ? { pais_codigo: pais } : {}) } })).data;
+      if (cat === 'centro') return (await api.get('/categorizacion/geo/centros', { params: { ...inc, ...(pais ? { pais_codigo: pais } : {}) } })).data;
       if (!provinciaId) return [];
-      return (await api.get('/categorizacion/geo/municipios', { params: { provincia_id: provinciaId } })).data;
+      return (await api.get('/categorizacion/geo/municipios', { params: { ...inc, provincia_id: provinciaId } })).data;
     },
   });
 
@@ -616,9 +619,16 @@ export function TabGeo({ tipos = ['especialidad', 'provincia', 'municipio', 'cen
     onSuccess: () => { setNombre(''); qc.invalidateQueries({ queryKey: ['geo-items'] }); qc.invalidateQueries({ queryKey: ['geo-prov'] }); },
     onError: (e: any) => setError(e?.response?.data?.detail ?? 'No se pudo crear'),
   });
-  const eliminar = useMutation({
-    mutationFn: async (id: number) => api.delete(`/categorizacion/geo/${cat}/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['geo-items'] }),
+  const toggleActivo = useMutation({
+    mutationFn: async ({ id, activo }: { id: number; activo: boolean }) =>
+      api.patch(`/categorizacion/geo/${cat}/${id}`, { activo }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['geo-items'] }); qc.invalidateQueries({ queryKey: ['geo-prov'] }); },
+    onError: (e: any) => setError(e?.response?.data?.detail ?? 'No se pudo actualizar'),
+  });
+  const borrar = useMutation({
+    mutationFn: async (id: number) => api.delete(`/categorizacion/geo/${cat}/${id}`, { params: { permanente: true } }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['geo-items'] }); qc.invalidateQueries({ queryKey: ['geo-prov'] }); },
+    onError: (e: any) => setError(e?.response?.data?.detail ?? 'No se pudo borrar'),
   });
   const renombrar = useMutation({
     mutationFn: async () => api.patch(`/categorizacion/geo/${cat}/${editId}`, { nombre: editNombre }),
@@ -679,24 +689,30 @@ export function TabGeo({ tipos = ['especialidad', 'provincia', 'municipio', 'cen
           <TableHead>
             <TableRow>
               <TableCell sx={{ fontWeight: 700 }}>Nombre</TableCell>
+              <TableCell align="center" sx={{ fontWeight: 700 }}>Estado</TableCell>
               <TableCell align="right" sx={{ fontWeight: 700 }}>Acciones</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {isLoading && <TableRow><TableCell colSpan={2}>Cargando…</TableCell></TableRow>}
+            {isLoading && <TableRow><TableCell colSpan={3}>Cargando…</TableCell></TableRow>}
             {!isLoading && items.length === 0 && (
-              <TableRow><TableCell colSpan={2} sx={{ color: 'text.secondary', py: 3, textAlign: 'center' }}>
+              <TableRow><TableCell colSpan={3} sx={{ color: 'text.secondary', py: 3, textAlign: 'center' }}>
                 {necesitaProv && !provinciaId ? 'Elige una provincia' : 'Sin registros'}
               </TableCell></TableRow>
             )}
-            {items.map((it) => (
-              <TableRow key={it.id} hover>
+            {items.map((it) => {
+              const activo = it.activo !== false;
+              return (
+              <TableRow key={it.id} hover sx={{ opacity: activo ? 1 : 0.6 }}>
                 <TableCell>
                   {editId === it.id ? (
                     <TextField size="small" value={editNombre} autoFocus fullWidth
                                onChange={(e) => setEditNombre(e.target.value)}
                                onKeyDown={(e) => { if (e.key === 'Enter' && editNombre.trim().length >= 2) renombrar.mutate(); }} />
                   ) : it.nombre}
+                </TableCell>
+                <TableCell align="center">
+                  <Chip size="small" label={activo ? 'Activo' : 'Inactivo'} color={activo ? 'success' : 'default'} variant={activo ? 'filled' : 'outlined'} />
                 </TableCell>
                 <TableCell align="right">
                   {editId === it.id ? (
@@ -710,14 +726,23 @@ export function TabGeo({ tipos = ['especialidad', 'provincia', 'municipio', 'cen
                       <Tooltip title="Editar / corregir nombre">
                         <IconButton size="small" color="primary" onClick={() => { setError(''); setEditId(it.id); setEditNombre(it.nombre); }}><EditIcon fontSize="small" /></IconButton>
                       </Tooltip>
-                      <Tooltip title="Desactivar (baja lógica)">
-                        <IconButton size="small" color="error" onClick={() => eliminar.mutate(it.id)}><DeleteIcon fontSize="small" /></IconButton>
+                      <Tooltip title={activo ? 'Desactivar' : 'Activar'}>
+                        <IconButton size="small" color={activo ? 'warning' : 'success'}
+                                    onClick={() => toggleActivo.mutate({ id: it.id, activo: !activo })}>
+                          {activo ? <Block fontSize="small" /> : <CheckCircleOutlineIcon fontSize="small" />}
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Borrar permanentemente">
+                        <IconButton size="small" color="error"
+                                    onClick={() => { if (window.confirm(`¿Borrar permanentemente "${it.nombre}"? Esta acción no se puede deshacer.`)) borrar.mutate(it.id); }}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
                       </Tooltip>
                     </>
                   )}
                 </TableCell>
               </TableRow>
-            ))}
+            ); })}
           </TableBody>
         </Table>
       </Paper>

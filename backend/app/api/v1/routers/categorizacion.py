@@ -337,26 +337,27 @@ from app.services import geo_catalogo_service as _geo  # noqa: E402
 
 
 @router.get("/geo/provincias", summary="Listar provincias")
-def geo_listar_provincias(pais_codigo: Optional[str] = Query(None),
+def geo_listar_provincias(pais_codigo: Optional[str] = Query(None), incluir_inactivos: bool = Query(False),
                           _u: Usuario = RequireAuth, db: Session = Depends(get_db)):
-    return _geo.listar_provincias(db, pais_codigo)
+    return _geo.listar_provincias(db, pais_codigo, incluir_inactivos)
 
 
 @router.get("/geo/municipios", summary="Listar municipios de una provincia")
-def geo_listar_municipios(provincia_id: Optional[int] = Query(None),
+def geo_listar_municipios(provincia_id: Optional[int] = Query(None), incluir_inactivos: bool = Query(False),
                           _u: Usuario = RequireAuth, db: Session = Depends(get_db)):
-    return _geo.listar_municipios(db, provincia_id)
+    return _geo.listar_municipios(db, provincia_id, incluir_inactivos)
 
 
 @router.get("/geo/centros", summary="Listar centros médicos")
-def geo_listar_centros(pais_codigo: Optional[str] = Query(None),
+def geo_listar_centros(pais_codigo: Optional[str] = Query(None), incluir_inactivos: bool = Query(False),
                        _u: Usuario = RequireAuth, db: Session = Depends(get_db)):
-    return _geo.listar_centros(db, pais_codigo)
+    return _geo.listar_centros(db, pais_codigo, incluir_inactivos)
 
 
 @router.get("/geo/especialidades", summary="Listar especialidades")
-def geo_listar_especialidades(_u: Usuario = RequireAuth, db: Session = Depends(get_db)):
-    return _geo.listar_especialidades(db)
+def geo_listar_especialidades(incluir_inactivos: bool = Query(False),
+                              _u: Usuario = RequireAuth, db: Session = Depends(get_db)):
+    return _geo.listar_especialidades(db, incluir_inactivos)
 
 
 @router.post("/geo/provincias", summary="Crear provincia", status_code=201)
@@ -399,18 +400,26 @@ def geo_crear_especialidad(body: dict, _u: Usuario = RequireAdminCat, db: Sessio
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.patch("/geo/{tipo}/{id_}", summary="Renombrar (corregir) un elemento del catálogo")
-def geo_renombrar(tipo: str, id_: int, body: dict, _u: Usuario = RequireAdminCat, db: Session = Depends(get_db)):
+@router.patch("/geo/{tipo}/{id_}", summary="Editar un elemento: renombrar y/o activar-desactivar")
+def geo_editar(tipo: str, id_: int, body: dict, _u: Usuario = RequireAdminCat, db: Session = Depends(get_db)):
     try:
-        return _geo.renombrar(db, tipo, id_, body.get("nombre", ""))
+        if "activo" in body:
+            _geo.set_activo(db, tipo, id_, bool(body["activo"]))
+        if body.get("nombre"):
+            return _geo.renombrar(db, tipo, id_, body["nombre"])
+        return {"ok": True}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.delete("/geo/{tipo}/{id_}", summary="Baja lógica de un elemento del catálogo geográfico")
-def geo_desactivar(tipo: str, id_: int, _u: Usuario = RequireAdminCat, db: Session = Depends(get_db)):
+@router.delete("/geo/{tipo}/{id_}", summary="Borrar un elemento (baja lógica; ?permanente=true borra físico)")
+def geo_borrar(tipo: str, id_: int, permanente: bool = Query(False),
+               _u: Usuario = RequireAdminCat, db: Session = Depends(get_db)):
     try:
-        _geo.desactivar(db, tipo, id_)
+        if permanente:
+            _geo.eliminar_permanente(db, tipo, id_)
+        else:
+            _geo.desactivar(db, tipo, id_)
         return {"ok": True}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
