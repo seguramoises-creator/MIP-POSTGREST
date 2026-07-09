@@ -114,3 +114,22 @@ def desactivar(db: Session, tipo: str, id_: int) -> None:
         raise ValueError("Elemento no encontrado")
     obj.activo = False
     db.commit()
+
+
+def renombrar(db: Session, tipo: str, id_: int, nombre: str) -> dict:
+    """Corrige el nombre de un elemento del catálogo (edición). Como el nombre se
+    almacena por texto en los médicos, este cambio impacta el sistema completo."""
+    modelo = _MODELOS.get(tipo)
+    if modelo is None:
+        raise ValueError("Tipo de catálogo inválido")
+    nombre = _nombre_limpio(nombre)
+    obj = db.query(modelo).filter(modelo.id == id_).first()
+    if obj is None:
+        raise ValueError("Elemento no encontrado")
+    obj.nombre = nombre
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise ValueError("Ya existe otro elemento con ese nombre")
+    return {"id": obj.id, "nombre": obj.nombre}

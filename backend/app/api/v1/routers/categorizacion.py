@@ -399,6 +399,14 @@ def geo_crear_especialidad(body: dict, _u: Usuario = RequireAdminCat, db: Sessio
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.patch("/geo/{tipo}/{id_}", summary="Renombrar (corregir) un elemento del catálogo")
+def geo_renombrar(tipo: str, id_: int, body: dict, _u: Usuario = RequireAdminCat, db: Session = Depends(get_db)):
+    try:
+        return _geo.renombrar(db, tipo, id_, body.get("nombre", ""))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.delete("/geo/{tipo}/{id_}", summary="Baja lógica de un elemento del catálogo geográfico")
 def geo_desactivar(tipo: str, id_: int, _u: Usuario = RequireAdminCat, db: Session = Depends(get_db)):
     try:

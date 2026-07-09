@@ -574,8 +574,10 @@ interface GeoItem { id: number; nombre: string; pais_codigo?: string; provincia_
 
 export function TabGeo() {
   const qc = useQueryClient();
-  const [cat, setCat] = useState<'especialidad' | 'provincia' | 'municipio' | 'centro'>('provincia');
+  const [cat, setCat] = useState<'especialidad' | 'provincia' | 'municipio' | 'centro'>('especialidad');
   const [pais, setPais] = useState('');
+  const [editId, setEditId] = useState<number | null>(null);
+  const [editNombre, setEditNombre] = useState('');
   const [provinciaId, setProvinciaId] = useState<number | ''>('');
   const [nombre, setNombre] = useState('');
   const [error, setError] = useState('');
@@ -612,6 +614,11 @@ export function TabGeo() {
   const eliminar = useMutation({
     mutationFn: async (id: number) => api.delete(`/categorizacion/geo/${cat}/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['geo-items'] }),
+  });
+  const renombrar = useMutation({
+    mutationFn: async () => api.patch(`/categorizacion/geo/${cat}/${editId}`, { nombre: editNombre }),
+    onSuccess: () => { setEditId(null); setEditNombre(''); qc.invalidateQueries({ queryKey: ['geo-items'] }); qc.invalidateQueries({ queryKey: ['geo-prov'] }); },
+    onError: (e: any) => setError(e?.response?.data?.detail ?? 'No se pudo renombrar'),
   });
 
   const puedeCrear = nombre.trim().length >= 2 && (!necesitaPais || !!pais) && (!necesitaProv || !!provinciaId);
@@ -682,11 +689,30 @@ export function TabGeo() {
             )}
             {items.map((it) => (
               <TableRow key={it.id} hover>
-                <TableCell>{it.nombre}</TableCell>
+                <TableCell>
+                  {editId === it.id ? (
+                    <TextField size="small" value={editNombre} autoFocus fullWidth
+                               onChange={(e) => setEditNombre(e.target.value)}
+                               onKeyDown={(e) => { if (e.key === 'Enter' && editNombre.trim().length >= 2) renombrar.mutate(); }} />
+                  ) : it.nombre}
+                </TableCell>
                 <TableCell align="right">
-                  <Tooltip title="Desactivar (baja lógica)">
-                    <IconButton size="small" color="error" onClick={() => eliminar.mutate(it.id)}><DeleteIcon fontSize="small" /></IconButton>
-                  </Tooltip>
+                  {editId === it.id ? (
+                    <>
+                      <Button size="small" variant="contained" disabled={editNombre.trim().length < 2 || renombrar.isPending}
+                              onClick={() => renombrar.mutate()}>Guardar</Button>
+                      <Button size="small" onClick={() => { setEditId(null); setEditNombre(''); }}>Cancelar</Button>
+                    </>
+                  ) : (
+                    <>
+                      <Tooltip title="Editar / corregir nombre">
+                        <IconButton size="small" color="primary" onClick={() => { setError(''); setEditId(it.id); setEditNombre(it.nombre); }}><EditIcon fontSize="small" /></IconButton>
+                      </Tooltip>
+                      <Tooltip title="Desactivar (baja lógica)">
+                        <IconButton size="small" color="error" onClick={() => eliminar.mutate(it.id)}><DeleteIcon fontSize="small" /></IconButton>
+                      </Tooltip>
+                    </>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
