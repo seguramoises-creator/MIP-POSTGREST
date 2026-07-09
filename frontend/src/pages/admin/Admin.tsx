@@ -241,6 +241,7 @@ type FieldDef = {
   type?: string;
   options?: string[];
   freeSoloFrom?: string; // key: Autocomplete con opciones = valores distintos ya usados en esa columna (dropdown + escribir nuevo)
+  optionsEspecialidad?: boolean; // Autocomplete cuyas opciones son las especialidades ACTIVAS del catálogo (freeSolo)
   isPais?: boolean;    // true = usar PaisSelector en vez de TextField
   isLinea?: boolean;   // true = usar LineaSelector (filtrado por pais_codigo del mismo form)
   isGerente?: boolean; // true = usar GerenteSelector (filtrado por pais_codigo del mismo form)
@@ -289,6 +290,13 @@ function CatalogoTab({
       params: paisFilter ? { pais_codigo: paisFilter } : {},
     }).then((r) => r.data),
     retry: 1,
+  });
+
+  // Especialidades ACTIVAS del sistema (para campos que se eligen del catálogo, ej. Área Terapéutica).
+  const { data: especialidades = [] } = useQuery<{ nombre: string }[]>({
+    queryKey: ['geo-especialidades-activas'],
+    queryFn: () => api.get('/categorizacion/geo/especialidades').then((r) => r.data),
+    staleTime: 60_000,
   });
 
   // Los campos opcionales vacíos ("") rompen la validación de Pydantic (int/date).
@@ -401,6 +409,16 @@ function CatalogoTab({
             {f.options.map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
           </Select>
         </FormControl>
+      ) : f.optionsEspecialidad ? (
+        // Desplegable con las especialidades ACTIVAS del catálogo (permite elegir o escribir una nueva).
+        <Autocomplete
+          freeSolo size="small"
+          options={especialidades.map((e) => e.nombre).sort((a, b) => a.localeCompare(b))}
+          value={form[f.key] || ''}
+          onChange={(_, v) => setForm({ ...form, [f.key]: v ?? '' })}
+          onInputChange={(_, v, reason) => { if (reason === 'input') setForm({ ...form, [f.key]: v }); }}
+          renderInput={(params) => <TextField {...params} label={f.label} />}
+        />
       ) : f.freeSoloFrom ? (
         // Desplegable con los valores ya usados en esa columna (permite elegir o escribir uno nuevo).
         <Autocomplete
@@ -1450,7 +1468,7 @@ const TABS_DIM = [
     addFields: [
       { key: 'codigo', label: 'Código (ONCX-301...)' },
       { key: 'nombre', label: 'Nombre del Producto' },
-      { key: 'area_terapeutica', label: 'Área Terapéutica', freeSoloFrom: 'area_terapeutica' },
+      { key: 'area_terapeutica', label: 'Área Terapéutica', optionsEspecialidad: true },
       { key: 'descripcion', label: 'Descripción (Inhibidor selectivo...)' },
       { key: 'segmento_target', label: 'Segmento Target', freeSoloFrom: 'segmento_target' },
       { key: 'meta_muestras_visita', label: 'Meta muestras / visita', type: 'number' },
