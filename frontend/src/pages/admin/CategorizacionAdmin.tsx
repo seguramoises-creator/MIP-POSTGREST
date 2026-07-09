@@ -572,9 +572,14 @@ function TabReglas() {
 interface Pais { id: number; codigo: string; nombre: string; }
 interface GeoItem { id: number; nombre: string; pais_codigo?: string; provincia_id?: number; }
 
-export function TabGeo() {
+type GeoTipo = 'especialidad' | 'provincia' | 'municipio' | 'centro';
+const GEO_LABEL: Record<GeoTipo, string> = {
+  especialidad: 'Especialidades', centro: 'Centros médicos', provincia: 'Provincias', municipio: 'Municipios',
+};
+
+export function TabGeo({ tipos = ['especialidad', 'provincia', 'municipio', 'centro'] }: { tipos?: GeoTipo[] }) {
   const qc = useQueryClient();
-  const [cat, setCat] = useState<'especialidad' | 'provincia' | 'municipio' | 'centro'>('especialidad');
+  const [cat, setCat] = useState<GeoTipo>(tipos[0]);
   const [pais, setPais] = useState('');
   const [editId, setEditId] = useState<number | null>(null);
   const [editNombre, setEditNombre] = useState('');
@@ -633,11 +638,8 @@ export function TabGeo() {
         <Grid item xs={12} sm={3}>
           <FormControl size="small" fullWidth>
             <InputLabel>Catálogo</InputLabel>
-            <Select label="Catálogo" value={cat} onChange={(e) => { setCat(e.target.value as any); setProvinciaId(''); }}>
-              <MenuItem value="especialidad">Especialidades</MenuItem>
-              <MenuItem value="provincia">Provincias</MenuItem>
-              <MenuItem value="municipio">Municipios</MenuItem>
-              <MenuItem value="centro">Centros médicos</MenuItem>
+            <Select label="Catálogo" value={cat} onChange={(e) => { setCat(e.target.value as GeoTipo); setProvinciaId(''); }}>
+              {tipos.map((t) => <MenuItem key={t} value={t}>{GEO_LABEL[t]}</MenuItem>)}
             </Select>
           </FormControl>
         </Grid>
