@@ -11,6 +11,24 @@ import {
   type CostoFull, type CostoEstructuraInput, type CostoProdInput, type Catalogo,
 } from '../../services/visita.service';
 
+// Campo numérico: muestra vacío cuando el valor es 0 (para que al escribir el número
+// reemplace el cero en vez de anteponerse) y selecciona todo al enfocar. Solo números.
+function NumField({ value, onNum, width = 90, disabled, label, sx }: {
+  value: number; onNum: (n: number) => void; width?: number;
+  disabled?: boolean; label?: string; sx?: object;
+}) {
+  return (
+    <TextField
+      size="small" type="number" label={label}
+      value={value === 0 || value == null ? '' : value}
+      disabled={disabled} sx={{ width, ...sx }}
+      onFocus={(e) => (e.target as HTMLInputElement).select()}
+      onChange={(e) => onNum(e.target.value === '' ? 0 : Number(e.target.value))}
+      inputProps={{ min: 0 }}
+    />
+  );
+}
+
 function errMsg(e: unknown, fallback: string): string {
   const d = (e as { response?: { data?: { detalle?: { msg?: string }[]; detail?: string } } })?.response?.data;
   if (Array.isArray(d?.detalle) && d.detalle[0]?.msg) return d.detalle[0].msg.replace('Value error, ', '');
@@ -92,7 +110,7 @@ export default function CostoRoiVisita() {
   const num = (label: string, val: number, k: keyof CostoEstructuraInput, sub?: string, width = 150) => (
     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ py: 0.75 }}>
       <Box><Typography variant="body2" fontWeight={600}>{label}</Typography>{sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}</Box>
-      <TextField size="small" type="number" value={val} sx={{ width }} disabled={cerrado} onChange={(e) => setE(k, Number(e.target.value))} />
+      <NumField value={val} width={width} disabled={cerrado} onNum={(n) => setE(k, n)} />
     </Stack>
   );
   const kpi = (label: string, valor: string, color = 'text.primary', sub?: string) => (
@@ -161,8 +179,8 @@ export default function CostoRoiVisita() {
                 <TableRow key={p.producto}>
                   <TableCell>{i + 1}</TableCell>
                   <TableCell>{p.producto}</TableCell>
-                  <TableCell align="center"><TextField size="small" type="number" value={p.costo_unitario_muestra} sx={{ width: 90 }} onChange={(e) => setP(i, 'costo_unitario_muestra', Number(e.target.value))} /></TableCell>
-                  <TableCell align="center"><TextField size="small" type="number" value={p.cantidad_muestras} sx={{ width: 90 }} onChange={(e) => setP(i, 'cantidad_muestras', Number(e.target.value))} /></TableCell>
+                  <TableCell align="center"><NumField value={p.costo_unitario_muestra} disabled={cerrado} onNum={(n) => setP(i, 'costo_unitario_muestra', n)} /></TableCell>
+                  <TableCell align="center"><NumField value={p.cantidad_muestras} disabled={cerrado} onNum={(n) => setP(i, 'cantidad_muestras', n)} /></TableCell>
                   <TableCell align="right">{money(p.costo_unitario_muestra * p.cantidad_muestras)}</TableCell>
                 </TableRow>
               ))}
@@ -189,8 +207,8 @@ export default function CostoRoiVisita() {
               {prods.map((p, i) => (
                 <TableRow key={p.producto}>
                   <TableCell>{i + 1}</TableCell><TableCell sx={{ fontWeight: 600 }}>{p.producto}</TableCell>
-                  <TableCell align="center"><TextField size="small" type="number" value={p.pool_ventas} sx={{ width: 140 }} onChange={(e) => setP(i, 'pool_ventas', Number(e.target.value))} /></TableCell>
-                  <TableCell align="center"><TextField size="small" type="number" value={p.visitas_detalladas} sx={{ width: 100 }} onChange={(e) => setP(i, 'visitas_detalladas', Number(e.target.value))} /></TableCell>
+                  <TableCell align="center"><NumField value={p.pool_ventas} width={140} disabled={cerrado} onNum={(n) => setP(i, 'pool_ventas', n)} /></TableCell>
+                  <TableCell align="center"><NumField value={p.visitas_detalladas} width={100} disabled={cerrado} onNum={(n) => setP(i, 'visitas_detalladas', n)} /></TableCell>
                   <TableCell align="right"><Typography variant="body2" fontWeight={700} color="success.main">{p.visitas_detalladas ? money(p.pool_ventas / p.visitas_detalladas) : '—'}</Typography></TableCell>
                 </TableRow>
               ))}
@@ -203,11 +221,11 @@ export default function CostoRoiVisita() {
           <Card variant="outlined"><CardContent>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}><CalendarMonth fontSize="small" color="action" /><Typography variant="subtitle1" fontWeight={700}>Planificación Anual — Productividad Objetivo del Contacto</Typography></Stack>
             <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
-              <TextField size="small" label="Visitadores" type="number" value={est.visitadores} sx={{ width: 110 }} onChange={(e) => setE('visitadores', Number(e.target.value))} />
+              <NumField label="Visitadores" value={est.visitadores} width={110} disabled={cerrado} onNum={(n) => setE('visitadores', n)} />
               <Typography>×</Typography>
-              <TextField size="small" label="Visitas/ciclo VM" type="number" value={est.visitas_ciclo_vm} sx={{ width: 130 }} onChange={(e) => setE('visitas_ciclo_vm', Number(e.target.value))} />
+              <NumField label="Visitas/ciclo VM" value={est.visitas_ciclo_vm} width={130} disabled={cerrado} onNum={(n) => setE('visitas_ciclo_vm', n)} />
               <Typography>×</Typography>
-              <TextField size="small" label="Ciclos/año" type="number" value={est.ciclos_anio} sx={{ width: 110 }} onChange={(e) => setE('ciclos_anio', Number(e.target.value))} />
+              <NumField label="Ciclos/año" value={est.ciclos_anio} width={110} disabled={cerrado} onNum={(n) => setE('ciclos_anio', n)} />
               <Typography>=</Typography>
               <Box><Typography variant="caption" color="text.secondary">Contactos/año equipo</Typography><Typography variant="h6" fontWeight={800} color="primary.main">{pa.contactos_anio.toLocaleString()}</Typography></Box>
               <Box sx={{ ml: 'auto' }}><Typography variant="caption" color="text.secondary">Contactos/año por VM</Typography><Typography variant="h6" fontWeight={800} color="primary.main">{pa.contactos_anio_vm.toLocaleString()}</Typography></Box>
@@ -226,8 +244,8 @@ export default function CostoRoiVisita() {
                 return (
                   <TableRow key={p.producto}>
                     <TableCell>{p.producto}</TableCell>
-                    <TableCell align="center"><TextField size="small" type="number" value={p.presupuesto_anual} sx={{ width: 130 }} onChange={(e) => setP(i, 'presupuesto_anual', Number(e.target.value))} /></TableCell>
-                    <TableCell align="center"><TextField size="small" type="number" value={p.precio_prom} sx={{ width: 90 }} onChange={(e) => setP(i, 'precio_prom', Number(e.target.value))} /></TableCell>
+                    <TableCell align="center"><NumField value={p.presupuesto_anual} width={130} disabled={cerrado} onNum={(n) => setP(i, 'presupuesto_anual', n)} /></TableCell>
+                    <TableCell align="center"><NumField value={p.precio_prom} disabled={cerrado} onNum={(n) => setP(i, 'precio_prom', n)} /></TableCell>
                     <TableCell align="right">{money(pr?.productiv_obj_contacto ?? 0)}</TableCell>
                     <TableCell align="right">{(pr?.unidades_obj_contacto ?? 0).toFixed(1)} uds</TableCell>
                     <TableCell align="center"><Chip size="small" color={cumpl >= 100 ? 'success' : cumpl >= 80 ? 'warning' : 'error'} label={`${cumpl}%`} /></TableCell>
@@ -274,8 +292,8 @@ export default function CostoRoiVisita() {
                   {(['a', 'b', 'c'] as const).map((c) => (
                     <TableRow key={c}>
                       <TableCell><Chip size="small" label={c.toUpperCase()} color={c === 'a' ? 'success' : c === 'b' ? 'primary' : 'default'} /></TableCell>
-                      <TableCell align="center"><TextField size="small" type="number" value={est[`med_sin_visitar_${c}` as keyof CostoEstructuraInput] ?? 0} sx={{ width: 100 }} onChange={(e) => setE(`med_sin_visitar_${c}` as keyof CostoEstructuraInput, Number(e.target.value))} /></TableCell>
-                      <TableCell align="center"><TextField size="small" type="number" value={est[`psp_${c}` as keyof CostoEstructuraInput] as number} sx={{ width: 120 }} onChange={(e) => setE(`psp_${c}` as keyof CostoEstructuraInput, Number(e.target.value))} /></TableCell>
+                      <TableCell align="center"><NumField value={Number(est[`med_sin_visitar_${c}` as keyof CostoEstructuraInput] ?? 0)} width={100} disabled={cerrado} onNum={(n) => setE(`med_sin_visitar_${c}` as keyof CostoEstructuraInput, n)} /></TableCell>
+                      <TableCell align="center"><NumField value={Number(est[`psp_${c}` as keyof CostoEstructuraInput] ?? 0)} width={120} disabled={cerrado} onNum={(n) => setE(`psp_${c}` as keyof CostoEstructuraInput, n)} /></TableCell>
                     </TableRow>
                   ))}
                 </TableBody></Table>

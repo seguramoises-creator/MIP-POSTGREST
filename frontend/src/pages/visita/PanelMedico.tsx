@@ -1,17 +1,17 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert, Grid,
   Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
   Avatar, InputAdornment, Divider, Switch, FormControlLabel, IconButton, Tooltip, Autocomplete,
 } from '@mui/material';
-import { Add, PersonAddAlt1, Warning, Search, FiberManualRecord, Edit, Block, Restore, HowToReg, ThumbUp, ThumbDown } from '@mui/icons-material';
+import { Add, PersonAddAlt1, Warning, Search, FiberManualRecord, Edit, Block, Restore, HowToReg, ThumbUp, ThumbDown, Badge, SupervisorAccount, Layers } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import {
   listarMedicos, listarMedicosExistentes, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
   solicitarBajaMedico, reactivarMedico, listarAprobaciones, aprobarMedico, rechazarMedico,
-  listarProvincias, listarMunicipios, listarCentros, importarMedicosCategorizacion,
+  listarProvincias, listarMunicipios, listarCentros, importarMedicosCategorizacion, miGerente,
   type MedicoVisita, type MedicoExistente, type Catalogo, type PosibleDuplicado, type MedicoCrear, type AprobacionPendiente,
-  type Provincia, type Municipio,
+  type Provincia, type Municipio, type MiGerente,
 } from '../../services/visita.service';
 
 // Tipos de consultorio válidos en RD (sin "Hospital privado", que no aplica).
@@ -93,8 +93,9 @@ export default function PanelMedico() {
   const [vmFiltro, setVmFiltro] = useState<number | ''>('');
   const [busqueda, setBusqueda] = useState('');
   const [catFiltro, setCatFiltro] = useState('');
-  const [lineaFiltro, setLineaFiltro] = useState('');
   const [espFiltro, setEspFiltro] = useState('');
+  // Ficha del representante (Gerente de Distrito + Línea) — viene de la dim del RM.
+  const [infoRep, setInfoRep] = useState<MiGerente | null>(null);
   const [estadoFiltro, setEstadoFiltro] = useState<'activos' | 'inactivos' | 'todos'>('activos');
   const [editId, setEditId] = useState<number | null>(null);
   const [pendientes, setPendientes] = useState<AprobacionPendiente[]>([]);
@@ -132,6 +133,13 @@ export default function PanelMedico() {
     cargarPendientes();
   }, [esVM, cargarPendientes]);
 
+  // Ficha del representante: el VM ve la suya; ADMIN/GERENTE la del VM seleccionado.
+  useEffect(() => {
+    if (esVM) miGerente().then(setInfoRep).catch(() => setInfoRep(null));
+    else if (vmFiltro) miGerente(Number(vmFiltro)).then(setInfoRep).catch(() => setInfoRep(null));
+    else setInfoRep(null);
+  }, [esVM, vmFiltro]);
+
   // Municipios en cascada: al elegir provincia (o abrir en edición), cargar sus municipios.
   useEffect(() => {
     const p = provincias.find((x) => x.nombre === form.provincia);
@@ -149,9 +157,6 @@ export default function PanelMedico() {
   }, [medicos]);
 
   // Opciones de los selectores, derivadas de los médicos presentes.
-  const opcLineas = useMemo(
-    () => Array.from(new Set(medicos.map((m) => m.linea_nombre).filter(Boolean) as string[])).sort(),
-    [medicos]);
   const opcEspecialidades = useMemo(
     () => Array.from(new Set(medicos.map((m) => m.especialidad_nombre).filter(Boolean) as string[])).sort(),
     [medicos]);
@@ -161,12 +166,11 @@ export default function PanelMedico() {
     return medicos.filter((m) =>
       (estadoFiltro === 'todos' || (estadoFiltro === 'activos' ? m.activo : !m.activo)) &&
       (!catFiltro || m.categoria === catFiltro) &&
-      (!lineaFiltro || m.linea_nombre === lineaFiltro) &&
       (!espFiltro || m.especialidad_nombre === espFiltro) &&
       (!q || m.nombre_completo.toUpperCase().includes(q)
           || (m.especialidad_nombre ?? '').toUpperCase().includes(q)
           || (m.linea_nombre ?? '').toUpperCase().includes(q)));
-  }, [medicos, busqueda, catFiltro, lineaFiltro, espFiltro, estadoFiltro]);
+  }, [medicos, busqueda, catFiltro, espFiltro, estadoFiltro]);
 
   const abrirNuevo = () => {
     setMenuAnchor(null); setModoExistente(false); setExistenteSel('');
@@ -296,6 +300,18 @@ export default function PanelMedico() {
     } finally { setGuardando(false); }
   }
 
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+  // Un dato de la ficha del representante: icono + etiqueta + valor.
+  const infoDato = (icono: ReactNode, label: string, valor: string) => (
+    <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+      <Avatar sx={{ bgcolor: 'primary.main', color: '#fff', width: 32, height: 32 }}>{icono}</Avatar>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.1, fontWeight: 600, letterSpacing: 0.3 }}>{label}</Typography>
+        <Typography variant="body2" fontWeight={700} noWrap>{valor}</Typography>
+      </Box>
+    </Stack>
+  );
+
   const kpiCard = (label: string, valor: number, sub: string, color: string, alerta = false) => (
     <Card variant="outlined" sx={{ borderColor: alerta ? 'error.main' : 'divider', borderWidth: alerta ? 1.5 : 1 }}>
       <CardContent sx={{ py: 1.75 }}>
@@ -313,9 +329,9 @@ export default function PanelMedico() {
 
   return (
     <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
-      {/* Cabecera */}
-      <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={1.5} sx={{ mb: 2 }}>
-        <Box>
+      {/* Cabecera: título + ficha del representante (selector VM + Gerente de Distrito + Línea) */}
+      <Box sx={{ mb: 2 }}>
+        <Box sx={{ mb: 1.5 }}>
           <Typography variant="h5" fontWeight={700}>Panel Médico</Typography>
           <Typography variant="body2" color="text.secondary">
             {filtrados.length === medicos.length
@@ -323,55 +339,77 @@ export default function PanelMedico() {
               : `${filtrados.length} de ${medicos.length} médicos · filtro activo`}
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1.5} flexWrap="wrap" alignItems="center">
-          {!esVM && (
-            <TextField select size="small" label="Visitador (VM)" value={vmFiltro} sx={{ minWidth: 200 }}
-                       onChange={(e) => setVmFiltro(e.target.value === '' ? '' : Number(e.target.value))}>
-              <MenuItem value="">Todos</MenuItem>
-              {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
-            </TextField>
-          )}
-          <TextField size="small" placeholder="Buscar médico…" value={busqueda} sx={{ minWidth: 200 }}
-                     onChange={(e) => setBusqueda(e.target.value)}
-                     InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }} />
-          <TextField select size="small" label="Línea" value={lineaFiltro} sx={{ minWidth: 160 }}
-                     onChange={(e) => setLineaFiltro(e.target.value)}>
-            <MenuItem value="">Todas las líneas</MenuItem>
-            {opcLineas.map((l) => <MenuItem key={l} value={l}>{l}</MenuItem>)}
-          </TextField>
-          <TextField select size="small" label="Especialidad" value={espFiltro} sx={{ minWidth: 180 }}
-                     onChange={(e) => setEspFiltro(e.target.value)}>
-            <MenuItem value="">Todas las especialidades</MenuItem>
-            {opcEspecialidades.map((e) => <MenuItem key={e} value={e}>{e}</MenuItem>)}
-          </TextField>
-          <TextField select size="small" label="Categoría" value={catFiltro} sx={{ minWidth: 140 }}
-                     onChange={(e) => setCatFiltro(e.target.value)}>
-            <MenuItem value="">Todas</MenuItem>
-            {['A', 'B', 'C', 'D'].map((c) => <MenuItem key={c} value={c}>Categoría {c}</MenuItem>)}
-          </TextField>
-          <TextField select size="small" label="Estado" value={estadoFiltro} sx={{ minWidth: 130 }}
-                     onChange={(e) => setEstadoFiltro(e.target.value as 'activos' | 'inactivos' | 'todos')}>
-            <MenuItem value="activos">Activos</MenuItem>
-            <MenuItem value="inactivos">Inactivos</MenuItem>
-            <MenuItem value="todos">Todos</MenuItem>
-          </TextField>
-          {esAprobador && !esVM && (
-            <Button variant="outlined" startIcon={<HowToReg />} disabled={importando}
-                    onClick={() => setConfirmImport(true)}>
-              {importando ? 'Importando…' : 'Importar desde Categorización'}
-            </Button>
-          )}
-          <Button variant="contained" startIcon={<PersonAddAlt1 />}
-                  onClick={(e) => setMenuAnchor(e.currentTarget)}>Agregar Médico</Button>
-          <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
-            <MenuItem onClick={abrirNuevo}>
-              <PersonAddAlt1 fontSize="small" style={{ marginRight: 8 }} /> Médico nuevo
-            </MenuItem>
-            <MenuItem onClick={abrirExistente}>
-              <HowToReg fontSize="small" style={{ marginRight: 8 }} /> Médico existente (copiar al panel)
-            </MenuItem>
-          </Menu>
-        </Stack>
+
+        {/* El representante (VM) se ELIGE aquí; su Gerente de Distrito y Línea se
+            muestran automáticamente (de la dim del RM). Un VM ve su ficha fija. */}
+        {(!esVM || (infoRep && (infoRep.vm || infoRep.gerente || infoRep.linea))) && (
+          <Card variant="outlined" sx={{ borderColor: 'primary.light', bgcolor: 'rgba(46,91,255,0.05)' }}>
+            <CardContent sx={{ py: 1.25, '&:last-child': { pb: 1.25 } }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1.25, sm: 4 }} alignItems={{ sm: 'center' }}
+                     flexWrap="wrap"
+                     divider={<Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', sm: 'block' } }} />}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+                  <Avatar sx={{ bgcolor: 'primary.main', color: '#fff', width: 32, height: 32 }}><Badge fontSize="small" /></Avatar>
+                  {esVM ? (
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.1, fontWeight: 600, letterSpacing: 0.3 }}>Representante médico</Typography>
+                      <Typography variant="body2" fontWeight={700} noWrap>{infoRep?.vm ?? '—'}</Typography>
+                    </Box>
+                  ) : (
+                    <TextField select variant="standard" label="Representante médico (VM)" value={vmFiltro} sx={{ minWidth: 240 }}
+                               onChange={(e) => setVmFiltro(e.target.value === '' ? '' : Number(e.target.value))}>
+                      <MenuItem value="">Todos los visitadores</MenuItem>
+                      {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
+                    </TextField>
+                  )}
+                </Stack>
+                {infoRep?.gerente && infoDato(<SupervisorAccount fontSize="small" />,
+                  infoRep.gerente_tipo ? `Gerente de ${cap(infoRep.gerente_tipo)}` : 'Gerente de Distrito', infoRep.gerente)}
+                {infoRep?.linea && infoDato(<Layers fontSize="small" />, 'Línea', infoRep.linea)}
+              </Stack>
+            </CardContent>
+          </Card>
+        )}
+      </Box>
+
+      {/* Filtros sobre el panel */}
+      <Stack direction="row" spacing={1.5} flexWrap="wrap" alignItems="center" sx={{ mb: 2 }}>
+        <TextField size="small" placeholder="Buscar médico…" value={busqueda} sx={{ minWidth: 220 }}
+                   onChange={(e) => setBusqueda(e.target.value)}
+                   InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }} />
+        <TextField select size="small" label="Especialidad" value={espFiltro} sx={{ minWidth: 180 }}
+                   onChange={(e) => setEspFiltro(e.target.value)}>
+          <MenuItem value="">Todas las especialidades</MenuItem>
+          {opcEspecialidades.map((e) => <MenuItem key={e} value={e}>{e}</MenuItem>)}
+        </TextField>
+        <TextField select size="small" label="Categoría" value={catFiltro} sx={{ minWidth: 140 }}
+                   onChange={(e) => setCatFiltro(e.target.value)}>
+          <MenuItem value="">Todas</MenuItem>
+          {['A', 'B', 'C', 'D'].map((c) => <MenuItem key={c} value={c}>Categoría {c}</MenuItem>)}
+        </TextField>
+        <TextField select size="small" label="Estado" value={estadoFiltro} sx={{ minWidth: 130 }}
+                   onChange={(e) => setEstadoFiltro(e.target.value as 'activos' | 'inactivos' | 'todos')}>
+          <MenuItem value="activos">Activos</MenuItem>
+          <MenuItem value="inactivos">Inactivos</MenuItem>
+          <MenuItem value="todos">Todos</MenuItem>
+        </TextField>
+        <Box sx={{ flexGrow: 1 }} />
+        {esAprobador && !esVM && (
+          <Button variant="outlined" startIcon={<HowToReg />} disabled={importando}
+                  onClick={() => setConfirmImport(true)}>
+            {importando ? 'Importando…' : 'Importar desde Categorización'}
+          </Button>
+        )}
+        <Button variant="contained" startIcon={<PersonAddAlt1 />}
+                onClick={(e) => setMenuAnchor(e.currentTarget)}>Agregar Médico</Button>
+        <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
+          <MenuItem onClick={abrirNuevo}>
+            <PersonAddAlt1 fontSize="small" style={{ marginRight: 8 }} /> Médico nuevo
+          </MenuItem>
+          <MenuItem onClick={abrirExistente}>
+            <HowToReg fontSize="small" style={{ marginRight: 8 }} /> Médico existente (copiar al panel)
+          </MenuItem>
+        </Menu>
       </Stack>
 
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}

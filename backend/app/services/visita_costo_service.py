@@ -166,7 +166,7 @@ def roi_ranking(db: Session, ciclo_id: int | None) -> dict:
 
 # ── Modelo financiero completo: Estructura de costo + Pool + Plan anual + Impacto ──
 from datetime import datetime as _dt, timezone as _tz
-from app.models.visita import CostoEstructura, CostoProducto
+from app.models.visita import CostoEstructura, CostoProducto, ParrillaPromocional
 from app.models.dimensiones import Producto as _Producto, RepresentanteMedico as _RM
 
 _DEFAULTS = dict(
@@ -197,9 +197,50 @@ def obtener_estructura(db: Session, ciclo_id, linea_id) -> dict:
 
 
 def _productos(db: Session, ciclo_id, linea_id):
-    return (db.query(CostoProducto)
+    rows = (db.query(CostoProducto)
             .filter(CostoProducto.ciclo_id == ciclo_id, CostoProducto.linea_id == linea_id)
             .order_by(CostoProducto.orden, CostoProducto.producto).all())
+    if rows:
+        return rows
+    # Aún no hay costo configurado para esta (ciclo, línea): sembrar la lista con los
+    # productos de la PARRILLA de la línea (los que el equipo promueve), en ceros, para
+    # que las muestras de la línea aparezcan listas para llenar. Son objetos transitorios
+    # (no se agregan a la sesión): solo se persisten si el usuario pulsa "Guardar".
+    return _semilla_desde_parrilla(db, ciclo_id, linea_id)
+
+
+def _semilla_desde_parrilla(db: Session, ciclo_id, linea_id):
+    """Placeholders de CostoProducto (en ceros) a partir de la parrilla de la línea.
+
+    Si el ciclo pedido aún no tiene parrilla propia, cae a la parrilla MÁS RECIENTE de
+    esa línea en cualquier ciclo, para que las muestras de la línea aparezcan de forma
+    estable sin importar qué ciclo esté seleccionado (evita el 'salen y desaparecen').
+    """
+    if not linea_id:
+        return []
+    from app.services.visita_parrilla_service import listar_parrilla
+    from app.models.dimensiones import Ciclo
+    try:
+        parrilla = listar_parrilla(db, ciclo_id, linea_id)
+        if not parrilla:
+            cid = (db.query(ParrillaPromocional.ciclo_id)
+                   .join(Ciclo, Ciclo.id == ParrillaPromocional.ciclo_id)
+                   .filter(ParrillaPromocional.linea_id == linea_id,
+                           ParrillaPromocional.activo == True)  # noqa: E712
+                   .order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first())
+            if cid:
+                parrilla = listar_parrilla(db, cid[0], linea_id)
+    except Exception:
+        return []
+    seed = []
+    for i, f in enumerate(parrilla, 1):
+        seed.append(CostoProducto(
+            ciclo_id=ciclo_id, linea_id=linea_id,
+            producto_id=f.get("producto_id"), producto=f["producto"], orden=i,
+            # Cantidad = meta de muestras de la parrilla (lo que se promete entregar).
+            costo_unitario_muestra=0, cantidad_muestras=int(f.get("meta_muestras") or 0),
+            pool_ventas=0, visitas_detalladas=0, presupuesto_anual=0, precio_prom=0))
+    return seed
 
 
 def guardar_estructura(db: Session, datos, usuario_id) -> dict:
