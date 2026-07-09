@@ -80,8 +80,11 @@ from app.models.dimensiones import (
     TargetMedico,
     Feriado,
     ParametroCobertura,
+    Linea,
+    Gerente,
 )
 from app.models.hechos import Visita
+from app.models.visita import PlaneacionCiclo, VisitaRegistro, MedicoVisita
 
 
 # Pisos fijos de semáforo (no parametrizables, igual que en el Excel de referencia)
@@ -453,7 +456,251 @@ def calcular_cobertura_equipo(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# MODO EN VIVO — Cobertura desde Planeación del Ciclo + Registro de Visitas
+# (jul-2026: el módulo ya NO depende de Excel ni del esquema cat.*).
+#   • Programado (J) = médicos con Vista planeada en Visita.PlaneacionCiclo.
+#   • Realizado (L/M) = visitas EJECUTADAS en Visita.FactVisita al corte, dentro
+#     del universo planeado.
+#   • Días hábiles (N/O/P) = Ciclo.dias_laborables menos los transcurridos.
+# Se calcula 100% en vivo en cada request (sin materializar ni botón Recalcular).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _resolver_ciclo_vivo(db: Session, ciclo_codigo: str, pais_codigo: str):
+    """Resuelve el Config.DIM_Ciclo por nombre (ej. 'C06-2026') y país."""
+    return (db.query(Ciclo)
+            .filter(Ciclo.nombre == ciclo_codigo, Ciclo.pais_codigo == pais_codigo)
+            .order_by(Ciclo.id.desc()).first())
+
+
+def _medicos_planeados(db: Session, rm_id: int, ciclo_id: int) -> list:
+    """IDs de médicos con Vista planeada (tipo 'V') para el RM en el ciclo."""
+    return [r[0] for r in db.query(PlaneacionCiclo.medico_id).filter(
+        PlaneacionCiclo.vm_id == rm_id, PlaneacionCiclo.ciclo_id == ciclo_id,
+        PlaneacionCiclo.tipo_visita == "V").distinct().all()]
+
+
+def _metricas_rm_vivo(db: Session, rm, ciclo, fecha_corte: date, meta: Decimal, N: int, feriados: set) -> dict:
+    """Columnas 4DX (I..AD) para un RM desde Planeación + Registro, en el shape del dashboard."""
+    if fecha_corte < ciclo.fecha_inicio:
+        O = 0
+    else:
+        O = _networkdays(ciclo.fecha_inicio, min(fecha_corte, ciclo.fecha_fin), feriados)
+    P = max(0, N - O)
+
+    planeados = _medicos_planeados(db, rm.id, ciclo.id)
+    J = len(planeados)          # médicos programados = universo planeado
+    I = J
+    K = _ceiling1(Decimal(J) * meta)
+
+    if planeados:
+        base = db.query(VisitaRegistro).filter(
+            VisitaRegistro.vm_id == rm.id, VisitaRegistro.ciclo_id == ciclo.id,
+            VisitaRegistro.ejecutada == True,  # noqa: E712
+            func.date(VisitaRegistro.fecha_hora) <= fecha_corte,
+            VisitaRegistro.medico_id.in_(planeados))
+        L = base.with_entities(func.count(func.distinct(VisitaRegistro.medico_id))).scalar() or 0
+        M = base.with_entities(func.count(VisitaRegistro.id)).scalar() or 0
+    else:
+        L = M = 0
+
+    Q = _safe_div(Decimal(K), Decimal(N))
+    R = Q * Decimal(O)
+    S = max(Decimal("0"), R - Decimal(L))
+    T = (S / Decimal(P)) if P > 0 else Decimal("0")
+    U = _ceiling1(Q + T) if P > 0 else 0
+
+    V = _safe_div(Decimal(I), Decimal(N))
+    W = V * Decimal(O)
+    Xc = max(Decimal("0"), W - Decimal(M))
+    Y = _ceiling1(V + _safe_div(Xc, Decimal(P))) if P > 0 else 0
+
+    Z = _safe_div(Decimal(L), Decimal(J))                   # cobertura actual
+    esperada = meta * _safe_div(Decimal(O), Decimal(N))     # cobertura esperada al corte
+    if O > 0:
+        AA = min(Decimal("1"), _safe_div(_safe_div(Decimal(L), Decimal(O)) * Decimal(N), Decimal(J)))
+        cont_proj = _safe_div(Decimal(M), Decimal(O)) * Decimal(N)
+    else:
+        AA = Decimal("0"); cont_proj = Decimal("0")
+
+    estado_cobertura = "Verde" if AA >= meta else ("Amarillo" if AA >= _PISO_AMARILLO_COBERTURA else "Rojo")
+    estado_psp = "Verde" if cont_proj >= Decimal(I) else ("Amarillo" if cont_proj >= Decimal(I) * _PISO_AMARILLO_PSP else "Rojo")
+    if J == 0 or O == 0:
+        estado_ritmo = "Rojo"
+    elif Z >= esperada:
+        estado_ritmo = "Verde"
+    elif Z >= esperada - Decimal("0.05"):
+        estado_ritmo = "Amarillo"
+    else:
+        estado_ritmo = "Rojo"
+
+    return {
+        "kpi_key": rm.id,
+        "codigo_representante": rm.codigo,
+        "nombre_vm": rm.nombre,
+        "linea": None, "gd": None,  # nombres rellenados en el agregador
+        "medicos_programados": J,
+        "medicos_visitados_unicos": L,
+        "cobertura_actual_pct": float(Z * 100),
+        "cobertura_esperada_pct": float(esperada * 100),
+        "cobertura_proyectada_pct": float(AA * 100),
+        "meta_cobertura_pct": float(meta * 100),
+        "brecha_actual_vs_esperada_pct": float((Z - esperada) * 100),
+        "brecha_proyectada_vs_meta_pct": float((AA - meta) * 100),
+        "medicos_requeridos_meta": K,
+        "medicos_pendientes_meta": max(0, K - L),
+        "medicos_diarios_requeridos": U,
+        "contactos_meta_ciclo": I,
+        "contactos_realizados": M,
+        "cumplimiento_contactos_pct": float(_safe_div(Decimal(M), Decimal(I)) * 100),
+        "contactos_proyectados": float(cont_proj),
+        "contactos_pendientes": float(max(Decimal("0"), Decimal(I) - Decimal(M))),
+        "contactos_diarios_requeridos": Y,
+        "dias_habiles_totales": N,
+        "dias_habiles_transcurridos": O,
+        "dias_habiles_restantes": P,
+        "estado_cobertura": estado_cobertura,
+        "estado_ritmo": estado_ritmo,
+        "estado_psp": estado_psp,
+        "lectura_accionable": _generar_lectura_gd(Y=Y, V=V, X=Xc, P=P, U=U, aceleracion=_ceiling1(T)),
+    }
+
+
+def ciclos_vivo(db: Session, pais_codigo: Optional[str] = None) -> list:
+    """Ciclos reales (Config.DIM_Ciclo) para el selector — reemplaza cat.DimCiclo."""
+    from app.models.dimensiones import Pais
+    paises = {p.codigo: p.nombre for p in db.query(Pais).all()}
+    q = db.query(Ciclo).filter(Ciclo.activo == True)  # noqa: E712
+    if pais_codigo:
+        q = q.filter(Ciclo.pais_codigo == pais_codigo)
+    out = []
+    for c in q.order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).all():
+        meta = obtener_meta_cobertura(db, c.pais_codigo)
+        out.append({
+            "ciclo_key": c.id, "codigo_ciclo": c.nombre, "linea": None,
+            "fecha_inicio": c.fecha_inicio.isoformat(), "fecha_fin": c.fecha_fin.isoformat(),
+            "dias_habiles_ciclo": c.dias_laborables, "meta_cobertura_pct": float(meta) * 100,
+            "pais_codigo": c.pais_codigo, "pais_nombre": paises.get(c.pais_codigo, c.pais_codigo),
+        })
+    return out
+
+
+def _rms_con_planeacion(db: Session, ciclo_id: int, pais_codigo: str,
+                        linea: Optional[str], gd: Optional[str],
+                        lineas_map: dict, gerentes_map: dict) -> list:
+    """RMs (del país) con planeación en el ciclo, aplicando filtros de línea/GD por nombre."""
+    rm_ids = [r[0] for r in db.query(PlaneacionCiclo.vm_id)
+              .filter(PlaneacionCiclo.ciclo_id == ciclo_id).distinct().all()]
+    if not rm_ids:
+        return []
+    rms = db.query(RepresentanteMedico).filter(
+        RepresentanteMedico.id.in_(rm_ids), RepresentanteMedico.pais_codigo == pais_codigo).all()
+    return [rm for rm in rms
+            if (not linea or lineas_map.get(rm.linea_id) == linea)
+            and (not gd or gerentes_map.get(rm.gerente_id) == gd)]
+
+
+def dashboard_vivo(db: Session, ciclo_codigo: str, pais_codigo: str,
+                   fecha_corte: Optional[date] = None,
+                   linea: Optional[str] = None, gd: Optional[str] = None) -> dict:
+    """Dashboard de Cobertura Predictiva calculado EN VIVO desde Planeación + Registro."""
+    ciclo = _resolver_ciclo_vivo(db, ciclo_codigo, pais_codigo)
+    if not ciclo:
+        return {"ok": False, "mensaje": f"Ciclo '{ciclo_codigo}' no encontrado para país '{pais_codigo}'",
+                "total_rms": 0, "detalle_rms": []}
+    if fecha_corte is None:
+        fecha_corte = date.today()
+
+    meta = obtener_meta_cobertura(db, pais_codigo)
+    N = obtener_dias_habiles_ciclo(db, ciclo)
+    feriados = _feriados_pais(db, pais_codigo, ciclo.fecha_inicio, ciclo.fecha_fin)
+    O = 0 if fecha_corte < ciclo.fecha_inicio else _networkdays(ciclo.fecha_inicio, min(fecha_corte, ciclo.fecha_fin), feriados)
+    P = max(0, N - O)
+
+    lineas_map = {l.id: l.nombre for l in db.query(Linea).all()}
+    gerentes_map = {g.id: g.nombre for g in db.query(Gerente).all()}
+    rms = _rms_con_planeacion(db, ciclo.id, pais_codigo, linea, gd, lineas_map, gerentes_map)
+
+    detalle = []
+    for rm in rms:
+        d = _metricas_rm_vivo(db, rm, ciclo, fecha_corte, meta, N, feriados)
+        d["linea"] = lineas_map.get(rm.linea_id)
+        d["gd"] = gerentes_map.get(rm.gerente_id)
+        detalle.append(d)
+
+    orden = {"Verde": 0, "Amarillo": 1, "Rojo": 2}
+    detalle.sort(key=lambda d: (orden[d["estado_cobertura"]], d["cobertura_actual_pct"]))
+
+    total = len(detalle); div = total or 1
+    def _avg(f): return round(sum(x[f] for x in detalle) / div, 2) if detalle else 0.0
+    verdes = sum(1 for d in detalle if d["estado_cobertura"] == "Verde")
+    amar = sum(1 for d in detalle if d["estado_cobertura"] == "Amarillo")
+    rojos = sum(1 for d in detalle if d["estado_cobertura"] == "Rojo")
+
+    return {
+        "ok": True, "fuente": "Planeación + Registro (en vivo)",
+        "ciclo": {"codigo": ciclo.nombre, "fecha_inicio": ciclo.fecha_inicio.isoformat(),
+                  "fecha_fin": ciclo.fecha_fin.isoformat(), "meta_cobertura_pct": float(meta) * 100},
+        "fecha_corte": fecha_corte.isoformat(), "pais_codigo": pais_codigo,
+        "total_rms": total,
+        "cobertura_actual_promedio_pct": _avg("cobertura_actual_pct"),
+        "cobertura_esperada_promedio_pct": _avg("cobertura_esperada_pct"),
+        "cobertura_proyectada_promedio_pct": _avg("cobertura_proyectada_pct"),
+        "meta_cobertura_pct": float(meta) * 100,
+        "medicos_programados_total": sum(d["medicos_programados"] for d in detalle),
+        "medicos_unicos_visitados_total": sum(d["medicos_visitados_unicos"] for d in detalle),
+        "contactos_realizados_total": sum(d["contactos_realizados"] for d in detalle),
+        "contactos_meta_total": sum(d["contactos_meta_ciclo"] for d in detalle),
+        "medicos_diarios_requeridos_max": max((d["medicos_diarios_requeridos"] for d in detalle), default=0),
+        "rms_en_verde": verdes, "rms_en_amarillo": amar, "rms_en_rojo": rojos,
+        "rms_psp_verde": sum(1 for d in detalle if d["estado_psp"] == "Verde"),
+        "rms_psp_rojo": sum(1 for d in detalle if d["estado_psp"] == "Rojo"),
+        "pct_rms_en_riesgo": round((amar + rojos) / div * 100, 2),
+        "dias_habiles_totales": N, "dias_habiles_transcurridos": O, "dias_habiles_restantes": P,
+        "detalle_rms": detalle,
+        "filtros": {"ciclo_codigo": ciclo_codigo, "pais_codigo": pais_codigo,
+                    "fecha_corte": fecha_corte.isoformat(), "linea": linea, "gd": gd},
+    }
+
+
+def categorias_vivo(db: Session, ciclo_codigo: str, pais_codigo: str,
+                    gd: Optional[str] = None, linea: Optional[str] = None) -> list:
+    """Avance por categoría de médico (A/B/C/D) EN VIVO: planeados vs visitados."""
+    ciclo = _resolver_ciclo_vivo(db, ciclo_codigo, pais_codigo)
+    if not ciclo:
+        return []
+    lineas_map = {l.id: l.nombre for l in db.query(Linea).all()}
+    gerentes_map = {g.id: g.nombre for g in db.query(Gerente).all()}
+    rms = _rms_con_planeacion(db, ciclo.id, pais_codigo, linea, gd, lineas_map, gerentes_map)
+    scope_ids = [rm.id for rm in rms]
+    if not scope_ids:
+        return []
+
+    planeados = db.query(PlaneacionCiclo.medico_id, MedicoVisita.categoria).join(
+        MedicoVisita, MedicoVisita.id == PlaneacionCiclo.medico_id).filter(
+        PlaneacionCiclo.ciclo_id == ciclo.id, PlaneacionCiclo.tipo_visita == "V",
+        PlaneacionCiclo.vm_id.in_(scope_ids)).distinct().all()
+    visitados_ids = {r[0] for r in db.query(VisitaRegistro.medico_id).filter(
+        VisitaRegistro.ciclo_id == ciclo.id, VisitaRegistro.ejecutada == True,  # noqa: E712
+        VisitaRegistro.vm_id.in_(scope_ids)).distinct().all()}
+
+    agg: dict = {}
+    for medico_id, cat in planeados:
+        c = (cat or "D").upper()
+        d = agg.setdefault(c, {"prog": set(), "vis": set()})
+        d["prog"].add(medico_id)
+        if medico_id in visitados_ids:
+            d["vis"].add(medico_id)
+    out = []
+    for c in sorted(agg.keys()):
+        prog, vis = len(agg[c]["prog"]), len(agg[c]["vis"])
+        out.append({"categoria": c, "total_programados": prog, "visitados": vis,
+                    "pendientes": prog - vis, "pct_visita": round(vis / prog * 100, 1) if prog else 0.0})
+    return out
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # CAPA cat.* — Funciones que usan el esquema cat.* (SP + vista + DimCiclo)
+# (LEGADO — ya no lo consume el frontend; conservado por compatibilidad histórica)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 from sqlalchemy import text as _text

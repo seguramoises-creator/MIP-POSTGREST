@@ -259,14 +259,27 @@ def importar_medicos_categorizacion(db: Session = Depends(get_db), current_user=
     return visita_service.importar_desde_categorizacion(db, getattr(current_user, "id", None))
 
 
+@router.get("/gerentes", response_model=list[dict])
+def listar_gerentes(db: Session = Depends(get_db), current_user=RequireVisita):
+    """Gerentes de Distrito (para el filtro de cobertura)."""
+    from app.models.dimensiones import Gerente
+    return [{"id": g.id, "nombre": g.nombre}
+            for g in db.query(Gerente).filter(Gerente.tipo == "DISTRITO", Gerente.activo == True)  # noqa: E712
+            .order_by(Gerente.nombre).all()]
+
+
 @router.get("/cobertura/resumen", response_model=dict)
 def cobertura_resumen(ciclo_id: int | None = None, vm_id: int | None = None,
+                      gerente_id: int | None = None, linea_id: int | None = None,
+                      solo_ruptura: bool = False,
                       db: Session = Depends(get_db), current_user=RequireVisita):
     """Dashboard de Cobertura: gauges (cobertura/V+R/gap), desglose A/B/C, listas y ruptura.
-    El VM ve su propia cobertura; ADMIN/GERENTE ven el equipo o filtran por ?vm_id=."""
+    El VM ve su propia cobertura; ADMIN/GERENTE ven el equipo o filtran por visitador
+    (?vm_id=), Gerente de Distrito (?gerente_id=), Línea (?linea_id=) y ruptura (?solo_ruptura=)."""
     from app.services import visita_cobertura_service
     vm = _scope_vm(current_user, vm_id)
-    return visita_cobertura_service.resumen_cobertura(db, ciclo_id, vm)
+    return visita_cobertura_service.resumen_cobertura(
+        db, ciclo_id, vm, gerente_id, linea_id, solo_ruptura)
 
 
 @router.get("/cobertura/ranking", response_model=dict)

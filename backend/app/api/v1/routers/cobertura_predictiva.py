@@ -54,6 +54,7 @@ from app.models.dimensiones import (
 from app.models.hechos import Visita
 from app.services.cobertura_predictiva_service import (
     calcular_cobertura_rm, calcular_cobertura_equipo,
+    dashboard_vivo, categorias_vivo, ciclos_vivo,
 )
 from app.api.v1.routers.etl import _validar_magic_bytes
 
@@ -148,6 +149,48 @@ def detalle_cobertura_rm(
         return calcular_cobertura_rm(db, rm_id=rm_id, ciclo_id=ciclo_id, fecha_corte=fecha_corte)
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# MODO EN VIVO — dashboard desde Planeación + Registro (sin Excel ni cat.*)
+# ─────────────────────────────────────────────────────────────────────────
+
+@router.get("/vivo/ciclos", summary="Ciclos reales (Config.DIM_Ciclo) para el selector")
+def vivo_ciclos(
+    pais_codigo: Optional[str] = Query(None, description="Código de país, ej. DO"),
+    db: Session = Depends(get_db),
+    _current_user: Usuario = AnyAuth,
+):
+    return ciclos_vivo(db, pais_codigo=pais_codigo)
+
+
+@router.get("/vivo/dashboard", summary="Dashboard 4DX EN VIVO (Planeación + Registro)")
+def vivo_dashboard(
+    ciclo_codigo: str = Query(..., description="Código de ciclo, ej. C06-2026"),
+    pais_codigo: str = Query(..., description="Código de país, ej. DO"),
+    fecha_corte: Optional[date] = Query(None, description="Por defecto: hoy"),
+    linea: Optional[str] = Query(None, description="Filtrar por nombre de línea"),
+    gd: Optional[str] = Query(None, description="Filtrar por nombre de Gerente de Distrito"),
+    db: Session = Depends(get_db),
+    _current_user: Usuario = AnyAuth,
+):
+    """Cobertura y ritmo calculados en vivo: programado = médicos planeados en
+    Planeación del Ciclo; realizado = visitas ejecutadas; días hábiles del ciclo
+    menos los transcurridos. Sin Excel ni materialización."""
+    return dashboard_vivo(db, ciclo_codigo=ciclo_codigo, pais_codigo=pais_codigo,
+                          fecha_corte=fecha_corte, linea=linea, gd=gd)
+
+
+@router.get("/vivo/categorias", summary="Cobertura por categoría A/B/C/D EN VIVO")
+def vivo_categorias(
+    ciclo_codigo: str = Query(..., description="Código de ciclo, ej. C06-2026"),
+    pais_codigo: str = Query(..., description="Código de país, ej. DO"),
+    gd: Optional[str] = Query(None, description="Filtrar por nombre de GD"),
+    linea: Optional[str] = Query(None, description="Filtrar por nombre de línea"),
+    db: Session = Depends(get_db),
+    _current_user: Usuario = AnyAuth,
+):
+    return categorias_vivo(db, ciclo_codigo=ciclo_codigo, pais_codigo=pais_codigo, gd=gd, linea=linea)
 
 
 # ─────────────────────────────────────────────────────────────────────────

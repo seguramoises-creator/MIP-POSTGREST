@@ -1,10 +1,14 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useState, useCallback, type MouseEvent } from 'react';
 import {
   Box, Typography, Card, CardContent, Grid, Chip, Alert, Stack, LinearProgress,
-  IconButton, Popover, CircularProgress, Divider,
+  IconButton, Popover, CircularProgress, Divider, TextField, MenuItem, Button,
 } from '@mui/material';
-import { InfoOutlined } from '@mui/icons-material';
-import { coberturaResumen, coberturaRanking, type CoberturaResumen, type RankingVM } from '../../services/visita.service';
+import { InfoOutlined, FilterList } from '@mui/icons-material';
+import { useAuthStore } from '../../store/auth.store';
+import {
+  coberturaResumen, coberturaRanking, listarVMs, listarGerentesVisita, listarLineasVisita,
+  type CoberturaResumen, type RankingVM, type Catalogo,
+} from '../../services/visita.service';
 
 const CAT_COLOR: Record<string, string> = { A: '#1b5e20', B: '#0d47a1', C: '#e65100' };
 
@@ -80,9 +84,40 @@ function Gauge({ pct, color, label, metrica, titulo, sub }: { pct: number; color
 }
 
 export default function CoberturaDashboard() {
-  const [data, setData] = useState<CoberturaResumen | null>(null);
-  useEffect(() => { coberturaResumen().then(setData).catch(() => setData(null)); }, []);
+  const rol = useAuthStore((s) => s.rol);
+  const esVM = rol === 'REPRESENTANTE_MEDICO';
 
+  const [data, setData] = useState<CoberturaResumen | null>(null);
+  const [cargando, setCargando] = useState(true);
+  // Filtros (solo ADMIN/GERENTE; el VM ve su propia cobertura).
+  const [vms, setVms] = useState<Catalogo[]>([]);
+  const [gerentes, setGerentes] = useState<Catalogo[]>([]);
+  const [lineas, setLineas] = useState<Catalogo[]>([]);
+  const [vmId, setVmId] = useState<number | ''>('');
+  const [gerenteId, setGerenteId] = useState<number | ''>('');
+  const [lineaId, setLineaId] = useState<number | ''>('');
+  const [soloRuptura, setSoloRuptura] = useState(false);
+
+  useEffect(() => {
+    if (esVM) return;
+    listarVMs().then(setVms).catch(() => {});
+    listarGerentesVisita().then(setGerentes).catch(() => {});
+    listarLineasVisita().then(setLineas).catch(() => {});
+  }, [esVM]);
+
+  const cargar = useCallback(() => {
+    setCargando(true);
+    coberturaResumen({
+      vmId: vmId || undefined, gerenteId: gerenteId || undefined,
+      lineaId: lineaId || undefined, soloRuptura: soloRuptura || undefined,
+    }).then(setData).catch(() => setData(null)).finally(() => setCargando(false));
+  }, [vmId, gerenteId, lineaId, soloRuptura]);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const hayFiltro = !!(vmId || gerenteId || lineaId || soloRuptura);
+  const limpiar = () => { setVmId(''); setGerenteId(''); setLineaId(''); setSoloRuptura(false); };
+
+  if (cargando && !data) return <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /></Box>;
   if (!data) return <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /></Box>;
 
   return (
@@ -91,6 +126,39 @@ export default function CoberturaDashboard() {
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Panel de {data.panel} médicos · {data.visitados} visitados · {data.sin_visitar} sin visitar
       </Typography>
+
+      {/* Filtros (solo ADMIN/GERENTE) */}
+      {!esVM && (
+        <Card variant="outlined" sx={{ mb: 2, bgcolor: '#f5f8ff', borderColor: '#bbdefb' }}>
+          <Box sx={{ p: 1.5 }}>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }} flexWrap="wrap" useFlexGap>
+              <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: 'primary.main' }}>
+                <FilterList fontSize="small" />
+                <Typography variant="body2" fontWeight={700}>Filtrar</Typography>
+              </Stack>
+              <TextField select size="small" label="Representante médico" value={vmId} sx={{ minWidth: 220, bgcolor: '#fff' }}
+                         onChange={(e) => setVmId(e.target.value === '' ? '' : Number(e.target.value))}>
+                <MenuItem value="">Todos</MenuItem>
+                {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Gerente de Distrito" value={gerenteId} sx={{ minWidth: 200, bgcolor: '#fff' }}
+                         onChange={(e) => setGerenteId(e.target.value === '' ? '' : Number(e.target.value))}>
+                <MenuItem value="">Todos</MenuItem>
+                {gerentes.map((g) => <MenuItem key={g.id} value={g.id}>{g.nombre}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Línea" value={lineaId} sx={{ minWidth: 180, bgcolor: '#fff' }}
+                         onChange={(e) => setLineaId(e.target.value === '' ? '' : Number(e.target.value))}>
+                <MenuItem value="">Todas</MenuItem>
+                {lineas.map((l) => <MenuItem key={l.id} value={l.id}>{l.nombre}</MenuItem>)}
+              </TextField>
+              <Chip label="Ruptura de secuencia" color={soloRuptura ? 'error' : 'default'}
+                    variant={soloRuptura ? 'filled' : 'outlined'} onClick={() => setSoloRuptura((v) => !v)}
+                    sx={{ bgcolor: soloRuptura ? undefined : '#fff' }} />
+              {hayFiltro && <Button size="small" onClick={limpiar}>Limpiar</Button>}
+            </Stack>
+          </Box>
+        </Card>
+      )}
 
       {/* Gauges */}
       <Grid container spacing={2} sx={{ mb: 1 }}>

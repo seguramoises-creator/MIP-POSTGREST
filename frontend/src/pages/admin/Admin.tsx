@@ -969,10 +969,31 @@ function DimTabWithPais({ tabConfig }: { tabConfig: (typeof TABS_DIM)[0] }) {
 
 
 // ── Tab dedicado: Ciclos por País ──────────────────────────────────────
+/** ISO local (YYYY-MM-DD) sin desfase de zona horaria (evita el corrimiento de toISOString). */
+function isoLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+/** Días laborables (lun-vie) entre dos fechas ISO, excluyendo los feriados dados. Preview en vivo;
+ *  el backend recalcula el valor autoritativo al guardar. */
+function contarDiasHabiles(inicioStr: string, finStr: string, feriados: Set<string>): number {
+  if (!inicioStr || !finStr) return 0;
+  const inicio = new Date(inicioStr + 'T00:00:00');
+  const fin = new Date(finStr + 'T00:00:00');
+  if (isNaN(inicio.getTime()) || isNaN(fin.getTime()) || fin < inicio) return 0;
+  let total = 0;
+  const d = new Date(inicio);
+  while (d <= fin) {
+    const dow = d.getDay();  // 0=domingo, 6=sábado
+    if (dow !== 0 && dow !== 6 && !feriados.has(isoLocal(d))) total++;
+    d.setDate(d.getDate() + 1);
+  }
+  return total;
+}
+
 /**
- * CiclosPorPaisTab — Vista de ciclos filtrada por país con botones Cerrar/Abrir.
- * El selector de país al tope permite ver y gestionar los ciclos de cada país
- * de forma independiente.
+ * CiclosPorPaisTab — Mantenimiento de ciclos por país: crear/editar (con días laborables
+ * calculados automáticamente de las fechas menos feriados), cerrar/abrir, y gestión de
+ * los días no laborables (feriados) que se excluyen del cálculo.
  */
 function CiclosPorPaisTab() {
   const [paisCodigo, setPaisId] = useState<string | ''>('');
@@ -995,15 +1016,80 @@ function CiclosPorPaisTab() {
       api.get('/admin/ciclos', { params: { ...(paisCodigo && { pais_codigo: paisCodigo }) } }).then(r => r.data),
   });
 
+  // Feriados / días no laborables del país seleccionado.
+  const { data: feriados } = useQuery({
+    queryKey: ['feriados', paisCodigo],
+    queryFn: () => api.get('/admin/feriados', { params: { pais_codigo: paisCodigo } }).then(r => r.data),
+    enabled: !!paisCodigo,
+  });
+  const feriadosRows: any[] = feriados || [];
+  const feriadosSet = new Set<string>(feriadosRows.map((f: any) => f.fecha));
+
   const rows: any[] = ciclos || [];
   const paisNombre = (codigo: string) => {
     const p = (paises || []).find((x: any) => x.codigo === codigo);
     return p ? `${p.codigo} — ${p.nombre}` : String(codigo);
   };
 
+  // ── Formulario de ciclo (crear / editar) ──
+  const vacio = {
+    id: null as number | null, pais_codigo: '', anio: new Date().getFullYear(),
+    numero: 1, nombre: '', nombre_canonico: '', fecha_inicio: '', fecha_fin: '',
+  };
+  const [form, setForm] = useState<typeof vacio>(vacio);
+  const [abierto, setAbierto] = useState(false);
+  const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
+  const setF = (k: keyof typeof vacio, v: any) => setForm((f) => ({ ...f, [k]: v }));
+  const errText = (e: any, fb: string) => e?.response?.data?.detail || fb;
+
+  const abrirNuevo = () => { setForm({ ...vacio, pais_codigo: paisCodigo || '' }); setAbierto(true); };
+  const abrirEditar = (row: any) => {
+    setForm({
+      id: row.id, pais_codigo: row.pais_codigo, anio: row.anio, numero: row.numero,
+      nombre: row.nombre, nombre_canonico: row.nombre_canonico || '',
+      fecha_inicio: row.fecha_inicio, fecha_fin: row.fecha_fin,
+    });
+    setAbierto(true);
+  };
+
+  // Días laborables en vivo (con los feriados del país del formulario).
+  const diasPreview = contarDiasHabiles(form.fecha_inicio, form.fecha_fin, feriadosSet);
+  const formValido = !!(form.pais_codigo && form.nombre && form.fecha_inicio && form.fecha_fin
+    && form.fecha_fin >= form.fecha_inicio);
+
+  const guardarCiclo = useMutation({
+    mutationFn: () => {
+      const body = {
+        pais_codigo: form.pais_codigo, anio: Number(form.anio), numero: Number(form.numero),
+        nombre: form.nombre, nombre_canonico: form.nombre_canonico || null,
+        fecha_inicio: form.fecha_inicio, fecha_fin: form.fecha_fin,
+      };
+      return form.id ? api.put(`/admin/ciclos/${form.id}`, body) : api.post('/admin/ciclos', body);
+    },
+    onSuccess: () => { setAbierto(false); setMsg({ tipo: 'success', texto: 'Ciclo guardado.' }); refetch(); },
+    onError: (e: any) => setMsg({ tipo: 'error', texto: errText(e, 'No se pudo guardar el ciclo.') }),
+  });
+
+  // ── Feriados (agregar / eliminar) ──
+  const [ferFecha, setFerFecha] = useState('');
+  const [ferNombre, setFerNombre] = useState('');
+  const addFeriado = useMutation({
+    mutationFn: () => api.post('/admin/feriados', { pais_codigo: paisCodigo, fecha: ferFecha, nombre: ferNombre || null }),
+    onSuccess: () => { setFerFecha(''); setFerNombre(''); qc.invalidateQueries({ queryKey: ['feriados'] }); },
+    onError: (e: any) => setMsg({ tipo: 'error', texto: errText(e, 'No se pudo agregar el feriado.') }),
+  });
+  const delFeriado = useMutation({
+    mutationFn: (id: number) => api.delete(`/admin/feriados/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['feriados'] }),
+  });
+
+  const findeEnFecha = (iso: string) => { const d = new Date(iso + 'T00:00:00'); return d.getDay() === 0 || d.getDay() === 6; };
+
   return (
     <Box>
-      {/* Selector de país */}
+      {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
+
+      {/* Selector de país + Nuevo ciclo */}
       <Card elevation={1} sx={{ mb: 2, borderRadius: 2 }}>
         <CardContent sx={{ py: '12px !important' }}>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1025,9 +1111,47 @@ function CiclosPorPaisTab() {
               {rows.length} ciclo{rows.length !== 1 ? 's' : ''}
               {paisCodigo ? ` — ${paisNombre(String(paisCodigo))}` : ' en todos los países'}
             </Typography>
+            <Box sx={{ flexGrow: 1 }} />
+            <Button variant="contained" startIcon={<Add />} onClick={abrirNuevo}>Nuevo ciclo</Button>
           </Box>
         </CardContent>
       </Card>
+
+      {/* Días no laborables (feriados) del país — se excluyen de los días laborables */}
+      {paisCodigo && (
+        <Card variant="outlined" sx={{ mb: 2, bgcolor: '#f5f8ff', borderColor: '#bbdefb' }}>
+          <CardContent sx={{ py: 1.5 }}>
+            <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+              Días no laborables (feriados) — {paisNombre(String(paisCodigo))}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Fechas entre semana (lun-vie) que NO cuentan como días laborables del ciclo. Los sábados y
+              domingos ya se excluyen automáticamente.
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mb: feriadosRows.length ? 1.5 : 0 }}>
+              <TextField size="small" type="date" label="Fecha" value={ferFecha}
+                         InputLabelProps={{ shrink: true }} sx={{ bgcolor: '#fff' }}
+                         onChange={(e) => setFerFecha(e.target.value)} />
+              <TextField size="small" label="Descripción (opcional)" value={ferNombre} sx={{ bgcolor: '#fff', minWidth: 220 }}
+                         onChange={(e) => setFerNombre(e.target.value)} />
+              <Button variant="outlined" startIcon={<Add />} disabled={!ferFecha || addFeriado.isPending}
+                      onClick={() => addFeriado.mutate()}>Agregar</Button>
+              {ferFecha && findeEnFecha(ferFecha) && (
+                <Typography variant="caption" color="warning.main">Esa fecha ya es fin de semana.</Typography>
+              )}
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              {feriadosRows.length === 0
+                ? <Typography variant="caption" color="text.secondary">Sin feriados configurados.</Typography>
+                : feriadosRows.map((f: any) => (
+                  <Chip key={f.id} size="small" sx={{ bgcolor: '#fff' }}
+                        label={f.nombre ? `${f.fecha} · ${f.nombre}` : f.fecha}
+                        onDelete={() => delFeriado.mutate(f.id)} />
+                ))}
+            </Box>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabla de ciclos */}
       {isLoading ? (
@@ -1037,7 +1161,7 @@ function CiclosPorPaisTab() {
           <Table size="small">
             <TableHead sx={{ bgcolor: 'primary.main' }}>
               <TableRow>
-                {['País', 'N°', 'Nombre', 'Inicio', 'Fin', 'Estado', 'Acciones'].map(h => (
+                {['País', 'N°', 'Nombre', 'Inicio', 'Fin', 'Días lab.', 'Estado', 'Acciones'].map(h => (
                   <TableCell key={h} sx={{ color: 'white', fontWeight: 700 }}>{h}</TableCell>
                 ))}
               </TableRow>
@@ -1045,7 +1169,7 @@ function CiclosPorPaisTab() {
             <TableBody>
               {rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                  <TableCell colSpan={8} align="center" sx={{ py: 4, color: 'text.secondary' }}>
                     No hay ciclos{paisCodigo ? ' para este país' : ''}
                   </TableCell>
                 </TableRow>
@@ -1056,6 +1180,7 @@ function CiclosPorPaisTab() {
                   <TableCell sx={{ fontWeight: 600 }}>{row.nombre}</TableCell>
                   <TableCell>{row.fecha_inicio}</TableCell>
                   <TableCell>{row.fecha_fin}</TableCell>
+                  <TableCell align="center"><Chip size="small" variant="outlined" label={row.dias_laborables ?? 0} /></TableCell>
                   <TableCell>
                     <Chip
                       label={row.cerrado ? 'Cerrado' : 'Abierto'}
@@ -1064,7 +1189,12 @@ function CiclosPorPaisTab() {
                     />
                   </TableCell>
                   <TableCell>
-                    <CicloStateButtons row={row} refetch={refetch} />
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Tooltip title="Editar ciclo">
+                        <IconButton size="small" color="primary" onClick={() => abrirEditar(row)}><Edit fontSize="small" /></IconButton>
+                      </Tooltip>
+                      <CicloStateButtons row={row} refetch={refetch} />
+                    </Box>
                   </TableCell>
                 </TableRow>
               ))}
@@ -1072,6 +1202,64 @@ function CiclosPorPaisTab() {
           </Table>
         </TableContainer>
       )}
+
+      {/* Formulario crear / editar ciclo */}
+      <Dialog open={abierto} onClose={() => setAbierto(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>{form.id ? 'Editar ciclo' : 'Nuevo ciclo'}</DialogTitle>
+        <DialogContent dividers>
+          <Grid container spacing={2} sx={{ mt: 0 }}>
+            <Grid item xs={12} sm={6}>
+              {form.id ? (
+                <TextField fullWidth size="small" label="País" value={paisNombre(form.pais_codigo)} InputProps={{ readOnly: true }} />
+              ) : (
+                <FormControl fullWidth size="small">
+                  <InputLabel>País</InputLabel>
+                  <Select label="País" value={form.pais_codigo} onChange={(e) => setF('pais_codigo', e.target.value)}>
+                    {(paises || []).map((p: any) => <MenuItem key={p.id} value={p.codigo}>{p.codigo} — {p.nombre}</MenuItem>)}
+                  </Select>
+                </FormControl>
+              )}
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <TextField fullWidth size="small" type="number" label="Año" value={form.anio} onChange={(e) => setF('anio', e.target.value)} />
+            </Grid>
+            <Grid item xs={6} sm={3}>
+              <TextField fullWidth size="small" type="number" label="N° ciclo" value={form.numero} onChange={(e) => setF('numero', e.target.value)} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="Nombre (ej. C03-2026)" value={form.nombre} onChange={(e) => setF('nombre', e.target.value)} />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField fullWidth size="small" label="Nombre canónico (opcional)" value={form.nombre_canonico} onChange={(e) => setF('nombre_canonico', e.target.value)} />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField fullWidth size="small" type="date" label="Fecha inicio" InputLabelProps={{ shrink: true }}
+                         value={form.fecha_inicio} onChange={(e) => setF('fecha_inicio', e.target.value)} />
+            </Grid>
+            <Grid item xs={6}>
+              <TextField fullWidth size="small" type="date" label="Fecha fin" InputLabelProps={{ shrink: true }}
+                         value={form.fecha_fin} onChange={(e) => setF('fecha_fin', e.target.value)}
+                         error={!!(form.fecha_inicio && form.fecha_fin && form.fecha_fin < form.fecha_inicio)}
+                         helperText={form.fecha_inicio && form.fecha_fin && form.fecha_fin < form.fecha_inicio ? 'Debe ser posterior al inicio' : ' '} />
+            </Grid>
+            <Grid item xs={12}>
+              <Box sx={{ p: 1.5, bgcolor: 'rgba(46,91,255,0.06)', borderRadius: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Box>
+                  <Typography variant="body2" fontWeight={700}>Días laborables (calculado)</Typography>
+                  <Typography variant="caption" color="text.secondary">Lun-vie entre las fechas, menos los feriados del país</Typography>
+                </Box>
+                <Typography variant="h5" fontWeight={800} color="primary.main">{diasPreview}</Typography>
+              </Box>
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAbierto(false)}>Cancelar</Button>
+          <Button variant="contained" disabled={!formValido || guardarCiclo.isPending} onClick={() => guardarCiclo.mutate()}>
+            {guardarCiclo.isPending ? 'Guardando…' : 'Guardar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

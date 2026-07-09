@@ -3,6 +3,7 @@ SCGCPR — Router: Administración
 Gestión de catálogos: Países, Líneas, Gerentes, RMs,
 Indicadores, Tablas de puntuación, Ciclos, Reglas de Elegibilidad, Usuarios.
 """
+from datetime import date
 from typing import Annotated, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
@@ -13,7 +14,7 @@ from app.models.usuario import Usuario, Rol
 from app.models.dimensiones import (
     Pais, Linea, Gerente, RepresentanteMedico, Producto,
     Indicador, IndicadorTabla, Ciclo, ReglaElegibilidad, Premio, CapacitacionDim,
-    CategoriaMedica, CriterioCategoria, CriterioCategoriaTabla,
+    CategoriaMedica, CriterioCategoria, CriterioCategoriaTabla, Feriado,
 )
 from app.schemas.schemas import (
     PaisCreate, PaisResponse,
@@ -23,7 +24,7 @@ from app.schemas.schemas import (
     ProductoCreate, ProductoResponse,
     IndicadorCreate, IndicadorResponse,
     IndicadorTablaCreate, IndicadorTablaResponse,
-    CicloCreate, CicloResponse,
+    CicloCreate, CicloResponse, CicloUpdate, FeriadoIn, FeriadoResponse,
     ReglaElegibilidadCreate, ReglaElegibilidadResponse,
     PremioCreate, PremioResponse,
     UsuarioCreate, UsuarioResponse, UsuarioUpdate,
@@ -439,6 +440,27 @@ def delete_tabla_criterio(id: int, tabla_id: int, db: Session = Depends(get_db),
 
 # ── Ciclos ────────────────────────────────────────────────────────────────────
 
+def _dias_habiles(db: Session, pais_codigo: str, inicio, fin) -> int:
+    """Días laborables entre inicio y fin (ambos inclusive): cuenta solo lunes-viernes
+    y excluye los feriados/días no laborables del país que caigan en día hábil.
+    Weekday(): 0=lunes … 4=viernes, 5=sábado, 6=domingo."""
+    from datetime import timedelta
+    if inicio is None or fin is None or fin < inicio:
+        return 0
+    feriados = {
+        f.fecha for f in db.query(Feriado).filter(
+            Feriado.pais_codigo == pais_codigo, Feriado.activo == True,  # noqa: E712
+            Feriado.fecha >= inicio, Feriado.fecha <= fin).all()
+        if f.fecha.weekday() < 5  # sábado/domingo ya no cuentan; no restar dos veces
+    }
+    total, d = 0, inicio
+    while d <= fin:
+        if d.weekday() < 5 and d not in feriados:
+            total += 1
+        d += timedelta(days=1)
+    return total
+
+
 def _ciclo_actual_de(ciclos):
     """Ciclo abierto (cerrado=False) más reciente: max por (anio, numero)."""
     abiertos = [c for c in ciclos if not c.cerrado]
@@ -482,11 +504,36 @@ def pais_defecto(db: Session = Depends(get_db), _=AnyAuth):
            .first())
     return row[0] if row else None
 
+@router.get("/ciclos/dias-habiles", response_model=int,
+            summary="Días laborables entre dos fechas (para el formulario de ciclo)")
+def ciclo_dias_habiles(pais_codigo: str, fecha_inicio: date, fecha_fin: date,
+                       db: Session = Depends(get_db), _=AnyAuth):
+    """Preview: lunes-viernes entre las fechas menos los feriados del país."""
+    return _dias_habiles(db, pais_codigo, fecha_inicio, fecha_fin)
+
+
 @router.post("/ciclos", response_model=CicloResponse, status_code=201, summary="Crear ciclo")
 def create_ciclo(data: CicloCreate, db: Session = Depends(get_db), _=AdminOnly):
-    obj = Ciclo(**data.model_dump())
+    payload = data.model_dump()
+    # dias_laborables SIEMPRE se calcula (lun-vie menos feriados), no se toma del cliente.
+    payload["dias_laborables"] = _dias_habiles(db, data.pais_codigo, data.fecha_inicio, data.fecha_fin)
+    obj = Ciclo(**payload)
     db.add(obj); db.commit(); db.refresh(obj)
     return obj
+
+
+@router.put("/ciclos/{id}", response_model=CicloResponse, summary="Editar ciclo")
+def update_ciclo(id: int, data: CicloUpdate, db: Session = Depends(get_db), _=AdminOnly):
+    obj = db.query(Ciclo).filter(Ciclo.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Ciclo no encontrado")
+    for campo, valor in data.model_dump(exclude_unset=True).items():
+        setattr(obj, campo, valor)
+    # Recalcular días laborables con las fechas (nuevas o vigentes) y los feriados del país.
+    obj.dias_laborables = _dias_habiles(db, obj.pais_codigo, obj.fecha_inicio, obj.fecha_fin)
+    db.commit(); db.refresh(obj)
+    return obj
+
 
 @router.patch("/ciclos/{id}/cerrar", response_model=Msg, summary="Cerrar ciclo")
 def close_ciclo(id: int, db: Session = Depends(get_db), _=AdminOnly):
@@ -504,6 +551,44 @@ def open_ciclo(id: int, db: Session = Depends(get_db), _=AdminOnly):
     obj.cerrado = False
     db.commit()
     return Msg(message=f"Ciclo '{obj.nombre}' abierto correctamente")
+
+
+# ── Feriados / Días no laborables (DIM_Feriado) ───────────────────────────────
+# Fechas entre semana (lun-vie) que NO se cuentan como días laborables del ciclo.
+
+@router.get("/feriados", response_model=List[FeriadoResponse], summary="Listar feriados por país")
+def list_feriados(pais_codigo: Optional[str] = None, db: Session = Depends(get_db), _=AnyAuth):
+    q = db.query(Feriado).filter(Feriado.activo == True)  # noqa: E712
+    if pais_codigo:
+        q = q.filter(Feriado.pais_codigo == pais_codigo)
+    return q.order_by(Feriado.fecha).all()
+
+
+@router.post("/feriados", response_model=FeriadoResponse, status_code=201, summary="Crear feriado")
+def create_feriado(data: FeriadoIn, db: Session = Depends(get_db), _=AdminOnly):
+    ya = db.query(Feriado).filter(
+        Feriado.pais_codigo == data.pais_codigo, Feriado.fecha == data.fecha).first()
+    if ya:
+        # Si estaba desactivado, reactívalo (idempotente); si no, error de duplicado.
+        if not ya.activo:
+            ya.activo = True
+            if data.nombre:
+                ya.nombre = data.nombre
+            db.commit(); db.refresh(ya)
+            return ya
+        raise HTTPException(409, f"Ya existe un feriado en {data.fecha.isoformat()} para {data.pais_codigo}")
+    obj = Feriado(pais_codigo=data.pais_codigo, fecha=data.fecha, nombre=data.nombre, activo=True)
+    db.add(obj); db.commit(); db.refresh(obj)
+    return obj
+
+
+@router.delete("/feriados/{id}", response_model=Msg, summary="Eliminar feriado")
+def delete_feriado(id: int, db: Session = Depends(get_db), _=AdminOnly):
+    obj = db.query(Feriado).filter(Feriado.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Feriado no encontrado")
+    db.delete(obj); db.commit()
+    return Msg(message="Feriado eliminado")
 
 
 # ── Reset de datos ────────────────────────────────────────────────────────────

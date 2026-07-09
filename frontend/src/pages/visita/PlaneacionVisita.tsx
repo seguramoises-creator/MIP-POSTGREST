@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Stack, Chip, Alert, MenuItem,
   Select, FormControl, CircularProgress, Table, TableHead, TableRow, TableCell,
-  TableBody, Grid, Tooltip, TextField,
+  TableBody, Grid, Tooltip, TextField, Avatar, Divider,
 } from '@mui/material';
-import { Save, EventNote, Warning, CheckCircle, FilterList, Search } from '@mui/icons-material';
+import { Save, EventNote, Warning, CheckCircle, FilterList, Search, Badge, SupervisorAccount, Layers } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
-  listarMedicos, obtenerPlaneacion, planeacionResumen, guardarPlaneacion, listarVMs,
-  type MedicoVisita, type PlaneacionItem, type PlaneacionResumen, type Catalogo,
+  listarMedicos, obtenerPlaneacion, planeacionResumen, guardarPlaneacion, listarVMs, miGerente,
+  type MedicoVisita, type PlaneacionItem, type PlaneacionResumen, type Catalogo, type MiGerente,
 } from '../../services/visita.service';
 
 function msgError(e: unknown, fallback: string): string {
@@ -44,6 +44,8 @@ export default function PlaneacionVisita() {
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
   const [catFiltro, setCatFiltro] = useState('');   // '' = todas
   const [busqueda, setBusqueda] = useState('');
+  // Ficha del representante (Gerente de Distrito + Línea) — viene de la dim del RM.
+  const [infoRep, setInfoRep] = useState<MiGerente | null>(null);
 
   // Filtro visual (no afecta el guardado: se persiste TODO el plan, no solo lo visible).
   const medicosVisibles = useMemo(() => {
@@ -59,6 +61,13 @@ export default function PlaneacionVisita() {
 
   // Lista de visitadores (solo para ADMIN/GERENTE).
   useEffect(() => { if (!esVM) listarVMs().then(setVms).catch(() => {}); }, [esVM]);
+
+  // Ficha del representante: el VM ve la suya; ADMIN/GERENTE la del VM seleccionado.
+  useEffect(() => {
+    if (esVM) miGerente().then(setInfoRep).catch(() => setInfoRep(null));
+    else if (vmId) miGerente(Number(vmId)).then(setInfoRep).catch(() => setInfoRep(null));
+    else setInfoRep(null);
+  }, [esVM, vmId]);
 
   const cargar = useCallback(async () => {
     if (!listo) { setMedicos([]); setPlan({}); setResumen(null); setCargando(false); return; }
@@ -158,6 +167,16 @@ export default function PlaneacionVisita() {
       <Typography variant="h5" fontWeight={700} sx={{ color }}>{valor}</Typography>
     </CardContent></Card>
   );
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+  const infoDato = (icono: ReactNode, label: string, valor: string) => (
+    <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+      <Avatar sx={{ bgcolor: 'primary.main', color: '#fff', width: 32, height: 32 }}>{icono}</Avatar>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.1, fontWeight: 600, letterSpacing: 0.3 }}>{label}</Typography>
+        <Typography variant="body2" fontWeight={700} noWrap>{valor}</Typography>
+      </Box>
+    </Stack>
+  );
 
   return (
     <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
@@ -178,14 +197,35 @@ export default function PlaneacionVisita() {
         </Alert>
       )}
 
-      {/* Selector de visitador: solo ADMIN/GERENTE. El RM planifica su propio panel. */}
-      {!esVM && (
-        <TextField select fullWidth size="small" label="Visitador (VM)" value={vmId} sx={{ mb: 2, maxWidth: 420 }}
-                   helperText="Elige el visitador cuyo ciclo vas a planificar"
-                   onChange={(e) => setVmId(e.target.value === '' ? '' : Number(e.target.value))}>
-          <MenuItem value=""><em>— Selecciona un visitador —</em></MenuItem>
-          {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
-        </TextField>
+      {/* El representante (VM) se ELIGE aquí; su Gerente de Distrito y Línea se
+          muestran automáticamente (de la dim del RM). Un VM ve su ficha fija. */}
+      {(!esVM || (infoRep && (infoRep.vm || infoRep.gerente || infoRep.linea))) && (
+        <Card variant="outlined" sx={{ mb: 2, borderColor: 'primary.light', bgcolor: 'rgba(46,91,255,0.05)' }}>
+          <CardContent sx={{ py: 1.25, '&:last-child': { pb: 1.25 } }}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1.25, sm: 4 }} alignItems={{ sm: 'center' }}
+                   flexWrap="wrap"
+                   divider={<Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', sm: 'block' } }} />}>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+                <Avatar sx={{ bgcolor: 'primary.main', color: '#fff', width: 32, height: 32 }}><Badge fontSize="small" /></Avatar>
+                {esVM ? (
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.1, fontWeight: 600, letterSpacing: 0.3 }}>Representante médico</Typography>
+                    <Typography variant="body2" fontWeight={700} noWrap>{infoRep?.vm ?? '—'}</Typography>
+                  </Box>
+                ) : (
+                  <TextField select variant="standard" label="Visitador (VM)" value={vmId} sx={{ minWidth: 240 }}
+                             onChange={(e) => setVmId(e.target.value === '' ? '' : Number(e.target.value))}>
+                    <MenuItem value=""><em>— Selecciona un visitador —</em></MenuItem>
+                    {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
+                  </TextField>
+                )}
+              </Stack>
+              {infoRep?.gerente && infoDato(<SupervisorAccount fontSize="small" />,
+                infoRep.gerente_tipo ? `Gerente de ${cap(infoRep.gerente_tipo)}` : 'Gerente de Distrito', infoRep.gerente)}
+              {infoRep?.linea && infoDato(<Layers fontSize="small" />, 'Línea', infoRep.linea)}
+            </Stack>
+          </CardContent>
+        </Card>
       )}
 
       {!listo ? (

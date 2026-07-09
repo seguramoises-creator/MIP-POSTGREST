@@ -223,6 +223,16 @@ class CicloCreate(BaseModel):
     fecha_fin: date
     dias_laborables: int = 0
 
+class CicloUpdate(BaseModel):
+    """Edición de un ciclo. `dias_laborables` NO se recibe: se recalcula en el backend
+    a partir de fecha_inicio/fecha_fin y los feriados del país."""
+    anio: Optional[int] = None
+    numero: Optional[int] = None
+    nombre: Optional[str] = None
+    nombre_canonico: Optional[str] = None
+    fecha_inicio: Optional[date] = None
+    fecha_fin: Optional[date] = None
+
 class CicloResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -233,7 +243,22 @@ class CicloResponse(BaseModel):
     nombre_canonico: Optional[str]
     fecha_inicio: date
     fecha_fin: date
+    dias_laborables: int
     cerrado: bool
+    activo: bool
+
+
+class FeriadoIn(BaseModel):
+    pais_codigo: str
+    fecha: date
+    nombre: Optional[str] = None
+
+class FeriadoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    pais_codigo: str
+    fecha: date
+    nombre: Optional[str]
     activo: bool
 
 

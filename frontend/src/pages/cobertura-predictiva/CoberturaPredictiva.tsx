@@ -138,7 +138,7 @@ const ETIQUETAS_CAT: Record<string, string> = {
 const CoberturaPorCategoriaPanel = ({ data }: { data: CoberturaCategoria[] }) => {
   if (!data || data.length === 0) return (
     <Alert severity="info" sx={{ mt: 0 }}>
-      Sin datos de categoría. Cargue el Excel de Target Médicos con la columna Potencial (A/B/C/D).
+      Sin médicos planeados con categoría. Planifica el ciclo (Planeación) y verifica que los médicos tengan categoría A/B/C/D en el Panel Médico.
     </Alert>
   );
 
@@ -302,11 +302,10 @@ const BarraMeta = ({ actual, esperada, meta }: { actual: number; esperada: numbe
 
 // ── Dashboard tab ─────────────────────────────────────────────────────────────
 const DashboardTab = ({
-  data, loading, error, onRecalcular, recalculating,
+  data, loading, error,
   catData, catLoading,
 }: {
   data?: DashboardData; loading: boolean; error: string | null;
-  onRecalcular: () => void; recalculating: boolean;
   catData?: CoberturaCategoria[]; catLoading?: boolean;
 }) => {
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
@@ -336,15 +335,7 @@ const DashboardTab = ({
   );
 
   if (error) return (
-    <Alert
-      severity={error.includes('Sin datos') ? 'info' : 'error'}
-      sx={{ mt: 2 }}
-      action={
-        <Button color="inherit" size="small" onClick={onRecalcular} disabled={recalculating}>
-          {recalculating ? 'Calculando…' : 'Calcular ahora'}
-        </Button>
-      }
-    >
+    <Alert severity={error.includes('Sin datos') ? 'info' : 'error'} sx={{ mt: 2 }}>
       {error}
     </Alert>
   );
@@ -385,15 +376,6 @@ const DashboardTab = ({
             <Typography variant="body2" color="text.secondary">
               <b>{data.dias_habiles_transcurridos}</b> / {data.dias_habiles_totales} días hábiles ({data.dias_habiles_restantes} restantes)
             </Typography>
-            <Button
-              size="small"
-              startIcon={recalculating ? <CircularProgress size={14} /> : <Refresh />}
-              onClick={onRecalcular}
-              disabled={recalculating}
-              sx={{ bgcolor: '#1565c0', color: '#fff', '&:hover': { bgcolor: '#0d47a1' } }}
-            >
-              {recalculating ? 'Calculando…' : 'Recalcular'}
-            </Button>
           </Box>
         </Box>
         <Box mt={1.5}>
@@ -623,11 +605,10 @@ export default function CoberturaPredictiva() {
   const [fechaCorte, setFechaCorte] = useState('');
   const [lineaFiltro, setLineaFiltro] = useState('');
   const [gdFiltro, setGdFiltro] = useState('');
-  const qc = useQueryClient();
 
   const { data: ciclos = [], isLoading: ciclosLoading } = useQuery<Ciclo[]>({
     queryKey: ['cob-ciclos', paisCodigo],
-    queryFn: () => api.get(`/cobertura-predictiva/cat/ciclos?pais_codigo=${paisCodigo}`).then(r => r.data),
+    queryFn: () => api.get(`/cobertura-predictiva/vivo/ciclos?pais_codigo=${paisCodigo}`).then(r => r.data),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -636,7 +617,6 @@ export default function CoberturaPredictiva() {
   }, [ciclos]);
 
   const cicloActual = ciclos.find(c => c.codigo_ciclo === cicloSeleccionado);
-  const lineasDisponibles = useMemo(() => [...new Set(ciclos.filter(c => c.linea).map(c => c.linea!))], [ciclos]);
 
   const dashboardEnabled = Boolean(cicloSeleccionado && paisCodigo);
   const { data: dashData, isLoading: dashLoading, error: dashError } = useQuery<DashboardData>({
@@ -646,7 +626,7 @@ export default function CoberturaPredictiva() {
       if (fechaCorte) p.set('fecha_corte', fechaCorte);
       if (lineaFiltro) p.set('linea', lineaFiltro);
       if (gdFiltro) p.set('gd', gdFiltro);
-      return api.get(`/cobertura-predictiva/cat/dashboard?${p}`).then(r => r.data);
+      return api.get(`/cobertura-predictiva/vivo/dashboard?${p}`).then(r => r.data);
     },
     enabled: dashboardEnabled,
     staleTime: 2 * 60 * 1000,
@@ -658,24 +638,17 @@ export default function CoberturaPredictiva() {
     queryFn: () => {
       const p = new URLSearchParams({ ciclo_codigo: cicloSeleccionado, pais_codigo: paisCodigo });
       if (gdFiltro) p.set('gd', gdFiltro);
-      return api.get(`/cobertura-predictiva/cat/cobertura-categorias?${p}`).then(r => r.data);
+      return api.get(`/cobertura-predictiva/vivo/categorias?${p}`).then(r => r.data);
     },
     enabled: dashboardEnabled,
     staleTime: 2 * 60 * 1000,
     retry: false,
   });
 
-  const { mutate: recalcular, isPending: recalculating } = useMutation({
-    mutationFn: () => {
-      const p = new URLSearchParams({ ciclo_codigo: cicloSeleccionado, pais_codigo: paisCodigo });
-      if (fechaCorte) p.set('fecha_corte', fechaCorte);
-      return api.post(`/cobertura-predictiva/cat/calcular?${p}`);
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['cob-dashboard'] });
-      qc.invalidateQueries({ queryKey: ['cob-categorias'] });
-    },
-  });
+  // Líneas disponibles para el filtro: se derivan del detalle en vivo (ya no de cat.DimCiclo).
+  const lineasDisponibles = useMemo(
+    () => [...new Set((dashData?.detalle_rms ?? []).map(r => r.linea).filter(Boolean) as string[])],
+    [dashData]);
 
   const errorMsg = dashError
     ? (dashError as any).response?.data?.detail ?? 'Error al cargar el dashboard'
@@ -756,8 +729,6 @@ export default function CoberturaPredictiva() {
           data={dashData}
           loading={dashLoading}
           error={errorMsg}
-          onRecalcular={() => recalcular()}
-          recalculating={recalculating}
           catData={catData}
           catLoading={catLoading}
         />

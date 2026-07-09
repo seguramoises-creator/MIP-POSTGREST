@@ -57,11 +57,30 @@ def _mapa_visitas(db: Session, ciclo_id: int, vm_id: int | None):
     return mapa
 
 
-def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None) -> dict:
+def _rm_ids_por(db: Session, gerente_id: int | None, linea_id: int | None) -> list[int] | None:
+    """IDs de RM (visitadores) que pertenecen al Gerente de Distrito y/o la Línea.
+    Devuelve None si no se pidió ningún filtro (no restringir)."""
+    if not gerente_id and not linea_id:
+        return None
+    q = db.query(RepresentanteMedico.id)
+    if gerente_id:
+        q = q.filter(RepresentanteMedico.gerente_id == gerente_id)
+    if linea_id:
+        q = q.filter(RepresentanteMedico.linea_id == linea_id)
+    return [r[0] for r in q.all()]
+
+
+def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
+                    gerente_id: int | None = None, linea_id: int | None = None,
+                    solo_ruptura: bool = False) -> dict:
     """Calcula panel, visitados, completos, sin visitar y desglose por categoría.
 
     Solo incluye médicos VIGENTES para el ciclo: excluye altas pendientes/rechazadas
-    y respeta el ciclo efectivo de alta/baja (aprobación del Gerente de Distrito)."""
+    y respeta el ciclo efectivo de alta/baja (aprobación del Gerente de Distrito).
+
+    Filtros: `vm_id` (un visitador) tiene prioridad; si no, `gerente_id`/`linea_id`
+    restringen a los médicos de ese distrito/línea; `solo_ruptura` deja solo los de
+    3+ ciclos sin visita."""
     from app.services.visita_aprobacion_service import ordenes_ciclo, cuenta_en_ciclo
     ordenes = ordenes_ciclo(db)
     ciclo_orden = ordenes.get(ciclo_id)
@@ -69,6 +88,12 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None) -> dict:
     mq = db.query(MedicoVisita)
     if vm_id:
         mq = mq.filter(MedicoVisita.vm_id == vm_id)
+    else:
+        rm_ids = _rm_ids_por(db, gerente_id, linea_id)
+        if rm_ids is not None:
+            mq = mq.filter(MedicoVisita.vm_id.in_(rm_ids or [-1]))  # [] => sin médicos
+    if solo_ruptura:
+        mq = mq.filter(MedicoVisita.ciclos_sin_visita >= 3)
     medicos = [m for m in mq.all() if cuenta_en_ciclo(m, ciclo_orden, ordenes)]
     mapa = _mapa_visitas(db, ciclo_id, vm_id)
 
@@ -106,19 +131,27 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None) -> dict:
     }
 
 
-def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | None = None) -> dict:
-    """Datos del Dashboard de Cobertura: gauges, desglose A/B/C, listas y ruptura."""
+def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | None = None,
+                      gerente_id: int | None = None, linea_id: int | None = None,
+                      solo_ruptura: bool = False) -> dict:
+    """Datos del Dashboard de Cobertura: gauges, desglose A/B/C, listas y ruptura.
+    Filtrable por visitador (vm_id), Gerente de Distrito (gerente_id), Línea (linea_id)
+    y solo médicos en ruptura de secuencia (solo_ruptura)."""
     ciclo_id = ciclo_id or ciclo_por_defecto(db)
     if ciclo_id is None:
         return {"ciclo_id": None, "panel": 0, "visitados": 0, "con_revisita": 0,
                 "sin_visitar": 0, "pct_cobertura": 0, "pct_completa": 0, "pct_gap": 0,
                 "categorias": {}, "sin_visita": [], "falta_revisita": [], "ruptura": []}
-    base = _cobertura_base(db, ciclo_id, vm_id)
-    # Ruptura de secuencia (≥3 ciclos sin visita)
+    base = _cobertura_base(db, ciclo_id, vm_id, gerente_id, linea_id, solo_ruptura)
+    # Ruptura de secuencia (≥3 ciclos sin visita) — respeta los mismos filtros de scope.
     rq = db.query(MedicoVisita).filter(
         MedicoVisita.activo == True, MedicoVisita.ciclos_sin_visita >= 3)  # noqa: E712
     if vm_id:
         rq = rq.filter(MedicoVisita.vm_id == vm_id)
+    else:
+        rm_ids = _rm_ids_por(db, gerente_id, linea_id)
+        if rm_ids is not None:
+            rq = rq.filter(MedicoVisita.vm_id.in_(rm_ids or [-1]))
     base["ruptura"] = [{"id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria,
                         "ciclos_sin_visita": m.ciclos_sin_visita}
                        for m in rq.order_by(MedicoVisita.ciclos_sin_visita.desc()).all()]

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="VISTA">
+  <rect width="512" height="512" rx="112" fill="#0b1e3f"/>
+  <rect width="512" height="512" rx="112" fill="url(#g)" opacity="0.35"/>
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1565c0"/>
+      <stop offset="1" stop-color="#0b1e3f"/>
+    </linearGradient>
+  </defs>
+  <!-- Barras ascendentes dentro de la lupa (contenido en zona segura ~central 80%) -->
+  <g>
+    <rect x="176" y="238" width="30" height="56" rx="8" fill="#4f9dff"/>
+    <rect x="214" y="206" width="30" height="88" rx="8" fill="#7ab6ff"/>
+    <rect x="252" y="174" width="30" height="120" rx="8" fill="#ffffff"/>
+  </g>
+  <!-- Lupa -->
+  <g fill="none" stroke="#ffffff" stroke-width="26" stroke-linecap="round">
+    <circle cx="228" cy="228" r="118"/>
+    <line x1="314" y1="314" x2="392" y2="392"/>
+  </g>
+</svg>

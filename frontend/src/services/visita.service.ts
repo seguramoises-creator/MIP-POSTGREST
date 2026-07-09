@@ -157,8 +157,13 @@ export interface RankingVM {
   metrica: string; objetivo: number | null; no_cumplen: number; total: number;
   items: { vm_id: number; nombre: string; zona: string | null; valor: number; cumple: boolean }[];
 }
-export const coberturaResumen = (vmId?: number) =>
-  api.get<CoberturaResumen>('/visita/cobertura/resumen', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export interface CoberturaFiltros { vmId?: number; gerenteId?: number; lineaId?: number; soloRuptura?: boolean; }
+export const coberturaResumen = (f: CoberturaFiltros = {}) =>
+  api.get<CoberturaResumen>('/visita/cobertura/resumen', { params: {
+    ...(f.vmId && { vm_id: f.vmId }), ...(f.gerenteId && { gerente_id: f.gerenteId }),
+    ...(f.lineaId && { linea_id: f.lineaId }), ...(f.soloRuptura && { solo_ruptura: true }),
+  } }).then(r => r.data);
+export const listarGerentesVisita = () => api.get<Catalogo[]>('/visita/gerentes').then(r => r.data);
 export const coberturaRanking = (metrica: string) =>
   api.get<RankingVM>('/visita/cobertura/ranking', { params: { metrica } }).then(r => r.data);
 
