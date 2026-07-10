@@ -9,7 +9,7 @@ import {
   CloudUpload, Settings, AdminPanelSettings, Assessment,
   SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn, Groups,
   MedicalServices, EditNote, EventNote, ReportProblem, Campaign, Paid,
-  ChevronLeft, ChevronRight, Add, Remove,
+  ChevronLeft, ChevronRight, Add, Remove, RateReview,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { Rol } from '../../types';
@@ -54,6 +54,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Cobertura Visita',    path: '/visita/cobertura', icon: <TrackChanges />,  roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
       { label: 'Ruptura / Cierre',    path: '/visita/ruptura',   icon: <ReportProblem />, roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
       { label: 'Parrilla & Muestras', path: '/visita/parrilla',  icon: <Campaign />,      roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Coaching (MORE)',     path: '/coaching-more',    icon: <RateReview />,    roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
     ],
   },
   {

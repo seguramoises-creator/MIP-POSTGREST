@@ -20,6 +20,7 @@ from app.api.v1.routers.categorizacion import router as categorizacion_router
 from app.api.v1.routers.examenes      import router as examenes_router
 from app.api.v1.routers.examenes      import intentos_router
 from app.api.v1.routers.visita        import router as visita_router
+from app.api.v1.routers.coaching_more import router as coaching_more_router
 
 api_router = APIRouter()
 
@@ -40,3 +41,4 @@ api_router.include_router(lsii_router)
 api_router.include_router(examenes_router)
 api_router.include_router(intentos_router)
 api_router.include_router(visita_router)  # Módulo de Visita Médica (esquema Visita)
+api_router.include_router(coaching_more_router)  # Coaching MORE (esquema coaching)

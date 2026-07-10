@@ -1,0 +1,514 @@
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import {
+  Box, Typography, Card, CardContent, Button, TextField, MenuItem, Stack, Chip, Alert, Grid,
+  Divider, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Radio,
+  FormControlLabel, IconButton, Tooltip,
+} from '@mui/material';
+import { RateReview, Save, CheckCircle, Lock, Visibility, Edit } from '@mui/icons-material';
+import { useAuthStore } from '../../store/auth.store';
+import { useCicloStore } from '../../store/ciclo.store';
+import {
+  cmCatalogo, cmVms, cmCrear, cmCorregir, cmListar, cmDetalle, cmKpi, cmConsolidar,
+  type CatalogoItem, type VMItem, type HojaResumen, type HojaDetalle, type CoachingKpi, type ItemCalif,
+} from '../../services/coachingMore.service';
+
+const ESCALA = [
+  { v: 1, l: 'D', label: 'Desarrollar', color: '#e53935' },
+  { v: 2, l: 'P', label: 'Perfeccionar', color: '#f59e0b' },
+  { v: 3, l: 'A', label: 'Adecuado', color: '#0057A8' },
+  { v: 4, l: 'E', label: 'Excelente', color: '#00A86B' },
+];
+const colorProm = (a: number) => (a >= 3.5 ? '#00A86B' : a >= 2.5 ? '#0057A8' : a >= 1.5 ? '#f59e0b' : '#e53935');
+const r2 = (x: number) => Math.round(x * 100) / 100;
+
+function errMsg(e: unknown, fb: string): string {
+  const d = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+  return typeof d === 'string' ? d : fb;
+}
+
+// ── Canvas de firma ───────────────────────────────────────────────────────────
+function FirmaCanvas({ valor, onConfirmar, onLimpiar }:
+  { valor: string; onConfirmar: (dataUrl: string) => void; onLimpiar: () => void }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const dib = useRef(false);
+  const [trazo, setTrazo] = useState(false);
+  const confirmada = !!valor;
+
+  const resize = useCallback(() => {
+    const c = ref.current; if (!c) return;
+    const w = c.parentElement?.getBoundingClientRect().width ?? 300;
+    c.width = w; c.height = 170;
+    const ctx = c.getContext('2d')!; ctx.strokeStyle = '#003f7a'; ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+  }, []);
+  useEffect(() => { resize(); window.addEventListener('resize', resize); return () => window.removeEventListener('resize', resize); }, [resize]);
+
+  const pos = (e: React.MouseEvent | React.TouchEvent) => {
+    const c = ref.current!; const r = c.getBoundingClientRect();
+    const p = 'touches' in e ? e.touches[0] : (e as React.MouseEvent);
+    return { x: p.clientX - r.left, y: p.clientY - r.top };
+  };
+  const start = (e: React.MouseEvent | React.TouchEvent) => { if (confirmada) return; dib.current = true; const ctx = ref.current!.getContext('2d')!; const p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); };
+  const move = (e: React.MouseEvent | React.TouchEvent) => { if (!dib.current || confirmada) return; const ctx = ref.current!.getContext('2d')!; const p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); setTrazo(true); e.preventDefault(); };
+  const stop = () => { dib.current = false; };
+  const limpiar = () => { const c = ref.current!; c.getContext('2d')!.clearRect(0, 0, c.width, c.height); setTrazo(false); onLimpiar(); };
+  const confirmar = () => { if (!trazo) return; onConfirmar(ref.current!.toDataURL('image/png')); };
+
+  return (
+    <Box>
+      <Box sx={{ border: confirmada ? '2px solid #00A86B' : '2px dashed #d1d5db', borderRadius: 2, bgcolor: '#fdfdfd', position: 'relative', touchAction: 'none' }}>
+        <canvas ref={ref} style={{ display: 'block', width: '100%', height: 170, cursor: confirmada ? 'default' : 'crosshair' }}
+          onMouseDown={start} onMouseMove={move} onMouseUp={stop} onMouseLeave={stop}
+          onTouchStart={start} onTouchMove={move} onTouchEnd={stop} />
+        {!trazo && !confirmada && (
+          <Typography sx={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#d1d5db', fontSize: 13, pointerEvents: 'none' }}>
+            firme aquí con el dedo o el mouse
+          </Typography>
+        )}
+      </Box>
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+        <Typography variant="body2" fontWeight={700} sx={{ color: confirmada ? '#00A86B' : '#f59e0b' }}>
+          {confirmada ? '✅ Firma confirmada' : '✍️ Firma pendiente'}
+        </Typography>
+        <Box sx={{ flex: 1 }} />
+        <Button size="small" onClick={limpiar}>Limpiar</Button>
+        <Button size="small" variant="outlined" disabled={confirmada || !trazo} onClick={confirmar}>Confirmar firma</Button>
+      </Stack>
+    </Box>
+  );
+}
+
+// ── Detalle solo-lectura (reusado por GD y RM) ──────────────────────────────────
+function DetalleHoja({ id, onClose }: { id: number; onClose: () => void }) {
+  const [d, setD] = useState<HojaDetalle | null>(null);
+  useEffect(() => { cmDetalle(id).then(setD).catch(() => setD(null)); }, [id]);
+  return (
+    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>Hoja de Coaching {d ? `— ${d.fecha_coaching}` : ''}</DialogTitle>
+      <DialogContent dividers>
+        {!d ? <Box sx={{ textAlign: 'center', py: 3 }}><CircularProgress /></Box> : (
+          <Stack spacing={0.5}>
+            {d.es_correccion && <Alert severity="warning">Hoja de corrección de la #{d.corrige_a_id}. Motivo: {d.motivo_correccion}</Alert>}
+            {d.tiene_correccion && <Alert severity="info">Esta hoja fue enmendada por una hoja de corrección posterior.</Alert>}
+            <Row k="Representante" v={d.rm_nombre ?? '—'} />
+            <Row k="Gerente de Distrito" v={d.gd_nombre ?? '—'} />
+            <Row k="Médicos vistos" v={String(d.medicos_vistos)} />
+            <Divider sx={{ my: 1 }} />
+            {d.secciones.map((s) => (
+              <Row key={s.seccion} k={s.seccion} v={s.promedio != null ? s.promedio.toFixed(2) : '—'} />
+            ))}
+            <Row k="Evaluación promedio general" v={d.evaluacion_promedio.toFixed(2)} bold />
+            <Divider sx={{ my: 1 }} />
+            <Row k="Fortalezas" v={d.fortalezas} />
+            <Row k="Áreas a perfeccionar" v={d.areas_perfeccionar} />
+            <Row k="¿Qué harás?" v={d.plan_que_haras} />
+            <Row k="Fecha de seguimiento" v={d.plan_fecha_seguimiento} />
+            <Row k="Acuerdo" v={d.rm_acuerdo === 'de_acuerdo' ? 'De acuerdo' : 'No de acuerdo'} />
+            {d.rm_justificacion_desacuerdo && (
+              <Box sx={{ bgcolor: '#fdecea', borderLeft: '4px solid #e53935', borderRadius: 1, p: 1.2, mt: 0.5 }}>
+                <Typography variant="body2"><b>Justificación:</b> {d.rm_justificacion_desacuerdo}</Typography>
+              </Box>
+            )}
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>Firma capturada:</Typography>
+            {d.rm_firma_imagen && <Box component="img" src={d.rm_firma_imagen} alt="firma" sx={{ maxWidth: '100%', border: '1px solid #e5e7eb', borderRadius: 1, bgcolor: '#fff' }} />}
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions><Button onClick={onClose}>Cerrar</Button></DialogActions>
+    </Dialog>
+  );
+}
+function Row({ k, v, bold }: { k: string; v: string; bold?: boolean }) {
+  return (
+    <Stack direction="row" justifyContent="space-between" sx={{ py: 0.5, borderBottom: '1px solid #f3f4f6' }}>
+      <Typography variant="body2" color="text.secondary">{k}</Typography>
+      <Typography variant="body2" fontWeight={bold ? 800 : 700} sx={{ color: bold ? '#0057A8' : undefined, textAlign: 'right', maxWidth: '60%' }}>{v}</Typography>
+    </Stack>
+  );
+}
+
+// ── Página ──────────────────────────────────────────────────────────────────
+export default function CoachingMore() {
+  const rol = useAuthStore((s) => s.rol);
+  const esVM = rol === 'REPRESENTANTE_MEDICO';
+  const puedeConsolidar = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD';
+  const cicloId = useCicloStore((s) => s.cicloId);
+  const paisCodigo = useCicloStore((s) => s.paisCodigo);
+  const cicloAbiertoId = useCicloStore((s) => s.cicloAbiertoId);
+  const [consolidando, setConsolidando] = useState<string | null>(null);
+
+  const [catalogo, setCatalogo] = useState<CatalogoItem[]>([]);
+  const [vms, setVms] = useState<VMItem[]>([]);
+  const [hojas, setHojas] = useState<HojaResumen[]>([]);
+  const [kpi, setKpi] = useState<CoachingKpi | null>(null);
+  const [verId, setVerId] = useState<number | null>(null);
+  const [cargando, setCargando] = useState(true);
+
+  // Estado del formulario (solo GD)
+  const [rmId, setRmId] = useState<number | ''>('');
+  const [medicos, setMedicos] = useState('');
+  const [ratings, setRatings] = useState<Record<number, number>>({});
+  const [fortalezas, setFortalezas] = useState('');
+  const [areas, setAreas] = useState('');
+  const [planQue, setPlanQue] = useState('');
+  const [planComo, setPlanComo] = useState('');
+  const [planVeras, setPlanVeras] = useState('');
+  const [fechaSeg, setFechaSeg] = useState('');
+  const [acuerdo, setAcuerdo] = useState<'de_acuerdo' | 'no_de_acuerdo' | ''>('');
+  const [justif, setJustif] = useState('');
+  const [firma, setFirma] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
+  const [okDialog, setOkDialog] = useState(false);
+  // Corrección: id de la hoja que se está enmendando + motivo.
+  const [corrigiendoId, setCorrigiendoId] = useState<number | null>(null);
+  const [motivoCorreccion, setMotivoCorreccion] = useState('');
+
+  const recargar = useCallback(() => {
+    cmListar().then(setHojas).catch(() => setHojas([]));
+    if (!esVM) cmKpi(cicloId || undefined).then(setKpi).catch(() => setKpi(null));
+  }, [esVM, cicloId]);
+
+  useEffect(() => {
+    setCargando(true);
+    Promise.all([cmCatalogo().catch(() => []), esVM ? Promise.resolve([]) : cmVms().catch(() => [])])
+      .then(([cat, v]) => { setCatalogo(cat); setVms(v as VMItem[]); })
+      .finally(() => setCargando(false));
+    recargar();
+  }, [esVM, recargar]);
+
+  const secciones = useMemo(() => {
+    const map = new Map<string, CatalogoItem[]>();
+    [...catalogo].sort((a, b) => a.orden_seccion - b.orden_seccion || a.orden_item - b.orden_item)
+      .forEach((it) => { if (!map.has(it.seccion)) map.set(it.seccion, []); map.get(it.seccion)!.push(it); });
+    return Array.from(map.entries());
+  }, [catalogo]);
+
+  const secAvg = (items: CatalogoItem[]) => {
+    const vals = items.map((i) => ratings[i.id]).filter((v) => v != null) as number[];
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
+  const todosCalificados = catalogo.length > 0 && catalogo.every((i) => ratings[i.id] != null);
+  const general = useMemo(() => {
+    if (!todosCalificados) return null;
+    const avgs = secciones.map(([, items]) => secAvg(items)!).filter((v) => v != null) as number[];
+    return avgs.length ? r2(avgs.reduce((a, b) => a + b, 0) / avgs.length) : null;
+  }, [ratings, secciones, todosCalificados]);
+
+  const resetForm = () => {
+    setRmId(''); setMedicos(''); setRatings({}); setFortalezas(''); setAreas('');
+    setPlanQue(''); setPlanComo(''); setPlanVeras(''); setFechaSeg('');
+    setAcuerdo(''); setJustif(''); setFirma('');
+    setCorrigiendoId(null); setMotivoCorreccion('');
+  };
+
+  // Corregir: precarga la hoja original en el formulario (la firma se recaptura).
+  const iniciarCorreccion = async (id: number) => {
+    setMsg(null);
+    try {
+      const d = await cmDetalle(id);
+      setRmId(d.rm_id); setMedicos(String(d.medicos_vistos));
+      const textoAId = new Map(catalogo.map((c) => [c.texto, c.id]));
+      const nuevos: Record<number, number> = {};
+      d.secciones.forEach((s) => s.items.forEach((it) => {
+        const cid = textoAId.get(it.texto);
+        if (cid != null) nuevos[cid] = it.calificacion;
+      }));
+      setRatings(nuevos);
+      setFortalezas(d.fortalezas); setAreas(d.areas_perfeccionar);
+      setPlanQue(d.plan_que_haras); setPlanComo(d.plan_como_haras); setPlanVeras(d.plan_como_veras);
+      setFechaSeg(d.plan_fecha_seguimiento);
+      setAcuerdo(d.rm_acuerdo === 'no_de_acuerdo' ? 'no_de_acuerdo' : 'de_acuerdo');
+      setJustif(d.rm_justificacion_desacuerdo || '');
+      setFirma('');  // el RM debe volver a firmar la hoja corregida
+      setCorrigiendoId(id); setMotivoCorreccion('');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      setMsg({ tipo: 'error', texto: 'No se pudo cargar la hoja a corregir.' });
+    }
+  };
+
+  const guardar = async () => {
+    setMsg(null);
+    if (!rmId) { setMsg({ tipo: 'error', texto: 'Selecciona el representante (RM).' }); return; }
+    if (corrigiendoId && !motivoCorreccion.trim()) {
+      setMsg({ tipo: 'error', texto: 'Indica el motivo de la corrección.' }); return;
+    }
+    const items: ItemCalif[] = catalogo.filter((i) => ratings[i.id] != null)
+      .map((i) => ({ item_catalogo_id: i.id, seccion: i.seccion, item_texto: i.texto, calificacion: ratings[i.id] }));
+    const payload = {
+      rm_id: Number(rmId), medicos_vistos: Number(medicos || 0), items,
+      fortalezas, areas_perfeccionar: areas,
+      plan_que_haras: planQue, plan_como_haras: planComo, plan_como_veras: planVeras,
+      plan_fecha_seguimiento: fechaSeg, rm_acuerdo: acuerdo,
+      rm_justificacion_desacuerdo: acuerdo === 'no_de_acuerdo' ? justif : null,
+      rm_firma_imagen: firma,
+    };
+    setGuardando(true);
+    try {
+      if (corrigiendoId) await cmCorregir(corrigiendoId, { ...payload, motivo_correccion: motivoCorreccion });
+      else await cmCrear(payload);
+      setOkDialog(true); resetForm(); recargar();
+    } catch (e) {
+      setMsg({ tipo: 'error', texto: errMsg(e, 'No se pudo guardar la hoja.') });
+    } finally { setGuardando(false); }
+  };
+
+  const consolidar = async (destino: 'coaching' | 'indicador') => {
+    if (!cicloAbiertoId || !paisCodigo) { setMsg({ tipo: 'error', texto: 'Falta ciclo abierto o país en el contexto.' }); return; }
+    setConsolidando(destino); setMsg(null);
+    try {
+      const r = await cmConsolidar(destino, cicloAbiertoId, paisCodigo);
+      setMsg({ tipo: 'success', texto: `Consolidado a ${r.destino}: ${r.rms_consolidados} RM(s). El Score del ciclo se recalculó.` });
+      recargar();
+    } catch (e) {
+      setMsg({ tipo: 'error', texto: errMsg(e, 'No se pudo consolidar.') });
+    } finally { setConsolidando(null); }
+  };
+
+  if (cargando) return <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /></Box>;
+
+  // ── Vista RM: solo lectura ──
+  if (esVM) {
+    return (
+      <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+          <RateReview color="primary" /><Typography variant="h5" fontWeight={700}>Mis Hojas de Coaching</Typography>
+        </Stack>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Registradas por tu Gerente de Distrito — solo lectura, nunca editables.
+        </Typography>
+        <ListaHojas hojas={hojas} onVer={setVerId} />
+        {verId != null && <DetalleHoja id={verId} onClose={() => setVerId(null)} />}
+      </Box>
+    );
+  }
+
+  // ── Vista GD/gerencia ──
+  return (
+    <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+        <RateReview color="primary" /><Typography variant="h5" fontWeight={700}>Coaching (Modelo MORE)</Typography>
+      </Stack>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Hoja de acompañamiento GD→RM. Se completa al final del día de campo y queda inmutable al guardar.
+      </Typography>
+
+      {kpi && (
+        <Grid container spacing={2} sx={{ mb: 2 }}>
+          <KpiCard label="Hojas completadas (ciclo)" valor={String(kpi.hojas_completadas)} />
+          <KpiCard label="RMs con coaching" valor={`${kpi.rms_con_coaching} / ${kpi.total_rms}`} />
+          <KpiCard label="Avance de la meta" valor={`${kpi.pct_avance}%`} color="#00A86B" />
+        </Grid>
+      )}
+
+      {puedeConsolidar && (
+        <Card variant="outlined" sx={{ mb: 2, bgcolor: '#f5f8ff', borderColor: '#bbdefb' }}><CardContent sx={{ py: 1.5 }}>
+          <Typography variant="subtitle2" fontWeight={700}>Consolidar al KPI Coaching del Score</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            Vuelca los promedios MORE del <b>ciclo abierto</b> hacia el flujo que alimenta el Score Integral
+            (idempotente; recalcula el ciclo). Úsalo cuando el cliente decida dejar su Excel de coaching.
+          </Typography>
+          <Stack direction="row" spacing={1.5} flexWrap="wrap">
+            <Button size="small" variant="outlined" disabled={!!consolidando} onClick={() => consolidar('coaching')}>
+              {consolidando === 'coaching' ? 'Consolidando…' : 'Consolidar a Coaching (FACT_Coaching)'}
+            </Button>
+            <Button size="small" variant="outlined" disabled={!!consolidando} onClick={() => consolidar('indicador')}>
+              {consolidando === 'indicador' ? 'Consolidando…' : 'Consolidar a EVAL_COACHING'}
+            </Button>
+          </Stack>
+        </CardContent></Card>
+      )}
+
+      {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
+
+      {corrigiendoId && (
+        <>
+          <Alert severity="warning" sx={{ mb: 1.5 }}
+                 action={<Button color="inherit" size="small" onClick={resetForm}>Cancelar corrección</Button>}>
+            Corrigiendo la hoja <b>#{corrigiendoId}</b>. Se creará una <b>hoja de corrección</b> nueva
+            (la original queda intacta e inmutable). El representante debe <b>volver a firmar</b>.
+          </Alert>
+          <TextField fullWidth size="small" label="Motivo de la corrección *" value={motivoCorreccion}
+                     onChange={(e) => setMotivoCorreccion(e.target.value)} sx={{ mb: 2 }}
+                     placeholder="Ej: se seleccionó el representante equivocado" />
+        </>
+      )}
+
+      {/* Encabezado */}
+      <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>Encabezado del Coaching</Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={4}>
+            <TextField fullWidth size="small" label="Fecha del coaching" value={new Date().toISOString().slice(0, 10)} disabled
+                       helperText="La fija el servidor — no editable" />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField select fullWidth size="small" label="Representante (RM)" value={rmId}
+                       onChange={(e) => setRmId(e.target.value === '' ? '' : Number(e.target.value))}>
+              <MenuItem value="">Seleccionar…</MenuItem>
+              {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField fullWidth size="small" type="number" label="Médicos vistos ese día" value={medicos}
+                       onChange={(e) => setMedicos(e.target.value)} inputProps={{ min: 0 }} />
+          </Grid>
+        </Grid>
+      </CardContent></Card>
+
+      {/* Escala */}
+      <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+          {ESCALA.map((e) => (
+            <Chip key={e.v} label={`${e.v} · ${e.l} — ${e.label}`} sx={{ bgcolor: e.color, color: '#fff', fontWeight: 700 }} />
+          ))}
+        </Stack>
+      </CardContent></Card>
+
+      {/* Secciones MORE */}
+      {secciones.map(([sec, items]) => {
+        const avg = secAvg(items);
+        return (
+          <Card variant="outlined" sx={{ mb: 2 }} key={sec}><CardContent>
+            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+              <Typography variant="subtitle1" fontWeight={700}>{sec}</Typography>
+              <Chip size="small" label={avg != null ? avg.toFixed(2) : '— sin calificar —'}
+                    sx={{ bgcolor: avg != null ? colorProm(avg) : '#f3f4f6', color: avg != null ? '#fff' : '#6b7280', fontWeight: 800 }} />
+            </Stack>
+            {items.map((it) => (
+              <Stack key={it.id} direction="row" alignItems="center" spacing={1} sx={{ py: 0.75, borderBottom: '1px solid #f3f4f6' }}>
+                <Typography variant="body2" sx={{ flex: 1 }}>{it.texto}</Typography>
+                <Stack direction="row" spacing={0.5}>
+                  {ESCALA.map((e) => {
+                    const sel = ratings[it.id] === e.v;
+                    return (
+                      <Button key={e.v} size="small" onClick={() => setRatings((r) => ({ ...r, [it.id]: e.v }))}
+                              sx={{ minWidth: 36, px: 0, fontWeight: 800,
+                                    bgcolor: sel ? e.color : '#fff', color: sel ? '#fff' : '#9ca3af',
+                                    border: `1.5px solid ${sel ? e.color : '#e5e7eb'}`, '&:hover': { borderColor: e.color } }}>
+                        {e.l}
+                      </Button>
+                    );
+                  })}
+                </Stack>
+              </Stack>
+            ))}
+          </CardContent></Card>
+        );
+      })}
+
+      {/* Promedio general */}
+      <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
+        <Stack direction="row" spacing={3} alignItems="center">
+          <Box sx={{ width: 110, height: 110, borderRadius: '50%', border: `7px solid ${general != null ? colorProm(general) : '#d1d5db'}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <Typography variant="h4" fontWeight={800} color="primary.main">{general != null ? general.toFixed(2) : '—'}</Typography>
+          </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 420 }}>
+            Evaluación promedio general = promedio simple de los 7 promedios de sección.
+            {general == null && ' Faltan ítems por calificar.'}
+          </Typography>
+        </Stack>
+      </CardContent></Card>
+
+      {/* Plan de desarrollo */}
+      <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>Plan de Desarrollo</Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} sm={6}><TextField fullWidth size="small" multiline minRows={2} label="Fortalezas *" value={fortalezas} onChange={(e) => setFortalezas(e.target.value)} /></Grid>
+          <Grid item xs={12} sm={6}><TextField fullWidth size="small" multiline minRows={2} label="Áreas a perfeccionar *" value={areas} onChange={(e) => setAreas(e.target.value)} /></Grid>
+        </Grid>
+      </CardContent></Card>
+
+      {/* Plan de acción */}
+      <Card variant="outlined" sx={{ mb: 2, borderColor: 'primary.main' }}><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>Plan de Acción — obligatorio</Typography>
+        <Stack spacing={2}>
+          <TextField fullWidth size="small" multiline label="¿Qué harás? *" value={planQue} onChange={(e) => setPlanQue(e.target.value)} />
+          <TextField fullWidth size="small" multiline label="¿Cómo lo harás? *" value={planComo} onChange={(e) => setPlanComo(e.target.value)} />
+          <TextField fullWidth size="small" multiline label="¿Cómo te darás cuenta que estás perfeccionando la habilidad? *" value={planVeras} onChange={(e) => setPlanVeras(e.target.value)} />
+          <TextField size="small" type="date" label="Fecha de seguimiento *" InputLabelProps={{ shrink: true }} sx={{ maxWidth: 240 }} value={fechaSeg} onChange={(e) => setFechaSeg(e.target.value)} />
+        </Stack>
+      </CardContent></Card>
+
+      {/* Acuerdo + firma */}
+      <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
+        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Acuerdo del Representante</Typography>
+        <Stack spacing={1}>
+          <FormControlLabel control={<Radio checked={acuerdo === 'de_acuerdo'} onChange={() => setAcuerdo('de_acuerdo')} />} label="Estoy de acuerdo con esta evaluación" />
+          <FormControlLabel control={<Radio checked={acuerdo === 'no_de_acuerdo'} onChange={() => setAcuerdo('no_de_acuerdo')} />} label="No estoy de acuerdo con esta evaluación" />
+          {acuerdo === 'no_de_acuerdo' && (
+            <TextField fullWidth size="small" multiline label="Justificación del desacuerdo *" value={justif} onChange={(e) => setJustif(e.target.value)}
+                       helperText="Obligatorio si eliges No estoy de acuerdo." />
+          )}
+        </Stack>
+        <Divider sx={{ my: 2 }} />
+        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Firma del Representante *</Typography>
+        <FirmaCanvas valor={firma} onConfirmar={setFirma} onLimpiar={() => setFirma('')} />
+      </CardContent></Card>
+
+      <Button fullWidth size="large" variant="contained" color={corrigiendoId ? 'warning' : 'primary'}
+              startIcon={<Save />} disabled={guardando} onClick={guardar} sx={{ py: 1.5 }}>
+        {guardando ? 'Guardando…'
+          : corrigiendoId ? `Guardar corrección de la hoja #${corrigiendoId}`
+          : 'Guardar Hoja de Coaching (bloquea la edición para siempre)'}
+      </Button>
+
+      {/* Historial del equipo */}
+      <Typography variant="subtitle1" fontWeight={700} sx={{ mt: 4, mb: 1 }}>Historial de mi equipo</Typography>
+      <ListaHojas hojas={hojas} onVer={setVerId} onCorregir={iniciarCorreccion} />
+
+      {verId != null && <DetalleHoja id={verId} onClose={() => setVerId(null)} />}
+
+      <Dialog open={okDialog} onClose={() => setOkDialog(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><CheckCircle color="success" /> Hoja guardada</DialogTitle>
+        <DialogContent><Typography variant="body2">Se envió una copia en PDF al correo corporativo del representante y el KPI Coaching se actualizó. Esta hoja ya no podrá modificarse por ningún rol.</Typography></DialogContent>
+        <DialogActions><Button variant="contained" onClick={() => setOkDialog(false)}>Entendido</Button></DialogActions>
+      </Dialog>
+    </Box>
+  );
+}
+
+function KpiCard({ label, valor, color }: { label: string; valor: string; color?: string }) {
+  return (
+    <Grid item xs={12} sm={4}>
+      <Card variant="outlined"><CardContent sx={{ py: 1.5 }}>
+        <Typography variant="caption" color="text.secondary" fontWeight={600}>{label}</Typography>
+        <Typography variant="h5" fontWeight={800} sx={{ color: color ?? 'primary.main' }}>{valor}</Typography>
+      </CardContent></Card>
+    </Grid>
+  );
+}
+
+function ListaHojas({ hojas, onVer, onCorregir }:
+  { hojas: HojaResumen[]; onVer: (id: number) => void; onCorregir?: (id: number) => void }) {
+  if (!hojas.length) return <Alert severity="info">No hay hojas de coaching todavía.</Alert>;
+  return (
+    <Stack spacing={1}>
+      {hojas.map((h) => (
+        <Card key={h.id} variant="outlined"><CardContent sx={{ py: 1.25, '&:last-child': { pb: 1.25 } }}>
+          <Stack direction="row" alignItems="center" spacing={1.5} flexWrap="wrap">
+            <Lock fontSize="small" sx={{ color: '#00A86B' }} />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Typography variant="body2" fontWeight={700} noWrap>
+                {h.fecha_coaching} · {h.rm_nombre} {h.gd_nombre ? `· ${h.gd_nombre}` : ''}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">Promedio {h.evaluacion_promedio.toFixed(2)}</Typography>
+            </Box>
+            {h.es_correccion && <Chip size="small" color="warning" label="Corrección" />}
+            {h.tiene_correccion && <Chip size="small" variant="outlined" label="Enmendada" />}
+            <Chip size="small" label={h.rm_acuerdo === 'de_acuerdo' ? 'De acuerdo' : 'No de acuerdo'}
+                  color={h.rm_acuerdo === 'de_acuerdo' ? 'success' : 'error'} variant="outlined" />
+            <Tooltip title="Ver hoja">
+              <IconButton size="small" color="primary" onClick={() => onVer(h.id)}><Visibility fontSize="small" /></IconButton>
+            </Tooltip>
+            {onCorregir && !h.tiene_correccion && (
+              <Tooltip title="Crear hoja de corrección">
+                <IconButton size="small" color="warning" onClick={() => onCorregir(h.id)}><Edit fontSize="small" /></IconButton>
+              </Tooltip>
+            )}
+          </Stack>
+        </CardContent></Card>
+      ))}
+    </Stack>
+  );
+}

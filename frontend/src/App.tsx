@@ -24,6 +24,7 @@ function rutaInicial(rol: Rol | null): string {
 import Productividad from './pages/productividad/Productividad';
 import CoberturaPredictiva from './pages/cobertura-predictiva/CoberturaPredictiva';
 import Coaching from './pages/coaching/Coaching';
+import CoachingMore from './pages/coaching-more/CoachingMore';
 import Categorizacion from './pages/categorizacion/Categorizacion';
 import Ranking from './pages/ranking/Ranking';
 import Reconocimiento from './pages/reconocimiento/Reconocimiento';
@@ -106,6 +107,7 @@ function AppRoutes() {
         <Route path="productividad" element={<Productividad />} />
         <Route path="cobertura-predictiva" element={<CoberturaPredictiva />} />
         <Route path="coaching" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO']}><Coaching /></ProtectedRoute>} />
+        <Route path="coaching-more" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><CoachingMore /></ProtectedRoute>} />
         <Route path="categorizacion" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','CONSULTA']}><Categorizacion /></ProtectedRoute>} />
         <Route path="ranking" element={<Ranking />} />
         <Route path="reconocimiento" element={<Reconocimiento />} />
