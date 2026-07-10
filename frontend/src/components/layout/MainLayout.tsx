@@ -4,9 +4,10 @@ import {
   Tooltip, Avatar, Menu, MenuItem, Divider, Chip,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Alert, Stack,
 } from '@mui/material';
-import { Logout, AccountCircle, LockReset, SupervisorAccount, Menu as MenuIcon } from '@mui/icons-material';
+import { Logout, AccountCircle, LockReset, SupervisorAccount, Menu as MenuIcon, InstallMobile } from '@mui/icons-material';
 import { useState, useEffect } from 'react';
 import Sidebar, { DRAWER_WIDTH } from './Sidebar';
+import InstalarAppDialog from '../InstalarAppDialog';
 import { useAuthStore } from '../../store/auth.store';
 import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
@@ -34,6 +35,7 @@ export default function MainLayout() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [gd, setGd] = useState<MiGerente | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);   // menú lateral en móvil (overlay)
+  const [instalarOpen, setInstalarOpen] = useState(false); // modal "Instalar app" (PWA)
 
   // El representante ve su Gerente de Distrito de la línea arriba a la derecha.
   useEffect(() => {
@@ -125,6 +127,11 @@ export default function MainLayout() {
                   {nombreCompleto}
                 </Typography>
               )}
+              <Tooltip title="Instalar app (iOS / Android)">
+                <IconButton onClick={() => setInstalarOpen(true)} size="small" color="primary" aria-label="Instalar app">
+                  <InstallMobile />
+                </IconButton>
+              </Tooltip>
               <Tooltip title="Opciones de cuenta">
                 <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small">
                   <Avatar sx={{ width: 34, height: 34, bgcolor: 'primary.main', fontSize: '0.9rem' }}>
@@ -141,6 +148,9 @@ export default function MainLayout() {
             <AccountCircle sx={{ mr: 1 }} /> {nombreCompleto}
           </MenuItem>
           <Divider />
+          <MenuItem onClick={() => { setAnchorEl(null); setInstalarOpen(true); }}>
+            <InstallMobile sx={{ mr: 1 }} /> Instalar app
+          </MenuItem>
           <MenuItem onClick={abrirCambioPassword}>
             <LockReset sx={{ mr: 1 }} /> Cambiar contraseña
           </MenuItem>
@@ -148,6 +158,8 @@ export default function MainLayout() {
             <Logout sx={{ mr: 1 }} /> Cerrar sesión
           </MenuItem>
         </Menu>
+
+        <InstalarAppDialog open={instalarOpen} onClose={() => setInstalarOpen(false)} />
 
         <Dialog open={pwOpen} onClose={() => setPwOpen(false)} maxWidth="xs" fullWidth>
           <DialogTitle>Cambiar contraseña</DialogTitle>
