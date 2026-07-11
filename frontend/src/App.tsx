@@ -108,7 +108,7 @@ function AppRoutes() {
         <Route path="cobertura-predictiva" element={<CoberturaPredictiva />} />
         <Route path="coaching" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO']}><Coaching /></ProtectedRoute>} />
         <Route path="coaching-more" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><CoachingMore /></ProtectedRoute>} />
-        <Route path="categorizacion" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','CONSULTA']}><Categorizacion /></ProtectedRoute>} />
+        <Route path="categorizacion" element={<ProtectedRoute allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_MARCA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO','CONSULTA']}><Categorizacion /></ProtectedRoute>} />
         <Route path="ranking" element={<Ranking />} />
         <Route path="reconocimiento" element={<Reconocimiento />} />
         <Route path="lsii" element={<ProtectedRoute allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','GERENTE_MARCA','CONSULTA']}><Lsii /></ProtectedRoute>} />

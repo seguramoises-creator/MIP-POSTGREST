@@ -1739,6 +1739,13 @@ export default function Admin() {
       if (e.detail === 'import') setTab(TAB_IMPORT_INDEX);
     };
     window.addEventListener('admin-navigate-tab', handler as EventListener);
+    // Deep-link opcional: /admin?tab=<label DIM> abre esa pestaña (ej. ?tab=productos,
+    // usado por el aviso "línea sin productos" de la Parrilla).
+    const qtab = new URLSearchParams(window.location.search).get('tab');
+    if (qtab) {
+      const idx = TABS_DIM.findIndex((t) => t.label.toLowerCase() === qtab.toLowerCase());
+      if (idx >= 0) setTab(idx);
+    }
     return () => window.removeEventListener('admin-navigate-tab', handler as EventListener);
   }, []);
 

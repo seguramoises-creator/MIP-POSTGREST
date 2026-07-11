@@ -123,6 +123,29 @@ export default function CostoRoiVisita() {
 
   const pa = full.plan_anual; const r = full.resumen; const im = full.impacto;
 
+  // Requerimiento Mallén (Item 10): impacto financiero recalculado EN VIVO al mover el slider
+  // de coeficiente (o editar PSP). Los médicos sin visitar vienen de la COBERTURA (im.categorias)
+  // y NO son editables. venta_riesgo = médicos_sin_visitar × PSP × coeficiente.
+  const impLive = (() => {
+    const cats = (['A', 'B', 'C'] as const).map((C) => {
+      const msv = im.categorias.find((x) => x.categoria === C)?.medicos_sin_visitar ?? 0;
+      const psp = Number(est?.[`psp_${C.toLowerCase()}` as keyof CostoEstructuraInput] ?? 0);
+      return {
+        categoria: C, medicos_sin_visitar: msv, psp,
+        venta_riesgo_bajo: msv * psp * (est?.coef_conservador ?? 0),
+        venta_riesgo_alto: msv * psp * (est?.coef_optimista ?? 0),
+      };
+    });
+    const bajo = cats.reduce((s, c) => s + c.venta_riesgo_bajo, 0);
+    const alto = cats.reduce((s, c) => s + c.venta_riesgo_alto, 0);
+    const totalMsv = cats.reduce((s, c) => s + c.medicos_sin_visitar, 0);
+    const hc = est?.visitas_ciclo_vm ? totalMsv / est.visitas_ciclo_vm : 0;
+    return {
+      categorias: cats, venta_riesgo_bajo: bajo, venta_riesgo_alto: alto,
+      total_medicos_sin_visitar: totalMsv, headcount_equivalente: Math.round(hc * 100) / 100,
+    };
+  })();
+
   return (
     <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
       <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1} sx={{ mb: 1 }}>
@@ -202,7 +225,7 @@ export default function CostoRoiVisita() {
               <Typography variant="caption" color="text.secondary">Ingresado por Gerencia al cierre del ciclo · Sin ponderación por VM</Typography>
             </Stack>
             <Table size="small"><TableHead><TableRow>
-              <TableCell>#</TableCell><TableCell>Producto</TableCell><TableCell align="center">Pool Ventas</TableCell><TableCell align="center">Visitas detalladas</TableCell><TableCell align="right">Retorno x visita</TableCell>
+              <TableCell>#</TableCell><TableCell>Producto</TableCell><TableCell align="center">Pool Ventas</TableCell><TableCell align="center">PSP visitas</TableCell><TableCell align="right">Producto contacto</TableCell>
             </TableRow></TableHead><TableBody>
               {prods.map((p, i) => (
                 <TableRow key={p.producto}>
@@ -266,7 +289,7 @@ export default function CostoRoiVisita() {
               <Grid item xs={12} md={4}><Card sx={{ bgcolor: 'rgba(46,167,106,0.08)', border: '1px solid', borderColor: 'success.light' }}><CardContent sx={{ textAlign: 'center' }}><Typography variant="h4" fontWeight={800}>{r.roi_promedio ?? '—'}x</Typography><Typography variant="caption" color="text.secondary">ROI PROMEDIO DE LA FUERZA DE VENTA</Typography><Typography variant="caption" display="block" color={(r.roi_promedio ?? 0) >= 2 ? 'success.main' : 'warning.main'}>{(r.roi_promedio ?? 0) >= 2 ? '✅ Excelente · Retorno superior a 2x' : 'Retorno moderado'}</Typography></CardContent></Card></Grid>
             </Grid>
             <Table size="small"><TableHead><TableRow>
-              <TableCell>Producto</TableCell><TableCell align="right">Costo/visita</TableCell><TableCell align="right">Retorno/visita</TableCell><TableCell align="center">ROI</TableCell><TableCell align="center">Estado</TableCell>
+              <TableCell>Producto</TableCell><TableCell align="right">Costo/visita</TableCell><TableCell align="right">Producto esperado</TableCell><TableCell align="center">ROI</TableCell><TableCell align="center">Estado</TableCell>
             </TableRow></TableHead><TableBody>
               {r.productos.map((x) => (
                 <TableRow key={x.producto}>
@@ -285,14 +308,19 @@ export default function CostoRoiVisita() {
         <Grid item xs={12}>
           <Card variant="outlined" sx={{ borderColor: 'secondary.light' }}><CardContent>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}><WarningAmber fontSize="small" color="secondary" /><Typography variant="subtitle1" fontWeight={700}>Impacto Financiero de la Cobertura — Venta en Riesgo & Headcount</Typography></Stack>
-            <Typography variant="caption" color="text.secondary">Convierte la brecha de cobertura en impacto de venta usando la Productividad Esperada por Contacto (PSP) y un coeficiente de atribución (visita→venta).</Typography>
+            <Typography variant="caption" color="text.secondary">Los médicos sin visitar salen de la Cobertura (no editables); el impacto se recalcula al instante al mover el coeficiente de atribución (visita→venta) o el PSP.</Typography>
             <Grid container spacing={2} sx={{ mt: 0.5 }}>
               <Grid item xs={12} md={6}>
                 <Table size="small"><TableHead><TableRow><TableCell>Cat.</TableCell><TableCell align="center">Médicos sin visitar</TableCell><TableCell align="center">PSP / contacto</TableCell></TableRow></TableHead><TableBody>
                   {(['a', 'b', 'c'] as const).map((c) => (
                     <TableRow key={c}>
                       <TableCell><Chip size="small" label={c.toUpperCase()} color={c === 'a' ? 'success' : c === 'b' ? 'primary' : 'default'} /></TableCell>
-                      <TableCell align="center"><NumField value={Number(est[`med_sin_visitar_${c}` as keyof CostoEstructuraInput] ?? 0)} width={100} disabled={cerrado} onNum={(n) => setE(`med_sin_visitar_${c}` as keyof CostoEstructuraInput, n)} /></TableCell>
+                      {/* Item 10: no editable — viene de la Cobertura (Panel/Registro). */}
+                      <TableCell align="center">
+                        <Typography variant="body2" fontWeight={700}>
+                          {im.categorias.find((x) => x.categoria === c.toUpperCase())?.medicos_sin_visitar ?? 0}
+                        </Typography>
+                      </TableCell>
                       <TableCell align="center"><NumField value={Number(est[`psp_${c}` as keyof CostoEstructuraInput] ?? 0)} width={120} disabled={cerrado} onNum={(n) => setE(`psp_${c}` as keyof CostoEstructuraInput, n)} /></TableCell>
                     </TableRow>
                   ))}
@@ -309,12 +337,12 @@ export default function CostoRoiVisita() {
               </Grid>
             </Grid>
             <Grid container spacing={2} sx={{ mt: 0.5 }}>
-              <Grid item xs={12} md={4}><Card sx={{ bgcolor: 'rgba(123,90,248,0.08)', border: '1px solid', borderColor: 'secondary.light' }}><CardContent sx={{ textAlign: 'center' }}><Typography variant="h5" fontWeight={800} color="secondary.main">{money(im.venta_riesgo_bajo)} – {money(im.venta_riesgo_alto)}</Typography><Typography variant="caption" color="text.secondary">VENTA EN RIESGO POR CICLO (EQUIPO)</Typography></CardContent></Card></Grid>
-              <Grid item xs={12} md={4}><Card sx={{ bgcolor: 'rgba(123,90,248,0.08)', border: '1px solid', borderColor: 'secondary.light' }}><CardContent sx={{ textAlign: 'center' }}><Typography variant="h5" fontWeight={800} color="secondary.main">{im.headcount_equivalente}</Typography><Typography variant="caption" color="text.secondary">HEADCOUNT EQUIVALENTE</Typography></CardContent></Card></Grid>
-              <Grid item xs={12} md={4}><Card sx={{ bgcolor: 'rgba(123,90,248,0.08)', border: '1px solid', borderColor: 'secondary.light' }}><CardContent sx={{ textAlign: 'center' }}><Typography variant="h5" fontWeight={800} color="secondary.main">{im.total_medicos_sin_visitar}</Typography><Typography variant="caption" color="text.secondary">MÉDICOS SIN VISITAR (EQUIPO)</Typography></CardContent></Card></Grid>
+              <Grid item xs={12} md={4}><Card sx={{ bgcolor: 'rgba(123,90,248,0.08)', border: '1px solid', borderColor: 'secondary.light' }}><CardContent sx={{ textAlign: 'center' }}><Typography variant="h5" fontWeight={800} color="secondary.main">{money(impLive.venta_riesgo_bajo)} – {money(impLive.venta_riesgo_alto)}</Typography><Typography variant="caption" color="text.secondary">VENTA EN RIESGO POR CICLO (EQUIPO)</Typography></CardContent></Card></Grid>
+              <Grid item xs={12} md={4}><Card sx={{ bgcolor: 'rgba(123,90,248,0.08)', border: '1px solid', borderColor: 'secondary.light' }}><CardContent sx={{ textAlign: 'center' }}><Typography variant="h5" fontWeight={800} color="secondary.main">{impLive.headcount_equivalente}</Typography><Typography variant="caption" color="text.secondary">HEADCOUNT EQUIVALENTE</Typography></CardContent></Card></Grid>
+              <Grid item xs={12} md={4}><Card sx={{ bgcolor: 'rgba(123,90,248,0.08)', border: '1px solid', borderColor: 'secondary.light' }}><CardContent sx={{ textAlign: 'center' }}><Typography variant="h5" fontWeight={800} color="secondary.main">{impLive.total_medicos_sin_visitar}</Typography><Typography variant="caption" color="text.secondary">MÉDICOS SIN VISITAR (EQUIPO)</Typography></CardContent></Card></Grid>
             </Grid>
             <Table size="small" sx={{ mt: 1 }}><TableHead><TableRow><TableCell>Cat.</TableCell><TableCell align="center">Médicos sin visitar</TableCell><TableCell align="center">PSP / contacto</TableCell><TableCell align="right">Venta en riesgo (bajo)</TableCell><TableCell align="right">Venta en riesgo (alto)</TableCell></TableRow></TableHead><TableBody>
-              {im.categorias.map((c) => (
+              {impLive.categorias.map((c) => (
                 <TableRow key={c.categoria}>
                   <TableCell><Chip size="small" label={c.categoria} color={c.categoria === 'A' ? 'success' : c.categoria === 'B' ? 'primary' : 'default'} /></TableCell>
                   <TableCell align="center">{c.medicos_sin_visitar}</TableCell>

@@ -49,7 +49,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_db, get_current_active_user, require_roles
 from app.models.usuario import Rol, Usuario
 from app.models.dimensiones import (
-    RepresentanteMedico, Ciclo, TargetMedico, Feriado, ParametroCobertura,
+    RepresentanteMedico, Ciclo, TargetMedico, Feriado, ParametroCobertura, Gerente,
 )
 from app.models.hechos import Visita
 from app.services.cobertura_predictiva_service import (
@@ -87,6 +87,18 @@ def _aplicar_alcance_equipo(current_user: Usuario, gerente_id: Optional[int]) ->
             raise HTTPException(403, "Su usuario no tiene un gerente_id asignado.")
         return current_user.gerente_id
     return gerente_id
+
+
+def _scope_gd_nombre(db: Session, current_user: Usuario, gd: Optional[str]) -> Optional[str]:
+    """Item 9 (Mallén): el GERENTE_DISTRITO se limita a su propio equipo en el dashboard EN
+    VIVO (que filtra por NOMBRE de GD). Resuelve su gerente_id → nombre y lo fuerza, ignorando
+    cualquier valor recibido. Otros roles pasan el `gd` tal cual."""
+    if current_user.rol == Rol.GERENTE_DISTRITO:
+        if not current_user.gerente_id:
+            raise HTTPException(403, "Su usuario no tiene un gerente_id asignado.")
+        nombre = db.query(Gerente.nombre).filter(Gerente.id == current_user.gerente_id).scalar()
+        return nombre or "\x00sin-equipo"  # nombre inexistente → no ve datos ajenos
+    return gd
 
 
 def _verificar_acceso_rm(db: Session, current_user: Usuario, rm_id: int) -> RepresentanteMedico:
@@ -172,11 +184,12 @@ def vivo_dashboard(
     linea: Optional[str] = Query(None, description="Filtrar por nombre de línea"),
     gd: Optional[str] = Query(None, description="Filtrar por nombre de Gerente de Distrito"),
     db: Session = Depends(get_db),
-    _current_user: Usuario = AnyAuth,
+    current_user: Usuario = AnyAuth,
 ):
     """Cobertura y ritmo calculados en vivo: programado = médicos planeados en
     Planeación del Ciclo; realizado = visitas ejecutadas; días hábiles del ciclo
     menos los transcurridos. Sin Excel ni materialización."""
+    gd = _scope_gd_nombre(db, current_user, gd)  # el GD se limita a su equipo
     return dashboard_vivo(db, ciclo_codigo=ciclo_codigo, pais_codigo=pais_codigo,
                           fecha_corte=fecha_corte, linea=linea, gd=gd)
 
@@ -188,8 +201,9 @@ def vivo_categorias(
     gd: Optional[str] = Query(None, description="Filtrar por nombre de GD"),
     linea: Optional[str] = Query(None, description="Filtrar por nombre de línea"),
     db: Session = Depends(get_db),
-    _current_user: Usuario = AnyAuth,
+    current_user: Usuario = AnyAuth,
 ):
+    gd = _scope_gd_nombre(db, current_user, gd)  # el GD se limita a su equipo
     return categorias_vivo(db, ciclo_codigo=ciclo_codigo, pais_codigo=pais_codigo, gd=gd, linea=linea)
 
 

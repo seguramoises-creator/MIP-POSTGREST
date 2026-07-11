@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_active_user, require_roles
 from app.db.database import get_db
 from app.models.usuario import Rol, Usuario
+from app.models.dimensiones import RepresentanteMedico
 from app.services import categorizacion_service as svc
 
 router = APIRouter(prefix="/categorizacion", tags=["Categorización Médica"])
@@ -26,6 +27,24 @@ router = APIRouter(prefix="/categorizacion", tags=["Categorización Médica"])
 AdminOGerProd  = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
 RequireAdminCat = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
 RequireAuth    = Depends(get_current_active_user)
+
+# Item 5 (Mallén): visión de datos por rol. Producto/MKT/Dirección + gestión + CONSULTA ven
+# todo; el RM ve solo su panel; el GD solo su equipo.
+_ROLES_VE_TODO = {Rol.ADMIN, Rol.PRESIDENCIA, Rol.DIR_COMERCIAL,
+                  Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_MARCA, Rol.CONSULTA}
+
+
+def _codigos_scope(db: Session, user: Usuario):
+    """Códigos de representante visibles para el usuario: None = todos; [] = ninguno."""
+    if user.rol in _ROLES_VE_TODO:
+        return None
+    if user.rol == Rol.REPRESENTANTE_MEDICO:
+        cod = db.query(RepresentanteMedico.codigo).filter(RepresentanteMedico.id == user.rm_id).scalar()
+        return [cod] if cod else []
+    if user.rol == Rol.GERENTE_DISTRITO:
+        return [c for (c,) in db.query(RepresentanteMedico.codigo)
+                .filter(RepresentanteMedico.gerente_id == user.gerente_id).all() if c]
+    return []
 
 MAX_UPLOAD_MB = 50
 
@@ -94,7 +113,7 @@ def get_resumen(
     municipio: Optional[str] = Query(None),
     especialidad: Optional[str] = Query(None),
     representante: Optional[str] = Query(None),
-    _current_user: Usuario = RequireAuth,
+    current_user: Usuario = RequireAuth,
     db: Session = Depends(get_db),
 ):
     return svc.get_resumen(
@@ -105,6 +124,7 @@ def get_resumen(
         municipio=municipio,
         especialidad=especialidad,
         representante=representante,
+        codigos_rep=_codigos_scope(db, current_user),
     )
 
 
@@ -115,9 +135,11 @@ def get_resultados(
     categoria: Optional[str] = Query(None, description="A, B, C o D"),
     estado_conciliacion: Optional[str] = Query(None, description="OK, DIFERENCIA, SIN_REFERENCIA"),
     representante: Optional[str] = Query(None),
+    medico: Optional[str] = Query(None, description="Filtro por nombre del médico (parcial)"),
+    especialidad: Optional[str] = Query(None, description="Filtro por especialidad (exacta)"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    _current_user: Usuario = RequireAuth,
+    current_user: Usuario = RequireAuth,
     db: Session = Depends(get_db),
 ):
     return svc.get_resultados(
@@ -126,6 +148,9 @@ def get_resultados(
         categoria=categoria,
         estado_conciliacion=estado_conciliacion,
         representante=representante,
+        medico=medico,
+        especialidad=especialidad,
+        codigos_rep=_codigos_scope(db, current_user),
         skip=skip,
         limit=limit,
     )

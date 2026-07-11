@@ -303,10 +303,10 @@ const BarraMeta = ({ actual, esperada, meta }: { actual: number; esperada: numbe
 // ── Dashboard tab ─────────────────────────────────────────────────────────────
 const DashboardTab = ({
   data, loading, error,
-  catData, catLoading,
+  catData, catLoading, filtroVM,
 }: {
   data?: DashboardData; loading: boolean; error: string | null;
-  catData?: CoberturaCategoria[]; catLoading?: boolean;
+  catData?: CoberturaCategoria[]; catLoading?: boolean; filtroVM?: string;
 }) => {
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
   const [sortField, setSortField] = useState<keyof DetalleRM>('estado_cobertura');
@@ -314,13 +314,20 @@ const DashboardTab = ({
 
   const sortedRMs = useMemo(() => {
     if (!data?.detalle_rms) return [];
+    // Item 9 (Mallén): búsqueda por representante (nombre o código).
+    const q = (filtroVM ?? '').trim().toLowerCase();
+    const base = q
+      ? data.detalle_rms.filter(r =>
+          (r.nombre_vm ?? '').toLowerCase().includes(q) ||
+          (r.codigo_representante ?? '').toLowerCase().includes(q))
+      : data.detalle_rms;
     const order: Record<string, number> = { Verde: 0, Amarillo: 1, Rojo: 2 };
-    return [...data.detalle_rms].sort((a, b) => {
+    return [...base].sort((a, b) => {
       const av = sortField === 'estado_cobertura' ? (order[a.estado_cobertura] ?? 0) : (a[sortField] as number);
       const bv = sortField === 'estado_cobertura' ? (order[b.estado_cobertura] ?? 0) : (b[sortField] as number);
       return sortDir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
     });
-  }, [data?.detalle_rms, sortField, sortDir]);
+  }, [data?.detalle_rms, sortField, sortDir, filtroVM]);
 
   const handleSort = (field: keyof DetalleRM) => {
     if (field === sortField) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -605,6 +612,7 @@ export default function CoberturaPredictiva() {
   const [fechaCorte, setFechaCorte] = useState('');
   const [lineaFiltro, setLineaFiltro] = useState('');
   const [gdFiltro, setGdFiltro] = useState('');
+  const [busquedaVM, setBusquedaVM] = useState('');  // Item 9: búsqueda de representante
 
   const { data: ciclos = [], isLoading: ciclosLoading } = useQuery<Ciclo[]>({
     queryKey: ['cob-ciclos', paisCodigo],
@@ -721,6 +729,11 @@ export default function CoberturaPredictiva() {
               </Select>
             </FormControl>
           </Grid>
+          <Grid item xs={12} sm={6} md={3}>
+            {/* Item 9 (Mallén): búsqueda de representante médico. */}
+            <TextField fullWidth size="small" label="Buscar representante" value={busquedaVM}
+                       onChange={e => setBusquedaVM(e.target.value)} placeholder="Nombre o código…" />
+          </Grid>
         </Grid>
       </Paper>
 
@@ -731,6 +744,7 @@ export default function CoberturaPredictiva() {
           error={errorMsg}
           catData={catData}
           catLoading={catLoading}
+          filtroVM={busquedaVM}
         />
       </Paper>
     </Box>

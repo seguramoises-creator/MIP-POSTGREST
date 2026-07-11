@@ -416,10 +416,14 @@ def resumen_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
 
 # ── Ruptura de secuencia / Cierre de ciclo (Parte 5) ──────────────────────────
 @router.get("/ruptura", response_model=dict)
-def estado_ruptura(vm_id: int | None = None, db: Session = Depends(get_db), current_user=RequireVisita):
-    """Médicos en ruptura por severidad (1 / 2 / ≥3 ciclos sin visita). El VM ve el suyo."""
+def estado_ruptura(vm_id: int | None = None, gerente_id: int | None = None,
+                   linea_id: int | None = None, db: Session = Depends(get_db),
+                   current_user=RequireVisita):
+    """Médicos en ruptura por severidad (1 / 2 / ≥3 ciclos sin visita). El VM ve el suyo;
+    gestión puede filtrar por Gerente de Distrito (?gerente_id=) y Línea (?linea_id=)."""
     from app.services import visita_cierre_service
-    return visita_cierre_service.estado_ruptura(db, _scope_vm(current_user, vm_id))
+    return visita_cierre_service.estado_ruptura(
+        db, _scope_vm(current_user, vm_id), gerente_id, linea_id)
 
 
 @router.get("/cierre/previsualizar", response_model=dict)

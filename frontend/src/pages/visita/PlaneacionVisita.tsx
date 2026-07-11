@@ -7,6 +7,7 @@ import {
 import { Save, EventNote, Warning, CheckCircle, FilterList, Search, Badge, SupervisorAccount, Layers } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
+import { catChipSx } from './categoriaColores';
 import {
   listarMedicos, obtenerPlaneacion, planeacionResumen, guardarPlaneacion, listarVMs, miGerente,
   type MedicoVisita, type PlaneacionItem, type PlaneacionResumen, type Catalogo, type MiGerente,
@@ -24,6 +25,8 @@ interface Fila { vSemana: number; vDia: string; revisita: boolean; rSemana: numb
 const F0: Fila = { vSemana: 0, vDia: '', revisita: false, rSemana: 0, rDia: '' };
 const SEMANAS = [1, 2, 3, 4];
 const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+// Item 6: frecuencia como etiqueta corta (2 toques = V+R, 1 = V, 0 = —).
+const freqLabel = (n: number) => (n >= 2 ? 'V+R' : n === 1 ? 'V' : '—');
 
 // La revisita se intercala 2 semanas después (Sem 1→3, Sem 2→4); solo aplica a Vistas en Sem 1 o 2.
 const revisitaPermitida = (vSemana: number) => vSemana === 1 || vSemana === 2;
@@ -288,28 +291,42 @@ export default function PlaneacionVisita() {
                 <TableCell align="center">Revisita</TableCell>
                 <TableCell align="center">Semana revisita</TableCell>
                 <TableCell align="center">Día revisita</TableCell>
+                <TableCell align="center">Frecuencia<br />plan / logrado</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {medicos.length === 0 && (
-                <TableRow><TableCell colSpan={7}>
+                <TableRow><TableCell colSpan={8}>
                   <Alert severity="info" sx={{ my: 1 }}>No hay médicos en tu panel. Regístralos en Panel Médico.</Alert>
                 </TableCell></TableRow>
               )}
               {medicos.length > 0 && medicosVisibles.length === 0 && (
-                <TableRow><TableCell colSpan={7}>
+                <TableRow><TableCell colSpan={8}>
                   <Alert severity="info" sx={{ my: 1 }}>Ningún médico coincide con el filtro.</Alert>
                 </TableCell></TableRow>
               )}
               {medicosVisibles.map((m) => {
                 const f = plan[m.id] ?? F0;
                 const rOk = revisitaPermitida(f.vSemana);
+                // Item 6 — coherencia: frecuencia PLANEADA (lo creado) vs LOGRADA (visitas del ciclo).
+                const planeado = (f.vSemana > 0 ? 1 : 0) + (f.revisita && f.rSemana > 0 ? 1 : 0);
+                const logrado = m.estado_visita === 'vr' ? 2 : m.estado_visita === 'v' ? 1 : 0;
+                const coherente = logrado >= planeado;
                 return (
                   <TableRow key={m.id} hover>
-                    <TableCell>{m.nombre_completo}</TableCell>
+                    <TableCell>
+                      <Typography variant="body2" fontWeight={600}>{m.nombre_completo}</Typography>
+                      {/* Requerimiento Mallén (Item 6): indica en el panel si el médico ya fue visitado este ciclo. */}
+                      {m.estado_visita === 'vr' || m.estado_visita === 'v' ? (
+                        <Chip size="small" color="success" variant="outlined" sx={{ mt: 0.3, height: 18, fontSize: 11 }}
+                              label={m.estado_visita === 'vr' ? 'Visitado (V+R)' : 'Visitado'} />
+                      ) : (
+                        <Chip size="small" color="default" variant="outlined" sx={{ mt: 0.3, height: 18, fontSize: 11 }}
+                              label="Sin visitar" />
+                      )}
+                    </TableCell>
                     <TableCell align="center">
-                      <Chip size="small" label={m.categoria}
-                            color={m.categoria === 'A' ? 'error' : m.categoria === 'B' ? 'warning' : 'default'} />
+                      <Chip size="small" label={m.categoria} sx={catChipSx(m.categoria)} />
                     </TableCell>
                     {/* Semana de la Vista */}
                     <TableCell align="center">
@@ -360,6 +377,12 @@ export default function PlaneacionVisita() {
                       {f.revisita
                         ? <Chip size="small" variant="outlined" label={f.rDia || f.vDia || '—'} />
                         : <Typography variant="body2" color="text.disabled">—</Typography>}
+                    </TableCell>
+                    {/* Frecuencia planeada vs. lograda: verde si va al día, ámbar si va detrás. */}
+                    <TableCell align="center">
+                      <Chip size="small" variant="outlined"
+                            color={planeado === 0 ? 'default' : coherente ? 'success' : 'warning'}
+                            label={`${freqLabel(planeado)} / ${freqLabel(logrado)}`} />
                     </TableCell>
                   </TableRow>
                 );

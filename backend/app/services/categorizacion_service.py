@@ -611,9 +611,19 @@ def get_lotes(db: Session, limit: int = 50) -> list:
     return [dict(r) for r in rows]
 
 
-def get_resultados(db: Session, periodo=None, categoria=None, estado_conciliacion=None, representante=None, skip=0, limit=100) -> dict:
+def get_resultados(db: Session, periodo=None, categoria=None, estado_conciliacion=None, representante=None, medico=None, especialidad=None, codigos_rep=None, skip=0, limit=100) -> dict:
     where_parts = ["1=1"]
     params = {"skip": skip, "limit": limit}
+    # Scope de datos (Item 5 Mallén): None = ve todos; lista = solo esos representantes;
+    # lista vacía = no ve nada (RM/GD sin vínculo).
+    if codigos_rep is not None:
+        if codigos_rep:
+            keys = []
+            for i, c in enumerate(codigos_rep):
+                k = f"cr{i}"; params[k] = c; keys.append(f":{k}")
+            where_parts.append(f'v."CodigoRepresentante" IN ({", ".join(keys)})')
+        else:
+            where_parts.append("1=0")
     if periodo:
         where_parts.append('v."Periodo"=:periodo'); params["periodo"] = periodo
     if categoria:
@@ -621,7 +631,11 @@ def get_resultados(db: Session, periodo=None, categoria=None, estado_conciliacio
     if estado_conciliacion:
         where_parts.append('v."EstadoConciliacion"=:ec'); params["ec"] = estado_conciliacion
     if representante:
-        where_parts.append('(v."NombreRepresentante" LIKE :rep OR v."CodigoRepresentante" LIKE :rep)'); params["rep"] = f"%{representante}%"
+        where_parts.append('(LOWER(v."NombreRepresentante") LIKE LOWER(:rep) OR LOWER(v."CodigoRepresentante") LIKE LOWER(:rep))'); params["rep"] = f"%{representante}%"
+    if medico:
+        where_parts.append('LOWER(v."NombreMedico") LIKE LOWER(:med)'); params["med"] = f"%{medico}%"
+    if especialidad:
+        where_parts.append('COALESCE(v."Especialidad", \'\') = :esp'); params["esp"] = especialidad
     wc = " AND ".join(where_parts)
     total = int(db.execute(text(f'SELECT COUNT(*) FROM "cat"."vwMedicoCategoriaConciliacion" v WHERE {wc}'), params).fetchone()[0])
     rows = db.execute(text(f"""
@@ -641,6 +655,7 @@ def get_resumen(
     municipio: str = None,
     especialidad: str = None,
     representante: str = None,
+    codigos_rep=None,
 ) -> dict:
     params: dict = {}
     filters = ["1=1"]
@@ -663,12 +678,21 @@ def get_resumen(
     if representante:
         filters.append('COALESCE(r."NombreRepresentante",\'\') = :representante')
         params["representante"] = representante
+    # Scope de datos (Item 5 Mallén): RM ve solo su código; GD los de su equipo.
+    if codigos_rep is not None:
+        if codigos_rep:
+            keys = []
+            for i, c in enumerate(codigos_rep):
+                k = f"cr{i}"; params[k] = c; keys.append(f":{k}")
+            filters.append(f'r."CodigoRepresentante" IN ({", ".join(keys)})')
+        else:
+            filters.append("1=0")
 
     where = "WHERE " + " AND ".join(filters)
 
     # Solo añadir JOINs si se filtran columnas de tablas relacionadas
     join_clause = ""
-    if especialidad or representante:
+    if especialidad or representante or codigos_rep is not None:
         join_clause = """
         LEFT JOIN "cat"."DimMedico" m ON m."MedicoKey" = f."MedicoKey"
         LEFT JOIN "cat"."DimEspecialidad" e ON e."EspecialidadKey" = m."EspecialidadKey"

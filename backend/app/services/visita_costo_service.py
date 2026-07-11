@@ -349,10 +349,11 @@ def calcular_full(db: Session, ciclo_id, linea_id) -> dict:
         roi_rows.append({"producto": p.producto, "costo_visita": cvis, "retorno_visita": rvis,
                         "roi": roi, "estado": estado})
 
+    # Requerimiento Mallén (Item 10): los médicos sin visitar del impacto financiero salen
+    # SIEMPRE de la Cobertura (Panel/Registro), no son editables a mano — se ignora cualquier
+    # override manual guardado en la estructura.
     derivado = _med_sin_visitar_por_cat(db, ciclo_id, linea_id)
-    msv = {"A": e["med_sin_visitar_a"] if e["med_sin_visitar_a"] is not None else derivado["A"],
-           "B": e["med_sin_visitar_b"] if e["med_sin_visitar_b"] is not None else derivado["B"],
-           "C": e["med_sin_visitar_c"] if e["med_sin_visitar_c"] is not None else derivado["C"]}
+    msv = {"A": derivado["A"], "B": derivado["B"], "C": derivado["C"]}
     psp = {"A": e["psp_a"], "B": e["psp_b"], "C": e["psp_c"]}
     impacto_cat, riesgo_bajo, riesgo_alto = [], 0.0, 0.0
     for c in ("A", "B", "C"):

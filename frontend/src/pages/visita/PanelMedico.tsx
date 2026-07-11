@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { Add, PersonAddAlt1, Warning, Search, FiberManualRecord, Edit, Block, Restore, HowToReg, ThumbUp, ThumbDown, Badge, SupervisorAccount, Layers } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import { CAT_AV } from './categoriaColores';
 import {
   listarMedicos, listarMedicosExistentes, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
   solicitarBajaMedico, reactivarMedico, listarAprobaciones, aprobarMedico, rechazarMedico,
@@ -33,12 +34,7 @@ const vacio: MedicoCrear = {
 };
 
 // Avatar de categoría (círculo) — A dorado, B azul, C gris (como el prototipo).
-const CAT_AV: Record<string, { bg: string; fg: string }> = {
-  A: { bg: '#FBE7A1', fg: '#8A6D0B' },
-  B: { bg: '#D6E4FF', fg: '#1E52C7' },
-  C: { bg: '#E8EAF0', fg: '#5A6472' },
-  D: { bg: '#F3D6D6', fg: '#B23B3B' },
-};
+// Colores de categorización (A=Verde, B=Azul, C=Amarillo, D=Rojo): mapa compartido en ./categoriaColores.
 // Paleta rotativa para las iniciales del médico.
 const INICIAL_COLORS = ['#2E5BFF', '#7A5AF8', '#0F9B8E', '#E8833A', '#D6409F', '#2AA76A', '#C0392B', '#3B82C4'];
 
@@ -103,6 +99,7 @@ export default function PanelMedico() {
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
   const [form, setForm] = useState<MedicoCrear>(vacio);
+  const [errCampos, setErrCampos] = useState<Record<string, string>>({});  // validación por campo
   const [abierto, setAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [duplicados, setDuplicados] = useState<PosibleDuplicado[] | null>(null);
@@ -201,12 +198,16 @@ export default function PanelMedico() {
     const m = existentes.find((x) => x.id === id);
     if (!m) return;
     setForm({
+      // Requerimiento Mallén (ajustado 11-jul-2026): copia TODA la ficha del médico EXCEPTO
+      // el nombre — incluida la ubicación (centro, provincia, municipio, sector, dirección,
+      // GPS). El VM solo captura/confirma el nombre; el resto queda precargado y editable.
+      ...vacio,
       vm_id: esVM ? 0 : (vmFiltro || 0),
-      codigo: m.codigo, nombre_completo: m.nombre_completo, nombre: m.nombre, apellidos: m.apellidos,
       especialidad_id: m.especialidad_id, subespecialidad: m.subespecialidad, categoria: m.categoria,
       centro_trabajo: m.centro_trabajo, institucion_tipo: m.institucion_tipo, tipo_consultorio: m.tipo_consultorio,
       provincia: m.provincia, municipio: m.municipio, sector: m.sector, direccion: m.direccion,
-      latitud: m.latitud, longitud: m.longitud, telefono: m.telefono, email: m.email, exequatur: m.exequatur,
+      latitud: m.latitud, longitud: m.longitud,
+      telefono: m.telefono, email: m.email, exequatur: m.exequatur,
       dias_consulta: m.dias_consulta, horario_consulta: m.horario_consulta, frecuencia_visita: m.frecuencia_visita,
       acepta_visita: m.acepta_visita ?? true, potencial_prescripcion: m.potencial_prescripcion, kol: m.kol ?? false,
       segmento: m.segmento, observaciones: m.observaciones,
@@ -252,7 +253,10 @@ export default function PanelMedico() {
       setMsg({ tipo: 'error', texto: 'No se pudo procesar (¿es de tu distrito?).' });
     }
   };
-  const set = (k: keyof MedicoCrear, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: keyof MedicoCrear, v: unknown) => {
+    setForm((f) => ({ ...f, [k]: v }));
+    setErrCampos((e) => (e[k] ? { ...e, [k]: '' } : e));  // limpia el error del campo al editarlo
+  };
 
   // Carga masiva: crea en el Panel los médicos ya cargados en Categorización.
   const importarCat = async () => {
@@ -280,8 +284,26 @@ export default function PanelMedico() {
   const setHorario = (desde: string, hasta: string) =>
     set('horario_consulta', desde || hasta ? `${desde}-${hasta}` : '');
 
+  // Requerimiento Mallén (Item 4b): validación por campo. Campo vacío → borde rojo;
+  // formato inválido → borde rojo + mensaje. Devuelve el mapa de errores (vacío = OK).
+  function validarForm(): Record<string, string> {
+    const e: Record<string, string> = {};
+    const nom = (form.nombre_completo || '').trim();
+    if (!nom) e.nombre_completo = 'Campo obligatorio.';
+    else if (nom !== nom.toUpperCase()) e.nombre_completo = 'Debe ir en MAYÚSCULAS.';
+    else if (nom.split(/\s+/).length < 2) e.nombre_completo = 'Ingresa al menos nombre y apellido.';
+    if (!esVM && !form.vm_id) e.vm_id = 'Selecciona el visitador (VM).';
+    const email = (form.email || '').trim();
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) e.email = 'Correo con formato inválido.';
+    const tel = (form.telefono || '').trim();
+    if (tel && !/^[0-9()+\-\s]{7,}$/.test(tel)) e.telefono = 'Teléfono con formato inválido.';
+    return e;
+  }
+
   async function guardar(confirmar = false) {
-    if (editId === null && !esVM && !form.vm_id) { setMsg({ tipo: 'error', texto: 'Selecciona el visitador (VM).' }); return; }
+    const errs = validarForm();
+    setErrCampos(errs);
+    if (Object.keys(errs).length) { setMsg({ tipo: 'error', texto: 'Revisa los campos marcados en rojo.' }); return; }
     setGuardando(true); setDuplicados(null);
     try {
       if (editId !== null) {
@@ -534,17 +556,22 @@ export default function PanelMedico() {
         <DialogContent dividers>
           {modoExistente && (
             <Box sx={{ mb: 1.5 }}>
-              <TextField select fullWidth size="small" label="Copiar de médico existente"
-                         value={existenteSel} onChange={(e) => elegirExistente(Number(e.target.value))}
-                         helperText={existentes.length
-                           ? 'Elige un médico ya registrado; se precargan sus datos (puedes ajustarlos antes de guardar).'
-                           : 'No hay médicos de otros visitadores para copiar.'}>
-                {existentes.map((m) => (
-                  <MenuItem key={m.id} value={m.id}>
-                    {m.nombre_completo} · Cat {m.categoria}{m.especialidad_nombre ? ` · ${m.especialidad_nombre}` : ''}{m.vm_nombre ? ` — ${m.vm_nombre}` : ''}
-                  </MenuItem>
-                ))}
-              </TextField>
+              {/* Requerimiento Mallén (Item 4c): búsqueda de médico como autocompletado (se escribe y filtra). */}
+              <Autocomplete
+                fullWidth size="small"
+                options={existentes}
+                value={existentes.find((x) => x.id === existenteSel) ?? null}
+                onChange={(_e, m) => { if (m) elegirExistente(m.id); else setExistenteSel(''); }}
+                getOptionLabel={(m) => `${m.nombre_completo} · Cat ${m.categoria}${m.especialidad_nombre ? ` · ${m.especialidad_nombre}` : ''}${m.vm_nombre ? ` — ${m.vm_nombre}` : ''}`}
+                isOptionEqualToValue={(a, b) => a.id === b.id}
+                noOptionsText="Sin coincidencias."
+                renderInput={(params) => (
+                  <TextField {...params} label="Copiar de médico existente (escribe para buscar)"
+                             helperText={existentes.length
+                               ? 'Escribe el nombre; se precargan sus datos (puedes ajustarlos antes de guardar).'
+                               : 'No hay médicos de otros visitadores para copiar.'} />
+                )}
+              />
             </Box>
           )}
           {(() => {
@@ -568,8 +595,9 @@ export default function PanelMedico() {
                 </Grid>
                 <Grid item xs={12}>
                   <TextField fullWidth size="small" label="Nombre completo (MAYÚSCULAS, ≥2 palabras)" value={form.nombre_completo} required
+                             error={!!errCampos.nombre_completo}
                              onChange={(e) => set('nombre_completo', e.target.value.toUpperCase())}
-                             helperText="Ej: MANUEL ANTONIO PEREZ GARCIA — sin abreviaciones con punto" />
+                             helperText={errCampos.nombre_completo || 'Ej: MANUEL ANTONIO PEREZ GARCIA — sin abreviaciones con punto'} />
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField fullWidth size="small" label="Nombre" value={form.nombre ?? ''} onChange={(e) => set('nombre', e.target.value)} />
@@ -654,10 +682,14 @@ export default function PanelMedico() {
 
                 {seccion('Contacto')}
                 <Grid item xs={12} sm={4}>
-                  <TextField fullWidth size="small" label="Teléfono" value={form.telefono ?? ''} onChange={(e) => set('telefono', e.target.value)} />
+                  <TextField fullWidth size="small" label="Teléfono" value={form.telefono ?? ''}
+                             error={!!errCampos.telefono} helperText={errCampos.telefono || ''}
+                             onChange={(e) => set('telefono', e.target.value)} />
                 </Grid>
                 <Grid item xs={12} sm={4}>
-                  <TextField fullWidth size="small" label="Correo electrónico" value={form.email ?? ''} onChange={(e) => set('email', e.target.value)} />
+                  <TextField fullWidth size="small" label="Correo electrónico" value={form.email ?? ''}
+                             error={!!errCampos.email} helperText={errCampos.email || ''}
+                             onChange={(e) => set('email', e.target.value)} />
                 </Grid>
                 <Grid item xs={12} sm={4}>
                   <TextField fullWidth size="small" label="Exequátur / colegiación" value={form.exequatur ?? ''} onChange={(e) => set('exequatur', e.target.value)} />

@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import { api } from '../../services/api';
 import DetalleMedicos from './DetalleMedicos';
+import { useAuthStore } from '../../store/auth.store';
 
 // ── Paleta profesional A/B/C/D (sincronizada con DetalleMedicos.tsx) ─────────
 // A = Teal esmeralda  B = Azul zafiro  C = Ámbar dorado  D = Gris acero
@@ -155,9 +156,16 @@ function CatChip({ cat }: { cat: string | null }) {
 // ── Componente principal ───────────────────────────────────────────────────────
 export default function Categorizacion() {
   const [tab, setTab] = useState(0);
+  // Requerimiento Mallén (Item 5): acceso a variables/pesos y al detalle por médico solo para
+  // Gerente de Producto / Área MKT / Dirección General → mapeado a estos roles del sistema.
+  const rol = useAuthStore((s) => s.rol);
+  const accesoCompleto = ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_MARCA']
+    .includes(rol ?? '');
   const [periodo, setPeriodo] = useState<string>('');
   const [categoria, setCategoria] = useState('');
-  const [busqueda, setBusqueda] = useState('');
+  const [busqueda, setBusqueda] = useState('');              // representante
+  const [busquedaMedico, setBusquedaMedico] = useState('');  // nombre del médico
+  const [especialidadFiltro, setEspecialidadFiltro] = useState('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
@@ -174,12 +182,14 @@ export default function Categorizacion() {
 
   // Resultados paginados
   const { data: resultados, isLoading: loadingResultados } = useQuery({
-    queryKey: ['cat-resultados', periodo, categoria, busqueda, page, rowsPerPage],
+    queryKey: ['cat-resultados', periodo, categoria, busqueda, busquedaMedico, especialidadFiltro, page, rowsPerPage],
     queryFn: async () => {
       const params = new URLSearchParams({ skip: String(page * rowsPerPage), limit: String(rowsPerPage) });
       if (periodo) params.set('periodo', periodo);
       if (categoria) params.set('categoria', categoria);
       if (busqueda) params.set('representante', busqueda);
+      if (busquedaMedico) params.set('medico', busquedaMedico);
+      if (especialidadFiltro) params.set('especialidad', especialidadFiltro);
       const r = await api.get(`/categorizacion/resultados?${params}`);
       return r.data as { total: number; items: Resultado[] };
     },
@@ -316,11 +326,13 @@ export default function Categorizacion() {
             iconPosition="start"
             label="Resumen General"
           />
-          <Tab
-            icon={<ManageSearchIcon sx={{ fontSize: 17 }} />}
-            iconPosition="start"
-            label="Detalle por Médico"
-          />
+          {accesoCompleto && (
+            <Tab
+              icon={<ManageSearchIcon sx={{ fontSize: 17 }} />}
+              iconPosition="start"
+              label="Detalle por Médico"
+            />
+          )}
         </Tabs>
       </Box>
 
@@ -373,7 +385,8 @@ export default function Categorizacion() {
           </Paper>
         </Grid>
 
-        {/* Componentes y Pesos */}
+        {/* Componentes y Pesos — solo roles con acceso completo (Producto/MKT/Dirección) */}
+        {accesoCompleto && (
         <Grid item xs={12} md={7}>
           <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
             <Typography variant="subtitle1" fontWeight={600} mb={1}>Componentes y Pesos</Typography>
@@ -390,6 +403,7 @@ export default function Categorizacion() {
             ))}
           </Paper>
         </Grid>
+        )}
       </Grid>
 
       {/* Tabla de resultados */}
@@ -398,11 +412,29 @@ export default function Categorizacion() {
           <Typography variant="subtitle1" fontWeight={600} mr="auto">Resultados por Médico</Typography>
           <TextField
             size="small"
+            placeholder="Buscar médico…"
+            value={busquedaMedico}
+            onChange={(e) => { setBusquedaMedico(e.target.value); setPage(0); }}
+            InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
+            sx={{ width: 200 }}
+          />
+          <FormControl size="small" sx={{ minWidth: 180 }}>
+            <InputLabel>Especialidad</InputLabel>
+            <Select value={especialidadFiltro} label="Especialidad"
+                    onChange={(e) => { setEspecialidadFiltro(e.target.value); setPage(0); }}>
+              <MenuItem value="">Todas</MenuItem>
+              {porEsp.map((e) => (
+                <MenuItem key={e.especialidad} value={e.especialidad}>{e.especialidad}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <TextField
+            size="small"
             placeholder="Buscar representante…"
             value={busqueda}
             onChange={(e) => { setBusqueda(e.target.value); setPage(0); }}
             InputProps={{ startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment> }}
-            sx={{ width: 220 }}
+            sx={{ width: 200 }}
           />
           <FormControl size="small" sx={{ minWidth: 110 }}>
             <InputLabel>Categoría</InputLabel>
@@ -423,14 +455,14 @@ export default function Categorizacion() {
               <TableCell><b>Representante</b></TableCell>
               <TableCell><b>Equipo</b></TableCell>
               <TableCell><b>Período</b></TableCell>
-              <TableCell align="center"><b>Puntaje</b></TableCell>
+              {accesoCompleto && <TableCell align="center"><b>Puntaje</b></TableCell>}
               <TableCell align="center"><b>Cat. calculada</b></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {!loadingResultados && (resultados?.items ?? []).length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                <TableCell colSpan={accesoCompleto ? 7 : 6} align="center" sx={{ py: 4, color: 'text.secondary' }}>
                   Sin resultados para los filtros aplicados
                 </TableCell>
               </TableRow>
@@ -442,11 +474,13 @@ export default function Categorizacion() {
                 <TableCell>{r.NombreRepresentante || r.CodigoRepresentante || '—'}</TableCell>
                 <TableCell>{r.Equipo || '—'}</TableCell>
                 <TableCell>{r.Periodo}</TableCell>
-                <TableCell align="center">
-                  {r.PuntajeTotalPct != null
-                    ? `${Number(r.PuntajeTotalPct).toFixed(1)}%`
-                    : '—'}
-                </TableCell>
+                {accesoCompleto && (
+                  <TableCell align="center">
+                    {r.PuntajeTotalPct != null
+                      ? `${Number(r.PuntajeTotalPct).toFixed(1)}%`
+                      : '—'}
+                  </TableCell>
+                )}
                 <TableCell align="center"><CatChip cat={r.CategoriaCalculada} /></TableCell>
               </TableRow>
             ))}
@@ -465,7 +499,8 @@ export default function Categorizacion() {
         />
       </Paper>
 
-      {/* ── Tablas de resumen ─────────────────────────────────────────────── */}
+      {/* ── Tablas de resumen (agregados por equipo/especialidad) — solo acceso completo ── */}
+      {accesoCompleto && (
       <Grid container spacing={3} mt={1}>
 
         {/* ── Tabla por Representante ── */}
@@ -644,11 +679,12 @@ export default function Categorizacion() {
         </Grid>
 
       </Grid>
+      )}
       </Box>
       )}
 
-      {/* Tab 1: Detalle por Médico */}
-      {tab === 1 && <DetalleMedicos periodo={periodo} />}
+      {/* Tab 1: Detalle por Médico — solo roles con acceso completo */}
+      {tab === 1 && accesoCompleto && <DetalleMedicos periodo={periodo} />}
     </Box>
   );
 }

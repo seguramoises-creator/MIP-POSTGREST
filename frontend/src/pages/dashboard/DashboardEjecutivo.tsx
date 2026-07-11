@@ -15,6 +15,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { api } from '../../services/api';
+import { useCicloStore } from '../../store/ciclo.store';
 
 import { KPI_ORDEN, kpiNombre, kpiNombreCard } from '../../constants/kpi';
 
@@ -356,17 +357,22 @@ function FilterLabel({ children }: { children: React.ReactNode }) {
 // ── Página principal ─────────────────────────────────────────────────────────
 
 export default function DashboardEjecutivo() {
-  const [selectedPais,    setSelectedPais]    = useState<string | ''>('');
-  const [selectedCiclo,   setSelectedCiclo]   = useState<number | ''>('');
+  // País y ciclo salen del CONTEXTO GLOBAL (barra superior País+Ciclo). Así el cuerpo del
+  // dashboard sigue al ciclo elegido arriba (por defecto el ABIERTO) en lugar de resolver
+  // por su cuenta el "último ciclo con datos".
+  const paisCodigo  = useCicloStore((s) => s.paisCodigo);
+  const cicloId     = useCicloStore((s) => s.cicloId);
+  const setPais     = useCicloStore((s) => s.setPais);
+  const setCicloVer = useCicloStore((s) => s.setCicloVer);
+  const selectedPais  = paisCodigo ?? '';
+  const selectedCiclo = cicloId ?? '';
   const [selectedLinea,   setSelectedLinea]   = useState<number | ''>('');
   const [selectedGerente, setSelectedGerente] = useState<number | ''>('');
 
-  const handlePaisChange = (val: string | '') => {
-    setSelectedPais(val);
-    setSelectedCiclo('');
-    setSelectedLinea('');
-    setSelectedGerente('');
-  };
+  // Al cambiar el país (aquí o desde la barra global), limpia línea/gerente.
+  useEffect(() => { setSelectedLinea(''); setSelectedGerente(''); }, [paisCodigo]);
+
+  const handlePaisChange = (val: string | '') => { if (val) void setPais(val); };
 
   // Catálogos para los selectores
   const { data: catalogos } = useQuery({
@@ -412,15 +418,7 @@ export default function DashboardEjecutivo() {
   const paises: any[]      = catalogos?.paises     ?? [];
   const ciclos: any[]      = catalogos?.ciclos      ?? [];
 
-  // ── Auto-seleccionar República Dominicana al cargar ───────────────────
-  useEffect(() => {
-    if (!paises.length || selectedPais) return;
-    const rd = paises.find((p: any) =>
-      p.codigo?.toUpperCase() === 'RD' ||
-      p.nombre?.toLowerCase().includes('dominicana')
-    );
-    if (rd) handlePaisChange(rd.codigo);
-  }, [paises]); // eslint-disable-line react-hooks/exhaustive-deps
+  // El país por defecto lo fija el contexto global (store.init) — sin auto-selección local.
 
   // ── Ciclo: el backend elige el correcto automáticamente cuando no hay filtro ─
 
@@ -473,8 +471,8 @@ export default function DashboardEjecutivo() {
               {
                 label: 'Ciclo',
                 value: selectedCiclo,
-                onChange: (v: any) => setSelectedCiclo(v === '' ? '' : Number(v)),
-                placeholder: selectedPais ? 'Último ciclo con datos' : 'Seleccione un país',
+                onChange: (v: any) => { if (v !== '') setCicloVer(Number(v)); },
+                placeholder: selectedPais ? 'Ciclo del contexto' : 'Seleccione un país',
                 options: ciclos.map((c: any) => ({ id: c.id, nombre: c.nombre ?? c.nombre_canonico })),
                 disabled: !selectedPais,
               },

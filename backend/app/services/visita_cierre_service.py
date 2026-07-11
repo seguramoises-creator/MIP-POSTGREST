@@ -41,12 +41,18 @@ def _severidad(n: int) -> str:
     return "ninguna"
 
 
-def estado_ruptura(db: Session, vm_id: int | None = None) -> dict:
-    """Médicos en ruptura agrupados por severidad (1 / 2 / ≥3 ciclos sin visita)."""
+def estado_ruptura(db: Session, vm_id: int | None = None,
+                   gerente_id: int | None = None, linea_id: int | None = None) -> dict:
+    """Médicos en ruptura agrupados por severidad (1 / 2 / ≥3 ciclos sin visita).
+    Filtros (gestión): `vm_id` (un visitador), `gerente_id`/`linea_id` (distrito/línea)."""
+    from app.services.visita_cobertura_service import _rm_ids_por
     q = db.query(MedicoVisita).filter(
         MedicoVisita.activo == True, MedicoVisita.ciclos_sin_visita >= SEV_ALERTA)  # noqa: E712
     if vm_id:
         q = q.filter(MedicoVisita.vm_id == vm_id)
+    rm_ids = _rm_ids_por(db, gerente_id, linea_id)  # None = sin filtro de distrito/línea
+    if rm_ids is not None:
+        q = q.filter(MedicoVisita.vm_id.in_(rm_ids or [-1]))
     medicos = q.order_by(MedicoVisita.ciclos_sin_visita.desc()).all()
 
     vm_ids = {m.vm_id for m in medicos}

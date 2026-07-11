@@ -2,14 +2,15 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, Stack, Chip, Alert, Grid,
   CircularProgress, Table, TableHead, TableRow, TableCell, TableBody, Divider,
-  Dialog, DialogTitle, DialogContent, DialogActions,
+  Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem,
 } from '@mui/material';
-import { Warning, ErrorOutline, ReportProblem, LockClock, HistoryToggleOff } from '@mui/icons-material';
+import { Warning, ErrorOutline, ReportProblem, LockClock, HistoryToggleOff, FilterList } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
   estadoRuptura, previsualizarCierre, cerrarCiclo, historialCierres,
-  type RupturaEstado, type RupturaMedico, type CierrePreview, type CierreHist,
+  listarVMs, listarGerentesVisita, listarLineasVisita,
+  type RupturaEstado, type RupturaMedico, type CierrePreview, type CierreHist, type Catalogo,
 } from '../../services/visita.service';
 
 const CAT_COLOR: Record<string, 'success' | 'primary' | 'warning'> = { A: 'success', B: 'primary', C: 'warning' };
@@ -40,15 +41,34 @@ export default function RupturaVisita() {
   const [confirmar, setConfirmar] = useState(false);
   const [cerrando, setCerrando] = useState(false);
 
+  // Requerimiento Mallén (Item 2): filtros por representante / línea / GD para gestión,
+  // alimentados por los registros de visita (en vivo).
+  const [vms, setVms] = useState<Catalogo[]>([]);
+  const [gerentes, setGerentes] = useState<Catalogo[]>([]);
+  const [lineas, setLineas] = useState<Catalogo[]>([]);
+  const [vmId, setVmId] = useState<number | ''>('');
+  const [gerenteId, setGerenteId] = useState<number | ''>('');
+  const [lineaId, setLineaId] = useState<number | ''>('');
+
+  useEffect(() => {
+    if (!esGestor) return;
+    listarVMs().then(setVms).catch(() => {});
+    listarGerentesVisita().then(setGerentes).catch(() => {});
+    listarLineasVisita().then(setLineas).catch(() => {});
+  }, [esGestor]);
+
   const cargar = useCallback(() => {
     setCargando(true);
-    const tareas: Promise<unknown>[] = [estadoRuptura().then(setEstado).catch(() => setEstado(null))];
+    const tareas: Promise<unknown>[] = [
+      estadoRuptura({ vmId: vmId || undefined, gerenteId: gerenteId || undefined, lineaId: lineaId || undefined })
+        .then(setEstado).catch(() => setEstado(null)),
+    ];
     if (esGestor) {
       tareas.push(previsualizarCierre().then(setPreview).catch(() => setPreview(null)));
       tareas.push(historialCierres().then(setHist).catch(() => setHist([])));
     }
     Promise.all(tareas).finally(() => setCargando(false));
-  }, [esGestor]);
+  }, [esGestor, vmId, gerenteId, lineaId]);
   useEffect(() => { cargar(); }, [cargar]);
 
   async function confirmarCierre() {
@@ -99,6 +119,38 @@ export default function RupturaVisita() {
         Médicos que acumulan ciclos sin visita. La cuenta avanza al cerrar cada ciclo.
       </Typography>
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
+
+      {/* Requerimiento Mallén (Item 2): filtros por representante / GD / línea (solo gestión). */}
+      {esGestor && (
+        <Card variant="outlined" sx={{ mb: 2, bgcolor: '#f5f8ff', borderColor: '#bbdefb' }}>
+          <Box sx={{ p: 1.5 }}>
+            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }} flexWrap="wrap" useFlexGap>
+              <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: 'primary.main' }}>
+                <FilterList fontSize="small" />
+                <Typography variant="body2" fontWeight={700}>Filtrar</Typography>
+              </Stack>
+              <TextField select size="small" label="Representante médico" value={vmId} sx={{ minWidth: 220, bgcolor: '#fff' }}
+                         onChange={(e) => setVmId(e.target.value === '' ? '' : Number(e.target.value))}>
+                <MenuItem value="">Todos</MenuItem>
+                {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Gerente de Distrito" value={gerenteId} sx={{ minWidth: 200, bgcolor: '#fff' }}
+                         onChange={(e) => setGerenteId(e.target.value === '' ? '' : Number(e.target.value))}>
+                <MenuItem value="">Todos</MenuItem>
+                {gerentes.map((g) => <MenuItem key={g.id} value={g.id}>{g.nombre}</MenuItem>)}
+              </TextField>
+              <TextField select size="small" label="Línea" value={lineaId} sx={{ minWidth: 180, bgcolor: '#fff' }}
+                         onChange={(e) => setLineaId(e.target.value === '' ? '' : Number(e.target.value))}>
+                <MenuItem value="">Todas</MenuItem>
+                {lineas.map((l) => <MenuItem key={l.id} value={l.id}>{l.nombre}</MenuItem>)}
+              </TextField>
+              {(vmId || gerenteId || lineaId) && (
+                <Button size="small" onClick={() => { setVmId(''); setGerenteId(''); setLineaId(''); }}>Limpiar</Button>
+              )}
+            </Stack>
+          </Box>
+        </Card>
+      )}
 
       <Grid container spacing={2} sx={{ mb: 2 }}>
         {SEVERIDADES.map((s) => (

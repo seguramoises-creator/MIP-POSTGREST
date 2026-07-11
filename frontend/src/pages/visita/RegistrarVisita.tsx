@@ -2,13 +2,13 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert,
   MenuItem, ToggleButton, ToggleButtonGroup, CircularProgress, Avatar, Checkbox,
-  Select, FormControl, Divider,
+  Select, FormControl, Divider, Autocomplete,
 } from '@mui/material';
 import { CheckCircle, Save, EventBusy, AccessAlarm, Medication, ChatBubbleOutline, Assignment, FiberManualRecord, SupervisorAccount, History, ExpandMore, ExpandLess, Lock } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import {
-  agendaHoy, listarCausas, misVisitasHoy, registrarVisita, registrarNoVisita, listarVMs, obtenerParrilla, miGerente, subirFotoVisita, historialVisitas, registrarMuestras,
-  type AgendaMedico, type VisitaHoy, type Catalogo, type ParrillaItem, type ProductoDetalle, type MiGerente,
+  agendaHoy, listarCausas, misVisitasHoy, registrarVisita, registrarNoVisita, listarVMs, obtenerParrilla, miGerente, subirFotoVisita, historialVisitas, registrarMuestras, listarMedicos,
+  type AgendaMedico, type VisitaHoy, type Catalogo, type ParrillaItem, type ProductoDetalle, type MiGerente, type MedicoVisita,
 } from '../../services/visita.service';
 
 // ── Paleta profesional (médica / farmacéutica) ───────────────────────────────
@@ -88,6 +88,9 @@ export default function RegistrarVisita() {
   const [vms, setVms] = useState<Catalogo[]>([]);
   const [vmId, setVmId] = useState<number | ''>('');
   const [agenda, setAgenda] = useState<AgendaMedico[]>([]);
+  // Requerimiento Mallén (Item 1): panel completo del VM para buscar médicos FUERA de la
+  // agenda del día (visita no programada) — se registran igual, sin salir de la pantalla.
+  const [panel, setPanel] = useState<MedicoVisita[]>([]);
   const [causas, setCausas] = useState<string[]>([]);
   const [registradas, setRegistradas] = useState<Registrada[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -122,8 +125,9 @@ export default function RegistrarVisita() {
   const listo = esVM || !!vmId;
 
   const cargarAgenda = useCallback(() => {
-    if (!listo) return;
+    if (!listo) { setAgenda([]); setPanel([]); return; }
     agendaHoy(vmParam).then(setAgenda).catch(() => setAgenda([]));
+    listarMedicos(vmParam).then(setPanel).catch(() => setPanel([]));
   }, [listo, vmParam]);
 
   const cargarRegistradas = useCallback(() => {
@@ -172,6 +176,25 @@ export default function RegistrarVisita() {
       (!q || (a.nombre ?? '').toUpperCase().includes(q)));
   }, [agenda, catFiltro, busqueda]);
 
+  // Requerimiento Mallén (Item 1): médicos FUERA de la agenda del día (aprobados y activos
+  // del panel, que no están programados para hoy) — para registrar una visita no programada.
+  const fueraDeAgenda = useMemo(() => {
+    const enAgenda = new Set(agenda.map((a) => a.medico_id));
+    return panel.filter((m) =>
+      m.activo && m.estado_aprobacion === 'APROBADO' && !enAgenda.has(m.id));
+  }, [panel, agenda]);
+
+  // Registrar un médico fuera de la agenda: se trata como Vista no programada.
+  function seleccionarFuera(m: MedicoVisita | null) {
+    if (!m) return;
+    seleccionar({
+      medico_id: m.id, nombre: m.nombre_completo, especialidad: m.especialidad_nombre,
+      categoria: m.categoria, centro_trabajo: m.centro_trabajo, provincia: m.provincia,
+      linea_id: m.linea_id ?? null, tipo_visita: 'V', hora_estimada: null,
+      estado: 'pendiente', no_visita: false,
+    });
+  }
+
   // Minutos transcurridos desde la hora indicada (para la ventana de 60 min).
   const haceMin = useMemo(() => {
     const [h, mi] = hora.split(':').map(Number);
@@ -192,8 +215,14 @@ export default function RegistrarVisita() {
     if (!sel) return;
     if (modoNoVisita) {
       if (!causa) { setMsg({ tipo: 'error', texto: 'Selecciona la causa.' }); return; }
-    } else if (!horaOk) {
-      setMsg({ tipo: 'error', texto: 'La hora está fuera de la ventana de 60 minutos.' }); return;
+    } else {
+      if (!horaOk) {
+        setMsg({ tipo: 'error', texto: 'La hora está fuera de la ventana de 60 minutos.' }); return;
+      }
+      // Requerimiento Mallén: no se puede registrar una visita sin marcar ≥1 producto.
+      if (Object.keys(detallados).length === 0) {
+        setMsg({ tipo: 'error', texto: 'Marca al menos un producto promocionado para poder registrar la visita.' }); return;
+      }
     }
     setGuardando(true); setMsg(null);
     // Entrada optimista AMARILLA en "Registradas hoy" (aún sin confirmar en servidor).
@@ -329,6 +358,22 @@ export default function RegistrarVisita() {
                 {['A', 'B', 'C', 'D'].map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
               </TextField>
             </Stack>
+            {/* Requerimiento Mallén (Item 1): registrar un médico que NO está en la agenda de hoy. */}
+            {fueraDeAgenda.length > 0 && (
+              <Autocomplete
+                size="small" fullWidth sx={{ mb: 1 }}
+                options={fueraDeAgenda}
+                value={null} blurOnSelect clearOnBlur
+                onChange={(_e, m) => seleccionarFuera(m)}
+                getOptionLabel={(m) => `${m.nombre_completo} · Cat ${m.categoria}${m.especialidad_nombre ? ` · ${m.especialidad_nombre}` : ''}`}
+                isOptionEqualToValue={(a, b) => a.id === b.id}
+                noOptionsText="Sin coincidencias en tu panel."
+                renderInput={(params) => (
+                  <TextField {...params} label="Registrar médico fuera de agenda (visita no programada)"
+                             placeholder="Escribe el nombre…" />
+                )}
+              />
+            )}
             {agenda.length === 0 ? (
               <Alert severity="info">No hay médicos programados. Puedes registrar desde el panel.</Alert>
             ) : agendaVisible.length === 0 ? (
@@ -357,8 +402,9 @@ export default function RegistrarVisita() {
                         </Typography>
                       </Box>
                       {reg ? (
-                        <Chip size="small" color={a.no_visita ? 'default' : 'success'}
-                              label={a.no_visita ? 'No-visita' : 'Registrada ✓'} />
+                        <Chip size="small" variant={a.no_visita ? 'filled' : 'outlined'}
+                              color={a.no_visita ? 'error' : 'success'}
+                              label={a.no_visita ? 'No visitado' : 'Registrada ✓'} />
                       ) : (
                         <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 700 }}>Pendiente</Typography>
                       )}
@@ -486,7 +532,7 @@ export default function RegistrarVisita() {
                                   </Avatar>
                                   <Box sx={{ minWidth: 0, flex: 1 }}>
                                     <Typography fontWeight={700} noWrap sx={{ fontSize: 'clamp(0.78rem, 3vw, 0.9rem)', lineHeight: 1.2 }}>
-                                      {p.producto}
+                                      {p.nombre || p.producto}
                                     </Typography>
                                     <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', fontSize: '0.66rem' }}>
                                       Propuesto: {p.meta_muestras} muestra{p.meta_muestras === 1 ? '' : 's'} · {Math.min(idx + 1, 3)}ª mención
@@ -660,9 +706,9 @@ export default function RegistrarVisita() {
                     <Box key={v.id} sx={{ py: 1 }}>
                       <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" rowGap={0.3}>
                         <Typography variant="body2" fontWeight={700} noWrap sx={{ flex: 1, minWidth: 140 }}>{v.medico}</Typography>
-                        <Chip size="small" variant="outlined"
-                              color={v.ejecutada ? (v.tipo_visita === 'R' ? 'info' : 'success') : 'default'}
-                              label={v.ejecutada ? (v.tipo_visita === 'R' ? 'Revisita' : 'Vista') : 'No-visita'} />
+                        <Chip size="small" variant={v.ejecutada ? 'outlined' : 'filled'}
+                              color={v.ejecutada ? (v.tipo_visita === 'R' ? 'info' : 'success') : 'error'}
+                              label={v.ejecutada ? (v.tipo_visita === 'R' ? 'Revisita' : 'Vista') : 'NO-Visita'} />
                         <Typography variant="caption" color="text.secondary">
                           {v.hora ? `${new Date(v.hora).toLocaleDateString()} ${new Date(v.hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
                         </Typography>

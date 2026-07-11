@@ -240,8 +240,11 @@ export interface CierreHist {
   id: number; ciclo_id: number; ciclo_nombre: string; fecha_cierre: string | null;
   panel: number; visitados: number; sin_visitar: number; ruptura_nueva: number; ruptura_critica: number;
 }
-export const estadoRuptura = (vmId?: number) =>
-  api.get<RupturaEstado>('/visita/ruptura', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export const estadoRuptura = (f: { vmId?: number; gerenteId?: number; lineaId?: number } = {}) =>
+  api.get<RupturaEstado>('/visita/ruptura', { params: {
+    ...(f.vmId && { vm_id: f.vmId }), ...(f.gerenteId && { gerente_id: f.gerenteId }),
+    ...(f.lineaId && { linea_id: f.lineaId }),
+  } }).then(r => r.data);
 export const previsualizarCierre = () =>
   api.get<CierrePreview>('/visita/cierre/previsualizar').then(r => r.data);
 export const cerrarCiclo = () => api.post<CierrePreview>('/visita/cierre').then(r => r.data);

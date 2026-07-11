@@ -7,6 +7,7 @@ import {
 import { Add, Delete, Save, Campaign, Edit, Publish, Inventory2, BarChart, Person, SupervisorAccount } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
+import { useNavigate } from 'react-router-dom';
 import {
   listarLineasVisita, obtenerParrilla, guardarParrilla, publicarParrilla, parrillaPenetracion, listarProductosDim,
   type Catalogo, type ParrillaItem, type PenetracionCiclo, type ProductoDim,
@@ -24,6 +25,8 @@ function msgError(e: unknown, fallback: string): string {
 export default function ParrillaVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD' || rol === 'GERENTE_MARCA';
+  const puedeConfigProductos = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD';
+  const navigate = useNavigate();
 
   const { cicloId, ciclo, esSoloLectura } = useCicloStore();
 
@@ -148,6 +151,21 @@ export default function ParrillaVisita() {
           </TextField>
           {cerrado && <Chip size="small" label="Ciclo cerrado — solo lectura" />}
         </Stack>
+      )}
+
+      {/* Requerimiento Mallén (Item 3): línea sin productos registrados → aviso + acceso directo
+          a Sistema › Configuración › Productos para darlos de alta. */}
+      {esGestor && lineaId && productosDim.length === 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }}
+               action={puedeConfigProductos ? (
+                 <Button color="inherit" size="small" onClick={() => navigate('/admin?tab=Productos')}>
+                   Agregar producto
+                 </Button>
+               ) : undefined}>
+          Línea sin productos registrados. {puedeConfigProductos
+            ? '¿Quiere agregar producto? Ve a Sistema › Configuración › Productos.'
+            : 'Pide a un administrador que los registre en Sistema › Configuración › Productos.'}
+        </Alert>
       )}
 
       {/* KPIs */}

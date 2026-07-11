@@ -11,6 +11,7 @@ import {
 import { useMemo, useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { KPI_ORDEN, kpiNombre } from '../../constants/kpi';
+import { useCicloStore } from '../../store/ciclo.store';
 
 function FilterLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -50,12 +51,21 @@ const CICLO_COLORS = [
 // KPI_ORDEN y kpiNombre importados desde ../../constants/kpi
 
 export default function Productividad() {
-  const [paisId,   setPaisId]   = useState<string | ''>('');
-  const [cicloId,  setCicloId]  = useState<number | ''>('');
+  // País y ciclo salen del CONTEXTO GLOBAL (barra superior). Así la página y su gráfico
+  // siguen al ciclo elegido arriba (por defecto el ABIERTO), en vez de auto-elegir el
+  // "último ciclo con datos" por su cuenta (Item 7 Mallén).
+  const paisCodigo  = useCicloStore((s) => s.paisCodigo);
+  const cicloGlobal = useCicloStore((s) => s.cicloId);
+  const setPais     = useCicloStore((s) => s.setPais);
+  const setCicloVer = useCicloStore((s) => s.setCicloVer);
+  const paisId  = paisCodigo ?? '';
+  const cicloId = cicloGlobal ?? '';
   const [lineaId,  setLineaId]  = useState<number | ''>('');
   const [busqueda, setBusqueda] = useState('');
 
-  const handlePaisChange = (val: string | '') => { setPaisId(val); setCicloId(''); setLineaId(''); };
+  // Al cambiar el país (aquí o desde la barra global), limpia la línea.
+  useEffect(() => { setLineaId(''); }, [paisCodigo]);
+  const handlePaisChange = (val: string | '') => { if (val) void setPais(val); };
 
   const { data: catalogos } = useQuery({
     queryKey: ['prod-catalogos', paisId],
@@ -64,15 +74,7 @@ export default function Productividad() {
   const paises: any[] = catalogos?.paises ?? [];
   const ciclos: any[] = catalogos?.ciclos  ?? [];
 
-  // ── Auto-seleccionar República Dominicana al cargar ───────────────────
-  useEffect(() => {
-    if (!paises.length || paisId) return;
-    const rd = paises.find((p: any) =>
-      p.codigo?.toUpperCase() === 'RD' ||
-      p.nombre?.toLowerCase().includes('dominicana')
-    );
-    if (rd) handlePaisChange(rd.codigo);
-  }, [paises]); // eslint-disable-line react-hooks/exhaustive-deps
+  // El país por defecto lo fija el contexto global (store.init) — sin auto-selección local.
 
   const { data: lineas } = useQuery({
     queryKey: ['lineas', paisId],
@@ -131,11 +133,7 @@ export default function Productividad() {
     }).then(r => r.data),
     retry: 1, enabled: !!paisId,
   });
-  // ── Auto-seleccionar el último ciclo CON DATOS (ciclo_efectivo del ranking) ─
-  useEffect(() => {
-    if (!rankData?.ciclo_efectivo || cicloId) return;
-    setCicloId(rankData.ciclo_efectivo);
-  }, [rankData?.ciclo_efectivo]); // eslint-disable-line react-hooks/exhaustive-deps
+  // El ciclo lo fija el contexto global (default = abierto); sin auto-selección local.
 
   const rankPorRm  = useMemo(() => {
     const m: Record<number, { pos: number; mip: number; gerente: string }> = {};
@@ -269,7 +267,7 @@ export default function Productividad() {
             <Box sx={{ width: 200 }}>
               <FilterLabel>Ciclo</FilterLabel>
               <Select size="small" fullWidth value={cicloId}
-                onChange={(e) => setCicloId(e.target.value as number | '')}
+                onChange={(e) => { const v = e.target.value; if (v !== '') setCicloVer(Number(v)); }}
                 displayEmpty disabled={!paisId}>
                 <MenuItem value=""><em>{paisId ? 'Último ciclo con datos' : 'Seleccione un país'}</em></MenuItem>
                 {ciclos.map((c: any) => <MenuItem key={c.id} value={c.id}>{c.nombre_canonico || c.nombre}</MenuItem>)}

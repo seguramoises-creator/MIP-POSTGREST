@@ -9,6 +9,7 @@ import {
 import { Download } from '@mui/icons-material';
 import { useMemo, useEffect, useState } from 'react';
 import { api } from '../../services/api';
+import { useCicloStore } from '../../store/ciclo.store';
 import type { RankingItem } from '../../types';
 
 /* ── utilidades ───────────────────────────────────────────── */
@@ -64,14 +65,23 @@ function SimpleRow({ row, i }: { row: any; i: number }) {
 /* ── página principal ─────────────────────────────────────── */
 export default function Ranking() {
   const [tab,        setTab]        = useState(0);
-  const [paisId,     setPaisId]     = useState<string | ''>('');
-  const [cicloId,    setCicloId]    = useState<number | ''>('');
+  // País y ciclo salen del CONTEXTO GLOBAL (barra superior); el ranking sigue al ciclo
+  // elegido arriba (por defecto el ABIERTO) en vez de auto-elegir el "último con datos" (Item 8).
+  const paisCodigo  = useCicloStore((s) => s.paisCodigo);
+  const cicloGlobal = useCicloStore((s) => s.cicloId);
+  const setPais     = useCicloStore((s) => s.setPais);
+  const setCicloVer = useCicloStore((s) => s.setCicloVer);
+  const paisId  = paisCodigo ?? '';
+  const cicloId = cicloGlobal ?? '';
   const [busqueda,   setBusqueda]   = useState('');
+  const [soloConRegistro, setSoloConRegistro] = useState(false);  // Item 8: todos / con registro
   const [page,       setPage]       = useState(0);
   const [size,       setSize]       = useState(200);
   const [exportando, setExportando] = useState(false);
 
-  const handlePaisChange = (val: string | '') => { setPaisId(val); setCicloId(''); setPage(0); };
+  // Al cambiar el país (aquí o desde la barra global), vuelve a la primera página.
+  useEffect(() => { setPage(0); }, [paisCodigo]);
+  const handlePaisChange = (val: string | '') => { if (val) void setPais(val); setPage(0); };
 
   const { data: catalogos } = useQuery({
     queryKey: ['ranking-catalogos', paisId],
@@ -82,30 +92,7 @@ export default function Ranking() {
   const paises: any[] = catalogos?.paises ?? [];
   const ciclos: any[] = catalogos?.ciclos  ?? [];
 
-  // ── Auto-seleccionar República Dominicana al cargar ───────────────────
-  useEffect(() => {
-    if (!paises.length || paisId) return;
-    const rd = paises.find((p: any) =>
-      p.codigo?.toUpperCase() === 'RD' ||
-      p.nombre?.toLowerCase().includes('dominicana')
-    );
-    if (rd) handlePaisChange(rd.codigo);
-  }, [paises]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Obtener el último ciclo con datos reales
-  const { data: _cicloEf } = useQuery({
-    queryKey: ['ciclo-ef', paisId],
-    queryFn: () => api.get('/ranking', {
-      params: { ...(paisId && { pais_codigo: paisId }), size: 1, page: 1 },
-    }).then(r => r.data?.ciclo_efectivo ?? null),
-    enabled: !!paisId,
-    staleTime: 60_000,
-  });
-  // ── Auto-seleccionar el último ciclo CON DATOS ─────────────────────
-  useEffect(() => {
-    if (!_cicloEf || cicloId) return;
-    setCicloId(_cicloEf);
-  }, [_cicloEf]); // eslint-disable-line react-hooks/exhaustive-deps
+  // País y ciclo por defecto los fija el contexto global (store.init) — sin auto-selección local.
 
 
   const endpoints  = ['/ranking', '/ranking/regional', '/ranking/anual'];
@@ -147,14 +134,19 @@ export default function Ranking() {
   }, [items, ultimoCicloConDatos]);
 
   const itemsFiltrados = useMemo(() => {
-    const base = itemsOrdenados;
+    let base = itemsOrdenados;
+    // Item 8 (Mallén): "con registro" = RM con score en el ciclo vigente (score > 0).
+    if (soloConRegistro) {
+      const key = ultimoCicloConDatos != null ? `score_c${ultimoCicloConDatos}` : 'score_total';
+      base = base.filter((row: any) => row[key] != null && Number(row[key]) > 0);
+    }
     if (!busqueda.trim()) return base;
     const q = busqueda.trim().toLowerCase();
     return base.filter((row: any) =>
       String(row.rm_nombre || '').toLowerCase().includes(q) ||
       String(row.rm_codigo || '').toLowerCase().includes(q)
     );
-  }, [itemsOrdenados, busqueda]);
+  }, [itemsOrdenados, busqueda, soloConRegistro, ultimoCicloConDatos]);
 
   const elegibles = itemsFiltrados.filter((r: any) => {
     const score = ultimoCicloConDatos != null
@@ -258,7 +250,7 @@ export default function Ranking() {
             <Box sx={{ width: 200 }}>
               <FilterLabel>Ciclo</FilterLabel>
               <Select size="small" fullWidth value={cicloId}
-                onChange={(e) => { setCicloId(e.target.value as number | ''); setPage(0); }}
+                onChange={(e) => { const v = e.target.value; if (v !== '') setCicloVer(Number(v)); setPage(0); }}
                 displayEmpty disabled={!paisId}>
                 <MenuItem value="">
                   <em>{paisId ? 'Último ciclo con datos' : 'Seleccione un país'}</em>
@@ -281,6 +273,12 @@ export default function Ranking() {
                 />
               </Box>
             )}
+            {/* Item 8 (Mallén): alterna entre todos los RM y solo los que tienen registro. */}
+            <Chip label={soloConRegistro ? 'Solo con registro' : 'Todos'} clickable
+                  color={soloConRegistro ? 'primary' : 'default'}
+                  variant={soloConRegistro ? 'filled' : 'outlined'}
+                  onClick={() => setSoloConRegistro((v) => !v)}
+                  sx={{ ml: 1, fontWeight: 700, height: 32 }} />
             {cicloNombre && (
               <Box sx={{ ml: 'auto' }}>
                 <Chip label={'Mostrando: ' + cicloNombre}
