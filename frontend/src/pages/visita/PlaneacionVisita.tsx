@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback, type ReactNode } from 'react
 import {
   Box, Typography, Card, CardContent, Button, Stack, Chip, Alert, MenuItem,
   Select, FormControl, CircularProgress, Table, TableHead, TableRow, TableCell,
-  TableBody, Grid, Tooltip, TextField, Avatar, Divider,
+  TableBody, Grid, Tooltip, TextField, Avatar, Divider, TablePagination,
 } from '@mui/material';
 import { Save, EventNote, Warning, CheckCircle, FilterList, Search, Badge, SupervisorAccount, Layers } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
@@ -47,6 +47,8 @@ export default function PlaneacionVisita() {
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
   const [catFiltro, setCatFiltro] = useState('');   // '' = todas
   const [busqueda, setBusqueda] = useState('');
+  const [pagina, setPagina] = useState(0);          // paginación de la tabla (rendimiento)
+  const POR_PAGINA = 25;
   // Ficha del representante (Gerente de Distrito + Línea) — viene de la dim del RM.
   const [infoRep, setInfoRep] = useState<MiGerente | null>(null);
 
@@ -57,6 +59,14 @@ export default function PlaneacionVisita() {
       (!catFiltro || m.categoria === catFiltro) &&
       (!q || (m.nombre_completo ?? '').toUpperCase().includes(q)));
   }, [medicos, catFiltro, busqueda]);
+
+  // Rendimiento: renderizar solo la página actual (cada fila trae 5 selects; 200+ de golpe
+  // pone lentísima la tabla). El plan guardado es TODO el panel, no solo lo visible.
+  useEffect(() => { setPagina(0); }, [catFiltro, busqueda, vmId]);
+  const medicosPagina = useMemo(
+    () => medicosVisibles.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA),
+    [medicosVisibles, pagina],
+  );
 
   // El RM planifica su propio panel (backend fuerza rm_id); ADMIN/GERENTE eligen un VM.
   const vmParam = esVM ? undefined : (vmId || undefined);
@@ -305,7 +315,7 @@ export default function PlaneacionVisita() {
                   <Alert severity="info" sx={{ my: 1 }}>Ningún médico coincide con el filtro.</Alert>
                 </TableCell></TableRow>
               )}
-              {medicosVisibles.map((m) => {
+              {medicosPagina.map((m) => {
                 const f = plan[m.id] ?? F0;
                 const rOk = revisitaPermitida(f.vSemana);
                 // Item 6 — coherencia: frecuencia PLANEADA (lo creado) vs LOGRADA (visitas del ciclo).
@@ -389,6 +399,17 @@ export default function PlaneacionVisita() {
               })}
             </TableBody>
           </Table>
+          {medicosVisibles.length > POR_PAGINA && (
+            <TablePagination
+              component="div"
+              count={medicosVisibles.length}
+              page={pagina}
+              onPageChange={(_e, p) => setPagina(p)}
+              rowsPerPage={POR_PAGINA}
+              rowsPerPageOptions={[POR_PAGINA]}
+              labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
+            />
+          )}
         </Box>
       </Card>
 

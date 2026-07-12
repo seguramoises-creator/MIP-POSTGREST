@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback, type ReactNode } from 'react
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert, Grid,
   Menu, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
-  Avatar, InputAdornment, Divider, Switch, FormControlLabel, IconButton, Tooltip, Autocomplete,
+  Avatar, InputAdornment, Divider, Switch, FormControlLabel, IconButton, Tooltip, Autocomplete, TablePagination,
 } from '@mui/material';
 import { Add, PersonAddAlt1, Warning, Search, FiberManualRecord, Edit, Block, Restore, HowToReg, ThumbUp, ThumbDown, Badge, SupervisorAccount, Layers } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
@@ -90,6 +90,8 @@ export default function PanelMedico() {
   const [busqueda, setBusqueda] = useState('');
   const [catFiltro, setCatFiltro] = useState('');
   const [espFiltro, setEspFiltro] = useState('');
+  const [pagina, setPagina] = useState(0);          // paginación de la lista (rendimiento)
+  const POR_PAGINA = 30;
   // Ficha del representante (Gerente de Distrito + Línea) — viene de la dim del RM.
   const [infoRep, setInfoRep] = useState<MiGerente | null>(null);
   const [estadoFiltro, setEstadoFiltro] = useState<'activos' | 'inactivos' | 'todos'>('activos');
@@ -168,6 +170,13 @@ export default function PanelMedico() {
           || (m.especialidad_nombre ?? '').toUpperCase().includes(q)
           || (m.linea_nombre ?? '').toUpperCase().includes(q)));
   }, [medicos, busqueda, catFiltro, espFiltro, estadoFiltro]);
+
+  // Rendimiento: renderizar solo la página actual (2705 filas de golpe congela el navegador).
+  useEffect(() => { setPagina(0); }, [busqueda, catFiltro, espFiltro, estadoFiltro, vmFiltro]);
+  const filtradosPagina = useMemo(
+    () => filtrados.slice(pagina * POR_PAGINA, (pagina + 1) * POR_PAGINA),
+    [filtrados, pagina],
+  );
 
   const abrirNuevo = () => {
     setMenuAnchor(null); setModoExistente(false); setExistenteSel('');
@@ -482,7 +491,7 @@ export default function PanelMedico() {
           </Alert>
         ) : (
           <Box>
-            {filtrados.map((m, i) => {
+            {filtradosPagina.map((m, i) => {
               const ruptura = m.ciclos_sin_visita >= 3;
               const est = ESTADO[m.estado_visita ?? 'sin'];
               const av = CAT_AV[m.categoria] ?? CAT_AV.C;
@@ -540,6 +549,17 @@ export default function PanelMedico() {
                 </Box>
               );
             })}
+            {filtrados.length > POR_PAGINA && (
+              <TablePagination
+                component="div"
+                count={filtrados.length}
+                page={pagina}
+                onPageChange={(_e, p) => setPagina(p)}
+                rowsPerPage={POR_PAGINA}
+                rowsPerPageOptions={[POR_PAGINA]}
+                labelDisplayedRows={({ from, to, count }) => `${from}–${to} de ${count}`}
+              />
+            )}
           </Box>
         )}
       </Card>
