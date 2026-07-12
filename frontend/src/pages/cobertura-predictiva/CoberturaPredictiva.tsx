@@ -361,14 +361,14 @@ const DashboardTab = ({
     : 0;
 
   const chartCobertura = sortedRMs.slice(0, 15).map(r => ({
-    name: r.codigo_representante,
+    name: r.nombre_vm || r.codigo_representante,
     actual: +r.cobertura_actual_pct.toFixed(1),
     proyectada: +r.cobertura_proyectada_pct.toFixed(1),
     fill: SEM[r.estado_cobertura],
   }));
 
   const chartRitmo = sortedRMs.slice(0, 15).map(r => ({
-    name: r.codigo_representante,
+    name: r.nombre_vm || r.codigo_representante,
     medicos_dia: r.medicos_diarios_requeridos,
     contactos_dia: r.contactos_diarios_requeridos,
     fill: SEM[r.estado_ritmo],
@@ -462,9 +462,10 @@ const DashboardTab = ({
               Cobertura actual vs proyectada (top 15 VMs)
             </Typography>
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartCobertura} margin={{ top: 5, right: 10, left: -10, bottom: 28 }}>
+              <BarChart data={chartCobertura} margin={{ top: 5, right: 10, left: -10, bottom: 44 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0}
+                       tickFormatter={(v: string) => (v && v.length > 12 ? v.slice(0, 11) + '…' : v)} />
                 <YAxis domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 10 }} />
                 <RechartTooltip formatter={(v: number) => `${v}%`} />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
@@ -483,9 +484,10 @@ const DashboardTab = ({
               Ritmo diario requerido (méd. + contactos)
             </Typography>
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartRitmo} margin={{ top: 5, right: 10, left: -10, bottom: 28 }}>
+              <BarChart data={chartRitmo} margin={{ top: 5, right: 10, left: -10, bottom: 44 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0}
+                       tickFormatter={(v: string) => (v && v.length > 12 ? v.slice(0, 11) + '…' : v)} />
                 <YAxis tick={{ fontSize: 10 }} />
                 <RechartTooltip />
                 <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
@@ -534,8 +536,7 @@ const DashboardTab = ({
                     sx={{ cursor: 'pointer', bgcolor: expandedRow === rm.kpi_key ? '#f3f8ff' : undefined, borderLeft: `4px solid ${SEM[rm.estado_cobertura]}` }}
                   >
                     <TableCell>
-                      <Typography variant="body2" fontWeight={600}>{rm.nombre_vm}</Typography>
-                      <Typography variant="caption" color="text.secondary">{rm.codigo_representante}</Typography>
+                      <Typography variant="body2" fontWeight={600}>{rm.nombre_vm || rm.codigo_representante}</Typography>
                     </TableCell>
                     <TableCell>
                       <Typography variant="caption">{rm.linea ?? '—'}</Typography>
