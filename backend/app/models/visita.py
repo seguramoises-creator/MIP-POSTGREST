@@ -1,7 +1,7 @@
 """SCGCPR — Modelos del Módulo de Visita Médica (esquema `Visita`).
 
 Adapta la especificación "VISTA — Módulo de Visita Médica" al stack del proyecto
-(SQL Server + SQLAlchemy 2.0). Reutiliza Config.DIM_RM (visitador médico / VM),
+(PostgreSQL + SQLAlchemy 2.0). Reutiliza Config.DIM_RM (visitador médico / VM),
 Config.DIM_Ciclo y Config.DIM_Especialidad en lugar de crear catálogos nuevos.
 
 Fase 1: Panel Médico (catálogo de médicos del universo de visita).

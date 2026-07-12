@@ -47,7 +47,7 @@ class TokenRevocado(Base):
 
     Reemplaza la blacklist en memoria (FIX W-04 v1): el set en memoria no se
     comparte entre workers de uvicorn, por lo que un logout en un proceso no
-    revocaba el token en los demás. Persistir en SQL Server hace la revocación
+    revocaba el token en los demás. Persistir en la base de datos hace la revocación
     consistente entre todos los workers y sobrevive a reinicios.
 
     `jti` es el identificador único del token (claim `jti`, o el fallback

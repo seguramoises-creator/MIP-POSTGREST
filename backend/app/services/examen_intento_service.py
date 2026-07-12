@@ -40,7 +40,7 @@ def preparar_intento(db: Session, asignacion, evaluado_tipo, evaluado_id, contex
         raise ValueError("Se agotaron los intentos permitidos")
 
     if asignacion.fecha_limite is not None:
-        # fecha_limite se persiste como DateTime (naive en SQL Server) y representa
+        # fecha_limite se persiste como DateTime (naive en la BD) y representa
         # una FECHA DE CALENDARIO LOCAL (la que eligió quien asignó). Se compara
         # contra la fecha local — no UTC — porque en husos negativos (ej. GMT-4) la
         # fecha UTC ya es del día siguiente al final de la tarde y haría "vencer" la
@@ -312,7 +312,7 @@ def entregar_intento(db: Session, intento_id: int) -> IntentoExamen:
     intento.fecha_fin = datetime.now(timezone.utc)
 
     if intento.fecha_inicio is not None:
-        # fecha_inicio viene de SQL Server como naive; normalizar a UTC aware
+        # fecha_inicio viene de la BD como naive; normalizar a UTC aware
         # antes de restar (fecha_fin es aware) para evitar TypeError.
         ini = intento.fecha_inicio
         if ini.tzinfo is None:

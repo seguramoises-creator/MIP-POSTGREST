@@ -44,41 +44,27 @@ from app.models.dimensiones import (
     Ciclo, Mes, Premio, Medico,
 )
 from app.services.categorizacion_service import resolver_medico_por_codigo
-from app.core.config import settings as _settings
 
 router = APIRouter(prefix="/dims", tags=["Importación DIMs"])
 
 
-def _identity_insert_on(db: Session, tabla: str) -> None:
-    """Habilita inserción de ids explícitos en una columna autoincremental.
-
-    Dialect-aware: SQL Server exige ``SET IDENTITY_INSERT <tabla> ON`` antes de
-    insertar un id explícito; en Postgres las columnas SERIAL aceptan valores
-    explícitos sin comando previo, así que es un no-op.
-    """
-    if _settings.DB_ENGINE != "postgres":
-        from sqlalchemy import text as _text
-        db.execute(_text(f'SET IDENTITY_INSERT {tabla} ON'))
+def _ids_explicitos_on(db: Session, tabla: str) -> None:
+    """No-op en PostgreSQL: las columnas SERIAL aceptan ids explícitos sin
+    ningún comando previo."""
+    return None
 
 
-def _identity_insert_off(db: Session, tabla: str, pk: str = "id") -> None:
-    """Cierra el modo de inserción explícita de ids.
-
-    En SQL Server emite ``SET IDENTITY_INSERT <tabla> OFF``. En Postgres
-    resincroniza la secuencia SERIAL al ``MAX(pk)`` para que los siguientes
-    inserts automáticos no colisionen con los ids explícitos recién insertados.
-    """
+def _ids_explicitos_off(db: Session, tabla: str, pk: str = "id") -> None:
+    """Tras insertar ids explícitos, resincroniza la secuencia SERIAL al
+    ``MAX(pk)`` para que los siguientes inserts automáticos no colisionen."""
     from sqlalchemy import text as _text
-    if _settings.DB_ENGINE == "postgres":
-        db.execute(
-            _text(
-                f'SELECT setval(pg_get_serial_sequence(:tab, :pk), '
-                f'GREATEST(COALESCE((SELECT MAX("{pk}") FROM {tabla}), 1), 1))'
-            ),
-            {"tab": tabla, "pk": pk},
-        )
-    else:
-        db.execute(_text(f'SET IDENTITY_INSERT {tabla} OFF'))
+    db.execute(
+        _text(
+            f'SELECT setval(pg_get_serial_sequence(:tab, :pk), '
+            f'GREATEST(COALESCE((SELECT MAX("{pk}") FROM {tabla}), 1), 1))'
+        ),
+        {"tab": tabla, "pk": pk},
+    )
 
 
 AdminOGerProd = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
@@ -636,10 +622,10 @@ def _importar_hoja(
     elif nombre_canonico == "DIM_LINEA":
         from sqlalchemy import text as _text
 
-        # Si LINEA_ID del Excel es numérico, preservarlo como id de BD (IDENTITY_INSERT)
+        # Si LINEA_ID del Excel es numérico, preservarlo como id de BD (id explícito)
         usar_id_natural = bool(rows and _i(rows[0].get("LINEA_ID")))
         if usar_id_natural:
-            _identity_insert_on(db, '"Config"."DIM_Linea"')
+            _ids_explicitos_on(db, '"Config"."DIM_Linea"')
 
         try:
             ids_usados: set = set()
@@ -670,7 +656,7 @@ def _importar_hoja(
                 ins += 1
         finally:
             if usar_id_natural:
-                _identity_insert_off(db, '"Config"."DIM_Linea"')
+                _ids_explicitos_off(db, '"Config"."DIM_Linea"')
 
         db.commit()
 
@@ -678,10 +664,10 @@ def _importar_hoja(
     elif nombre_canonico == "DIM_GERENTE":
         from sqlalchemy import text as _text
 
-        # Si GERENTE_ID del Excel es numérico, preservarlo como id de BD (IDENTITY_INSERT)
+        # Si GERENTE_ID del Excel es numérico, preservarlo como id de BD (id explícito)
         usar_id_natural = bool(rows and _i(rows[0].get("GERENTE_ID")))
         if usar_id_natural:
-            _identity_insert_on(db, '"Config"."DIM_Gerente"')
+            _ids_explicitos_on(db, '"Config"."DIM_Gerente"')
 
         try:
             ids_usados: set = set()
@@ -717,7 +703,7 @@ def _importar_hoja(
                 ins += 1
         finally:
             if usar_id_natural:
-                _identity_insert_off(db, '"Config"."DIM_Gerente"')
+                _ids_explicitos_off(db, '"Config"."DIM_Gerente"')
 
         db.commit()
 
@@ -725,7 +711,7 @@ def _importar_hoja(
     elif nombre_canonico == "DIM_RM":
         from sqlalchemy import text as _text
 
-        # Si RM_CODIGO es numérico, usarlo como id de BD (IDENTITY_INSERT)
+        # Si RM_CODIGO es numérico, usarlo como id de BD (id explícito)
         # para que FACT_ResultadoIndicador.rm_id coincida con el código del Excel.
         usar_id_natural = bool(rows and _i(
             _s(rows[0].get("RM_CODIGO") or rows[0].get("CODIGO_RM")
@@ -733,7 +719,7 @@ def _importar_hoja(
         ))
 
         if usar_id_natural:
-            _identity_insert_on(db, '"Config"."DIM_RM"')
+            _ids_explicitos_on(db, '"Config"."DIM_RM"')
 
         try:
             for row in rows:
@@ -775,7 +761,7 @@ def _importar_hoja(
                 ins += 1
         finally:
             if usar_id_natural:
-                _identity_insert_off(db, '"Config"."DIM_RM"')
+                _ids_explicitos_off(db, '"Config"."DIM_RM"')
 
         db.commit()
 
@@ -783,12 +769,12 @@ def _importar_hoja(
     elif nombre_canonico == "DIM_INDICADOR":
         from sqlalchemy import text as _text
 
-        # Si INDICADOR_ID del Excel es numérico, preservarlo como id de BD (IDENTITY_INSERT).
+        # Si INDICADOR_ID del Excel es numérico, preservarlo como id de BD (id explícito).
         # Para multi-país: el mismo INDICADOR_ID solo se puede usar una vez (primer país);
         # los países subsiguientes con el mismo id obtendrán un id auto-generado.
         usar_id_natural = bool(rows and _i(rows[0].get("INDICADOR_ID")))
         if usar_id_natural:
-            _identity_insert_on(db, '"Config"."DIM_Indicador"')
+            _ids_explicitos_on(db, '"Config"."DIM_Indicador"')
 
         try:
             ids_usados: set = set()  # IDs ya asignados en este lote o en BD
@@ -861,7 +847,7 @@ def _importar_hoja(
                     ins += 1
         finally:
             if usar_id_natural:
-                _identity_insert_off(db, '"Config"."DIM_Indicador"')
+                _ids_explicitos_off(db, '"Config"."DIM_Indicador"')
 
         db.commit()
 

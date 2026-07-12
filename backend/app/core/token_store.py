@@ -1,7 +1,7 @@
 """
 SCGCPR — Token Blacklist (Revocación de Refresh Tokens) — persistida en BD.
 
-FIX W-04 (v2): la blacklist vive ahora en SQL Server (tabla
+FIX W-04 (v2): la blacklist vive ahora en la base de datos (tabla
 `Security.FACT_TokenRevocado`) en vez de un `set` en memoria. La versión en
 memoria no se compartía entre workers de uvicorn —un logout en un proceso no
 revocaba el token en los demás— y se perdía al reiniciar. Persistir en BD hace

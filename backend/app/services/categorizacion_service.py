@@ -1,15 +1,14 @@
 """
 Servicio de Categorización Médica — nueva versión (jun-2026).
 
-Adaptación del loader cargar_categorizacion_medica_excel_sqlserver.py
-para usar SQLAlchemy / pymssql en vez de pyodbc directo.
+Loader de Categorización Médica desde Excel con SQLAlchemy / psycopg2 (PostgreSQL).
 
 Flujo:
 1. Leer hojas del Excel con openpyxl (data_only=True para fórmulas calculadas).
-2. UPSERT de catálogos cat.Dim* compatible con pymssql.
+2. UPSERT de catálogos cat.Dim* (SQL portable).
 3. Crear registro en cat.LoadBatch.
 4. INSERT en stg.MedicoCategoriaInput.
-5. Ejecutar cat.sp_CalcularCategoriaMedica.
+5. Calcular categorías con el motor 100% Python (calcular_categorias_py).
 6. Retornar resumen del lote.
 """
 
@@ -144,7 +143,7 @@ def _get_componente_key(db, codigo):
 
 def _portable_upsert(db, tabla, claves, valores, solo_insert=None):
     """UPSERT portable a PostgreSQL: SELECT de existencia + INSERT o UPDATE como
-    dos statements separados. Sustituye el patrón T-SQL ``IF NOT EXISTS ... ELSE ...``
+    dos statements separados (SELECT de existencia y luego INSERT/UPDATE)
     (procedural, inválido en Postgres) sin requerir ``ON CONFLICT`` ni constraints
     únicos sobre la clave natural.
 
@@ -328,7 +327,7 @@ def _regla_aplica(regla, valor_num, valor_txt):
 
 # SQL de sincronización de dimensiones maestras: cat.* (cargado del Excel) → Config.DIM_*
 # (fuente única del sistema, usada por Panel Médico / Productos). Aditivo (insert-if-not-exists,
-# case-insensitive) y portable PG / SQL Server. El país se toma de cat.DimPais.CodigoPais y se
+# case-insensitive). El país se toma de cat.DimPais.CodigoPais y se
 # valida contra Config.DIM_Pais para no romper la FK.
 _SYNC_ESPECIALIDAD = """
 INSERT INTO "Config"."DIM_Especialidad" (nombre, activo)
@@ -542,7 +541,7 @@ def cargar_excel_categorizacion(db: Session, excel_bytes: bytes, nombre_archivo:
         if lotes_eliminados:
             logger.info(f"[CAT] Reemplazando {lotes_eliminados} lote(s) existente(s) para período '{periodo}'")
 
-        # Portabilidad: SQL Server usa OUTPUT INSERTED y Postgres RETURNING (incompatibles).
+        # Recupera la clave recién insertada con RETURNING (PostgreSQL).
         # Se hace el INSERT sin cláusula de salida y luego se relee la clave por MAX
         # sobre la clave natural (archivo+periodo+usuario). Es seguro porque
         # _limpiar_periodo() ya borró cualquier lote previo de este período.
@@ -1127,7 +1126,7 @@ def resolver_medico_por_codigo(
             "esp_id": especialidad_id,
         },
     )
-    # Portabilidad: SCOPE_IDENTITY() es exclusivo de SQL Server. Se relee la clave
+    # Se relee la clave
     # recién insertada por la clave natural (pais_codigo, codigo), portable en ambos motores.
     db.flush()
     new_id = db.execute(

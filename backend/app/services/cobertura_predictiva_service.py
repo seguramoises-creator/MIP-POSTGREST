@@ -704,7 +704,6 @@ def categorias_vivo(db: Session, ciclo_codigo: str, pais_codigo: str,
 # ═══════════════════════════════════════════════════════════════════════════════
 
 from sqlalchemy import text as _text
-from app.core.config import settings as _settings
 from app.models.cat_models import (
     CatDimPais, CatDimCiclo, CatDimCalendario,
     CatFactTargetMedicoCiclo, CatFactVisitaMedica,
@@ -914,8 +913,8 @@ def calcular_cobertura_sp(
 ) -> dict:
     """(Re)calcula los KPIs de cobertura predictiva en cat.KpiCoberturaPredictiva.
 
-    jul-2026: el cálculo se movió de cat.sp_CalcularCoberturaPredictiva (T-SQL) a
-    Python (calcular_cobertura_py) para dejar el core agnóstico de BD."""
+    jul-2026: el cálculo es 100% Python (calcular_cobertura_py) para dejar el
+    core agnóstico de BD."""
     if fecha_corte is None:
         fecha_corte = date.today()
     try:
@@ -1060,14 +1059,9 @@ def get_dashboard_cat(
             "detalle_rms": [],
         }
 
-    # Buscar la fecha de corte más próxima (el SP puede haberse corrido en otra fecha).
-    # La diferencia de días es dialect-específica: SQL Server usa DATEDIFF(DAY, a, b);
-    # Postgres resta directamente dos DATE y devuelve un entero de días.
-    _diff_dias = (
-        'ABS("FechaCorte"::date - CAST(:fecha_corte AS date))'
-        if _settings.DB_ENGINE == "postgres"
-        else 'ABS(DATEDIFF(DAY, "FechaCorte", :fecha_corte))'
-    )
+    # Buscar la fecha de corte más próxima (el cálculo pudo correrse en otra fecha).
+    # En Postgres la resta de dos DATE devuelve directamente un entero de días.
+    _diff_dias = 'ABS("FechaCorte"::date - CAST(:fecha_corte AS date))'
     kpi_fecha = db.execute(
         _text(f"""
             SELECT "FechaCorte"

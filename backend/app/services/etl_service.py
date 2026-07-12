@@ -250,7 +250,7 @@ def _recalcular_y_ranking(
     Fase 5 del ETL: dispara DW.sp_RecalcularCiclo para calcular
     puntos_obtenidos y regenerar FACT_ScoreIntegralRM + FACT_RankingRM.
 
-    ciclo_id llega como el valor del Excel (que con IDENTITY_INSERT coincide
+    ciclo_id llega como el valor del Excel (que con el id explícito coincide
     con DIM_Ciclo.id). Si no coincide, se busca también por numero.
     Los errores se registran pero NO abortan el job ETL (el usuario puede
     relanzar el recálculo manualmente desde la pantalla de ETL).

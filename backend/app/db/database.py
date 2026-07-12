@@ -10,18 +10,15 @@ from loguru import logger
 from app.core.config import settings
 
 
-# El timeout de conexión difiere por dialecto: pymssql usa 'timeout', psycopg2 'connect_timeout'.
-_connect_args = {"connect_timeout": 30} if settings.DB_ENGINE == "postgres" else {"timeout": 30}
-
 engine = create_engine(
     settings.DATABASE_URL,
+    connect_args={"connect_timeout": 30},  # psycopg2
     poolclass=QueuePool,
     pool_size=5,
     max_overflow=10,
     pool_pre_ping=True,
     pool_recycle=1800,
     echo=settings.DEBUG,
-    connect_args=_connect_args,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
@@ -47,10 +44,10 @@ def check_db_connection() -> bool:
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        logger.info("Conexión a SQL Server: OK")
+        logger.info("Conexión a PostgreSQL: OK")
         return True
     except Exception as e:
-        logger.error(f"Error de conexión a SQL Server: {e}")
+        logger.error(f"Error de conexión a PostgreSQL: {e}")
         return False
 
 

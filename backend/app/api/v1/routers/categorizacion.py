@@ -1,8 +1,8 @@
 """
 Router de Categorización Médica — nueva versión (jun-2026).
 
-Usa el esquema cat.* / stg.* en SQL Server.
-Motor de cálculo: cat.sp_CalcularCategoriaMedica (T-SQL).
+Usa el esquema cat.* / stg.* en PostgreSQL.
+Motor de cálculo: categorizacion_service (100% Python).
 
 Prefijo: /categorizacion
 """

@@ -45,13 +45,6 @@ class Settings(BaseSettings):
             f"@{data.get('DB_SERVER')}:{data.get('DB_PORT')}/{data.get('DB_NAME')}"
         )
 
-    @property
-    def DB_ENGINE(self) -> str:
-        """Dialecto de BD derivado del DATABASE_URL: 'postgres' o 'mssql'.
-        Usado por las (pocas) ramas de SQL crudo que aún dependen del dialecto."""
-        url = (self.DATABASE_URL or "").lower()
-        return "postgres" if ("postgres" in url or "psycopg" in url) else "mssql"
-
     # ── JWT
     JWT_SECRET_KEY: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"

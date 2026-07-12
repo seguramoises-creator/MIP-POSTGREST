@@ -1,7 +1,7 @@
-"""SCGCPR — Motor de cálculo Score/Ranking en Python (reemplaza los SPs DW.*).
+"""SCGCPR — Motor de cálculo Score/Ranking 100% en Python.
 
-Aritmética con Decimal para igualar exactamente al T-SQL original.
-Verificado por caracterización (tests/test_caracterizacion_motor.py).
+Aritmética con Decimal para resultados exactos, verificado por
+caracterización (tests/test_caracterizacion_motor.py).
 """
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP

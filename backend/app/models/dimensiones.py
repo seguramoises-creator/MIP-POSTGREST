@@ -8,7 +8,7 @@ from datetime import datetime, date
 from decimal import Decimal
 from sqlalchemy import (
     String, Boolean, Integer, Date, DateTime,
-    Numeric, ForeignKey, Text, UniqueConstraint, CheckConstraint, Index, text
+    Numeric, ForeignKey, Text, UniqueConstraint, CheckConstraint, Index
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.database import Base
@@ -76,13 +76,13 @@ class RepresentanteMedico(Base):
 
 class RepresentanteMedicoV2(Base):
     """
-    Fase 1 - Correccion F2 (colision IDENTITY_INSERT) + F9 (codigo unico
+    Fase 1 - Correccion F2 (colision de ids explícitos) + F9 (codigo unico
     global en vez de por pais). Tabla paralela nueva (migracion
     5f3a9c7e1b46) - NO sustituye a DIM_RM todavia, ver changelog Fase 1.
 
     Diferencias respecto a RepresentanteMedico (DIM_RM):
     - `id` es autoincrement real generado por la BD (dims.py ya no necesita
-      forzar IDENTITY_INSERT con el RM_CODIGO del Excel).
+      forzar un id explícito con el RM_CODIGO del Excel).
     - `codigo_origen_excel` conserva el codigo de negocio importado, para
       trazabilidad con el Excel fuente.
     - `codigo` es UNIQUE por (pais_codigo, codigo), no global — dos paises
@@ -706,27 +706,18 @@ class Medico(Base):
        `centro_medico_id` queda NULL para estas filas. Ver
        categorizacion_service.resolver_medico_por_codigo().
 
-    Dedup (REVISADO jun-2026): por eso `centro_medico_id` ahora es
-    NULLABLE y la unicidad se implementa con DOS ÍNDICES ÚNICOS FILTRADOS
-    (ver migración), no una UniqueConstraint simple — en SQL Server un
-    UNIQUE constraint/índice normal trata múltiples NULL como duplicados
-    (solo permite UNA fila con NULL en la columna), lo cual rompería
-    cualquiera de los dos universos si compartieran un único índice:
-      - `UQ_Medico_Pais_Codigo`        ON (pais_codigo, codigo) WHERE codigo IS NOT NULL
-      - `UQ_Medico_Pais_Nombre_Centro` ON (pais_codigo, nombre, centro_medico_id) WHERE codigo IS NULL
-    Los índices filtrados excluyen las filas que no aplican, evitando el
-    problema de "múltiples NULL" por completo.
+    Dedup (REVISADO jun-2026): por eso `centro_medico_id` ahora es NULLABLE y
+    la unicidad se implementa con DOS ÍNDICES ÚNICOS:
+      - `UQ_Medico_Pais_Codigo`        ON (pais_codigo, codigo)
+      - `UQ_Medico_Pais_Nombre_Centro` ON (pais_codigo, nombre, centro_medico_id)
+    En PostgreSQL un índice único trata múltiples NULL como DISTINTOS, así que
+    cada universo (con `codigo` o con `centro_medico_id` en NULL) convive sin
+    colisionar sin necesidad de índices filtrados.
     """
     __tablename__ = "DIM_Medico"
     __table_args__ = (
-        Index(
-            "UQ_Medico_Pais_Codigo", "pais_codigo", "codigo",
-            unique=True, mssql_where=text("codigo IS NOT NULL"),
-        ),
-        Index(
-            "UQ_Medico_Pais_Nombre_Centro", "pais_codigo", "nombre", "centro_medico_id",
-            unique=True, mssql_where=text("codigo IS NULL"),
-        ),
+        Index("UQ_Medico_Pais_Codigo", "pais_codigo", "codigo", unique=True),
+        Index("UQ_Medico_Pais_Nombre_Centro", "pais_codigo", "nombre", "centro_medico_id", unique=True),
         {"schema": "Config"},
     )
 
