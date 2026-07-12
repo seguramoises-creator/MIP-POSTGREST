@@ -165,7 +165,7 @@ C:\Users\Lenovo\Proyecto\MSM\
 │           ├── reportes/Reportes.tsx                            ← consume exportacion.py
 │           ├── comercial/Comercial.tsx                          ← CÓDIGO MUERTO, sin ruta en App.tsx
 │           └── capacitacion/Capacitacion.tsx                    ← CÓDIGO MUERTO, sin ruta en App.tsx
-└── deploy/                                ← scripts de despliegue (IIS/Windows y systemd+nginx/Linux)
+└── docker-compose.yml, DEPLOY-POSTGRES.md ← despliegue Docker en Linux (ver §20)
 ```
 
 **Rutas registradas en `App.tsx`** (confirmado leyendo el archivo): `/login`, `/dashboard`, `/productividad`, `/cobertura-predictiva`, `/coaching`, `/categorizacion`, `/ranking`, `/reconocimiento`, `/lsii`, `/etl` (ADMIN, GERENTE_PRODUCTIVIDAD), `/admin` (ADMIN, GERENTE_PRODUCTIVIDAD), `/usuarios` (ADMIN), `/reportes`, `/sin-acceso`. No existen rutas `/comercial` ni `/capacitacion` — cualquier ruta desconocida redirige a `/dashboard`.
@@ -790,7 +790,7 @@ npm run dev
 ```
 
 ### Producción
-El sistema está desplegado en `https://vista-mip.com` con **Docker en Linux**: frontend (nginx sirviendo el build de Vite + proxy `/api/v1`) + backend (uvicorn/FastAPI + psycopg2) + PostgreSQL, orquestados por `docker-compose.yml`. Las migraciones Alembic corren solas al arrancar el contenedor del backend. Deploy: `git pull && docker compose --profile with-db up -d --build`. Ver **`DEPLOY-POSTGRES.md`** para el procedimiento completo (la guía legacy Windows/IIS `deploy/DEPLOYMENT.md` quedó superseded).
+El sistema está desplegado en `https://vista-mip.com` con **Docker en Linux**: frontend (nginx sirviendo el build de Vite + proxy `/api/v1`) + backend (uvicorn/FastAPI + psycopg2) + PostgreSQL, orquestados por `docker-compose.yml`. Las migraciones Alembic corren solas al arrancar el contenedor del backend. Deploy: `git pull && docker compose --profile with-db up -d --build`. Ver **`DEPLOY-POSTGRES.md`** para el procedimiento completo.
 
 ### Crear tablas e inicializar (primera vez)
 ```bash

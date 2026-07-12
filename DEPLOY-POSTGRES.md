@@ -131,7 +131,7 @@ docker compose up -d --build       # (o --profile with-db si la BD va en contene
 
 ### TLS / HTTPS (vista-mip.com)
 El frontend escucha en **80**. Pon un **terminador TLS delante**. Opción recomendada
-(usa el nginx del host + Let's Encrypt, ya existe `deploy/linux/nginx_vista-mip.com.conf`):
+(nginx del host + Let's Encrypt):
 
 ```bash
 sudo apt install -y nginx certbot python3-certbot-nginx
