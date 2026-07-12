@@ -1,14 +1,13 @@
-"""Vistas PostgreSQL de los esquemas cat.* (traducidas de T-SQL).
+"""Vistas PostgreSQL de los esquemas cat.*.
 
 El baseline crea tablas ORM + las 6 tablas cat/stg sin modelo, pero NO las
-VISTAS que la edición SQL Server creaba en sus migraciones. Esta migración las
-reproduce en sintaxis Postgres:
+VISTAS del esquema cat. Esta migración las crea en PostgreSQL:
 
   - cat.vwMedicoCategoriaConciliacion  (categorización — get_resultados)
   - cat.vwDashboardCoberturaPredictivaGD (cobertura — get_dashboard_cat)
 
-Traducción T-SQL→Postgres: identificadores mixed-case entre comillas dobles,
-ISNULL→COALESCE, CAST(... AS DECIMAL(p,s))→NUMERIC(p,s), sin escape de EXEC.
+Sintaxis PostgreSQL: identificadores mixed-case entre comillas dobles,
+COALESCE, CAST(... AS NUMERIC(p,s)).
 
 Revision ID: 0002_views_postgres
 Revises: 0001_baseline_postgres

@@ -2,8 +2,8 @@
 
 El baseline creó cat.LoadBatch.Periodo y cat.FactMedicoCategoriaSnapshot.Periodo
 como String(7), pero el formato real de período es el código de ciclo (p. ej.
-'C03-2026', 8 chars) — en SQL Server la columna es VARCHAR(20). Se alinea el
-ancho para no truncar los datos reales.
+'C03-2026', 8 chars). Se amplía la columna a VARCHAR(20) para no truncar los
+datos reales.
 
 La vista cat.vwMedicoCategoriaConciliacion depende de Snapshot.Periodo, así que
 se suelta antes de alterar y se recrea igual que en la migración 0002.

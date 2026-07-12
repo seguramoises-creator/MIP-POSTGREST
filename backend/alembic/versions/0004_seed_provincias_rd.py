@@ -6,8 +6,7 @@ Idempotente y defensivo:
 - Inserta cada provincia/municipio solo si no existe ya (por sus claves únicas),
   así puede re-ejecutarse y correr sobre datos previos sin duplicar.
 
-Portable PG / SQL Server: usa SELECT/INSERT con parámetros nombrados, sin
-sintaxis específica de motor.
+Usa SELECT/INSERT con parámetros nombrados (SQL portable).
 
 Revision ID: 0004_seed_provincias_rd
 Revises: c5a7881c944b
