@@ -27,7 +27,7 @@ from app.schemas.schemas import (
     CicloCreate, CicloResponse, CicloUpdate, FeriadoIn, FeriadoResponse,
     ReglaElegibilidadCreate, ReglaElegibilidadResponse,
     PremioCreate, PremioResponse,
-    UsuarioCreate, UsuarioResponse, UsuarioUpdate, AdminSetPassword,
+    UsuarioCreate, UsuarioResponse, UsuarioUpdate, AdminSetPassword, CorreoConfig, CorreoTest,
     CategoriaMedicaCreate, CategoriaMedicaResponse,
     CriterioCategoriaCreate, CriterioCategoriaResponse,
     CriterioCategoriaTablaCreate, CriterioCategoriaTablaResponse,
@@ -751,6 +751,57 @@ def reset_password_usuario(id: int, data: AdminSetPassword, db: Session = Depend
 # ── Parámetros de sistema en runtime (solo ADMIN) ─────────────────────────────
 from app.core.config import settings as _settings   # noqa: E402
 from app.services import config_service as _cfg      # noqa: E402
+
+
+# ── Configuración del servidor de correo (SMTP) — solo ADMIN ───────────────────
+@router.get("/config/correo", summary="Configuración SMTP vigente (contraseña enmascarada)")
+def get_config_correo(db: Session = Depends(get_db), _=AdminOnly):
+    """Config SMTP efectiva (BD con fallback a .env). La contraseña NO se devuelve;
+    solo `password_set` indica si hay una guardada."""
+    from app.services import notification_service as _ns
+    cfg = _ns.mail_config()
+    return {
+        "server": cfg["server"], "port": cfg["port"], "username": cfg["username"],
+        "from_email": cfg["from"], "from_name": cfg["from_name"],
+        "tls": cfg["tls"], "ssl": cfg["ssl"],
+        "password_set": bool(cfg["password"]),
+        "habilitado": bool(cfg["server"]),
+    }
+
+
+@router.put("/config/correo", response_model=Msg, summary="Guardar configuración SMTP")
+def put_config_correo(data: CorreoConfig, db: Session = Depends(get_db), _=AdminOnly):
+    """Guarda la config SMTP en BD (claves MAIL_*). Si `password` viene vacío/None,
+    conserva la contraseña anterior (no la borra)."""
+    _cfg.fijar(db, "MAIL_SERVER", data.server or "")
+    _cfg.fijar(db, "MAIL_PORT", str(data.port or 587))
+    _cfg.fijar(db, "MAIL_USERNAME", data.username or "")
+    _cfg.fijar(db, "MAIL_FROM", data.from_email or "")
+    _cfg.fijar(db, "MAIL_FROM_NAME", data.from_name or "")
+    _cfg.fijar(db, "MAIL_TLS", "true" if data.tls else "false")
+    _cfg.fijar(db, "MAIL_SSL", "true" if data.ssl else "false")
+    if data.password:  # solo si el ADMIN escribió una nueva
+        _cfg.fijar(db, "MAIL_PASSWORD", data.password)
+    return Msg(message="Configuración de correo guardada")
+
+
+@router.post("/config/correo/probar", response_model=Msg, summary="Enviar correo de prueba")
+def probar_config_correo(data: CorreoTest, db: Session = Depends(get_db), _=AdminOnly):
+    """Envía un correo de prueba a la dirección indicada con la config vigente."""
+    from app.services import notification_service as _ns
+    cfg = _ns.mail_config()
+    if not cfg.get("server"):
+        raise HTTPException(status_code=400, detail="No hay servidor SMTP configurado.")
+    cuerpo = ("<html><body style='font-family:Arial,sans-serif;color:#333;'>"
+              "<h2>Correo de prueba</h2><p>Si ves este mensaje, el servidor SMTP del "
+              "Sistema MIP está configurado correctamente.</p>"
+              "<hr><p style='color:#aaa;font-size:12px;'>Sistema MIP — SCGCPR</p></body></html>")
+    ok = _ns._enviar(data.email, "Prueba de configuración de correo — Sistema MIP", cuerpo)
+    if not ok:
+        raise HTTPException(status_code=400, detail=(
+            "No se pudo enviar. Revisa servidor/puerto/usuario/contraseña (Gmail requiere "
+            "App Password) y que TLS/SSL sean correctos."))
+    return Msg(message=f"Correo de prueba enviado a {data.email}")
 
 
 @router.get("/config/examen-ia-demo", summary="Estado del modo de generación con IA (DEMO/real)")

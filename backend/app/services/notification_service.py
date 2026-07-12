@@ -33,9 +33,47 @@ _COLOR_TITULO = "#1F4E79"
 _COLOR_TEXTO_PIE = "#888888"
 
 
+def mail_config() -> dict:
+    """Config SMTP efectiva: primero la guardada por ADMIN en BD (config_service,
+    claves MAIL_*), con fallback al `.env` (settings). Abre una sesión corta y
+    nunca lanza — si la BD no está disponible usa el `.env`."""
+    cfg = {
+        "server": settings.MAIL_SERVER, "port": int(settings.MAIL_PORT),
+        "username": settings.MAIL_USERNAME, "password": settings.MAIL_PASSWORD,
+        "from": settings.MAIL_FROM, "from_name": settings.MAIL_FROM_NAME,
+        "tls": bool(settings.MAIL_TLS), "ssl": bool(settings.MAIL_SSL),
+    }
+    try:
+        from app.db.database import SessionLocal
+        from app.services import config_service
+        db = SessionLocal()
+        try:
+            def g(k, d):
+                v = config_service.obtener(db, k)
+                return v if v is not None else d
+            cfg["server"] = g("MAIL_SERVER", cfg["server"])
+            try:
+                cfg["port"] = int(g("MAIL_PORT", str(cfg["port"])) or cfg["port"])
+            except (TypeError, ValueError):
+                pass
+            cfg["username"] = g("MAIL_USERNAME", cfg["username"])
+            pw = config_service.obtener(db, "MAIL_PASSWORD")
+            if pw is not None:
+                cfg["password"] = pw
+            cfg["from"] = g("MAIL_FROM", cfg["from"])
+            cfg["from_name"] = g("MAIL_FROM_NAME", cfg["from_name"])
+            cfg["tls"] = config_service.obtener_bool(db, "MAIL_TLS", cfg["tls"])
+            cfg["ssl"] = config_service.obtener_bool(db, "MAIL_SSL", cfg["ssl"])
+        finally:
+            db.close()
+    except Exception as e:  # BD no disponible → usar .env
+        logger.debug(f"mail_config: usando .env (BD no disponible): {e}")
+    return cfg
+
+
 def _habilitado() -> bool:
-    """Notificaciones activas solo si hay servidor SMTP configurado en .env."""
-    return bool(settings.MAIL_SERVER)
+    """Notificaciones activas solo si hay servidor SMTP configurado (BD o .env)."""
+    return bool(mail_config().get("server"))
 
 
 def _enviar(destinatario: str, asunto: str, cuerpo_html: str) -> bool:
@@ -43,29 +81,30 @@ def _enviar(destinatario: str, asunto: str, cuerpo_html: str) -> bool:
     Envía un correo HTML vía SMTP. Retorna True/False según éxito — nunca
     lanza, los llamadores tratan el envío como best-effort.
     """
-    if not _habilitado():
-        logger.debug(f"Notificación omitida (MAIL_SERVER vacío) — destinatario={destinatario!r}")
+    cfg = mail_config()
+    if not cfg.get("server"):
+        logger.debug(f"Notificación omitida (SMTP sin configurar) — destinatario={destinatario!r}")
         return False
     if not destinatario:
         return False
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = asunto
-    msg["From"] = f"{settings.MAIL_FROM_NAME} <{settings.MAIL_FROM}>"
+    msg["From"] = f"{cfg['from_name']} <{cfg['from']}>"
     msg["To"] = destinatario
     msg.attach(MIMEText(cuerpo_html, "html", "utf-8"))
 
     servidor = None
     try:
-        if settings.MAIL_SSL:
-            servidor = smtplib.SMTP_SSL(settings.MAIL_SERVER, settings.MAIL_PORT, timeout=15)
+        if cfg["ssl"]:
+            servidor = smtplib.SMTP_SSL(cfg["server"], cfg["port"], timeout=15)
         else:
-            servidor = smtplib.SMTP(settings.MAIL_SERVER, settings.MAIL_PORT, timeout=15)
-            if settings.MAIL_TLS:
+            servidor = smtplib.SMTP(cfg["server"], cfg["port"], timeout=15)
+            if cfg["tls"]:
                 servidor.starttls()
-        if settings.MAIL_USERNAME:
-            servidor.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
-        servidor.sendmail(settings.MAIL_FROM, [destinatario], msg.as_string())
+        if cfg["username"]:
+            servidor.login(cfg["username"], cfg["password"])
+        servidor.sendmail(cfg["from"], [destinatario], msg.as_string())
         logger.info(f"Notificación enviada — destinatario={destinatario!r}, asunto={asunto!r}")
         return True
     except Exception as e:

@@ -71,6 +71,22 @@ class AdminSetPassword(BaseModel):
     password_nuevo: str
 
 
+class CorreoConfig(BaseModel):
+    """Configuración del servidor SMTP (editable por ADMIN desde el sistema)."""
+    server: str = ""
+    port: int = 587
+    username: str = ""
+    password: Optional[str] = None   # None/"" = no cambiar la existente
+    from_email: str = ""
+    from_name: str = ""
+    tls: bool = True
+    ssl: bool = False
+
+
+class CorreoTest(BaseModel):
+    email: EmailStr
+
+
 # ── Catálogos ─────────────────────────────────────────────────────────────────
 
 class PaisCreate(BaseModel):
