@@ -243,6 +243,7 @@ class VisitaRegistrar(BaseModel):
     comentario: str = Field(min_length=10, max_length=1000)
     hace_minutos: int = Field(default=0, ge=0, le=60)  # ventana de 60 min (spec 4.2)
     productos: list[ProductoDetallado] = Field(default_factory=list)
+    acompanado: bool = False  # visita acompañada por el Gerente de Distrito
     latitud: float | None = None
     longitud: float | None = None
 

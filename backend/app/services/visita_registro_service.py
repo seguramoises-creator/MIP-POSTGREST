@@ -48,6 +48,7 @@ def registrar_visita(db: Session, vm_id: int, datos: VisitaRegistrar, usuario_id
         vm_id=vm_id, ciclo_id=ciclo_id, medico_id=datos.medico_id,
         tipo_visita=datos.tipo_visita, fecha_hora=fecha_hora,
         comentario=datos.comentario, productos=productos, ejecutada=True, registrado_por=usuario_id,
+        acompanado=bool(getattr(datos, "acompanado", False)),
         latitud=getattr(datos, "latitud", None), longitud=getattr(datos, "longitud", None),
     )
     db.add(v)
@@ -88,6 +89,7 @@ def _serializar_visitas(db: Session, vs: list) -> list[dict]:
     return [{
         "id": v.id, "medico_id": v.medico_id, "medico": nombres.get(v.medico_id, "?"),
         "tipo_visita": v.tipo_visita, "ejecutada": v.ejecutada,
+        "acompanado": bool(v.acompanado),
         "causa_no_visita": v.causa_no_visita, "comentario": v.comentario,
         "productos": _prods(v.productos),
         "tiene_gps": v.latitud is not None and v.longitud is not None,

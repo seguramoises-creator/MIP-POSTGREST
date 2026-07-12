@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert,
-  MenuItem, ToggleButton, ToggleButtonGroup, CircularProgress, Avatar, Checkbox,
+  MenuItem, ToggleButton, ToggleButtonGroup, CircularProgress, Avatar, Checkbox, Switch, FormControlLabel,
   Select, FormControl, Divider, Autocomplete,
 } from '@mui/material';
 import { CheckCircle, Save, EventBusy, AccessAlarm, Medication, ChatBubbleOutline, Assignment, FiberManualRecord, SupervisorAccount, History, ExpandMore, ExpandLess, Lock } from '@mui/icons-material';
@@ -103,6 +103,7 @@ export default function RegistrarVisita() {
   const [tipo, setTipo] = useState<'V' | 'R'>('V');
   const [hora, setHora] = useState(hhmm(new Date()));
   const [comentario, setComentario] = useState('');
+  const [acompanado, setAcompanado] = useState(false);  // visita acompañada por el Gerente
   const [modoNoVisita, setModoNoVisita] = useState(false);
   const [causa, setCausa] = useState('');
   const [productos, setProductos] = useState<ParrillaItem[]>([]);
@@ -160,7 +161,7 @@ export default function RegistrarVisita() {
   function seleccionar(m: AgendaMedico) {
     if (m.estado === 'registrada') return;
     setSel(m); setTipo((m.tipo_visita === 'R' ? 'R' : 'V')); setHora(hhmm(new Date()));
-    setComentario(''); setModoNoVisita(false); setCausa(''); setDetallados({}); setMsg(null);
+    setComentario(''); setAcompanado(false); setModoNoVisita(false); setCausa(''); setDetallados({}); setMsg(null);
     // Parrilla de la LÍNEA DEL REPRESENTANTE (no la del médico), del ciclo abierto
     // de su país — la misma parrilla contra la que promociona y entrega muestras.
     obtenerParrilla(undefined, undefined, vmParam).then(setProductos).catch(() => setProductos([]));
@@ -241,7 +242,7 @@ export default function RegistrarVisita() {
       if (modoNoVisita) {
         await registrarNoVisita(sel.medico_id, causa, comentario || undefined, vmParam);
       } else {
-        const r = await registrarVisita(sel.medico_id, tipo, comentario, Math.max(0, Math.min(60, haceMin)), prods, vmParam, gps?.lat ?? null, gps?.lng ?? null);
+        const r = await registrarVisita(sel.medico_id, tipo, comentario, Math.max(0, Math.min(60, haceMin)), prods, vmParam, gps?.lat ?? null, gps?.lng ?? null, acompanado);
         // Muestras entregadas: alimentan el reporte de penetración/muestras vs meta.
         if (entregas.length) {
           try { await registrarMuestras(sel.medico_id, entregas, vmParam); }
@@ -256,7 +257,7 @@ export default function RegistrarVisita() {
         }
       }
       setMsg((m) => m ?? { tipo: 'success', texto: modoNoVisita ? 'No-visita registrada.' : 'Visita registrada y confirmada en el servidor.' });
-      setSel(null); setGps(null); setFoto(null); setFotoPreview(null);
+      setSel(null); setGps(null); setFoto(null); setFotoPreview(null); setAcompanado(false);
       // Confirmación real: re-consultamos el servidor → pasan a VERDE.
       cargarRegistradas(); cargarAgenda();
     } catch (e) {
@@ -587,6 +588,14 @@ export default function RegistrarVisita() {
                 </Box>
 
                 {!modoNoVisita && (
+                  <FormControlLabel
+                    control={<Switch checked={acompanado} onChange={(e) => setAcompanado(e.target.checked)} color="primary" />}
+                    label="Visita acompañada por el Gerente de Distrito"
+                    sx={{ '& .MuiFormControlLabel-label': { fontWeight: 600, fontSize: 14 } }}
+                  />
+                )}
+
+                {!modoNoVisita && (
                   <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" rowGap={1}>
                     <Button size="small" variant="outlined" startIcon={<span>📍</span>}
                             color={gps ? 'success' : 'primary'}
@@ -663,6 +672,7 @@ export default function RegistrarVisita() {
                           {v.medico}
                           {v.tiene_gps && <span title="Con ubicación" style={{ marginLeft: 6 }}>📍</span>}
                           {v.tiene_foto && <span title="Con foto del centro" style={{ marginLeft: 4 }}>📷</span>}
+                          {v.acompanado && <span title="Acompañada por el Gerente" style={{ marginLeft: 4 }}>👥</span>}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
                           {[v.ejecutada ? (v.tipo_visita === 'R' ? 'Revisita' : 'Vista') : `No-visita: ${v.causa_no_visita ?? ''}`,
@@ -709,6 +719,7 @@ export default function RegistrarVisita() {
                         <Chip size="small" variant={v.ejecutada ? 'outlined' : 'filled'}
                               color={v.ejecutada ? (v.tipo_visita === 'R' ? 'info' : 'success') : 'error'}
                               label={v.ejecutada ? (v.tipo_visita === 'R' ? 'Revisita' : 'Vista') : 'NO-Visita'} />
+                        {v.acompanado && <Chip size="small" variant="outlined" color="secondary" label="Acompañada" />}
                         <Typography variant="caption" color="text.secondary">
                           {v.hora ? `${new Date(v.hora).toLocaleDateString()} ${new Date(v.hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
                         </Typography>

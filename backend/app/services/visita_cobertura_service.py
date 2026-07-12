@@ -161,6 +161,24 @@ def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | Non
     base["ruptura"] = [{"id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria,
                         "ciclos_sin_visita": m.ciclos_sin_visita}
                        for m in rq.order_by(MedicoVisita.ciclos_sin_visita.desc()).all()]
+    # KPI de acompañamiento: visitas ejecutadas acompañadas por el GD (respeta el scope).
+    aq = db.query(VisitaRegistro).filter(
+        VisitaRegistro.ciclo_id == ciclo_id, VisitaRegistro.ejecutada == True,  # noqa: E712
+        VisitaRegistro.acompanado == True)  # noqa: E712
+    eq = db.query(VisitaRegistro).filter(
+        VisitaRegistro.ciclo_id == ciclo_id, VisitaRegistro.ejecutada == True)  # noqa: E712
+    if vm_id:
+        aq = aq.filter(VisitaRegistro.vm_id == vm_id)
+        eq = eq.filter(VisitaRegistro.vm_id == vm_id)
+    else:
+        rm_ids_a = _rm_ids_por(db, gerente_id, linea_id)
+        if rm_ids_a is not None:
+            aq = aq.filter(VisitaRegistro.vm_id.in_(rm_ids_a or [-1]))
+            eq = eq.filter(VisitaRegistro.vm_id.in_(rm_ids_a or [-1]))
+    acomp, total_ejec = aq.count(), eq.count()
+    base["acompanadas"] = acomp
+    base["visitas_ejecutadas"] = total_ejec
+    base["pct_acompanamiento"] = _pct(acomp, total_ejec)
     base["ciclo_id"] = ciclo_id
     base["objetivo_cobertura"] = OBJ_COBERTURA
     base["objetivo_completa"] = OBJ_COMPLETA

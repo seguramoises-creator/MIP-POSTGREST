@@ -125,6 +125,9 @@ export default function CoberturaDashboard() {
       <Typography variant="h5" fontWeight={700} gutterBottom>Dashboard de Cobertura — Visita</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Panel de {data.panel} médicos · {data.visitados} visitados · {data.sin_visitar} sin visitar
+        {typeof data.acompanadas === 'number' && (
+          <> · <strong>{data.acompanadas}</strong> visitas acompañadas por el GD ({data.pct_acompanamiento ?? 0}% de {data.visitas_ejecutadas ?? 0})</>
+        )}
       </Typography>
 
       {/* Filtros (solo ADMIN/GERENTE) */}

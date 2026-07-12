@@ -113,6 +113,7 @@ class VisitaRegistro(Base):
     comentario: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     productos: Mapped[str | None] = mapped_column(String(300), nullable=True)  # "producto:mencion|..."
     ejecutada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    acompanado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)  # visita acompañada por el GD
     causa_no_visita: Mapped[str | None] = mapped_column(String(80), nullable=True)
     registrado_por: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)

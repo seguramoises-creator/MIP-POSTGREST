@@ -156,6 +156,7 @@ export interface CoberturaResumen {
   ciclo_id: number | null;
   panel: number; visitados: number; con_revisita: number; sin_visitar: number;
   pct_cobertura: number; pct_completa: number; pct_gap: number;
+  acompanadas?: number; visitas_ejecutadas?: number; pct_acompanamiento?: number;
   objetivo_cobertura: number; objetivo_completa: number;
   categorias: Record<string, CatCobertura>;
   sin_visita: { id: number; nombre: string; categoria: string }[];
@@ -181,7 +182,7 @@ export interface VisitaHoy {
   id: number; medico_id: number; medico: string; tipo_visita: string;
   ejecutada: boolean; causa_no_visita: string | null; comentario: string | null;
   productos: string[]; hora: string | null;
-  tiene_gps?: boolean; tiene_foto?: boolean;
+  tiene_gps?: boolean; tiene_foto?: boolean; acompanado?: boolean;
 }
 export interface AgendaMedico {
   medico_id: number; nombre: string; especialidad: string | null; categoria: string;
@@ -203,10 +204,11 @@ export const agendaHoy = (vmId?: number) =>
 export const registrarVisita = (
   medico_id: number, tipo_visita: string, comentario: string, hace_minutos = 0,
   productos: ProductoDetalle[] = [], vmId?: number,
-  latitud?: number | null, longitud?: number | null,
+  latitud?: number | null, longitud?: number | null, acompanado = false,
 ) => api.post<{ id: number; tipo: string; hora: string | null }>(
   '/visita/registrar',
-  { medico_id, tipo_visita, comentario, hace_minutos, productos, latitud: latitud ?? null, longitud: longitud ?? null },
+  { medico_id, tipo_visita, comentario, hace_minutos, productos, acompanado,
+    latitud: latitud ?? null, longitud: longitud ?? null },
   { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 export const subirFotoVisita = (visitaId: number, file: File) => {
   const fd = new FormData(); fd.append('archivo', file);
