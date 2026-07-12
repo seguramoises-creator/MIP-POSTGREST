@@ -793,13 +793,14 @@ npm run dev
 El sistema está desplegado en `https://vista-mip.com` con **Docker en Linux**: frontend (nginx sirviendo el build de Vite + proxy `/api/v1`) + backend (uvicorn/FastAPI + psycopg2) + PostgreSQL, orquestados por `docker-compose.yml`. Las migraciones Alembic corren solas al arrancar el contenedor del backend. Deploy: `git pull && docker compose --profile with-db up -d --build`. Ver **`DEPLOY-POSTGRES.md`** para el procedimiento completo (la guía legacy Windows/IIS `deploy/DEPLOYMENT.md` quedó superseded).
 
 ### Crear tablas e inicializar (primera vez)
-```powershell
-cd C:\Users\Lenovo\Proyecto\MSM\backend
-.\venv\Scripts\activate
-python scripts\setup\_crear_tablas.py
-python scripts\setup\_crear_bd.py
-python -m alembic stamp head
+```bash
+# Las migraciones Alembic construyen TODO el esquema (0001_baseline_postgres → head):
+python -m alembic upgrade head
+# Sembrar el usuario admin:
+python scripts/setup/crear_admin_pg.py
 ```
+> Con Docker es automático: el contenedor del backend corre `alembic upgrade head` al
+> arrancar. El admin se siembra con `docker compose exec backend python scripts/setup/crear_admin_pg.py`.
 
 ### Credenciales por defecto
 - **Usuario**: `admin` | **Contraseña**: `Admin1234!` | **Swagger**: `http://localhost:8000/api/v1/docs`

@@ -1,9 +1,8 @@
 """
-crear_admin_pg.py — Siembra el usuario admin (edición PostgreSQL).
+crear_admin_pg.py — Siembra el usuario admin (PostgreSQL).
 
-A diferencia de crear_admin.py (SQL Server / pymssql + reinicio del servicio
-Windows MSM-Backend), este script es portable: usa SQLAlchemy/ORM y no depende
-del dialecto ni de servicios del SO. Pensado para correr dentro del contenedor:
+Usa SQLAlchemy/ORM (no depende de servicios del SO). Pensado para correr
+dentro del contenedor:
 
     docker compose exec backend python scripts/setup/crear_admin_pg.py
 
