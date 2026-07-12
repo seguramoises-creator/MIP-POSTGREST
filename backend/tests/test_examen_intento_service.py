@@ -133,7 +133,7 @@ def test_preparar_intento_vencido_falla():
 
 
 def test_preparar_intento_fecha_limite_datetime_no_rompe():
-    """Regresión: fecha_limite llega como DATETIME (lo que devuelve SQL Server), no
+    """Regresión: fecha_limite llega como DATETIME (naive desde la BD), no
     como date. La comparación no debe romper (antes: TypeError date>datetime)."""
     from tests.conftest import FakeQuery
     # Futura (datetime): procede a crear el intento sin TypeError
@@ -331,7 +331,7 @@ def test_entregar_intento_happy_path_aprobado():
 
 
 def test_entregar_intento_fecha_inicio_naive_no_rompe():
-    """Regresión: fecha_inicio naive (como viene de SQL Server) no debe romper la
+    """Regresión: fecha_inicio naive (como viene de la BD) no debe romper la
     resta con fecha_fin (aware) al calcular tiempo_usado_seg."""
     naive = datetime(2026, 6, 27, 10, 0, 0)  # sin tzinfo, como lo devuelve la BD
     db, intento, _ = _build_entregar_db(nota_minima=70, fecha_inicio=naive)

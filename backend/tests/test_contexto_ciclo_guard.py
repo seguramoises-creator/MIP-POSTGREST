@@ -23,8 +23,7 @@ Nota sobre Categorización Médica: `categorizacion_service.py` /
 absoluto — el flujo (`/categorizacion/cargar` → `cargar_excel_categorizacion`)
 está indexado por `periodo` (string libre) dentro del esquema `cat`/`stg`,
 sin relación con `ciclo_id`/`cerrado`. No hay endpoint `/categorizacion/calcular`
-ni `/recalcular` en este repo (a diferencia de lo que documenta el brief para
-la edición SQL Server hermana). Por lo tanto no aplica ningún guard de ciclo
+ni `/recalcular` en este repo. Por lo tanto no aplica ningún guard de ciclo
 ahí; se deja constancia explícita en vez de forzar un guard sin sentido.
 """
 from types import SimpleNamespace

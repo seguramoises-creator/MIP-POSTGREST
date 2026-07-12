@@ -5,14 +5,13 @@
 #   .\verificar_sistema.ps1
 #
 # Que hace:
-#   - Revisa SQL Server Express, el servicio "MSM-Backend" (NSSM) y IIS
+#   - Revisa el servicio "MSM-Backend" (NSSM) y IIS
 #   - Si alguno esta detenido, lo inicia automaticamente
 #   - Prueba que el backend (API) y el sitio respondan
 #   - Imprime un resumen final claro: OK o ERROR por componente
 # ===================================================================
 
 param(
-    [string]$SqlServiceName    = "MSSQL`$SQLEXPRESS",
     [string]$BackendServiceName = "MSM-Backend",
     [string]$IisServiceName    = "W3SVC",
     [string]$BackendUrl        = "http://localhost:8000/api/v1/docs",
@@ -84,7 +83,6 @@ if (-not (Test-Administrador)) {
 }
 
 Write-Host "`n--- Servicios de Windows ---"
-$resultados += [pscustomobject]@{ Componente = "SQL Server";  OK = Asegurar-Servicio -Nombre $SqlServiceName -Etiqueta "SQL Server" }
 $resultados += [pscustomobject]@{ Componente = "MSM-Backend"; OK = Asegurar-Servicio -Nombre $BackendServiceName -Etiqueta "MSM-Backend" }
 $resultados += [pscustomobject]@{ Componente = "IIS (W3SVC)"; OK = Asegurar-Servicio -Nombre $IisServiceName -Etiqueta "IIS" }
 
