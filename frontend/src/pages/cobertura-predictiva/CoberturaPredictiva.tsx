@@ -758,11 +758,11 @@ export default function CoberturaPredictiva() {
               options={repOptions}
               value={repOptions.find(o => o.codigo === busquedaVM) ?? null}
               onChange={(_e, v) => setBusquedaVM(v?.codigo ?? '')}
-              getOptionLabel={(o) => (o.nombre ? `${o.codigo} — ${o.nombre}` : o.codigo)}
+              getOptionLabel={(o) => o.nombre || o.codigo}
               isOptionEqualToValue={(o, v) => o.codigo === v.codigo}
               noOptionsText="Sin representantes en este ciclo"
               renderInput={(params) => (
-                <TextField {...params} label="Buscar representante" placeholder="Todos · nombre o código…" />
+                <TextField {...params} label="Buscar representante" placeholder="Todos · buscar por nombre…" />
               )}
             />
           </Grid>
