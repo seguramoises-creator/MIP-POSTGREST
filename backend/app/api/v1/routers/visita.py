@@ -118,11 +118,14 @@ def listar_vms(db: Session = Depends(get_db), current_user=RequireVisita):
 
 @router.get("/medicos", response_model=list[dict])
 def listar_medicos(vm_id: int | None = None, incluir_inactivos: bool = False,
+                   lite: bool = False,
                    db: Session = Depends(get_db), current_user=RequireVisita):
     """Panel médico. El VM ve solo el suyo; ADMIN/GERENTE pueden filtrar por ?vm_id=.
-    `incluir_inactivos=true` incluye los médicos desactivados (para reactivarlos)."""
+    `incluir_inactivos=true` incluye los médicos desactivados (para reactivarlos).
+    `lite=true` devuelve solo los campos de LISTA (rendimiento; la ficha completa se
+    obtiene con GET /visita/medicos/{id} al editar)."""
     vm = _scope_vm(current_user, vm_id)
-    return visita_service.listar_medicos(db, vm_id=vm, incluir_inactivos=incluir_inactivos)
+    return visita_service.listar_medicos(db, vm_id=vm, incluir_inactivos=incluir_inactivos, lite=lite)
 
 
 @router.get("/medicos/existentes", response_model=list[dict])
@@ -135,6 +138,18 @@ def listar_medicos_existentes(vm_id: int | None = None, db: Session = Depends(ge
     if not vm:
         raise HTTPException(status_code=400, detail="Indica el visitador destino (vm_id).")
     return visita_service.listar_medicos_existentes(db, vm)
+
+
+@router.get("/medicos/{medico_id}", response_model=dict)
+def obtener_medico(medico_id: int, db: Session = Depends(get_db), current_user=RequireVisita):
+    """Ficha COMPLETA de un médico (para editar). El VM solo ve los de su panel.
+    Declarado DESPUÉS de /medicos/existentes para no interceptar esa ruta literal."""
+    m = visita_service.obtener_medico(db, medico_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Médico no encontrado.")
+    if _rol(current_user) == "REPRESENTANTE_MEDICO" and m.get("vm_id") != getattr(current_user, "rm_id", None):
+        raise HTTPException(status_code=403, detail="Solo puedes ver los médicos de tu panel.")
+    return m
 
 
 @router.put("/medicos/{medico_id}", response_model=MedicoVisitaResponse)

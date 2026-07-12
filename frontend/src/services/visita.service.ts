@@ -87,10 +87,19 @@ export interface PosibleDuplicado {
 
 export interface Catalogo { id: number; nombre: string; }
 
-export const listarMedicos = (vmId?: number, incluirInactivos = false) =>
+// `lite=true` trae solo campos de lista (rendimiento). La ficha completa se pide con
+// obtenerMedico(id) al editar.
+export const listarMedicos = (vmId?: number, incluirInactivos = false, lite = false) =>
   api.get<MedicoVisita[]>('/visita/medicos', {
-    params: { ...(vmId ? { vm_id: vmId } : {}), ...(incluirInactivos ? { incluir_inactivos: true } : {}) },
+    params: {
+      ...(vmId ? { vm_id: vmId } : {}), ...(incluirInactivos ? { incluir_inactivos: true } : {}),
+      ...(lite ? { lite: true } : {}),
+    },
   }).then(r => r.data);
+
+// Ficha COMPLETA de un médico (para editar en el Panel).
+export const obtenerMedico = (id: number) =>
+  api.get<MedicoVisita>(`/visita/medicos/${id}`).then(r => r.data);
 
 // Médico existente (ya registrado por otro VM del país) que se puede COPIAR al panel.
 export type MedicoExistente = MedicoVisita & { vm_nombre?: string | null };

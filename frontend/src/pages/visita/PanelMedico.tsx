@@ -8,7 +8,7 @@ import { Add, PersonAddAlt1, Warning, Search, FiberManualRecord, Edit, Block, Re
 import { useAuthStore } from '../../store/auth.store';
 import { CAT_AV } from './categoriaColores';
 import {
-  listarMedicos, listarMedicosExistentes, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
+  listarMedicos, obtenerMedico, listarMedicosExistentes, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
   solicitarBajaMedico, reactivarMedico, listarAprobaciones, aprobarMedico, rechazarMedico,
   listarProvincias, listarMunicipios, listarCentros, importarMedicosCategorizacion, miGerente,
   type MedicoVisita, type MedicoExistente, type Catalogo, type PosibleDuplicado, type MedicoCrear, type AprobacionPendiente,
@@ -115,7 +115,7 @@ export default function PanelMedico() {
 
   const cargar = useCallback(() => {
     setCargando(true);
-    listarMedicos(esVM ? undefined : (vmFiltro || undefined), estadoFiltro !== 'activos')
+    listarMedicos(esVM ? undefined : (vmFiltro || undefined), estadoFiltro !== 'activos', true)
       .then(setMedicos).catch(() => setMedicos([])).finally(() => setCargando(false));
   }, [esVM, vmFiltro, estadoFiltro]);
 
@@ -222,9 +222,12 @@ export default function PanelMedico() {
       segmento: m.segmento, observaciones: m.observaciones,
     });
   };
-  const abrirEditar = (m: MedicoVisita) => {
+  const abrirEditar = async (mLite: MedicoVisita) => {
     setModoExistente(false); setExistenteSel('');
-    setEditId(m.id); setDuplicados(null);
+    setEditId(mLite.id); setDuplicados(null); setErrCampos({});
+    // La lista viene "lite" (sin la ficha pesada): traemos la ficha completa para editar.
+    let m = mLite;
+    try { m = await obtenerMedico(mLite.id); } catch { /* fallback: usa lo que trae la lista */ }
     setForm({
       vm_id: m.vm_id, codigo: m.codigo, nombre_completo: m.nombre_completo, nombre: m.nombre,
       apellidos: m.apellidos, especialidad_id: m.especialidad_id, subespecialidad: m.subespecialidad,

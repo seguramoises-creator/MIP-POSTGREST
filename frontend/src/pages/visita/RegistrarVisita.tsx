@@ -127,7 +127,7 @@ export default function RegistrarVisita() {
   const cargarAgenda = useCallback(() => {
     if (!listo) { setAgenda([]); setPanel([]); return; }
     agendaHoy(vmParam).then(setAgenda).catch(() => setAgenda([]));
-    listarMedicos(vmParam).then(setPanel).catch(() => setPanel([]));
+    listarMedicos(vmParam, false, true).then(setPanel).catch(() => setPanel([]));
   }, [listo, vmParam]);
 
   const cargarRegistradas = useCallback(() => {

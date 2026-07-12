@@ -87,7 +87,7 @@ export default function PlaneacionVisita() {
     setCargando(true);
     try {
       const [m, p, r] = await Promise.all([
-        listarMedicos(vmParam), obtenerPlaneacion(vmParam), planeacionResumen(vmParam)]);
+        listarMedicos(vmParam, false, true), obtenerPlaneacion(vmParam), planeacionResumen(vmParam)]);
       setMedicos(m);
       setResumen(r);
       const mapa: Record<number, Fila> = {};

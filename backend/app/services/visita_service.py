@@ -127,7 +127,7 @@ def actualizar_medico(db: Session, medico: MedicoVisita,
 
 
 def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None = None,
-                   incluir_inactivos: bool = False) -> list[dict]:
+                   incluir_inactivos: bool = False, lite: bool = False) -> list[dict]:
     """Lista los médicos del panel (opcionalmente de un VM), con el nombre de la
     especialidad y el estado de visita del ciclo (para el Panel Médico enriquecido):
     `estado_visita` = 'vr' (Vista+Revisita), 'v' (una visita), 'sin' (sin visitar)."""
@@ -175,33 +175,72 @@ def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None =
             estado = "sin"
         lid = rm_linea.get(m.vm_id)
         uv = ult_visita.get(m.id)
-        salida.append({
+        # Campos ligeros: los que usan las LISTAS y filtros del Panel/Planeación/Registro.
+        base = {
             "id": m.id, "vm_id": m.vm_id, "codigo": m.codigo,
-            "nombre_completo": m.nombre_completo, "nombre": m.nombre, "apellidos": m.apellidos,
+            "nombre_completo": m.nombre_completo,
             "especialidad_id": m.especialidad_id,
             "especialidad_nombre": esp_nom.get(m.especialidad_id),
-            "subespecialidad": m.subespecialidad,
             "linea_id": lid, "linea_nombre": linea_nom.get(lid),
             "categoria": m.categoria,
-            "centro_trabajo": m.centro_trabajo, "institucion_tipo": m.institucion_tipo,
-            "tipo_consultorio": m.tipo_consultorio,
-            "provincia": m.provincia, "municipio": m.municipio, "sector": m.sector,
-            "direccion": m.direccion,
-            "latitud": float(m.latitud) if m.latitud is not None else None,
-            "longitud": float(m.longitud) if m.longitud is not None else None,
-            "telefono": m.telefono, "email": m.email, "exequatur": m.exequatur,
-            "dias_consulta": m.dias_consulta, "horario_consulta": m.horario_consulta,
-            "frecuencia_visita": m.frecuencia_visita, "acepta_visita": m.acepta_visita,
-            "potencial_prescripcion": m.potencial_prescripcion, "kol": m.kol,
-            "segmento": m.segmento, "observaciones": m.observaciones,
-            "fecha_alta": m.fecha_alta.isoformat() if m.fecha_alta else None,
+            "centro_trabajo": m.centro_trabajo,
+            "provincia": m.provincia, "municipio": m.municipio,
             "fecha_ultima_visita": uv.isoformat() if uv else None,
             "ciclos_sin_visita": m.ciclos_sin_visita, "activo": m.activo,
             "estado_visita": estado,
             "estado_aprobacion": m.estado_aprobacion,
             "ciclo_baja_id": m.ciclo_baja_id,
-        })
+        }
+        # Campos pesados (ficha completa): solo para editar un médico (lite=False).
+        if not lite:
+            base.update({
+                "nombre": m.nombre, "apellidos": m.apellidos,
+                "subespecialidad": m.subespecialidad,
+                "institucion_tipo": m.institucion_tipo, "tipo_consultorio": m.tipo_consultorio,
+                "sector": m.sector, "direccion": m.direccion,
+                "latitud": float(m.latitud) if m.latitud is not None else None,
+                "longitud": float(m.longitud) if m.longitud is not None else None,
+                "telefono": m.telefono, "email": m.email, "exequatur": m.exequatur,
+                "dias_consulta": m.dias_consulta, "horario_consulta": m.horario_consulta,
+                "frecuencia_visita": m.frecuencia_visita, "acepta_visita": m.acepta_visita,
+                "potencial_prescripcion": m.potencial_prescripcion, "kol": m.kol,
+                "segmento": m.segmento, "observaciones": m.observaciones,
+                "fecha_alta": m.fecha_alta.isoformat() if m.fecha_alta else None,
+            })
+        salida.append(base)
     return salida
+
+
+def obtener_medico(db: Session, medico_id: int) -> dict | None:
+    """Ficha COMPLETA de UN médico (para editar en el Panel) — consulta directa por id."""
+    m = db.query(MedicoVisita).filter(MedicoVisita.id == medico_id).first()
+    if not m:
+        return None
+    esp = (db.query(Especialidad.nombre).filter(Especialidad.id == m.especialidad_id).scalar()
+           if m.especialidad_id else None)
+    lid = db.query(RepresentanteMedico.linea_id).filter(RepresentanteMedico.id == m.vm_id).scalar()
+    lnom = db.query(Linea.nombre).filter(Linea.id == lid).scalar() if lid else None
+    return {
+        "id": m.id, "vm_id": m.vm_id, "codigo": m.codigo,
+        "nombre_completo": m.nombre_completo, "nombre": m.nombre, "apellidos": m.apellidos,
+        "especialidad_id": m.especialidad_id, "especialidad_nombre": esp,
+        "subespecialidad": m.subespecialidad,
+        "linea_id": lid, "linea_nombre": lnom, "categoria": m.categoria,
+        "centro_trabajo": m.centro_trabajo, "institucion_tipo": m.institucion_tipo,
+        "tipo_consultorio": m.tipo_consultorio,
+        "provincia": m.provincia, "municipio": m.municipio, "sector": m.sector,
+        "direccion": m.direccion,
+        "latitud": float(m.latitud) if m.latitud is not None else None,
+        "longitud": float(m.longitud) if m.longitud is not None else None,
+        "telefono": m.telefono, "email": m.email, "exequatur": m.exequatur,
+        "dias_consulta": m.dias_consulta, "horario_consulta": m.horario_consulta,
+        "frecuencia_visita": m.frecuencia_visita, "acepta_visita": m.acepta_visita,
+        "potencial_prescripcion": m.potencial_prescripcion, "kol": m.kol,
+        "segmento": m.segmento, "observaciones": m.observaciones,
+        "fecha_alta": m.fecha_alta.isoformat() if m.fecha_alta else None,
+        "ciclos_sin_visita": m.ciclos_sin_visita, "activo": m.activo,
+        "estado_aprobacion": m.estado_aprobacion, "ciclo_baja_id": m.ciclo_baja_id,
+    }
 
 
 def listar_medicos_existentes(db: Session, vm_id: int) -> list[dict]:
