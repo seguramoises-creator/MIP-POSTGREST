@@ -24,7 +24,7 @@ El sistema permite:
 
 **REDISEÑO DE JUNIO 2026 — cambios estructurales clave respecto a la v1.0:**
 
-1. **El motor de cálculo de Score Integral/Ranking:** se trasladó a SQL Server (stored procedures T-SQL) en jun-2026 y **se movió de vuelta a Python en jul-2026** para dejar el core agnóstico de BD (ediciones PostgreSQL / SQL Server-contenedor). Hoy vive en `motor_calculo_service.py`, verificado por caracterización; los SPs fueron eliminados. Ver §8.
+1. **El motor de cálculo de Score Integral/Ranking:** vive en `motor_calculo_service.py` (**100% Python**, edición PostgreSQL). Ver §8.
 2. **El esquema `DW` fue rediseñado.** `FACT_RendimientoComercial`, `FACT_Ranking` y `FACT_Reconocimiento` (v1.0) fueron reemplazados por `FACT_ResultadoIndicador` (entrada), `FACT_ScoreIntegralRM` + `FACT_RankingRM` + `FACT_RankingGerente` + `FACT_ReconocimientoRM` (salidas calculadas), más tablas derivadas nuevas para dashboards (ver §4).
 3. **Cuatro módulos nuevos**: **LSII** (§12), **Cobertura Predictiva / 4DX** (§13, sustituye a Comercial), **Categorización Médica** (§14, sustituye a Capacitación) y **Exportación/Reportes** (§15, resuelve el pendiente histórico de exportación PDF/Excel).
 4. **Dos routers y dos páginas frontend quedaron como código muerto, intencionalmente no registrados**: `comercial.py` / `Comercial.tsx` y `capacitacion.py` / `Capacitacion.tsx`. Siguen en el disco (con comentarios inline que documentan la sustitución) pero no se importan en `router.py` ni en `App.tsx`. No tocarlos salvo que se pida explícitamente reactivarlos.
@@ -38,7 +38,7 @@ El sistema permite:
 - **Framework**: FastAPI 0.115.5
 - **ORM**: SQLAlchemy 2.0.36 (sintaxis moderna `Mapped` + `mapped_column`)
 - **Migraciones**: Alembic (configurado con `include_schemas=True` — crítico)
-- **Base de datos**: SQL Server Express (pymssql), IP `127.0.0.1`, puerto TCP 1433
+- **Base de datos**: PostgreSQL 14+ (psycopg2), IP `127.0.0.1`, puerto TCP 5432
 - **Validación/Config**: Pydantic v2 + pydantic-settings v2
 - **Auth**: JWT con python-jose 3.3.0 + passlib[bcrypt] 1.7.4
 - **ETL**: pandas 2.2.3 + openpyxl 3.1.5
@@ -59,8 +59,8 @@ El sistema permite:
 
 ### Infraestructura
 - Desarrollo — Backend: `http://localhost:8000` | Frontend: `http://localhost:3000` | Swagger: `http://localhost:8000/api/v1/docs`
-- Producción — `https://vista-mip.com` (IIS + ARR como proxy inverso hacia uvicorn, backend como servicio Windows vía NSSM)
-- Base de datos: SQL Server Express, BD `SCGCPR`, usuario `segura`
+- Producción — `https://vista-mip.com` (Docker en Linux: frontend nginx + backend uvicorn + PostgreSQL; ver `DEPLOY-POSTGRES.md`)
+- Base de datos: PostgreSQL, BD `scgcpr`, usuario `segura`
 
 ---
 
@@ -121,7 +121,7 @@ C:\Users\Lenovo\Proyecto\MSM\
 │   │       ├── iup_service.py              ← Motor de Score Integral (Python, lectura)
 │   │       ├── puntaje_service.py          ← Conversión valor→puntos (utilidad Python puntual)
 │   │       ├── ranking_service.py
-│   │       ├── recalculo_service.py        ← Orquestador — delega el cálculo a SQL Server (§8)
+│   │       ├── recalculo_service.py        ← Orquestador — delega el cálculo al motor Python (§8)
 │   │       ├── etl_service.py
 │   │       ├── elegibilidad_service.py
 │   │       ├── reconocimiento_service.py
@@ -174,7 +174,7 @@ C:\Users\Lenovo\Proyecto\MSM\
 
 ## 4. Base de Datos — Esquemas y Tablas
 
-SQL Server Express, base de datos `SCGCPR`, múltiples esquemas.
+PostgreSQL, base de datos `scgcpr`, múltiples esquemas.
 
 ### Esquema `Config` — Dimensiones (catálogos maestros)
 
@@ -347,7 +347,7 @@ Los indicadores son configurables por país (`DIM_Indicador`, `UNIQUE(pais_id, c
 - `1` → el valor ya viene como porcentaje (0-100), se usa directo
 - `100` → el valor ya viene como score directo (0-100), se usa directo
 
-Nota: a diferencia de v1.0, `puntaje_service.convertir_a_puntaje()` ya **no** recibe ni aplica la normalización por escala — recibe el valor ya normalizado y solo busca el rango en `DIM_IndicadorTabla`. La normalización por escala (si aplica `×100` u otra transformación) ahora ocurre dentro del stored procedure `DW.sp_CompletarPuntajesCiclo` durante el recálculo masivo (ver §8). `puntaje_service.py` queda como utilidad para cálculos puntuales fuera de ese flujo.
+Nota: a diferencia de v1.0, `puntaje_service.convertir_a_puntaje()` ya **no** recibe ni aplica la normalización por escala — recibe el valor ya normalizado y solo busca el rango en `DIM_IndicadorTabla`. La normalización por escala (si aplica `×100` u otra transformación) ahora ocurre en `motor_calculo_service.completar_puntajes` (Python) durante el recálculo masivo (ver §8). `puntaje_service.py` queda como utilidad para cálculos puntuales fuera de ese flujo.
 
 **Pesos del Score** (campo `DIM_Indicador.peso_iup`): fracción decimal (ej. `0.15` = 15%). La suma por módulo da el peso del módulo en el Score total — ver §7.
 
@@ -391,15 +391,11 @@ Score ∈ [0, 100]
 
 **Archivo**: `app/services/recalculo_service.py` (orquestación) + `app/services/motor_calculo_service.py` (motor).
 
-**Cambio de arquitectura (jul-2026, revierte el diseño anterior):** el motor de Score/Ranking
-**se movió de vuelta a Python** para dejar el core **agnóstico de base de datos** (prerequisito de
-las ediciones PostgreSQL y SQL Server-contenedor). Los 3 stored procedures T-SQL (`DW.sp_RecalcularCiclo`,
-`DW.sp_CompletarPuntajesCiclo`, `DW.sp_GenerarRankingCiclo`) **fueron eliminados** (migración `e8f1a2c3d4b5`);
-su lógica se reimplementó en `motor_calculo_service.py` con `decimal.Decimal` para aritmética exacta,
-**verificada por caracterización** (`tests/test_caracterizacion_motor.py`: mismo resultado que el SP).
-Igual se hizo con Categorización (`cat.sp_CalcularCategoriaMedica` → `categorizacion_service.calcular_categorias_py`)
-y Cobertura (`cat.sp_CalcularCoberturaPredictiva` → `cobertura_predictiva_service.calcular_cobertura_py`),
-también caracterizadas. **Ya no hay stored procedures en la BD.**
+**El motor de Score/Ranking es 100% Python** (`motor_calculo_service.py`), con
+`decimal.Decimal` para aritmética exacta. **No hay stored procedures en la BD**: el
+cálculo de puntajes, score integral y ranking vive en Python, igual que
+Categorización (`categorizacion_service.calcular_categorias_py`) y Cobertura
+(`cobertura_predictiva_service.calcular_cobertura_py`).
 
 - `motor_calculo_service.completar_puntajes(db, ciclo_id, pais_codigo)` — `resultado_porcentaje` + `puntos_obtenidos`.
 - `motor_calculo_service.generar_ranking(db, ciclo_id, pais_codigo)` — Score Integral + Ranking (**delete-then-insert**).
@@ -420,13 +416,13 @@ def recalcular_ciclo(db, ciclo_id, pais_codigo=None) -> dict:
 
 **Respuesta**: `{ciclo_id, abortado, motivo?, filas_kpi_actualizadas, rankings_generados}` — si `abortado=true` (ciclo cerrado), no se escribió nada.
 
-**Migraciones relacionadas con el motor SQL**: `e7a91f4c2b58` (crea los SPs), `b8c4d2e1f5a9` (corrige SP de cálculo de factor de peso), `e2f5b9c4a1d8` (SP de puntaje, factor por peso en runtime), `2c771e676bd7` (corrige fórmula de puntos proporcional).
+**Migraciones del motor**: las migraciones de la etapa SP (`e7a91f4c2b58`, `b8c4d2e1f5a9`, `e2f5b9c4a1d8`, `2c771e676bd7`, `e8f1a2c3d4b5`) están **archivadas** en `backend/alembic/versions/_mssql_archive/`; el cálculo actual es 100% Python y no depende de ellas.
 
 ---
 
 ## 9. Motor de Puntaje (Python)
 
-**Archivo**: `app/services/puntaje_service.py` — utilidad de conversión usada fuera del flujo masivo de recálculo (que ahora vive en SQL Server, ver §8).
+**Archivo**: `app/services/puntaje_service.py` — utilidad de conversión usada fuera del flujo masivo de recálculo (que vive en `motor_calculo_service`, 100% Python, ver §8).
 
 - `convertir_a_puntaje(db, indicador_id, valor, pais_id) → Decimal`: busca el rango `[rango_desde, rango_hasta]` (inclusive) en `DIM_IndicadorTabla` filtrando por indicador **y** país. Sin tabla configurada → devuelve el valor acotado a `[0,100]` (pass-through). Valor sobre el rango máximo → puntos máximos de la tabla. Valor bajo el mínimo → 0 puntos.
 - `convertir_puntaje_por_codigo(db, indicador_codigo, valor, pais_id)`: variante por código (útil en ETL, donde se tiene el código del Excel, no el ID).
@@ -619,7 +615,7 @@ Base URL: `http://localhost:8000/api/v1`
 | GET/POST | `/admin/premios` | ADMIN/GERENTE_PRODUCTIVIDAD (alta: ADMIN) |
 | GET/POST/PUT/DELETE | `/admin/usuarios` | ADMIN |
 
-> `POST /admin/reset?tipo=facts|dims` (hallazgo nuevo, no documentado en v1.0): borrado administrativo en dos fases vía conexión `pymssql` directa. `facts` borra todo `DW`/`ETL`/`Audit` (sin riesgo de FK, las FACT apuntan hacia los DIM). `dims` borra `Config` — solo seguro después de `facts`; nulifica `pais_id` en usuarios, deshabilita FKs dentro de `Config` con `NOCHECK`, borra, y las reactiva sin revalidar. Operación destructiva, ADMIN únicamente — pensada para entornos de prueba/reset de demo, no usar contra datos de producción reales sin respaldo previo.
+> `POST /admin/reset?tipo=facts|dims` (hallazgo nuevo, no documentado en v1.0): borrado administrativo en dos fases con `TRUNCATE ... RESTART IDENTITY CASCADE` (PostgreSQL). `facts` borra todo `DW`/`ETL`/`Audit` (sin riesgo de FK, las FACT apuntan hacia los DIM). `dims` borra `Config` — solo seguro después de `facts`; nulifica `pais_codigo` en usuarios antes de truncar. Operación destructiva, ADMIN únicamente — pensada para entornos de prueba/reset de demo, no usar contra datos de producción reales sin respaldo previo.
 
 ### DIMs — Importación masiva (`/dims`)
 Ver §11. `POST /dims/preview`, `POST /dims/importar` — ADMIN, GERENTE_PRODUCTIVIDAD.
@@ -629,7 +625,7 @@ Ver §11. `POST /dims/preview`, `POST /dims/importar` — ADMIN, GERENTE_PRODUCT
 |--------|------|-------|-------------|
 | POST | `/etl/cargar` | ADMIN, GERENTE_PRODUCTIVIDAD | Sube Excel, lanza procesamiento en background |
 | GET | `/etl/status/{id}` | ADMIN, GERENTE_PRODUCTIVIDAD | Estado de un job |
-| POST | `/etl/recalcular/{ciclo_id}` | ADMIN, GERENTE_PRODUCTIVIDAD | Dispara `DW.sp_RecalcularCiclo` manualmente (ver §8) |
+| POST | `/etl/recalcular/{ciclo_id}` | ADMIN, GERENTE_PRODUCTIVIDAD | Dispara el recálculo (`motor_calculo_service`, Python) manualmente (ver §8) |
 | GET | `/etl/historial` | ADMIN, GERENTE_PRODUCTIVIDAD | Historial de cargas |
 
 ### Productividad (`/productividad`)
@@ -679,7 +675,7 @@ GET `/health`.
 - Access token: 60 min (`JWT_ACCESS_TOKEN_EXPIRE_MINUTES`)
 - Refresh token: 7 días (`JWT_REFRESH_TOKEN_EXPIRE_DAYS`)
 - Payload: `sub` (user_id), `rol`, `username`, `nombre_completo`
-- Blacklist de refresh tokens persistida en SQL Server (`Security.FACT_TokenRevocado`, `token_store.py`) — consistente entre workers y duradera tras reinicio (FIX W-04 v2, ver §22)
+- Blacklist de refresh tokens persistida en la base de datos (`Security.FACT_TokenRevocado`, `token_store.py`) — consistente entre workers y duradera tras reinicio (FIX W-04 v2, ver §22)
 
 ### Roles y permisos
 ```
@@ -722,9 +718,9 @@ APP_ENV=development
 DEBUG=true
 API_PREFIX=/api/v1
 
-DB_SERVER=127.0.0.1        # CRÍTICO: IP, no nombre de instancia
-DB_PORT=1433               # TCP fijo (SQL Browser no requerido)
-DB_NAME=SCGCPR
+DB_SERVER=127.0.0.1        # host de PostgreSQL (o `db` con el compose with-db)
+DB_PORT=5432               # PostgreSQL
+DB_NAME=scgcpr
 DB_USER=segura
 DB_PASSWORD=<tu_password_db>   # nunca commitear el valor real (ver .env.example)
 
@@ -748,14 +744,11 @@ En producción, `CORS_ORIGINS` debe incluir `https://vista-mip.com`. El `field_v
 
 **Guía completa**: `backend/MIGRATIONS.md`. Hay aproximadamente 20 migraciones en `backend/alembic/versions/`. Migraciones confirmadas relevantes al rediseño (además de las 4 ya documentadas en v1.0 — baseline, `pais_id` en indicador, unique constraint, columnas faltantes):
 
-- `e7a91f4c2b58` — crea los stored procedures de recálculo IUP/Ranking en SQL Server (`sp_RecalcularCiclo`, etc.) — ver §8
-- `b8c4d2e1f5a9` — corrige el SP de cálculo del factor de peso
-- `e2f5b9c4a1d8` — SP de puntaje, factor por peso en runtime
-- `2c771e676bd7` — corrige la fórmula de puntos proporcional
+- Las migraciones de la etapa de stored procedures (`e7a91f4c2b58`, `b8c4d2e1f5a9`, `e2f5b9c4a1d8`, `2c771e676bd7`) están **archivadas** en `_mssql_archive/` — el motor actual es 100% Python (§8) y no las usa
 - Migraciones adicionales asociadas a los modelos nuevos: `DIM_TargetMedico`/`DIM_Feriado`/`DIM_ParametroCobertura`/`FACT_Visita`/`Usuario.gerente_id` (Cobertura Predictiva) y las DIM/FACT de Categorización Médica (`DIM_Especialidad`, `DIM_Provincia`, `DIM_Municipio`, `DIM_CentroMedico`, `DIM_CategoriaMedica`, `DIM_CriterioCategoria`, `DIM_CriterioCategoriaTabla`, `DIM_Medico`, `FACT_CategorizacionMedica`)
 
 ### ⚠️ Regla crítica de Alembic
-`env.py` tiene `include_schemas=True` en `context.configure()`. **No quitar esta opción.** Sin ella, Alembic solo reflexiona el esquema `dbo` y propone recrear todas las tablas de `Config.*`, `DW.*`, etc.
+`env.py` tiene `include_schemas=True` en `context.configure()`. **No quitar esta opción.** Sin ella, Alembic solo reflexiona el esquema `public` y propone recrear todas las tablas de `Config.*`, `DW.*`, etc.
 
 ### Comandos útiles
 ```powershell
@@ -797,7 +790,7 @@ npm run dev
 ```
 
 ### Producción
-El sistema ya está desplegado en `https://vista-mip.com`: backend como servicio Windows (NSSM) detrás de IIS+ARR (proxy inverso, `preserveHostHeader` habilitado), frontend compilado y publicado en IIS, certificado TLS configurado. Ver `deploy/DEPLOYMENT.md` y los scripts en `deploy/windows/` (IIS/NSSM) y `deploy/linux/` (alternativa systemd+nginx) para el procedimiento completo. Pendiente: tras el último ajuste de `web.config`, redesplegar y purgar caché del navegador (ver §22, tarea de seguimiento abierta).
+El sistema está desplegado en `https://vista-mip.com` con **Docker en Linux**: frontend (nginx sirviendo el build de Vite + proxy `/api/v1`) + backend (uvicorn/FastAPI + psycopg2) + PostgreSQL, orquestados por `docker-compose.yml`. Las migraciones Alembic corren solas al arrancar el contenedor del backend. Deploy: `git pull && docker compose --profile with-db up -d --build`. Ver **`DEPLOY-POSTGRES.md`** para el procedimiento completo (la guía legacy Windows/IIS `deploy/DEPLOYMENT.md` quedó superseded).
 
 ### Crear tablas e inicializar (primera vez)
 ```powershell
@@ -815,7 +808,7 @@ python -m alembic stamp head
 1. `POST /dims/preview` → subir `DIM_MIP_FINAL.xlsx` → revisar hojas detectadas
 2. `POST /dims/importar` → seleccionar todas las hojas → importar catálogos
 3. `POST /etl/cargar` → subir `FACT_MIP_FINAL.xlsx` con `tipo_archivo=KPI_RM`, `modo=PRODUCCION`
-4. El recálculo de Score/Ranking se dispara automáticamente vía `DW.sp_RecalcularCiclo` (o manualmente: `POST /etl/recalcular/{ciclo_id}`)
+4. El recálculo de Score/Ranking se dispara automáticamente (motor Python `motor_calculo_service`) o manualmente: `POST /etl/recalcular/{ciclo_id}`
 5. Para Cobertura Predictiva: `POST /cobertura-predictiva/cargar/target-medicos` y `.../cargar/visitas`
 6. Para Categorización Médica: `POST /categorizacion/cargar`
 
@@ -826,8 +819,8 @@ python -m alembic stamp head
 ### bcrypt / passlib
 **Síntoma**: `verify_password` lanza `"password cannot be longer than 72 bytes"`. **Causa**: incompatibilidad passlib 1.7.4 con bcrypt 4.x+. **Solución**: `pip install bcrypt==3.2.2`
 
-### SQL Server TCP
-**Síntoma**: `Connection refused` con nombre de instancia. **Causa**: SQL Browser no activo. **Solución**: usar `DB_SERVER=127.0.0.1` con TCP/IP habilitado en puerto 1433.
+### Conexión a PostgreSQL
+**Síntoma**: `Connection refused` o `fe_sendauth: no password supplied`. **Causa**: host/puerto o credenciales incorrectos, o `.env` no cargado (correr desde `backend/`). **Solución**: `DB_SERVER`/`DB_PORT=5432`/`DB_PASSWORD` correctos; con el compose `with-db` usar `DB_SERVER=db`.
 
 ### Alembic propone recrear tablas existentes
 **Causa**: `include_schemas=True` falta en `env.py`. **Verificación**: revisar que esté en `run_migrations_offline` y `run_migrations_online`.
@@ -845,7 +838,7 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 | Feature | Estado | Notas |
 |---------|--------|-------|
 | Completar frontend | Resuelto en buena parte | Ya existen vistas para todos los módulos (Dashboard, Productividad, Cobertura Predictiva, Coaching, Categorización, Ranking, Reconocimiento, LSII, ETL, Admin, Reportes) |
-| Módulo de Visita Médica (VISTA) | **Resuelto** (8 fases) | Esquema `Visita` en SQL Server; router `prefix="/visita"` en `visita.py`. Fases: Panel Médico (`DIM_MedicoVisita`), Planeación (`PlaneacionCiclo`, reglas P01-P03), Registro (`FactVisita`, hora servidor/ventana 60min), Ruptura+Cierre (`CierreCicloVisita`, rodaje idempotente de `ciclos_sin_visita`), Cobertura (gauges/ranking tiempo real), Proyección (ritmo vs requerido + simulador), Parrilla+Muestras (`ParrillaPromocional`+`MuestraEntregada`, cruce por producto normalizado), Costo+ROI (`ParametroCosto`, ingresos de `FACT_Ventas`). Servicios `visita_*_service.py`; páginas `frontend/src/pages/visita/*`. RBAC: VM auto-scope a `rm_id`; cierre/parrilla/costo = ADMIN+GERENTE_PRODUCTIVIDAD. Reutiliza `Config.DIM_RM` (VM), `DIM_Ciclo`, `DIM_Especialidad`, `DIM_Linea`. **v2 (jul-2026):** Parrilla y Costo/ROI tienen **selector de ciclo** en el frontend (`CostoRoiVisita.tsx`/`ParrillaVisita.tsx`) — la config siempre se guardó por `(ciclo,línea)`, ahora se puede ver/editar por ciclo; los ciclos **cerrados** quedan en **solo-lectura** (guard `_guard_ciclo_abierto` en `guardar_parrilla`/`publicar_parrilla`/`guardar_estructura`/`importar_excel`). El **registro de visita** captura **GPS** (`FactVisita.latitud/longitud`) y **foto del centro** como BLOB (`FactVisita.foto`/`foto_mime`, VARBINARY(MAX), migración `d4b8f1a6c290`), con endpoints `POST/GET /visita/{id}/foto` (validación magic bytes JPEG/PNG + 3 MB) y captura por `navigator.geolocation` + `<input capture>` en `RegistrarVisita.tsx` (foto opcional). |
+| Módulo de Visita Médica (VISTA) | **Resuelto** (8 fases) | Esquema `Visita` en PostgreSQL; router `prefix="/visita"` en `visita.py`. Fases: Panel Médico (`DIM_MedicoVisita`), Planeación (`PlaneacionCiclo`, reglas P01-P03), Registro (`FactVisita`, hora servidor/ventana 60min), Ruptura+Cierre (`CierreCicloVisita`, rodaje idempotente de `ciclos_sin_visita`), Cobertura (gauges/ranking tiempo real), Proyección (ritmo vs requerido + simulador), Parrilla+Muestras (`ParrillaPromocional`+`MuestraEntregada`, cruce por producto normalizado), Costo+ROI (`ParametroCosto`, ingresos de `FACT_Ventas`). Servicios `visita_*_service.py`; páginas `frontend/src/pages/visita/*`. RBAC: VM auto-scope a `rm_id`; cierre/parrilla/costo = ADMIN+GERENTE_PRODUCTIVIDAD. Reutiliza `Config.DIM_RM` (VM), `DIM_Ciclo`, `DIM_Especialidad`, `DIM_Linea`. **v2 (jul-2026):** Parrilla y Costo/ROI tienen **selector de ciclo** en el frontend (`CostoRoiVisita.tsx`/`ParrillaVisita.tsx`) — la config siempre se guardó por `(ciclo,línea)`, ahora se puede ver/editar por ciclo; los ciclos **cerrados** quedan en **solo-lectura** (guard `_guard_ciclo_abierto` en `guardar_parrilla`/`publicar_parrilla`/`guardar_estructura`/`importar_excel`). El **registro de visita** captura **GPS** (`FactVisita.latitud/longitud`) y **foto del centro** como BLOB (`FactVisita.foto`/`foto_mime`, BYTEA, migración `d4b8f1a6c290`), con endpoints `POST/GET /visita/{id}/foto` (validación magic bytes JPEG/PNG + 3 MB) y captura por `navigator.geolocation` + `<input capture>` en `RegistrarVisita.tsx` (foto opcional). |
 | IUP consistencia completo | **Resuelto** | Ver §7 — promedio de los 3 ciclos previos más recientes, base neutral 0 si no hay historial |
 | Exportación PDF/Excel de reportes | **Resuelto** | Ver §15 — `exportacion.py` |
 | Ranking Gerentes de Distrito | **Resuelto** | `FACT_RankingGerente` (ver §4) |
@@ -856,7 +849,7 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 | Módulo de Exámenes v2.0 | **Resuelto** | Esquema `exam` (autocontenido). **Gate de integración al KPI**: la entrega de un examen ya NO alimenta `DW.FACT_ResultadoIndicador`; la nota EVAL_CONOCIMIENTOS de los RM entra **solo** cuando Capacitación consolida el (ciclo, país) vía `examen_consolidacion_service.consolidar_ciclo` (tabla `exam.FactConsolidacionCiclo`, migración `c1e7a2f4b9d0`; guard de ciclo abierto; re-ejecutable; 1 recálculo). Endpoints `GET/POST /examenes/consolidacion`; panel `ConsolidacionPanel.tsx`. **4 mejoras**: (1) nota real + banner Aprobado/No Aprobado/Provisional + flag `provisional` en el reporte; (2) correo de correcciones a `fecha_limite+30min` (`notification_service.notificar_correcciones_examen` + `app/core/scheduler.py` APScheduler + botón demo `POST /examenes/{id}/correcciones/enviar`); (3) `analisis_preguntas` con `acierto_pct`/`fallan`/`aciertan`/`etiqueta` + tooltip de nombres + recomendaciones ≥40%; (4) tipo de pregunta `objecion` (Objeción de Producto, reusa `Pregunta.escenario`, banner naranja). |
 | Notificaciones email | **Resuelto** | `notification_service.py` (smtplib, best-effort, no-op si `MAIL_SERVER=""`) cableado a: `ranking_service` (`notificar_ranking_generado`), `reconocimiento_service` (`notificar_reconocimiento_otorgado`), `examen_intento_service` (`notificar_resultado_examen`) y `notificar_correcciones_examen` (correcciones de examen, T+30min vía APScheduler). Gmail SMTP configurado en `.env`; envío real verificado. |
 | Tests unitarios | **Resuelto (en curso)** | Suite `pytest` con **187 tests** (`backend/tests/test_*.py`): IUP, puntaje, elegibilidad, token_store, módulo Exámenes (incl. `test_examen_consolidacion_service.py`) y módulo Visita (`test_visita_service.py`, incl. guards de ciclo cerrado y foto/GPS). CI de GitHub Actions corre pytest+build. Cobertura ampliable a routers/ETL. |
-| Refresh token en BD | **Resuelto** (FIX W-04 v2) | La blacklist vive en SQL Server (`Security.FACT_TokenRevocado`, modelo `TokenRevocado`). `token_store.revocar_token`/`token_esta_revocado` reciben `db`; revocación consistente entre workers y duradera tras reinicio. Purga oportuna de expirados con `purgar_expirados`. |
+| Refresh token en BD | **Resuelto** (FIX W-04 v2) | La blacklist vive en la base de datos (`Security.FACT_TokenRevocado`, modelo `TokenRevocado`). `token_store.revocar_token`/`token_esta_revocado` reciben `db`; revocación consistente entre workers y duradera tras reinicio. Purga oportuna de expirados con `purgar_expirados`. |
 | Dashboard Power BI | Pendiente | Sin conexión a Power BI Embedded |
 
 ---
@@ -868,7 +861,7 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 - **Schemas**: Pydantic v2 con `model_config = ConfigDict(from_attributes=True)` en responses
 - **Routers**: `APIRouter(prefix="/<módulo>", tags=["..."])`. Prefijo en el router, no en el endpoint.
 - **Constantes RBAC por router**: definir `Depends(require_roles(...))` como constante de módulo y reutilizarla en las firmas de los endpoints (ver §17).
-- **Services**: reciben `db: Session`, no acceden a HTTP. Lógica de negocio pura — salvo el motor de Score/Ranking masivo, que ahora vive en SQL Server (§8); los services de Categorización y Cobertura Predictiva sí mantienen el cálculo en Python.
+- **Services**: reciben `db: Session`, no acceden a HTTP. Lógica de negocio pura. El motor de Score/Ranking masivo vive en `motor_calculo_service` (100% Python, §8), igual que Categorización y Cobertura Predictiva.
 - **BackgroundTasks**: siempre crear sesión propia con `SessionLocal()` y cerrarla en `finally`
 - **Logs**: `from loguru import logger`. Nunca `print()`.
 - **Timestamps**: `datetime.now(timezone.utc)`. Nunca `datetime.utcnow()` (deprecated).
@@ -896,7 +889,7 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 ### Migraciones
 - Ningún cambio de esquema a mano con `ALTER TABLE`
 - Todo cambio de modelo → generar migración → revisar → aplicar → commitear junto con el modelo
-- Si el cálculo correspondiente vive en un stored procedure (esquema `DW`), la migración debe crear/alterar el SP también (ver `e7a91f4c2b58` y siguientes)
+- El cálculo de Score/Ranking/Categorización/Cobertura es 100% Python (no hay stored procedures); una migración solo cambia esquema/datos, nunca lógica de cálculo
 
 ---
 
@@ -908,7 +901,7 @@ Para pedir mejoras, referencia sección y archivo. Ejemplos:
 > "En MSM (sección 16 - API Endpoints), agrega un endpoint GET `/ranking/gerentes` si no existe ya un equivalente para `FACT_RankingGerente` (sección 4). Usa el patrón de `ranking.py` existente."
 
 **Modificar el motor de Score**:
-> "En MSM (sección 7 - Motor de Score Integral), modifica `iup_service.py` para que el componente de Comercial también considere [...]. Recuerda que el cálculo masivo por ciclo vive en `DW.sp_GenerarRankingCiclo` (sección 8) — si el cambio debe aplicar al recálculo masivo, también hay que tocar el stored procedure, no solo el Python."
+> "En MSM (sección 7 - Motor de Score Integral), modifica `iup_service.py` para que el componente de Comercial también considere [...]. Recuerda que el cálculo masivo por ciclo vive en `motor_calculo_service` (sección 8, 100% Python) — si el cambio debe aplicar al recálculo masivo, también hay que tocarlo ahí."
 
 **Agregar migración**:
 > "En MSM (sección 19 - Migraciones), genera una migración Alembic para [...]. Usa la plantilla de columna NOT NULL segura de MIGRATIONS.md."
