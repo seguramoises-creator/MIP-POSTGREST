@@ -128,10 +128,11 @@ _DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domin
 
 
 def agenda_hoy(db: Session, vm_id: int) -> list[dict]:
-    """Médicos programados del VM para HOY (agenda). Sale de la Planeación del ciclo;
-    si la planeación tiene día, filtra al día de hoy; si no, muestra lo planeado.
-    Fallback: si no hay planeación, usa el panel activo. Marca 'registrada' cuando ya
-    existe una visita ejecutada hoy para ese médico."""
+    """Médicos PLANEADOS del VM en el ciclo. Sale EXCLUSIVAMENTE de la Planeación del
+    ciclo — si el VM no ha planeado, la agenda va vacía (no hay fallback al panel).
+    Cada médico trae `grupo`: 'dia' (el día de la semana del tipo pendiente cae hoy)
+    o 'ciclo' (planeado en el ciclo pero para otro día). `tipo_visita` es el próximo
+    tipo pendiente (V y luego R); 'registrada' cuando ya no queda tipo por registrar."""
     from app.models.visita import PlaneacionCiclo
     from app.models.dimensiones import Especialidad, RepresentanteMedico
     ciclo_id = ciclo_por_defecto(db, vm_id)  # ciclo ABIERTO del país del VM
@@ -139,32 +140,22 @@ def agenda_hoy(db: Session, vm_id: int) -> list[dict]:
     linea_id = rm.linea_id if rm else None
     hoy = datetime.now(timezone.utc).date()
     hoy_nombre = _DIAS[hoy.weekday()]
-    inicio = datetime(hoy.year, hoy.month, hoy.day, tzinfo=timezone.utc)
 
     plan_all = db.query(PlaneacionCiclo).filter(
         PlaneacionCiclo.vm_id == vm_id, PlaneacionCiclo.ciclo_id == ciclo_id).all() if ciclo_id else []
-    # Tipos PLANEADOS por médico en TODO el ciclo (V y/o R). Un médico con Revisita
-    # planeada sigue pendiente aunque ya se le haya hecho la Vista.
+    if not plan_all:
+        return []  # sin planeación → nada que registrar (la visita se programa en Planeación del Ciclo)
+
+    # Por médico: tipos planeados y día/hora por tipo (V y R pueden caer en días distintos).
     tipos_plan: dict[int, set[str]] = {}
+    dia_por_tipo: dict[tuple[int, str], str | None] = {}
+    hora_por_tipo: dict[tuple[int, str], str | None] = {}
     for p in plan_all:
         tipos_plan.setdefault(p.medico_id, set()).add(p.tipo_visita)
+        dia_por_tipo[(p.medico_id, p.tipo_visita)] = p.dia_semana
+        hora_por_tipo[(p.medico_id, p.tipo_visita)] = p.hora_estimada
 
-    # Para la lista/hora de hoy: si la planeación tiene día, filtra al día de hoy.
-    con_dia = [p for p in plan_all if p.dia_semana]
-    plan_hoy = [p for p in con_dia if p.dia_semana == hoy_nombre] if con_dia else plan_all
-
-    # Un ítem por médico (guarda la fila con menor hora para orden/hora estimada).
-    por_medico: dict[int, PlaneacionCiclo] = {}
-    for p in sorted(plan_hoy, key=lambda x: (x.hora_estimada or "99:99")):
-        por_medico.setdefault(p.medico_id, p)
-
-    medico_ids = list(por_medico)
-    if not medico_ids:  # fallback: panel activo vigente (solo médicos APROBADOS)
-        meds = db.query(MedicoVisita).filter(
-            MedicoVisita.vm_id == vm_id, MedicoVisita.activo == True,
-            MedicoVisita.estado_aprobacion == "APROBADO").all()
-        medico_ids = [m.id for m in meds]
-
+    medico_ids = list(tipos_plan)
     # Solo médicos APROBADOS entran a la agenda (los pendientes no son visitables aún).
     medicos = {m.id: m for m in db.query(MedicoVisita).filter(
         MedicoVisita.id.in_(medico_ids), MedicoVisita.estado_aprobacion == "APROBADO").all()} if medico_ids else {}
@@ -174,39 +165,42 @@ def agenda_hoy(db: Session, vm_id: int) -> list[dict]:
     # Tipos EJECUTADOS en el ciclo (para saber qué queda pendiente) + no-visita de hoy.
     ejec_tipos: dict[int, set[str]] = {}
     no_vis_hoy: set[int] = set()
-    if medico_ids and ciclo_id:
-        for v in db.query(VisitaRegistro).filter(
-                VisitaRegistro.vm_id == vm_id, VisitaRegistro.ciclo_id == ciclo_id,
-                VisitaRegistro.medico_id.in_(medico_ids)).all():
-            if v.ejecutada:
-                ejec_tipos.setdefault(v.medico_id, set()).add(v.tipo_visita)
-            elif v.fecha_hora and v.fecha_hora.date() == hoy:  # .date() evita choque naive/aware
-                no_vis_hoy.add(v.medico_id)
+    for v in db.query(VisitaRegistro).filter(
+            VisitaRegistro.vm_id == vm_id, VisitaRegistro.ciclo_id == ciclo_id,
+            VisitaRegistro.medico_id.in_(medico_ids)).all():
+        if v.ejecutada:
+            ejec_tipos.setdefault(v.medico_id, set()).add(v.tipo_visita)
+        elif v.fecha_hora and v.fecha_hora.date() == hoy:  # .date() evita choque naive/aware
+            no_vis_hoy.add(v.medico_id)
 
     agenda = []
     for mid in medico_ids:
         m = medicos.get(mid)
         if not m:
             continue
-        p = por_medico.get(mid)
-        req = tipos_plan.get(mid) or {"V"}          # tipos requeridos (plan) o Vista por defecto
-        ejec = ejec_tipos.get(mid, set())           # tipos ya ejecutados en el ciclo
-        pend = req - ejec                           # lo que falta por registrar
-        completo = not pend                          # V (y R si aplica) ya registradas
+        req = tipos_plan[mid]
+        ejec = ejec_tipos.get(mid, set())
+        pend = req - ejec
+        completo = not pend
         no_visita = (not ejec) and (mid in no_vis_hoy)
         registrada = completo or no_visita
-        # Tipo sugerido para el próximo registro: primero la Vista, luego la Revisita.
-        tipo_sug = "V" if "V" in pend else ("R" if "R" in pend else (p.tipo_visita if p else "V"))
+        # Tipo relevante = el próximo pendiente (Vista antes que Revisita); si ya está
+        # completo, el último tipo planeado (para ubicar su día).
+        tipo_rel = "V" if "V" in pend else ("R" if "R" in pend else ("R" if "R" in req else "V"))
+        dia_rel = dia_por_tipo.get((mid, tipo_rel))
+        hora_rel = hora_por_tipo.get((mid, tipo_rel))
+        grupo = "dia" if (dia_rel == hoy_nombre) else "ciclo"
         agenda.append({
             "medico_id": mid, "nombre": m.nombre_completo,
             "especialidad": esp.get(m.especialidad_id), "categoria": m.categoria,
             "centro_trabajo": m.centro_trabajo, "provincia": m.provincia, "linea_id": linea_id,
-            "tipo_visita": tipo_sug,
-            "hora_estimada": (p.hora_estimada if p else None),
+            "tipo_visita": tipo_rel,
+            "dia_semana": dia_rel, "hora_estimada": hora_rel, "grupo": grupo,
             "estado": "registrada" if registrada else "pendiente",
             "no_visita": no_visita,
         })
-    agenda.sort(key=lambda a: (a["estado"] != "pendiente", a["hora_estimada"] or "99:99", a["nombre"]))
+    # Del día primero, luego pendientes antes que registradas, luego por hora y nombre.
+    agenda.sort(key=lambda a: (a["grupo"] != "dia", a["estado"] != "pendiente", a["hora_estimada"] or "99:99", a["nombre"]))
     return agenda
 
 

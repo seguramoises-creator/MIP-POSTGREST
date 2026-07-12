@@ -185,6 +185,10 @@ export default function RegistrarVisita() {
       m.activo && m.estado_aprobacion === 'APROBADO' && !enAgenda.has(m.id));
   }, [panel, agenda]);
 
+  // Dos grupos: los del DÍA (día de la semana del tipo pendiente cae hoy) y los del CICLO (otro día).
+  const delDia = useMemo(() => agendaVisible.filter((a) => a.grupo === 'dia'), [agendaVisible]);
+  const delCiclo = useMemo(() => agendaVisible.filter((a) => a.grupo !== 'dia'), [agendaVisible]);
+
   // Registrar un médico fuera de la agenda: se trata como Vista no programada.
   function seleccionarFuera(m: MedicoVisita | null) {
     if (!m) return;
@@ -281,6 +285,274 @@ export default function RegistrarVisita() {
     );
   };
 
+  // Formulario de registro — se renderiza INLINE, justo debajo del médico seleccionado.
+  const formulario = sel ? (
+    <div ref={formRef}>
+      <Card elevation={0} sx={{ ...cardSx, mb: 1 }}>
+        <Box sx={{ background: `linear-gradient(120deg, ${NAVY}0d 0%, ${TEAL}0d 100%)`,
+                   borderBottom: '1px solid #eef1f6', px: 2, py: 1.5, display: 'flex', alignItems: 'center',
+                   gap: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
+          {avatar(sel.nombre, sel.categoria, sel.medico_id, 42)}
+          <Box sx={{ flex: 1, minWidth: 120 }}>
+            <Typography fontWeight={800} sx={{ color: INK, fontSize: 'clamp(0.82rem, 3.2vw, 1.05rem)', lineHeight: 1.2,
+                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {sel.nombre}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {[sel.especialidad, sel.centro_trabajo, sel.provincia].filter(Boolean).join(' · ') || 'Sin datos'}
+            </Typography>
+          </Box>
+          <ToggleButtonGroup exclusive size="small" value={tipo} onChange={(_, v) => v && setTipo(v)}
+                             sx={{ bgcolor: '#fff', borderRadius: 2, '& .MuiToggleButton-root': { border: '1px solid #e2e8f0', fontWeight: 700, px: 1.5,
+                                   '&.Mui-selected': { bgcolor: NAVY, color: '#fff', '&:hover': { bgcolor: NAVY } } } }}>
+            <ToggleButton value="V" disabled={sel?.tipo_visita === 'R'}
+                          title={sel?.tipo_visita === 'R' ? 'La Vista de este médico ya fue registrada' : ''}>Vista</ToggleButton>
+            <ToggleButton value="R" disabled={sel?.tipo_visita !== 'R'}
+                          title={sel?.tipo_visita !== 'R' ? 'Primero registra la Vista (o el médico no tiene Revisita planeada)' : ''}>Revisita</ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+        <CardContent>
+          <Stack spacing={2}>
+            {!modoNoVisita && (
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="stretch">
+                <Box sx={{ minWidth: { sm: 190 } }}>
+                  <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
+                    <AccessAlarm sx={{ fontSize: 18, color: '#e11d48' }} />
+                    <Typography variant="caption" sx={secHeadSx}>Hora real de la visita</Typography>
+                  </Stack>
+                  <TextField type="time" size="small" value={hora} onChange={(e) => setHora(e.target.value)}
+                             sx={{ width: { xs: '100%', sm: 160 } }} />
+                  <Typography variant="caption" sx={{ display: 'block', mt: 0.5, fontWeight: 600, color: horaOk ? 'success.main' : 'error.main' }}>
+                    Ahora {hhmm(new Date())} · {horaOk ? 'dentro de 60 min ✓' : 'fuera de 60 min ✗'}
+                  </Typography>
+                </Box>
+                <Box sx={{ flex: 1, borderRadius: 2, p: 1.25,
+                           background: `linear-gradient(135deg, ${NAVY}0a 0%, ${TEAL}0f 100%)`,
+                           border: '1px solid #eef1f6' }}>
+                  <Typography variant="caption" sx={{ ...secHeadSx, display: 'block', mb: 0.75 }}>
+                    Resumen de la visita
+                  </Typography>
+                  {(() => {
+                    const nProd = Object.keys(detallados).length;
+                    const nMuestras = Object.values(detallados).reduce((s, v) => s + (v.muestras || 0), 0);
+                    const stat = (label: string, value: string, color: string) => (
+                      <Box sx={{ textAlign: 'center', flex: 1, minWidth: 62 }}>
+                        <Typography sx={{ fontWeight: 900, fontSize: '1.15rem', lineHeight: 1.1, color }}>{value}</Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.62rem' }}>{label}</Typography>
+                      </Box>
+                    );
+                    return (
+                      <>
+                        <Stack direction="row" spacing={0.5} divider={<Divider orientation="vertical" flexItem sx={{ borderColor: '#e2e8f0' }} />}>
+                          {stat('Tipo', tipo === 'R' ? 'Revisita' : 'Vista', NAVY)}
+                          {stat('Productos', String(nProd), TEAL)}
+                          {stat('Muestras', String(nMuestras), TEAL)}
+                        </Stack>
+                        <Stack direction="row" spacing={0.75} sx={{ mt: 1 }} flexWrap="wrap" rowGap={0.5}>
+                          <Chip size="small" label={gps ? 'Ubicación ✓' : 'Sin ubicación'} variant={gps ? 'filled' : 'outlined'}
+                                color={gps ? 'success' : 'default'} sx={{ fontWeight: 600, height: 22, fontSize: '0.66rem' }} />
+                          <Chip size="small" label={foto ? 'Foto ✓' : 'Sin foto'} variant={foto ? 'filled' : 'outlined'}
+                                color={foto ? 'success' : 'default'} sx={{ fontWeight: 600, height: 22, fontSize: '0.66rem' }} />
+                        </Stack>
+                      </>
+                    );
+                  })()}
+                </Box>
+              </Stack>
+            )}
+
+            {!modoNoVisita && (
+              <Box>
+                <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
+                  <Medication sx={{ fontSize: 18, color: TEAL }} />
+                  <Typography variant="caption" sx={{ fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: 'text.secondary' }}>
+                    Productos y muestras
+                  </Typography>
+                </Stack>
+                {productos.length > 0 && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+                    Propuestos por prioridad de la parrilla promocional
+                  </Typography>
+                )}
+                {productos.length === 0 ? (
+                  <Typography variant="caption" color="text.secondary">No hay parrilla de productos para esta línea.</Typography>
+                ) : (
+                  <Box sx={{ border: '1px solid #eef1f6', borderRadius: 2, bgcolor: '#fafbfd', px: 1, py: 0.25 }}>
+                    <Stack divider={<Divider sx={{ borderColor: '#f0f3f8' }} />}>
+                      {productos.map((p, idx) => {
+                        const det = detallados[p.producto];
+                        const on = det !== undefined;
+                        const base = { mencion: Math.min(idx + 1, 3), muestras: p.meta_muestras || 0 };
+                        return (
+                          <Box key={p.producto}
+                               sx={{ py: 1, px: 0.5, borderRadius: 1.5, bgcolor: on ? 'rgba(46,91,255,0.05)' : 'transparent',
+                                     display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1, rowGap: 1 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0,
+                                       flex: { xs: '1 1 100%', sm: '1 1 40%' } }}>
+                              <Checkbox size="small" checked={on} onChange={() => toggleProd(p, idx)} sx={{ p: 0.5 }} />
+                              <Avatar sx={{ width: 22, height: 22, fontSize: 11, fontWeight: 800, flexShrink: 0,
+                                            bgcolor: p.prioridad === 1 ? '#1a237e' : p.prioridad === 2 ? '#1565c0' : '#90a4ae' }}>
+                                {p.prioridad}
+                              </Avatar>
+                              <Box sx={{ minWidth: 0, flex: 1 }}>
+                                <Typography fontWeight={700} noWrap sx={{ fontSize: 'clamp(0.78rem, 3vw, 0.9rem)', lineHeight: 1.2 }}>
+                                  {p.nombre || p.producto}
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', fontSize: '0.66rem' }}>
+                                  Propuesto: {p.meta_muestras} muestra{p.meta_muestras === 1 ? '' : 's'} · {Math.min(idx + 1, 3)}ª mención
+                                </Typography>
+                              </Box>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1,
+                                       pl: { xs: 4.5, sm: 0 }, width: { xs: '100%', sm: 'auto' }, ml: { sm: 'auto' } }}>
+                              <TextField size="small" type="number" label="Muestras" disabled={!on}
+                                         value={det?.muestras ?? p.meta_muestras}
+                                         onChange={(e) => {
+                                           const q = Math.max(0, Math.min(999, Number(e.target.value) || 0));
+                                           setDetallados((d) => ({ ...d, [p.producto]: { ...(d[p.producto] ?? base), muestras: q } }));
+                                         }}
+                                         inputProps={{ min: 0, max: 999 }}
+                                         sx={{ width: 72, flexShrink: 0, '& input': { textAlign: 'center', fontWeight: 700 } }} />
+                              <FormControl size="small" sx={{ minWidth: 108, flex: { xs: 1, sm: 'none' } }}>
+                                <Select value={det?.mencion ?? base.mencion} disabled={!on}
+                                        onChange={(e) => setDetallados((d) => ({ ...d, [p.producto]: { ...(d[p.producto] ?? base), mencion: Number(e.target.value) } }))}>
+                                  {MENCIONES.map((m) => <MenuItem key={m} value={m}>{m}ª mención</MenuItem>)}
+                                </Select>
+                              </FormControl>
+                            </Box>
+                          </Box>
+                        );
+                      })}
+                    </Stack>
+                  </Box>
+                )}
+              </Box>
+            )}
+
+            {modoNoVisita ? (
+              <TextField select label="Causa de no-visita" value={causa} required
+                         onChange={(e) => setCausa(e.target.value)}>
+                {causas.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              </TextField>
+            ) : null}
+
+            <Box>
+              <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
+                <ChatBubbleOutline sx={{ fontSize: 18, color: TEAL }} />
+                <Typography variant="caption" sx={secHeadSx}>
+                  Comentario de visita <span style={{ color: '#d32f2f' }}>*</span>
+                </Typography>
+              </Stack>
+              <TextField fullWidth multiline minRows={2} maxRows={4} value={comentario}
+                         onChange={(e) => setComentario(e.target.value)}
+                         placeholder="Describe algo relevante que ocurrió en la visita…"
+                         helperText='Mínimo 10 caracteres · No escribas solo "Visita OK"' />
+            </Box>
+
+            {!modoNoVisita && (
+              <FormControlLabel
+                control={<Switch checked={acompanado} onChange={(e) => setAcompanado(e.target.checked)} color="primary" />}
+                label="Visita acompañada por el Gerente de Distrito"
+                sx={{ '& .MuiFormControlLabel-label': { fontWeight: 600, fontSize: 14 } }}
+              />
+            )}
+
+            {!modoNoVisita && (
+              <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" rowGap={1}>
+                <Button size="small" variant="outlined" startIcon={<span>📍</span>}
+                        color={gps ? 'success' : 'primary'}
+                        sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, borderWidth: 1.5 }}
+                        onClick={() => {
+                          if (!navigator.geolocation) { setMsg({ tipo: 'error', texto: 'Este dispositivo no soporta geolocalización.' }); return; }
+                          navigator.geolocation.getCurrentPosition(
+                            (pos) => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                            () => setMsg({ tipo: 'error', texto: 'No se pudo obtener la ubicación (permiso denegado o sin señal).' }),
+                            { enableHighAccuracy: true, timeout: 8000 });
+                        }}>
+                  {gps ? 'Ubicación capturada' : 'Capturar ubicación'}
+                </Button>
+                {gps && <Typography variant="caption" color="text.secondary">📍 {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}</Typography>}
+                <Button size="small" variant="outlined" component="label" startIcon={<span>📷</span>}
+                        color={foto ? 'success' : 'primary'}
+                        sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, borderWidth: 1.5 }}>
+                  {foto ? 'Cambiar foto' : 'Foto del centro'}
+                  <input hidden type="file" accept="image/*" capture="environment"
+                         onChange={(e) => { const f = e.target.files?.[0] || null; setFoto(f); setFotoPreview(f ? URL.createObjectURL(f) : null); }} />
+                </Button>
+                {fotoPreview && <Box component="img" src={fotoPreview} alt="foto" sx={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 1, border: '1px solid #ddd' }} />}
+              </Stack>
+            )}
+
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ pt: 0.5 }}>
+              <Button variant="contained" fullWidth startIcon={<Save />}
+                      disabled={guardando || (!modoNoVisita && comentario.trim().length < 10)}
+                      onClick={guardar}
+                      sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 800, textTransform: 'none', fontSize: '0.95rem',
+                            boxShadow: '0 8px 18px rgba(15,155,142,0.30)',
+                            background: `linear-gradient(120deg, ${TEAL} 0%, #0b7d72 100%)`,
+                            '&:hover': { background: `linear-gradient(120deg, #0d8a7f 0%, #0a6f66 100%)` },
+                            '&.Mui-disabled': { background: '#cbd5e1', color: '#fff', boxShadow: 'none' } }}>
+                {guardando ? 'Guardando…' : (modoNoVisita ? 'Registrar no-visita' : 'Guardar visita')}
+              </Button>
+              <Button variant="outlined" color={modoNoVisita ? 'primary' : 'error'} startIcon={<EventBusy />}
+                      onClick={() => { setModoNoVisita(!modoNoVisita); setMsg(null); }}
+                      sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 700, textTransform: 'none', borderWidth: 1.5 }}>
+                {modoNoVisita ? 'Fue visita' : 'No visité'}
+              </Button>
+            </Stack>
+          </Stack>
+        </CardContent>
+      </Card>
+    </div>
+  ) : null;
+
+  // Renderiza un grupo titulado; el formulario aparece INLINE bajo el médico seleccionado.
+  const renderGrupo = (titulo: string, lista: AgendaMedico[]) => (
+    lista.length === 0 ? null : (
+      <Box sx={{ mb: 1.5 }}>
+        <Typography variant="caption" sx={{ fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase',
+                    color: 'text.secondary', display: 'block', mb: 0.5 }}>
+          {titulo} · {lista.length}
+        </Typography>
+        <Stack divider={<Divider />}>
+          {lista.map((a) => {
+            const activa = sel?.medico_id === a.medico_id;
+            const reg = a.estado === 'registrada';
+            return (
+              <Box key={a.medico_id}>
+                <Stack direction="row" alignItems="center" spacing={1.5}
+                       onClick={() => seleccionar(a)}
+                       sx={{ py: 1, px: 0.5, cursor: reg ? 'default' : 'pointer', borderRadius: 1,
+                             bgcolor: activa ? 'rgba(255,193,7,0.14)' : 'transparent',
+                             opacity: reg ? 0.7 : 1, '&:hover': { bgcolor: reg ? 'transparent' : 'action.hover' } }}>
+                  {avatar(a.nombre, a.categoria, a.medico_id, 36)}
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography fontWeight={700} sx={{ fontSize: 'clamp(0.72rem, 2.6vw, 0.875rem)', lineHeight: 1.25,
+                                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {a.nombre}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                      {[a.especialidad, a.tipo_visita === 'R' ? 'Revisita' : 'Vista', a.dia_semana, a.hora_estimada].filter(Boolean).join(' · ')}
+                    </Typography>
+                  </Box>
+                  {reg ? (
+                    <Chip size="small" variant={a.no_visita ? 'filled' : 'outlined'}
+                          color={a.no_visita ? 'error' : 'success'}
+                          label={a.no_visita ? 'No visitado' : 'Registrada ✓'} />
+                  ) : (
+                    <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 700 }}>Pendiente</Typography>
+                  )}
+                </Stack>
+                {activa && <Box sx={{ mt: 1 }}>{formulario}</Box>}
+              </Box>
+            );
+          })}
+        </Stack>
+      </Box>
+    )
+  );
+
   return (
     <Box sx={{ maxWidth: 620, mx: 'auto', p: { xs: 1.5, sm: 3 } }}>
       {/* HERO — encabezado corporativo: título + fecha + Gerente de Distrito, con el
@@ -376,278 +648,18 @@ export default function RegistrarVisita() {
               />
             )}
             {agenda.length === 0 ? (
-              <Alert severity="info">No hay médicos programados. Puedes registrar desde el panel.</Alert>
+              <Alert severity="info">Aún no has planeado el ciclo. Programa las Vistas/Revisitas en «Planeación del Ciclo» para que aparezcan aquí.</Alert>
             ) : agendaVisible.length === 0 ? (
               <Alert severity="info">Ningún médico coincide con el filtro.</Alert>
             ) : (
-              <Stack divider={<Divider />}>
-                {agendaVisible.map((a) => {
-                  const activa = sel?.medico_id === a.medico_id;
-                  const reg = a.estado === 'registrada';
-                  return (
-                    <Stack key={a.medico_id} direction="row" alignItems="center" spacing={1.5}
-                           onClick={() => seleccionar(a)}
-                           sx={{ py: 1, px: 0.5, cursor: reg ? 'default' : 'pointer', borderRadius: 1,
-                                 bgcolor: activa ? 'rgba(255,193,7,0.14)' : reg ? 'transparent' : 'transparent',
-                                 opacity: reg ? 0.7 : 1, '&:hover': { bgcolor: reg ? 'transparent' : 'action.hover' } }}>
-                      {avatar(a.nombre, a.categoria, a.medico_id, 36)}
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        {/* Tipografía fluida: la letra se encoge con el ancho (clamp) y
-                            solo cae a 2 líneas cuando ya no puede achicarse más. */}
-                        <Typography fontWeight={700} sx={{ fontSize: 'clamp(0.72rem, 2.6vw, 0.875rem)', lineHeight: 1.25,
-                                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                          {a.nombre}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-                          {[a.especialidad, a.tipo_visita === 'R' ? 'Revisita' : 'Vista programada', a.hora_estimada].filter(Boolean).join(' · ')}
-                        </Typography>
-                      </Box>
-                      {reg ? (
-                        <Chip size="small" variant={a.no_visita ? 'filled' : 'outlined'}
-                              color={a.no_visita ? 'error' : 'success'}
-                              label={a.no_visita ? 'No visitado' : 'Registrada ✓'} />
-                      ) : (
-                        <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 700 }}>Pendiente</Typography>
-                      )}
-                    </Stack>
-                  );
-                })}
-              </Stack>
+              <>
+                {renderGrupo('Visita / Revisita del día', delDia)}
+                {renderGrupo('Visita / Revisita del ciclo', delCiclo)}
+              </>
             )}
           </CardContent>
         </Card>
 
-        {/* Formulario de la visita seleccionada */}
-        {sel && (
-          <div ref={formRef}>
-          <Card elevation={0} sx={{ ...cardSx, mb: 2 }}>
-            <Box sx={{ background: `linear-gradient(120deg, ${NAVY}0d 0%, ${TEAL}0d 100%)`,
-                       borderBottom: '1px solid #eef1f6', px: 2, py: 1.5, display: 'flex', alignItems: 'center',
-                       gap: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
-              {avatar(sel.nombre, sel.categoria, sel.medico_id, 42)}
-              <Box sx={{ flex: 1, minWidth: 120 }}>
-                {/* Tipografía fluida: encoge con clamp; a 2 líneas solo si no cabe. */}
-                <Typography fontWeight={800} sx={{ color: INK, fontSize: 'clamp(0.82rem, 3.2vw, 1.05rem)', lineHeight: 1.2,
-                            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                  {sel.nombre}
-                </Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {[sel.especialidad, sel.centro_trabajo, sel.provincia].filter(Boolean).join(' · ') || 'Sin datos'}
-                </Typography>
-              </Box>
-              {/* El tipo pendiente manda: si la Vista ya se hizo (agenda sugiere R) se bloquea
-                  VISTA; si la Vista está pendiente se bloquea REVISITA hasta hacer la Vista. */}
-              <ToggleButtonGroup exclusive size="small" value={tipo} onChange={(_, v) => v && setTipo(v)}
-                                 sx={{ bgcolor: '#fff', borderRadius: 2, '& .MuiToggleButton-root': { border: '1px solid #e2e8f0', fontWeight: 700, px: 1.5,
-                                       '&.Mui-selected': { bgcolor: NAVY, color: '#fff', '&:hover': { bgcolor: NAVY } } } }}>
-                <ToggleButton value="V" disabled={sel?.tipo_visita === 'R'}
-                              title={sel?.tipo_visita === 'R' ? 'La Vista de este médico ya fue registrada' : ''}>Vista</ToggleButton>
-                <ToggleButton value="R" disabled={sel?.tipo_visita !== 'R'}
-                              title={sel?.tipo_visita !== 'R' ? 'Primero registra la Vista (o el médico no tiene Revisita planeada)' : ''}>Revisita</ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
-            <CardContent>
-              <Stack spacing={2}>
-                {!modoNoVisita && (
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="stretch">
-                    {/* Columna 1: hora real */}
-                    <Box sx={{ minWidth: { sm: 190 } }}>
-                      <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
-                        <AccessAlarm sx={{ fontSize: 18, color: '#e11d48' }} />
-                        <Typography variant="caption" sx={secHeadSx}>Hora real de la visita</Typography>
-                      </Stack>
-                      <TextField type="time" size="small" value={hora} onChange={(e) => setHora(e.target.value)}
-                                 sx={{ width: { xs: '100%', sm: 160 } }} />
-                      <Typography variant="caption" sx={{ display: 'block', mt: 0.5, fontWeight: 600, color: horaOk ? 'success.main' : 'error.main' }}>
-                        Ahora {hhmm(new Date())} · {horaOk ? 'dentro de 60 min ✓' : 'fuera de 60 min ✗'}
-                      </Typography>
-                    </Box>
-
-                    {/* Columna 2: RESUMEN EN VIVO — aprovecha el espacio con datos útiles */}
-                    <Box sx={{ flex: 1, borderRadius: 2, p: 1.25,
-                               background: `linear-gradient(135deg, ${NAVY}0a 0%, ${TEAL}0f 100%)`,
-                               border: '1px solid #eef1f6' }}>
-                      <Typography variant="caption" sx={{ ...secHeadSx, display: 'block', mb: 0.75 }}>
-                        Resumen de la visita
-                      </Typography>
-                      {(() => {
-                        const nProd = Object.keys(detallados).length;
-                        const nMuestras = Object.values(detallados).reduce((s, v) => s + (v.muestras || 0), 0);
-                        const stat = (label: string, value: string, color: string) => (
-                          <Box sx={{ textAlign: 'center', flex: 1, minWidth: 62 }}>
-                            <Typography sx={{ fontWeight: 900, fontSize: '1.15rem', lineHeight: 1.1, color }}>{value}</Typography>
-                            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.62rem' }}>{label}</Typography>
-                          </Box>
-                        );
-                        return (
-                          <>
-                            <Stack direction="row" spacing={0.5} divider={<Divider orientation="vertical" flexItem sx={{ borderColor: '#e2e8f0' }} />}>
-                              {stat('Tipo', tipo === 'R' ? 'Revisita' : 'Vista', NAVY)}
-                              {stat('Productos', String(nProd), TEAL)}
-                              {stat('Muestras', String(nMuestras), TEAL)}
-                            </Stack>
-                            <Stack direction="row" spacing={0.75} sx={{ mt: 1 }} flexWrap="wrap" rowGap={0.5}>
-                              <Chip size="small" label={gps ? 'Ubicación ✓' : 'Sin ubicación'} variant={gps ? 'filled' : 'outlined'}
-                                    color={gps ? 'success' : 'default'} sx={{ fontWeight: 600, height: 22, fontSize: '0.66rem' }} />
-                              <Chip size="small" label={foto ? 'Foto ✓' : 'Sin foto'} variant={foto ? 'filled' : 'outlined'}
-                                    color={foto ? 'success' : 'default'} sx={{ fontWeight: 600, height: 22, fontSize: '0.66rem' }} />
-                            </Stack>
-                          </>
-                        );
-                      })()}
-                    </Box>
-                  </Stack>
-                )}
-
-                {!modoNoVisita && (
-                  <Box>
-                    {/* La parrilla llega ordenada por PRIORIDAD desde el backend. */}
-                    <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
-                      <Medication sx={{ fontSize: 18, color: TEAL }} />
-                      <Typography variant="caption" sx={{ fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: 'text.secondary' }}>
-                        Productos y muestras
-                      </Typography>
-                    </Stack>
-                    {productos.length > 0 && (
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
-                        Propuestos por prioridad de la parrilla promocional
-                      </Typography>
-                    )}
-                    {productos.length === 0 ? (
-                      <Typography variant="caption" color="text.secondary">No hay parrilla de productos para esta línea.</Typography>
-                    ) : (
-                      <Box sx={{ border: '1px solid #eef1f6', borderRadius: 2, bgcolor: '#fafbfd', px: 1, py: 0.25 }}>
-                        <Stack divider={<Divider sx={{ borderColor: '#f0f3f8' }} />}>
-                          {productos.map((p, idx) => {
-                            const det = detallados[p.producto];
-                            const on = det !== undefined;
-                            const base = { mencion: Math.min(idx + 1, 3), muestras: p.meta_muestras || 0 };
-                            return (
-                              <Box key={p.producto}
-                                   sx={{ py: 1, px: 0.5, borderRadius: 1.5, bgcolor: on ? 'rgba(46,91,255,0.05)' : 'transparent',
-                                         display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1, rowGap: 1 }}>
-                                {/* Grupo 1: check + prioridad + nombre (nombre con fuente fluida) */}
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0,
-                                           flex: { xs: '1 1 100%', sm: '1 1 40%' } }}>
-                                  <Checkbox size="small" checked={on} onChange={() => toggleProd(p, idx)} sx={{ p: 0.5 }} />
-                                  <Avatar sx={{ width: 22, height: 22, fontSize: 11, fontWeight: 800, flexShrink: 0,
-                                                bgcolor: p.prioridad === 1 ? '#1a237e' : p.prioridad === 2 ? '#1565c0' : '#90a4ae' }}>
-                                    {p.prioridad}
-                                  </Avatar>
-                                  <Box sx={{ minWidth: 0, flex: 1 }}>
-                                    <Typography fontWeight={700} noWrap sx={{ fontSize: 'clamp(0.78rem, 3vw, 0.9rem)', lineHeight: 1.2 }}>
-                                      {p.nombre || p.producto}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', fontSize: '0.66rem' }}>
-                                      Propuesto: {p.meta_muestras} muestra{p.meta_muestras === 1 ? '' : 's'} · {Math.min(idx + 1, 3)}ª mención
-                                    </Typography>
-                                  </Box>
-                                </Box>
-                                {/* Grupo 2: cantidad (compacta) + mención — agrupados, indentados en móvil. */}
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1,
-                                           pl: { xs: 4.5, sm: 0 }, width: { xs: '100%', sm: 'auto' }, ml: { sm: 'auto' } }}>
-                                  <TextField size="small" type="number" label="Muestras" disabled={!on}
-                                             value={det?.muestras ?? p.meta_muestras}
-                                             onChange={(e) => {
-                                               const q = Math.max(0, Math.min(999, Number(e.target.value) || 0));
-                                               setDetallados((d) => ({ ...d, [p.producto]: { ...(d[p.producto] ?? base), muestras: q } }));
-                                             }}
-                                             inputProps={{ min: 0, max: 999 }}
-                                             sx={{ width: 72, flexShrink: 0, '& input': { textAlign: 'center', fontWeight: 700 } }} />
-                                  <FormControl size="small" sx={{ minWidth: 108, flex: { xs: 1, sm: 'none' } }}>
-                                    <Select value={det?.mencion ?? base.mencion} disabled={!on}
-                                            onChange={(e) => setDetallados((d) => ({ ...d, [p.producto]: { ...(d[p.producto] ?? base), mencion: Number(e.target.value) } }))}>
-                                      {MENCIONES.map((m) => <MenuItem key={m} value={m}>{m}ª mención</MenuItem>)}
-                                    </Select>
-                                  </FormControl>
-                                </Box>
-                              </Box>
-                            );
-                          })}
-                        </Stack>
-                      </Box>
-                    )}
-                  </Box>
-                )}
-
-                {modoNoVisita ? (
-                  <TextField select label="Causa de no-visita" value={causa} required
-                             onChange={(e) => setCausa(e.target.value)}>
-                    {causas.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-                  </TextField>
-                ) : null}
-
-                <Box>
-                  <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
-                    <ChatBubbleOutline sx={{ fontSize: 18, color: TEAL }} />
-                    <Typography variant="caption" sx={secHeadSx}>
-                      Comentario de visita <span style={{ color: '#d32f2f' }}>*</span>
-                    </Typography>
-                  </Stack>
-                  <TextField fullWidth multiline minRows={2} maxRows={4} value={comentario}
-                             onChange={(e) => setComentario(e.target.value)}
-                             placeholder="Describe algo relevante que ocurrió en la visita…"
-                             helperText='Mínimo 10 caracteres · No escribas solo "Visita OK"' />
-                </Box>
-
-                {!modoNoVisita && (
-                  <FormControlLabel
-                    control={<Switch checked={acompanado} onChange={(e) => setAcompanado(e.target.checked)} color="primary" />}
-                    label="Visita acompañada por el Gerente de Distrito"
-                    sx={{ '& .MuiFormControlLabel-label': { fontWeight: 600, fontSize: 14 } }}
-                  />
-                )}
-
-                {!modoNoVisita && (
-                  <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" rowGap={1}>
-                    <Button size="small" variant="outlined" startIcon={<span>📍</span>}
-                            color={gps ? 'success' : 'primary'}
-                            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, borderWidth: 1.5 }}
-                            onClick={() => {
-                              if (!navigator.geolocation) { setMsg({ tipo: 'error', texto: 'Este dispositivo no soporta geolocalización.' }); return; }
-                              navigator.geolocation.getCurrentPosition(
-                                (pos) => setGps({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                                () => setMsg({ tipo: 'error', texto: 'No se pudo obtener la ubicación (permiso denegado o sin señal).' }),
-                                { enableHighAccuracy: true, timeout: 8000 });
-                            }}>
-                      {gps ? 'Ubicación capturada' : 'Capturar ubicación'}
-                    </Button>
-                    {gps && <Typography variant="caption" color="text.secondary">📍 {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)}</Typography>}
-                    <Button size="small" variant="outlined" component="label" startIcon={<span>📷</span>}
-                            color={foto ? 'success' : 'primary'}
-                            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, borderWidth: 1.5 }}>
-                      {foto ? 'Cambiar foto' : 'Foto del centro'}
-                      <input hidden type="file" accept="image/*" capture="environment"
-                             onChange={(e) => { const f = e.target.files?.[0] || null; setFoto(f); setFotoPreview(f ? URL.createObjectURL(f) : null); }} />
-                    </Button>
-                    {fotoPreview && <Box component="img" src={fotoPreview} alt="foto" sx={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 1, border: '1px solid #ddd' }} />}
-                  </Stack>
-                )}
-
-                {/* En móvil los botones se apilan (columna); en pantallas medianas+ van en fila. */}
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ pt: 0.5 }}>
-                  <Button variant="contained" fullWidth startIcon={<Save />}
-                          disabled={guardando || (!modoNoVisita && comentario.trim().length < 10)}
-                          onClick={guardar}
-                          sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 800, textTransform: 'none', fontSize: '0.95rem',
-                                boxShadow: '0 8px 18px rgba(15,155,142,0.30)',
-                                background: `linear-gradient(120deg, ${TEAL} 0%, #0b7d72 100%)`,
-                                '&:hover': { background: `linear-gradient(120deg, #0d8a7f 0%, #0a6f66 100%)` },
-                                '&.Mui-disabled': { background: '#cbd5e1', color: '#fff', boxShadow: 'none' } }}>
-                    {guardando ? 'Guardando…' : (modoNoVisita ? 'Registrar no-visita' : 'Guardar visita')}
-                  </Button>
-                  <Button variant="outlined" color={modoNoVisita ? 'primary' : 'error'} startIcon={<EventBusy />}
-                          onClick={() => { setModoNoVisita(!modoNoVisita); setMsg(null); }}
-                          sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 700, textTransform: 'none', borderWidth: 1.5 }}>
-                    {modoNoVisita ? 'Fue visita' : 'No visité'}
-                  </Button>
-                </Stack>
-              </Stack>
-            </CardContent>
-          </Card>
-          </div>
-        )}
 
         {/* Registradas hoy */}
         <Card elevation={0} sx={cardSx}>

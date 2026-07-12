@@ -188,6 +188,7 @@ export interface AgendaMedico {
   medico_id: number; nombre: string; especialidad: string | null; categoria: string;
   centro_trabajo: string | null; provincia: string | null; linea_id: number | null;
   tipo_visita: string; hora_estimada: string | null;
+  dia_semana?: string | null; grupo?: 'dia' | 'ciclo';
   estado: 'pendiente' | 'registrada'; no_visita: boolean;
 }
 export interface ProductoDetalle { producto: string; mencion: number; }
