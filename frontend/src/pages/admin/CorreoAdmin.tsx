@@ -111,9 +111,19 @@ export default function CorreoAdmin() {
                        onChange={(e) => set('from_name', e.target.value)} />
           </Grid>
           <Grid item xs={12}>
-            <Stack direction="row" spacing={2}>
-              <FormControlLabel control={<Switch checked={cfg.tls} onChange={(e) => set('tls', e.target.checked)} />} label="TLS (STARTTLS)" />
-              <FormControlLabel control={<Switch checked={cfg.ssl} onChange={(e) => set('ssl', e.target.checked)} />} label="SSL" />
+            {/* TLS y SSL son mutuamente excluyentes: 587 → TLS (STARTTLS); 465 → SSL. */}
+            <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+              <FormControlLabel
+                control={<Switch checked={cfg.tls}
+                  onChange={(e) => setCfg({ ...cfg, tls: e.target.checked, ssl: e.target.checked ? false : cfg.ssl })} />}
+                label="TLS (STARTTLS) — puerto 587" />
+              <FormControlLabel
+                control={<Switch checked={cfg.ssl}
+                  onChange={(e) => setCfg({ ...cfg, ssl: e.target.checked, tls: e.target.checked ? false : cfg.tls })} />}
+                label="SSL — puerto 465" />
+              <Typography variant="caption" color="text.secondary">
+                Gmail: usa TLS con puerto 587 (SSL apagado).
+              </Typography>
             </Stack>
           </Grid>
         </Grid>
