@@ -499,28 +499,26 @@ Implementa el modelo de Liderazgo Situacional II (Hersey-Blanchard): cruza un ej
 
 **Sustituye** a `/comercial` y a `GET /dashboard/comercial` (ambos retirados — `comercial.py` permanece en disco, no registrado). Cambia el enfoque de **lag measure** (ventas/EVO IR históricos) a **lead measure** (ritmo de cobertura/visitas), siguiendo la metodología 4DX.
 
-**Motor_Formulas** — distingue cobertura de contactos totales:
-- `L = COUNT(DISTINCT medico_codigo)` visitados (médicos únicos — COBERTURA)
-- `M = COUNT(*)` contactos totales (incluye repetidos — PSP/CONTACTOS)
-- Días hábiles vía NETWORKDAYS sobre `DIM_Feriado`.
-- Meta de cobertura: resolución en cascada `país+línea+ciclo → país+línea → país` (`DIM_ParametroCobertura`, busca la más específica primero).
+**FLUJO ACTIVO — EN VIVO desde el módulo Visita (jul-2026):** el dashboard que consume el frontend
+NO depende de Excel. Se calcula en tiempo real desde las tablas operativas del módulo Visita, vía
+endpoints `GET /cobertura-predictiva/vivo/{ciclos,dashboard,categorias}`:
+- **Programado (J)** = Vistas planeadas en `Visita.PlaneacionCiclo` (Planeación del Ciclo).
+- **Realizado (L/M)** = visitas ejecutadas en `Visita.FactVisita` (Registrar Visita). L=`COUNT(DISTINCT medico)` entre los planeados, M=`COUNT(*)`.
+- **Días hábiles (N)** = `Ciclo.dias_laborables` (config del ciclo); solo si es 0 cae a NETWORKDAYS sobre `DIM_Feriado`.
+- **Cobertura** = `L / J` (médicos planeados visitados / total planeados). Meta en cascada `país+línea+ciclo → país+línea → país` (`DIM_ParametroCobertura`, default 90%).
 
-**Endpoints principales** (verificados):
+**LEGACY (importación por Excel) — retirado de la UI:** existían endpoints `cargar/target-medicos`,
+`cargar/visitas`, `feriados` y `cat/cargar-excel` (llenaban `DIM_TargetMedico`/`DW.FACT_Visita`/`DIM_Feriado`).
+Siguen en el router pero **`CoberturaPredictivaAdmin.tsx` ya no los expone** — solo queda la Meta de
+Cobertura. Los feriados no se gestionan aquí porque los días hábiles ya vienen del ciclo (`dias_laborables`).
 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/cobertura-predictiva/resumen` | Resumen del equipo (sustituye a `/dashboard/comercial`) |
-| GET | `/cobertura-predictiva/rm/{rm_id}` | Detalle de un RM |
-| GET / POST | `/cobertura-predictiva/parametros` | Metas de cobertura |
-| GET / POST | `/cobertura-predictiva/feriados` | Feriados |
-| POST | `/cobertura-predictiva/cargar/target-medicos` | Carga universo de médicos programados (`DIM_TargetMedico`) |
-| POST | `/cobertura-predictiva/cargar/visitas` | Carga bitácora de visitas (`FACT_Visita`) |
-
-**Carga masiva — resolución dual de RM**: las cargas (`target-medicos`, `visitas`) aceptan en la columna `RM_CODIGO` tanto el código de negocio (ej. `"VM01"`) como el ID numérico crudo de `Config.DIM_RM` (ej. `RM_ID=73`) — función `_resolver_rm`. Columnas `PAIS_ID`/`LINEA_ID` opcionales solo se usan para validar consistencia contra el RM real (`_validar_consistencia_dimensional`); una discrepancia no bloquea la carga, queda en `advertencias`. Las cargas son idempotentes (filas ya existentes para la misma clave se omiten).
+**Endpoints** (activos): `GET /cobertura-predictiva/vivo/ciclos|dashboard|categorias`,
+`GET /cobertura-predictiva/resumen` y `/rm/{rm_id}`, `GET/POST /cobertura-predictiva/parametros` (Meta).
+Los `cargar/*` y `feriados` quedan como legacy no expuestos en la UI.
 
 **RBAC con auto-filtro de scope** (patrón repetido también en Categorización, §14): `REPRESENTANTE_MEDICO` se filtra forzosamente a su propio `rm_id` (403 si no coincide o falta); `GERENTE_DISTRITO` se filtra a su propio `gerente_id` (vía `Usuario.gerente_id`, ver §4/§17).
 
-**Frontend**: `CoberturaPredictiva.tsx` (vista operativa, con selector relacional de Línea/Gerente por nombre — no texto libre) + `CoberturaPredictivaAdmin.tsx` (tab de mantenimiento en `Admin.tsx`).
+**Frontend**: `CoberturaPredictiva.tsx` (vista operativa en vivo; selector de ciclo por defecto en el abierto, buscador de representante por nombre) + `CoberturaPredictivaAdmin.tsx` (tab de Admin: **solo la Meta de Cobertura**).
 
 ---
 
