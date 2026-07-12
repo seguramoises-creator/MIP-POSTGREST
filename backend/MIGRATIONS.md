@@ -1,7 +1,7 @@
 # Migraciones de base de datos (Alembic)
 
 Este proyecto usa **Alembic** para mantener sincronizados los modelos de SQLAlchemy
-(`app/models/`) con el esquema real de la base de datos SQL Server. El error
+(`app/models/`) con el esquema real de la base de datos PostgreSQL. El error
 `Invalid column name 'pais_id'` ocurrió porque el modelo `Indicador` definía una
 columna que nunca se creó en la tabla `Config.DIM_Indicador` — el esquema y el
 código se desincronizaron porque no existía un mecanismo de migraciones.

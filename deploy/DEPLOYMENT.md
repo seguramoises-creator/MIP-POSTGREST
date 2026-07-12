@@ -20,7 +20,7 @@ Internet ──HTTPS──▶ IIS / nginx (puerto 443, dominio vista-mip.com)
                                                                   (Uvicorn, FastAPI)
                                                                        │
                                                                        ▼
-                                                              SQL Server (SCGCPR)
+                                                              PostgreSQL (scgcpr)
 ```
 
 Todos los archivos de configuración mencionados aquí están en `deploy/`:
@@ -50,7 +50,7 @@ backend/.env.production.example         ← plantilla de variables de entorno
 
 - Código del proyecto copiado al servidor (ej. `git clone` o copia del ZIP) en
   `C:\Users\Lenovo\Proyecto\MSM` (Windows) o `/opt/msm` (Linux).
-- Acceso a una instancia de **SQL Server** alcanzable desde el servidor de
+- Acceso a una instancia de **PostgreSQL** alcanzable desde el servidor de
   aplicación (puede ser la misma máquina o una instancia dedicada).
 - **Python 3.13** instalado en el servidor.
 - **Node.js 18+** y npm instalados (solo se necesitan para compilar el

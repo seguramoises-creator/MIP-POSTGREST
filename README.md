@@ -7,8 +7,7 @@ de la fuerza de ventas farmacéutica (Representantes Médicos y Gerentes de Dist
 
 > 🐘 **Edición PostgreSQL** — pensada para clientes grandes. El motor de cálculo
 > (Score Integral, Ranking, Categorización, Cobertura) es **100% Python**, sin stored
-> procedures; la BD es PostgreSQL 14+. Existe una edición gemela con SQL Server en
-> contenedor para clientes que ya operan sobre SQL Server.
+> procedures; la BD es PostgreSQL 14+.
 >
 > 📘 La documentación técnica completa está en [`CLAUDE.md`](CLAUDE.md).
 > 🐳 Despliegue con Docker: [`DEPLOY-POSTGRES.md`](DEPLOY-POSTGRES.md).

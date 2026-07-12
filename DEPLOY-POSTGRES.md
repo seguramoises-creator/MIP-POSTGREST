@@ -2,8 +2,7 @@
 
 Guía para construir las imágenes, correr el sistema con Docker y desplegarlo en un
 servidor Linux en la nube. **Esta es la edición PostgreSQL** (motor de cálculo 100%
-Python, BD PostgreSQL 14+). Para clientes que ya usan SQL Server existe una edición
-gemela con la BD en contenedor SQL Server.
+Python, BD PostgreSQL 14+).
 
 ## Arquitectura
 
@@ -113,7 +112,7 @@ Abre **http://<IP-del-servidor>:8090/** (o, tras configurar TLS, `https://vista-
   # luego desde la web: /dims (importar DIM_MIP_FINAL.xlsx) y /etl (FACT_MIP_FINAL.xlsx)
   ```
   > `crear_admin_pg.py` siembra el usuario `admin` / `Admin1234!` vía SQLAlchemy
-  > (sin dependencias de SQL Server). Cambia la contraseña tras el primer login.
+  > (sin dependencias externas). Cambia la contraseña tras el primer login.
 
 ---
 

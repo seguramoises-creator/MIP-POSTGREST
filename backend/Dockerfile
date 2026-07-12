@@ -8,7 +8,6 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1
 
 # psycopg2-binary trae libpq embebido: no requiere paquetes de sistema en runtime.
-# (La edición SQL Server necesitaba FreeTDS aquí; esta no.)
 
 WORKDIR /app
 
