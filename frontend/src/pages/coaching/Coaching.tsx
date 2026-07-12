@@ -9,6 +9,7 @@ import {
 } from 'recharts';
 import { useMemo, useEffect, useState } from 'react';
 import { api } from '../../services/api';
+import { useCicloStore } from '../../store/ciclo.store';
 
 import { KPI_ORDEN, kpiNombre } from '../../constants/kpi';
 
@@ -100,8 +101,14 @@ function DistCard({ label, count, total, rangoLabel, color, bg }: {
 
 // ── main ──────────────────────────────────────────────────────────────────────
 export default function Coaching() {
-  const [paisId,  setPaisId]  = useState('');
-  const [cicloId, setCicloId] = useState('');
+  // País y ciclo salen del CONTEXTO GLOBAL (barra superior): la pantalla sigue al ciclo
+  // elegido arriba (por defecto el ABIERTO) en vez de auto-elegir el "último con datos".
+  const paisCodigo  = useCicloStore((s) => s.paisCodigo);
+  const cicloGlobal = useCicloStore((s) => s.cicloId);
+  const setPais     = useCicloStore((s) => s.setPais);
+  const setCicloVer = useCicloStore((s) => s.setCicloVer);
+  const paisId  = paisCodigo ?? '';
+  const cicloId = cicloGlobal != null ? String(cicloGlobal) : '';
 
   const { data: paises } = useQuery({
     queryKey: ['paises'],
@@ -127,26 +134,7 @@ export default function Coaching() {
   const cicloNombre = cicloActivo?.nombre_canonico || cicloActivo?.nombre
     || (cicloId ? `Ciclo ${cicloId}` : 'Ciclo activo');
 
-  useEffect(() => {
-    if (!(paises || []).length || paisId) return;
-    const rd = (paises as any[]).find((p: any) =>
-      p.codigo?.toUpperCase() === 'RD' || p.nombre?.toLowerCase().includes('dominicana')
-    );
-    if (rd) setPaisId(rd.codigo);
-  }, [paises]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const { data: _cicloEf } = useQuery({
-    queryKey: ['ciclo-ef', paisId],
-    queryFn: () => api.get('/ranking', {
-      params: { ...(paisId && { pais_codigo: paisId }), size: 1, page: 1 },
-    }).then(r => r.data?.ciclo_efectivo ?? null),
-    enabled: !!paisId,
-    staleTime: 60_000,
-  });
-  useEffect(() => {
-    if (!_cicloEf || cicloId) return;
-    setCicloId(String(_cicloEf));
-  }, [_cicloEf]); // eslint-disable-line react-hooks/exhaustive-deps
+  // País y ciclo por defecto los fija el contexto global (store.init) — sin auto-selección local.
 
   const { data: prodData, isLoading: loadProd } = useQuery({
     queryKey: ['prod-scorecard', paisId, cicloId],
@@ -271,14 +259,14 @@ export default function Coaching() {
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
               <TextField select fullWidth size="small" label="País" value={paisId}
-                onChange={e => { setPaisId(e.target.value); setCicloId(''); }}>
+                onChange={e => { if (e.target.value) void setPais(e.target.value as string); }}>
                 <MenuItem value="">Todos los países</MenuItem>
                 {(paises || []).map((p: any) => <MenuItem key={p.id} value={p.codigo}>{p.nombre}</MenuItem>)}
               </TextField>
             </Grid>
             <Grid item xs={12} sm={6}>
               <TextField select fullWidth size="small" label="Ciclo" value={cicloId}
-                onChange={e => setCicloId(e.target.value)}>
+                onChange={e => { const v = e.target.value; if (v !== '') setCicloVer(Number(v)); }}>
                 <MenuItem value="">Todos los ciclos</MenuItem>
                 {(ciclos || []).map((c: any) => <MenuItem key={c.id} value={c.id}>{cicloLabel(c)}</MenuItem>)}
               </TextField>
