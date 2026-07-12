@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, lazy, Suspense } from 'react';
 import axios from 'axios';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, createTheme, CssBaseline, Box, Typography } from '@mui/material';
@@ -9,7 +9,7 @@ import MainLayout from './components/layout/MainLayout';
 import Login from './pages/auth/Login';
 import CambiarPassword from './pages/auth/CambiarPassword';
 import Setup from './pages/setup/Setup';
-import DashboardEjecutivo from './pages/dashboard/DashboardEjecutivo';
+const DashboardEjecutivo = lazy(() => import('./pages/dashboard/DashboardEjecutivo'));
 import { NAV_ITEMS } from './components/layout/Sidebar';
 import { Rol } from './types';
 
@@ -21,28 +21,30 @@ function rutaInicial(rol: Rol | null): string {
   const item = NAV_ITEMS.find((i) => i.roles.includes(rol));
   return item ? item.path : '/sin-acceso';
 }
-import Productividad from './pages/productividad/Productividad';
-import CoberturaPredictiva from './pages/cobertura-predictiva/CoberturaPredictiva';
-import Coaching from './pages/coaching/Coaching';
-import CoachingMore from './pages/coaching-more/CoachingMore';
-import Categorizacion from './pages/categorizacion/Categorizacion';
-import Ranking from './pages/ranking/Ranking';
-import Reconocimiento from './pages/reconocimiento/Reconocimiento';
-import ETL from './pages/etl/ETL';
-import Admin from './pages/admin/Admin';
-import Usuarios from './pages/admin/Usuarios';
-import Reportes from './pages/reportes/Reportes';
-import Lsii from './pages/lsii/Lsii';
-import Examenes from './pages/examenes/Examenes';
-import MisExamenes from './pages/examenes/MisExamenes';
-import EquipoExamenes from './pages/examenes/EquipoExamenes';
-import PanelMedico from './pages/visita/PanelMedico';
-import CoberturaDashboard from './pages/visita/CoberturaDashboard';
-import RegistrarVisita from './pages/visita/RegistrarVisita';
-import PlaneacionVisita from './pages/visita/PlaneacionVisita';
-import RupturaVisita from './pages/visita/RupturaVisita';
-import ParrillaVisita from './pages/visita/ParrillaVisita';
-import CostoRoiVisita from './pages/visita/CostoRoiVisita';
+// Páginas cargadas bajo demanda (code-splitting): cada ruta baja su propio chunk
+// al abrirla, aligerando la carga inicial de la app.
+const Productividad = lazy(() => import('./pages/productividad/Productividad'));
+const CoberturaPredictiva = lazy(() => import('./pages/cobertura-predictiva/CoberturaPredictiva'));
+const Coaching = lazy(() => import('./pages/coaching/Coaching'));
+const CoachingMore = lazy(() => import('./pages/coaching-more/CoachingMore'));
+const Categorizacion = lazy(() => import('./pages/categorizacion/Categorizacion'));
+const Ranking = lazy(() => import('./pages/ranking/Ranking'));
+const Reconocimiento = lazy(() => import('./pages/reconocimiento/Reconocimiento'));
+const ETL = lazy(() => import('./pages/etl/ETL'));
+const Admin = lazy(() => import('./pages/admin/Admin'));
+const Usuarios = lazy(() => import('./pages/admin/Usuarios'));
+const Reportes = lazy(() => import('./pages/reportes/Reportes'));
+const Lsii = lazy(() => import('./pages/lsii/Lsii'));
+const Examenes = lazy(() => import('./pages/examenes/Examenes'));
+const MisExamenes = lazy(() => import('./pages/examenes/MisExamenes'));
+const EquipoExamenes = lazy(() => import('./pages/examenes/EquipoExamenes'));
+const PanelMedico = lazy(() => import('./pages/visita/PanelMedico'));
+const CoberturaDashboard = lazy(() => import('./pages/visita/CoberturaDashboard'));
+const RegistrarVisita = lazy(() => import('./pages/visita/RegistrarVisita'));
+const PlaneacionVisita = lazy(() => import('./pages/visita/PlaneacionVisita'));
+const RupturaVisita = lazy(() => import('./pages/visita/RupturaVisita'));
+const ParrillaVisita = lazy(() => import('./pages/visita/ParrillaVisita'));
+const CostoRoiVisita = lazy(() => import('./pages/visita/CostoRoiVisita'));
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
 
@@ -96,6 +98,7 @@ function AppRoutes() {
   if (checking) return null;
 
   return (
+    <Suspense fallback={<Box sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">Cargando…</Typography></Box>}>
     <Routes>
       <Route path="/setup" element={<Setup />} />
       <Route path="/login" element={isAuthenticated ? <Navigate to={inicio} /> : <Login />} />
@@ -129,6 +132,7 @@ function AppRoutes() {
       </Route>
       <Route path="*" element={<Navigate to={inicio} />} />
     </Routes>
+    </Suspense>
   );
 }
 

@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     DB_USER: str = "segura"
     DB_PASSWORD: str = ""
     DATABASE_URL: str = ""
+    # Log de cada sentencia SQL (ruidoso y lento) — separado de DEBUG; solo para depurar SQL.
+    DB_ECHO: bool = False
+    # Pool de conexiones (SQLAlchemy QueuePool).
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod

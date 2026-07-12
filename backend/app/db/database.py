@@ -14,11 +14,11 @@ engine = create_engine(
     settings.DATABASE_URL,
     connect_args={"connect_timeout": 30},  # psycopg2
     poolclass=QueuePool,
-    pool_size=5,
-    max_overflow=10,
+    pool_size=settings.DB_POOL_SIZE,
+    max_overflow=settings.DB_MAX_OVERFLOW,
     pool_pre_ping=True,
     pool_recycle=1800,
-    echo=settings.DEBUG,
+    echo=settings.DB_ECHO,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
