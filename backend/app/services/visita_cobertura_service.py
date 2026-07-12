@@ -33,7 +33,13 @@ def ciclo_por_defecto(db: Session, vm_id: int | None = None) -> int | None:
                  .order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first())
             if c:
                 return c.id
-    c = db.query(Ciclo).order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first()
+    # Sin vm_id (vista agregada): preferir el ciclo ABIERTO más reciente, nunca un
+    # ciclo cerrado global (que dejaba el dashboard en blanco cuando el más reciente
+    # por (anio,numero) estaba cerrado).
+    c = (db.query(Ciclo).filter(Ciclo.cerrado == False)  # noqa: E712
+         .order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first())
+    if c is None:  # si no hay ninguno abierto, cae al más reciente global
+        c = db.query(Ciclo).order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first()
     return c.id if c else None
 
 
