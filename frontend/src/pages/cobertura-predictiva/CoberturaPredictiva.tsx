@@ -461,14 +461,14 @@ const DashboardTab = ({
             <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
               Cobertura actual vs proyectada (top 15 VMs)
             </Typography>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartCobertura} margin={{ top: 5, right: 10, left: -10, bottom: 44 }}>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={chartCobertura} margin={{ top: 5, right: 10, left: -10, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0}
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} height={78}
                        tickFormatter={(v: string) => (v && v.length > 12 ? v.slice(0, 11) + '…' : v)} />
                 <YAxis domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 10 }} />
                 <RechartTooltip formatter={(v: number) => `${v}%`} />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
                 <ReferenceLine y={90} stroke="#1565c0" strokeDasharray="4 2" label={{ value: 'Meta', fill: '#1565c0', fontSize: 10 }} />
                 <Bar dataKey="actual" name="Actual" radius={[3, 3, 0, 0]}>
                   {chartCobertura.map((e, i) => <Cell key={i} fill={e.fill} />)}
@@ -483,14 +483,14 @@ const DashboardTab = ({
             <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
               Ritmo diario requerido (méd. + contactos)
             </Typography>
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={chartRitmo} margin={{ top: 5, right: 10, left: -10, bottom: 44 }}>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={chartRitmo} margin={{ top: 5, right: 10, left: -10, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0}
+                <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} height={78}
                        tickFormatter={(v: string) => (v && v.length > 12 ? v.slice(0, 11) + '…' : v)} />
                 <YAxis tick={{ fontSize: 10 }} />
                 <RechartTooltip />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
                 <Bar dataKey="medicos_dia" name="Méd/día" fill="#ef5350" radius={[3, 3, 0, 0]} />
                 <Bar dataKey="contactos_dia" name="Cont/día" fill="#ab47bc" radius={[3, 3, 0, 0]} />
               </BarChart>
