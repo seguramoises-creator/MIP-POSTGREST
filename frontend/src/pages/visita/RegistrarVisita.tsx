@@ -436,11 +436,15 @@ export default function RegistrarVisita() {
                   {[sel.especialidad, sel.centro_trabajo, sel.provincia].filter(Boolean).join(' · ') || 'Sin datos'}
                 </Typography>
               </Box>
+              {/* El tipo pendiente manda: si la Vista ya se hizo (agenda sugiere R) se bloquea
+                  VISTA; si la Vista está pendiente se bloquea REVISITA hasta hacer la Vista. */}
               <ToggleButtonGroup exclusive size="small" value={tipo} onChange={(_, v) => v && setTipo(v)}
                                  sx={{ bgcolor: '#fff', borderRadius: 2, '& .MuiToggleButton-root': { border: '1px solid #e2e8f0', fontWeight: 700, px: 1.5,
                                        '&.Mui-selected': { bgcolor: NAVY, color: '#fff', '&:hover': { bgcolor: NAVY } } } }}>
-                <ToggleButton value="V">Vista</ToggleButton>
-                <ToggleButton value="R">Revisita</ToggleButton>
+                <ToggleButton value="V" disabled={sel?.tipo_visita === 'R'}
+                              title={sel?.tipo_visita === 'R' ? 'La Vista de este médico ya fue registrada' : ''}>Vista</ToggleButton>
+                <ToggleButton value="R" disabled={sel?.tipo_visita !== 'R'}
+                              title={sel?.tipo_visita !== 'R' ? 'Primero registra la Vista (o el médico no tiene Revisita planeada)' : ''}>Revisita</ToggleButton>
               </ToggleButtonGroup>
             </Box>
             <CardContent>
