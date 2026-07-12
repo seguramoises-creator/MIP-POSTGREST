@@ -11,7 +11,7 @@ import {
   FormControl, InputLabel, Select, MenuItem, Chip, Alert,
   TableContainer, Table, TableHead, TableRow, TableCell, TableBody,
   LinearProgress, CircularProgress, Button, Tooltip, Divider,
-  Collapse, IconButton, TextField, Stack, Badge,
+  Collapse, IconButton, TextField, Stack, Badge, Autocomplete,
 } from '@mui/material';
 import {
   TrendingUp, Warning, CheckCircle, Cancel,
@@ -50,6 +50,8 @@ interface Ciclo {
   meta_cobertura_pct: number;
   pais_codigo: string;
   pais_nombre: string;
+  cerrado?: boolean;
+  abierto?: boolean;
 }
 
 interface DetalleRM {
@@ -314,13 +316,18 @@ const DashboardTab = ({
 
   const sortedRMs = useMemo(() => {
     if (!data?.detalle_rms) return [];
-    // Item 9 (Mallén): búsqueda por representante (nombre o código).
+    // Item 9 (Mallén): filtro por representante. Si el valor coincide EXACTO con un código
+    // (selección del desplegable) se filtra por código exacto — así "VM-1" no arrastra a
+    // "VM-11". Al teclear libre, se hace búsqueda por coincidencia en nombre o código.
     const q = (filtroVM ?? '').trim().toLowerCase();
-    const base = q
-      ? data.detalle_rms.filter(r =>
-          (r.nombre_vm ?? '').toLowerCase().includes(q) ||
-          (r.codigo_representante ?? '').toLowerCase().includes(q))
-      : data.detalle_rms;
+    const esCodigoExacto = !!q && data.detalle_rms.some(r => (r.codigo_representante ?? '').toLowerCase() === q);
+    const base = !q
+      ? data.detalle_rms
+      : esCodigoExacto
+        ? data.detalle_rms.filter(r => (r.codigo_representante ?? '').toLowerCase() === q)
+        : data.detalle_rms.filter(r =>
+            (r.nombre_vm ?? '').toLowerCase().includes(q) ||
+            (r.codigo_representante ?? '').toLowerCase().includes(q));
     const order: Record<string, number> = { Verde: 0, Amarillo: 1, Rojo: 2 };
     return [...base].sort((a, b) => {
       const av = sortField === 'estado_cobertura' ? (order[a.estado_cobertura] ?? 0) : (a[sortField] as number);
@@ -621,7 +628,11 @@ export default function CoberturaPredictiva() {
   });
 
   React.useEffect(() => {
-    if (ciclos.length && !cicloSeleccionado) setCicloSeleccionado(ciclos[0].codigo_ciclo);
+    // Default = ciclo ABIERTO del país (no el primero de la lista, que sería un ciclo cerrado).
+    if (ciclos.length && !cicloSeleccionado) {
+      const abierto = ciclos.find(c => c.abierto);
+      setCicloSeleccionado((abierto ?? ciclos[ciclos.length - 1]).codigo_ciclo);
+    }
   }, [ciclos]);
 
   const cicloActual = ciclos.find(c => c.codigo_ciclo === cicloSeleccionado);
@@ -640,6 +651,17 @@ export default function CoberturaPredictiva() {
     staleTime: 2 * 60 * 1000,
     retry: false,
   });
+
+  // Item 9 (Mallén): lista de representantes del ciclo para el desplegable "Buscar representante".
+  const repOptions = React.useMemo(() => {
+    const seen = new Map<string, { codigo: string; nombre: string }>();
+    (dashData?.detalle_rms ?? []).forEach(r => {
+      const cod = r.codigo_representante ?? '';
+      if (cod && !seen.has(cod)) seen.set(cod, { codigo: cod, nombre: r.nombre_vm ?? '' });
+    });
+    return [...seen.values()].sort((a, b) =>
+      a.codigo.localeCompare(b.codigo, undefined, { numeric: true }));
+  }, [dashData]);
 
   const { data: catData, isLoading: catLoading } = useQuery<CoberturaCategoria[]>({
     queryKey: ['cob-categorias', cicloSeleccionado, paisCodigo, gdFiltro],
@@ -730,9 +752,19 @@ export default function CoberturaPredictiva() {
             </FormControl>
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
-            {/* Item 9 (Mallén): búsqueda de representante médico. */}
-            <TextField fullWidth size="small" label="Buscar representante" value={busquedaVM}
-                       onChange={e => setBusquedaVM(e.target.value)} placeholder="Nombre o código…" />
+            {/* Item 9 (Mallén): desplegable de representantes — elegir de la lista o teclear para buscar. */}
+            <Autocomplete
+              size="small"
+              options={repOptions}
+              value={repOptions.find(o => o.codigo === busquedaVM) ?? null}
+              onChange={(_e, v) => setBusquedaVM(v?.codigo ?? '')}
+              getOptionLabel={(o) => (o.nombre ? `${o.codigo} — ${o.nombre}` : o.codigo)}
+              isOptionEqualToValue={(o, v) => o.codigo === v.codigo}
+              noOptionsText="Sin representantes en este ciclo"
+              renderInput={(params) => (
+                <TextField {...params} label="Buscar representante" placeholder="Todos · nombre o código…" />
+              )}
+            />
           </Grid>
         </Grid>
       </Paper>

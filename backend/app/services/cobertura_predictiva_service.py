@@ -573,13 +573,14 @@ def ciclos_vivo(db: Session, pais_codigo: Optional[str] = None) -> list:
     if pais_codigo:
         q = q.filter(Ciclo.pais_codigo == pais_codigo)
     out = []
-    for c in q.order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).all():
+    for c in q.order_by(Ciclo.anio.asc(), Ciclo.numero.asc()).all():
         meta = obtener_meta_cobertura(db, c.pais_codigo)
         out.append({
             "ciclo_key": c.id, "codigo_ciclo": c.nombre, "linea": None,
             "fecha_inicio": c.fecha_inicio.isoformat(), "fecha_fin": c.fecha_fin.isoformat(),
             "dias_habiles_ciclo": c.dias_laborables, "meta_cobertura_pct": float(meta) * 100,
             "pais_codigo": c.pais_codigo, "pais_nombre": paises.get(c.pais_codigo, c.pais_codigo),
+            "cerrado": bool(c.cerrado), "abierto": not bool(c.cerrado),
         })
     return out
 
