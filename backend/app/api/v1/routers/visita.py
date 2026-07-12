@@ -144,7 +144,7 @@ def listar_medicos_existentes(vm_id: int | None = None, db: Session = Depends(ge
 def obtener_medico(medico_id: int, db: Session = Depends(get_db), current_user=RequireVisita):
     """Ficha COMPLETA de un médico (para editar). El VM solo ve los de su panel.
     Declarado DESPUÉS de /medicos/existentes para no interceptar esa ruta literal."""
-    m = visita_service.obtener_medico(db, medico_id)
+    m = visita_service.obtener_ficha_medico(db, medico_id)
     if not m:
         raise HTTPException(status_code=404, detail="Médico no encontrado.")
     if _rol(current_user) == "REPRESENTANTE_MEDICO" and m.get("vm_id") != getattr(current_user, "rm_id", None):

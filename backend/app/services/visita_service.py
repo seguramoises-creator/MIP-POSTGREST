@@ -211,8 +211,9 @@ def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None =
     return salida
 
 
-def obtener_medico(db: Session, medico_id: int) -> dict | None:
-    """Ficha COMPLETA de UN médico (para editar en el Panel) — consulta directa por id."""
+def obtener_ficha_medico(db: Session, medico_id: int) -> dict | None:
+    """Ficha COMPLETA de UN médico (para editar en el Panel) — consulta directa por id.
+    Devuelve un dict (NO el objeto ORM). Para el objeto ORM usar obtener_medico()."""
     m = db.query(MedicoVisita).filter(MedicoVisita.id == medico_id).first()
     if not m:
         return None
