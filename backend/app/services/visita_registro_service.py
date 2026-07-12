@@ -180,7 +180,7 @@ def agenda_hoy(db: Session, vm_id: int) -> list[dict]:
                 VisitaRegistro.medico_id.in_(medico_ids)).all():
             if v.ejecutada:
                 ejec_tipos.setdefault(v.medico_id, set()).add(v.tipo_visita)
-            elif v.fecha_hora and v.fecha_hora >= inicio:
+            elif v.fecha_hora and v.fecha_hora.date() == hoy:  # .date() evita choque naive/aware
                 no_vis_hoy.add(v.medico_id)
 
     agenda = []
