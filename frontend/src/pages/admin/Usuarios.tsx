@@ -9,7 +9,7 @@ import {
   TableContainer, TableHead, TableRow, Paper, Button, Chip, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, Alert,
   CircularProgress, MenuItem, Select, FormControl, InputLabel,
-  IconButton, Tooltip, Stack,
+  IconButton, Tooltip, Stack, Divider,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -37,6 +37,7 @@ export default function Usuarios() {
   const [openNew, setOpenNew]     = useState(false);
   const [openEdit, setOpenEdit]   = useState(false);
   const [editItem, setEditItem]   = useState<any>(null);
+  const [nuevaPass, setNuevaPass] = useState('');
   const [form, setForm]           = useState<Record<string, any>>({});
   const [msg, setMsg]             = useState('');
   const [msgType, setMsgType]     = useState<'success' | 'error'>('success');
@@ -127,8 +128,16 @@ export default function Usuarios() {
     onError: (e: any) => showMsg(e.response?.data?.detail || e.message, 'error'),
   });
 
+  // Restablecer contraseña de un usuario (solo ADMIN) — desde la edición.
+  const resetPassMut = useMutation({
+    mutationFn: () => api.post(`/admin/usuarios/${editItem?.id}/reset-password`, { password_nuevo: nuevaPass }),
+    onSuccess: (r: any) => { setNuevaPass(''); showMsg(r.data?.message || 'Contraseña restablecida'); },
+    onError: (e: any) => showMsg(e.response?.data?.detail || e.message, 'error'),
+  });
+
   const handleEdit = (row: any) => {
     setEditItem(row);
+    setNuevaPass('');
     setForm({ nombre_completo: row.nombre_completo || '', email: row.email || '', rol: row.rol || '',
               rm_id: row.rm_id ?? null, gerente_id: row.gerente_id ?? null });
     setOpenEdit(true);
@@ -328,10 +337,28 @@ export default function Usuarios() {
               </Select>
             </FormControl>
             {renderRelacion()}
+
+            {/* Restablecer contraseña (solo ADMIN). Mín. 12 caracteres con mayúscula,
+                minúscula, número y carácter especial. El usuario deberá cambiarla al entrar. */}
+            <Divider textAlign="left" sx={{ pt: 1 }}>Restablecer contraseña</Divider>
+            <Stack direction="row" spacing={1} alignItems="flex-start">
+              <TextField
+                fullWidth size="small" label="Nueva contraseña" type="password"
+                value={nuevaPass} onChange={(e) => setNuevaPass(e.target.value)}
+                helperText="Mín. 12 · mayúscula, minúscula, número y carácter especial"
+              />
+              <Button
+                variant="outlined" sx={{ whiteSpace: 'nowrap', mt: 0.25 }}
+                disabled={resetPassMut.isPending || nuevaPass.trim().length < 12}
+                onClick={() => resetPassMut.mutate()}
+              >
+                {resetPassMut.isPending ? <CircularProgress size={18} /> : 'Restablecer'}
+              </Button>
+            </Stack>
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenEdit(false)}>Cancelar</Button>
+          <Button onClick={() => setOpenEdit(false)}>Cerrar</Button>
           <Button
             variant="contained"
             onClick={() => updateMut.mutate()}

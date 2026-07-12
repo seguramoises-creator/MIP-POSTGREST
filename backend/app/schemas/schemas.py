@@ -54,6 +54,23 @@ class PasswordChange(BaseModel):
     # password_policy_service.validar_complejidad), no en el schema.
 
 
+class ForgotPassword(BaseModel):
+    """Paso 1 de recuperación: el usuario indica su correo."""
+    email: EmailStr
+
+
+class ResetPassword(BaseModel):
+    """Paso 2 de recuperación: correo + código recibido + nueva contraseña."""
+    email: EmailStr
+    codigo: str
+    password_nuevo: str
+
+
+class AdminSetPassword(BaseModel):
+    """Restablecimiento de contraseña por un ADMIN desde Administración de Usuarios."""
+    password_nuevo: str
+
+
 # ── Catálogos ─────────────────────────────────────────────────────────────────
 
 class PaisCreate(BaseModel):

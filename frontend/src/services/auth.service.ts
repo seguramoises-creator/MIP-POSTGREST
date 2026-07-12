@@ -35,4 +35,17 @@ export const authService = {
       return null;
     }
   },
+
+  // "Olvidó su contraseña" — paso 1: pide el código al correo (respuesta genérica).
+  async forgotPassword(email: string): Promise<string> {
+    const { data } = await axios.post<{ message: string }>(`${API_URL}/auth/forgot-password`, { email });
+    return data.message;
+  },
+
+  // Paso 2: valida el código y fija la nueva contraseña.
+  async resetPassword(email: string, codigo: string, password_nuevo: string): Promise<string> {
+    const { data } = await axios.post<{ message: string }>(
+      `${API_URL}/auth/reset-password`, { email, codigo, password_nuevo });
+    return data.message;
+  },
 };

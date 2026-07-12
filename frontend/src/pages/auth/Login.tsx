@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Card, CardContent, TextField, Button, Typography,
-  Alert, CircularProgress, InputAdornment, IconButton,
+  Alert, CircularProgress, InputAdornment, IconButton, Link,
+  Dialog, DialogTitle, DialogContent, DialogActions, Stack,
 } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
@@ -18,6 +19,43 @@ export default function Login() {
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // ── "Olvidó su contraseña" — flujo en 2 pasos (correo → código + nueva) ──
+  const [fpOpen, setFpOpen] = useState(false);
+  const [fpStep, setFpStep] = useState<1 | 2>(1);
+  const [fpEmail, setFpEmail] = useState('');
+  const [fpCodigo, setFpCodigo] = useState('');
+  const [fpPass, setFpPass] = useState('');
+  const [fpMsg, setFpMsg] = useState('');
+  const [fpErr, setFpErr] = useState('');
+  const [fpLoading, setFpLoading] = useState(false);
+
+  const abrirFp = () => {
+    setFpOpen(true); setFpStep(1); setFpEmail(''); setFpCodigo(''); setFpPass('');
+    setFpMsg(''); setFpErr('');
+  };
+
+  const fpEnviarCodigo = async () => {
+    setFpErr(''); setFpMsg(''); setFpLoading(true);
+    try {
+      const msg = await authService.forgotPassword(fpEmail.trim());
+      setFpMsg(msg);       // mensaje genérico del backend
+      setFpStep(2);        // pasa a ingresar el código
+    } catch (e: any) {
+      setFpErr(e.response?.data?.detail || 'No se pudo procesar la solicitud.');
+    } finally { setFpLoading(false); }
+  };
+
+  const fpRestablecer = async () => {
+    setFpErr(''); setFpMsg(''); setFpLoading(true);
+    try {
+      const msg = await authService.resetPassword(fpEmail.trim(), fpCodigo.trim(), fpPass);
+      setFpMsg(msg);
+      setTimeout(() => setFpOpen(false), 2500);   // cierra tras confirmar
+    } catch (e: any) {
+      setFpErr(e.response?.data?.detail || 'No se pudo restablecer la contraseña.');
+    } finally { setFpLoading(false); }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,11 +163,73 @@ export default function Login() {
             </Button>
           </form>
 
+          <Box textAlign="center" mt={2}>
+            <Link component="button" type="button" underline="hover" onClick={abrirFp}
+                  sx={{ fontSize: 14, fontWeight: 600 }}>
+              ¿Olvidó su contraseña?
+            </Link>
+          </Box>
+
           <Typography variant="caption" color="text.disabled" display="block" textAlign="center" mt={3}>
             v1.0.0 — Confidencial
           </Typography>
         </CardContent>
       </Card>
+
+      {/* Diálogo de recuperación por correo + código */}
+      <Dialog open={fpOpen} onClose={() => setFpOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Recuperar contraseña</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {fpErr && <Alert severity="error" onClose={() => setFpErr('')}>{fpErr}</Alert>}
+            {fpMsg && <Alert severity="success">{fpMsg}</Alert>}
+
+            {fpStep === 1 ? (
+              <>
+                <Typography variant="body2" color="text.secondary">
+                  Ingresa el correo asociado a tu cuenta. Si está registrado, recibirás un
+                  código de recuperación.
+                </Typography>
+                <TextField
+                  fullWidth size="small" label="Correo electrónico" type="email"
+                  value={fpEmail} onChange={(e) => setFpEmail(e.target.value)} autoFocus
+                />
+              </>
+            ) : (
+              <>
+                <Typography variant="body2" color="text.secondary">
+                  Escribe el código de 6 dígitos que enviamos a <strong>{fpEmail}</strong> y tu
+                  nueva contraseña. El código vence en 15 minutos.
+                </Typography>
+                <TextField
+                  fullWidth size="small" label="Código de recuperación"
+                  value={fpCodigo} onChange={(e) => setFpCodigo(e.target.value)}
+                  inputProps={{ inputMode: 'numeric', maxLength: 6 }}
+                />
+                <TextField
+                  fullWidth size="small" label="Nueva contraseña" type="password"
+                  value={fpPass} onChange={(e) => setFpPass(e.target.value)}
+                  helperText="Mín. 12 · mayúscula, minúscula, número y carácter especial"
+                />
+              </>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setFpOpen(false)}>Cerrar</Button>
+          {fpStep === 1 ? (
+            <Button variant="contained" disabled={fpLoading || !fpEmail.trim()} onClick={fpEnviarCodigo}>
+              {fpLoading ? <CircularProgress size={18} /> : 'Enviar código'}
+            </Button>
+          ) : (
+            <Button variant="contained"
+                    disabled={fpLoading || fpCodigo.trim().length < 6 || fpPass.trim().length < 12}
+                    onClick={fpRestablecer}>
+              {fpLoading ? <CircularProgress size={18} /> : 'Cambiar contraseña'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

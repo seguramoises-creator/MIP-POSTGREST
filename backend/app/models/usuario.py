@@ -77,3 +77,24 @@ class PasswordHistorial(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     creado_en: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class PasswordResetCode(Base):
+    """Código de recuperación de contraseña ("Olvidó su contraseña").
+
+    El código se guarda HASHEADO (bcrypt), nunca en claro. Es de un solo uso
+    (`usado`), expira (`expira_en`) y al solicitar uno nuevo se invalidan los
+    previos del mismo usuario. `intentos` limita la cantidad de validaciones
+    fallidas antes de invalidarlo (defensa contra fuerza bruta del código corto)."""
+    __tablename__ = "FACT_PasswordReset"
+    __table_args__ = {"schema": "Security"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    usuario_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), index=True, nullable=False)
+    codigo_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    expira_en: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    usado: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    intentos: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    creado_en: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc))

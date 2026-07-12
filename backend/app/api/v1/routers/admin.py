@@ -27,7 +27,7 @@ from app.schemas.schemas import (
     CicloCreate, CicloResponse, CicloUpdate, FeriadoIn, FeriadoResponse,
     ReglaElegibilidadCreate, ReglaElegibilidadResponse,
     PremioCreate, PremioResponse,
-    UsuarioCreate, UsuarioResponse, UsuarioUpdate,
+    UsuarioCreate, UsuarioResponse, UsuarioUpdate, AdminSetPassword,
     CategoriaMedicaCreate, CategoriaMedicaResponse,
     CriterioCategoriaCreate, CriterioCategoriaResponse,
     CriterioCategoriaTablaCreate, CriterioCategoriaTablaResponse,
@@ -724,6 +724,28 @@ def delete_usuario(id: int, db: Session = Depends(get_db), _=AdminOnly):
     obj.activo = False
     db.commit()
     return Msg(message="Usuario desactivado")
+
+
+@router.post("/usuarios/{id}/reset-password", response_model=Msg, summary="Restablecer contraseña de un usuario (ADMIN)")
+def reset_password_usuario(id: int, data: AdminSetPassword, db: Session = Depends(get_db), _=AdminOnly):
+    """Un ADMIN fija una nueva contraseña para cualquier usuario desde la edición.
+    Valida la política de complejidad, la guarda hasheada y fuerza el cambio en el
+    próximo inicio de sesión del usuario (debe_cambiar_password=True)."""
+    from datetime import datetime, timezone
+    from app.core.security import hash_password
+    from app.services import password_policy_service
+    obj = db.query(Usuario).filter(Usuario.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Usuario no encontrado")
+    try:
+        password_policy_service.validar_complejidad(db, data.password_nuevo, obj.rol)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    obj.hashed_password = hash_password(data.password_nuevo)
+    obj.password_actualizado_en = datetime.now(timezone.utc)
+    obj.debe_cambiar_password = True
+    db.commit()
+    return Msg(message=f"Contraseña de {obj.username} restablecida correctamente")
 
 
 # ── Parámetros de sistema en runtime (solo ADMIN) ─────────────────────────────

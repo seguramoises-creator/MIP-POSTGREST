@@ -28,9 +28,9 @@ from app.db.database import get_db
 from app.models.usuario import Usuario
 from app.models.hechos import Auditoria
 from app.schemas.common import Msg, TokenResponse
-from app.schemas.schemas import UsuarioResponse, PasswordChange
+from app.schemas.schemas import UsuarioResponse, PasswordChange, ForgotPassword, ResetPassword
 from app.core.config import settings
-from app.services import password_policy_service
+from app.services import password_policy_service, password_reset_service
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
@@ -241,3 +241,31 @@ def change_password(
     db.commit()
     _registrar_auditoria(db, current_user, "CHANGE_PASSWORD", request, True)
     return Msg(message="Contraseña actualizada correctamente")
+
+
+_MSG_GENERICO = ("Si el correo está registrado, recibirás un código de recuperación "
+                 "en unos minutos.")
+
+
+@router.post("/forgot-password", response_model=Msg, summary="Olvidó su contraseña — enviar código")
+def forgot_password(datos: ForgotPassword, request: Request, db: Session = Depends(get_db)):
+    """Paso 1: envía un código de recuperación al correo si está registrado.
+    Responde SIEMPRE el mismo mensaje genérico (no revela si el correo existe)."""
+    try:
+        password_reset_service.solicitar_codigo(db, datos.email)
+    except Exception as e:  # nunca filtrar el error real al cliente
+        logger.warning(f"forgot-password: fallo interno enviando código: {e}")
+    return Msg(message=_MSG_GENERICO)
+
+
+@router.post("/reset-password", response_model=Msg, summary="Olvidó su contraseña — fijar nueva con código")
+def reset_password(datos: ResetPassword, request: Request, db: Session = Depends(get_db)):
+    """Paso 2: valida el código y fija la nueva contraseña (política de complejidad)."""
+    try:
+        usuario = password_reset_service.restablecer(db, datos.email, datos.codigo, datos.password_nuevo)
+    except password_reset_service.CodigoInvalidoError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:  # complejidad / reutilización
+        raise HTTPException(status_code=400, detail=str(e))
+    _registrar_auditoria(db, usuario, "RESET_PASSWORD", request, True)
+    return Msg(message="Contraseña restablecida correctamente. Ya puedes iniciar sesión.")

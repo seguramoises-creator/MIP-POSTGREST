@@ -330,3 +330,22 @@ def notificar_correcciones_examen(db, examen_id: int) -> int:
             contador += 1  # modo demo: cuenta como simulado
     logger.info(f"Correcciones examen {examen_id}: {contador} correos (enviados/simulados)")
     return contador
+
+
+def notificar_codigo_recuperacion(destinatario: str, nombre: str, codigo: str, minutos: int = 15) -> bool:
+    """Envía el código de recuperación de contraseña ("Olvidó su contraseña").
+
+    Retorna True si se envió; False si las notificaciones están deshabilitadas o
+    no hay destinatario. Nunca lanza (el endpoint responde genérico igual)."""
+    if not _habilitado() or not destinatario:
+        return False
+    cuerpo = f"""<html><body style="font-family:Arial,sans-serif;color:#333;">
+  <h2>Recuperación de contraseña</h2>
+  <p>Hola {nombre or ''},</p>
+  <p>Recibimos una solicitud para restablecer tu contraseña. Usa el siguiente código:</p>
+  <p style="font-size:28px;font-weight:bold;letter-spacing:6px;color:#1a237e;margin:16px 0;">{codigo}</p>
+  <p>Este código vence en <strong>{minutos} minutos</strong> y solo puede usarse una vez.</p>
+  <p style="color:#888;font-size:13px;">Si no solicitaste este cambio, ignora este correo; tu contraseña no cambiará.</p>
+  <hr><p style="color:#aaa;font-size:12px;">Sistema MIP — SCGCPR</p>
+</body></html>"""
+    return _enviar(destinatario, "Código de recuperación de contraseña", cuerpo)
