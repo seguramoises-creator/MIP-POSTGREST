@@ -80,6 +80,9 @@ Thumbs.db
 .claude/
 
 # ── Artefactos locales (no versionar) ────────────────────────
-*.dump                    # respaldos/volcados de PostgreSQL (pg_dump)
-/backend/nuevo2.txt       # archivo suelto (hash) — basura
-/iniciar_vista_local.cmd  # lanzador local del entorno de desarrollo
+# respaldos/volcados de PostgreSQL (pg_dump)
+*.dump
+# archivo suelto (hash) — basura
+/backend/nuevo2.txt
+# lanzador local del entorno de desarrollo
+/iniciar_vista_local.cmd
