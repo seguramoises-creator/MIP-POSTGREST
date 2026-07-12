@@ -78,3 +78,8 @@ Thumbs.db
 
 # Tooling de sesión (preview/launch)
 .claude/
+
+# ── Artefactos locales (no versionar) ────────────────────────
+*.dump                    # respaldos/volcados de PostgreSQL (pg_dump)
+/backend/nuevo2.txt       # archivo suelto (hash) — basura
+/iniciar_vista_local.cmd  # lanzador local del entorno de desarrollo

@@ -592,7 +592,9 @@ Base URL: `http://localhost:8000/api/v1`
 | POST | `/auth/login` | Público | Form-data `username`+`password` → `access_token` + `refresh_token` |
 | POST | `/auth/logout` | Autenticado | Invalida el refresh_token |
 | POST | `/auth/refresh` | Público | Renueva access_token |
-| POST | `/auth/change-password` | Autenticado | Nueva contraseña (mín 12 chars, mayúscula, minúscula, número) |
+| POST | `/auth/change-password` | Autenticado | Cambia la propia (valida la actual + política de complejidad) |
+| POST | `/auth/forgot-password` | Público | "Olvidó su contraseña" — envía código al correo; respuesta SIEMPRE genérica |
+| POST | `/auth/reset-password` | Público | Valida `{email, codigo, password_nuevo}` y fija la nueva |
 | GET | `/auth/me` | Autenticado | Datos del usuario actual |
 
 ### Admin (`/admin`)
@@ -612,6 +614,7 @@ Base URL: `http://localhost:8000/api/v1`
 | GET/POST/PUT/DELETE | `/admin/reglas-elegibilidad` | ADMIN/GERENTE_PRODUCTIVIDAD |
 | GET/POST | `/admin/premios` | ADMIN/GERENTE_PRODUCTIVIDAD (alta: ADMIN) |
 | GET/POST/PUT/DELETE | `/admin/usuarios` | ADMIN |
+| POST | `/admin/usuarios/{id}/reset-password` | ADMIN — restablece la contraseña de cualquier usuario (fuerza cambio en próximo login) |
 
 > `POST /admin/reset?tipo=facts|dims` (hallazgo nuevo, no documentado en v1.0): borrado administrativo en dos fases con `TRUNCATE ... RESTART IDENTITY CASCADE` (PostgreSQL). `facts` borra todo `DW`/`ETL`/`Audit` (sin riesgo de FK, las FACT apuntan hacia los DIM). `dims` borra `Config` — solo seguro después de `facts`; nulifica `pais_codigo` en usuarios antes de truncar. Operación destructiva, ADMIN únicamente — pensada para entornos de prueba/reset de demo, no usar contra datos de producción reales sin respaldo previo.
 
@@ -702,8 +705,15 @@ Cada router nuevo (`lsii.py`, `cobertura_predictiva.py`, `categorizacion.py`, `e
 ### Seguridad
 - Bloqueo temporal tras 5 intentos fallidos (30 minutos)
 - `FACT_Auditoria` registra todos los logins y acciones POST/PUT/PATCH/DELETE
-- Contraseña: mínimo 12 chars, mayúscula, minúscula, número
+- Contraseña: mínimo 12 chars, mayúscula, minúscula, número **y carácter especial** (política real en `password_policy_service.validar_complejidad`); no reutilización de las últimas N (`FACT_PasswordHistorial`)
 - Archivos ETL: validación de magic bytes + nombre UUID para prevenir Path Traversal
+
+### Gestión de contraseñas (jul-2026)
+- **ADMIN restablece cualquier contraseña** desde Administración de Usuarios: `POST /admin/usuarios/{id}/reset-password` (valida complejidad, guarda hasheada, `debe_cambiar_password=True`). UI: campo + botón en el diálogo de editar usuario.
+- **"Olvidó su contraseña"** (`password_reset_service.py` + modelo `Security.FACT_PasswordReset`, migración `0010`):
+  - `POST /auth/forgot-password {email}` → respuesta **genérica** (nunca revela si el correo existe); si existe, genera **código de 6 dígitos guardado HASHEADO** (bcrypt), invalida los previos y lo envía por correo (`notification_service.notificar_codigo_recuperacion`).
+  - `POST /auth/reset-password {email, codigo, password_nuevo}` → valida el código (**vigente, no usado, máx. 5 intentos, expira 15 min**), aplica la política de complejidad, guarda y **consume el código (no reutilizable)**.
+  - Login: enlace "¿Olvidó su contraseña?" → diálogo de 2 pasos (correo → código + nueva contraseña).
 
 ---
 
