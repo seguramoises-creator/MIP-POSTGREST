@@ -36,6 +36,10 @@ class MedicoVisita(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     vm_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("Config.DIM_RM.id"), nullable=False)  # Representante asignado
+    # Maestro de Médicos (jul-2026): el Panel referencia al médico central del
+    # Maestro (Config.DIM_Medico) en vez de duplicar sus datos generales.
+    maestro_medico_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Config.DIM_Medico.id"), nullable=True, index=True)
     codigo: Mapped[str | None] = mapped_column(String(40), nullable=True)      # Código del médico (identificador)
     nombre_completo: Mapped[str] = mapped_column(String(200), nullable=False)  # solo MAYÚSCULAS
     nombre: Mapped[str | None] = mapped_column(String(100), nullable=True)     # primer nombre
