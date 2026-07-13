@@ -4,11 +4,11 @@ DIM_Pais, DIM_Linea, DIM_Gerente, DIM_RM, DIM_Indicador,
 DIM_IndicadorTabla, DIM_MetaIndicador, DIM_CategoriaDesempeno, DIM_KpiDashboard,
 DIM_Ciclo, DIM_Mes, DIM_Premio, DIM_Capacitacion, DIM_ReglaElegibilidad
 """
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 from sqlalchemy import (
     String, Boolean, Integer, Date, DateTime,
-    Numeric, ForeignKey, Text, UniqueConstraint, CheckConstraint, Index
+    Numeric, ForeignKey, Text, UniqueConstraint, CheckConstraint, Index, func
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.database import Base
@@ -735,6 +735,20 @@ class Medico(Base):
     cedula: Mapped[str | None]          = mapped_column(String(30),  nullable=True)
     email: Mapped[str | None]           = mapped_column(String(200), nullable=True)
     activo: Mapped[bool]                = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+
+    # --- Maestro de Médicos (jul-2026): datos generales que antes vivían
+    #     duplicados en Visita.DIM_MedicoVisita. Ver plan maestro-medicos. ---
+    telefono: Mapped[str | None]     = mapped_column(String(40),  nullable=True)
+    direccion: Mapped[str | None]    = mapped_column(String(300), nullable=True)
+    sector: Mapped[str | None]       = mapped_column(String(100), nullable=True)
+    exequatur: Mapped[str | None]    = mapped_column(String(50),  nullable=True, index=True)
+    observaciones: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # APROBADO (creado/validado por Admin/Supervisor o Excel) | PENDIENTE (creado desde Panel por un rep)
+    estado_validacion: Mapped[str]   = mapped_column(String(16), nullable=False, default="APROBADO", server_default="APROBADO")
+    # MANUAL | EXCEL | PANEL | CATEGORIZACION | COBERTURA
+    origen: Mapped[str]              = mapped_column(String(16), nullable=False, default="MANUAL", server_default="MANUAL")
+    created_at: Mapped[datetime]     = mapped_column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), server_default=func.now())
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, onupdate=lambda: datetime.now(timezone.utc))
 
 
 class ParametroSistema(Base):
