@@ -78,10 +78,9 @@ Leyenda: ✅ hecho y verificado · 🔎 hecho en código, falta tu confirmación
 
 ## 10. Costo por Visita & ROI / Pool de Ventas
 
-- [ ] ✅ **Relabels aplicados:** "PSP visitas", "Producto contacto", "Producto esperado".
-- [ ] ❓ **Confirmar visualmente** que cada renombre quedó en la columna correcta (el documento marcó dos renombres partiendo de "Retorno y visita").
-- [ ] ✅ **Impacto financiero no editable** — se obtiene de Cobertura, por filtro A/B/C.
-- [ ] 🔎 **Slider de coeficientes recalcula en tiempo real** — confirmar en vivo.
+- [ ] ✅ **Relabels aplicados y mapeados:** "Visitas detalladas"→**PSP visitas** y "Retorno y visita"→**Producto contacto** (tabla Pool de Ventas); "Retorno y visita"→**Producto esperado** (tabla ROI). Ya no aparece ninguna etiqueta vieja.
+- [ ] ✅ **Impacto financiero no editable** — médicos sin visitar salen de la Cobertura (`im.categorias`), por categoría A/B/C; `venta_riesgo = sin_visitar × PSP × coeficiente`.
+- [ ] ✅ **Slider recalcula en tiempo real** — capa `impLive` recomputa en cada render desde el estado del coeficiente; el Slider usa `onChange` (durante el arrastre). Verificado en código.
 
 ## 11. Formación
 
@@ -94,8 +93,8 @@ Leyenda: ✅ hecho y verificado · 🔎 hecho en código, falta tu confirmación
 - **11/11 secciones corregidas en código y desplegadas en `vista-mip.com`.**
 - **"Datos en 0" (Sec 9/2/6) RESUELTO:** se sembraron datos, se corrigió la vigencia de médicos y se dejó 1 ciclo abierto por país. Cobertura Predictiva y Cobertura Visita muestran números reales.
 - **Solo queda:**
-  - 🔎 3 confirmaciones visuales en vivo: cobertura planeada inmediata (6), regional + histórico (8), slider (10).
-  - ❓ 2 decisiones con Mallén: mapeo de roles (5) y a qué columna corresponde cada renombre "Retorno y visita" (10).
+  - 🔎 2 confirmaciones visuales en vivo: cobertura planeada inmediata (6), regional + histórico (8).
+  - ❓ 1 decisión con Mallén: mapeo de roles (5). *(El mapeo de renombres de Costo/ROI (10) ya quedó resuelto y verificado.)*
 - **Sin código pendiente.**
 
 ### Otras correcciones de la sesión (fuera de las 11 secciones)
