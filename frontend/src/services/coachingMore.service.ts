@@ -1,7 +1,8 @@
 import { api } from './api';
 
 export interface CatalogoItem { id: number; seccion: string; orden_seccion: number; orden_item: number; texto: string; }
-export interface VMItem { id: number; nombre: string; email: string | null; }
+export interface VMItem { id: number; nombre: string; email: string | null; coaching_min_dia?: number; }
+export interface AcompanadasHoy { rm_id: number; fecha: string; acompanadas: number; minimo: number; habilitado: boolean; }
 
 export interface ItemCalif { item_catalogo_id: number | null; seccion: string; item_texto: string; calificacion: number; }
 export interface HojaPayload {
@@ -38,6 +39,8 @@ export interface CoachingKpi {
 
 export const cmCatalogo = () => api.get<CatalogoItem[]>('/coaching-more/catalogo').then(r => r.data);
 export const cmVms = () => api.get<VMItem[]>('/coaching-more/vms').then(r => r.data);
+export const cmAcompanadasHoy = (rmId: number) =>
+  api.get<AcompanadasHoy>('/coaching-more/acompanadas-hoy', { params: { rm_id: rmId } }).then(r => r.data);
 export const cmCrear = (p: HojaPayload) => api.post('/coaching-more', p).then(r => r.data);
 export const cmCorregir = (id: number, p: HojaPayload) => api.post(`/coaching-more/${id}/correccion`, p).then(r => r.data);
 export const cmListar = (params: { rm_id?: number; ciclo_id?: number } = {}) =>

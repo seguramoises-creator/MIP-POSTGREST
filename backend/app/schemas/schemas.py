@@ -148,6 +148,7 @@ class RMCreate(BaseModel):
     email: Optional[str] = None
     zona: Optional[str] = None
     fecha_ingreso: Optional[date] = None
+    coaching_min_dia: int = Field(default=5, ge=1, le=9)
 
 class RMResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -161,6 +162,7 @@ class RMResponse(BaseModel):
     email: Optional[str] = None
     zona: Optional[str] = None
     fecha_ingreso: Optional[date] = None
+    coaching_min_dia: int = 5
     activo: bool
 
 

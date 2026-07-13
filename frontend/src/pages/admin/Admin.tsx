@@ -1636,6 +1636,7 @@ const TABS_DIM = [
       { key: 'email', label: 'Email' },
       { key: 'zona', label: 'Zona' },
       { key: 'fecha_ingreso', label: 'Fecha Ingreso', type: 'date' },
+      { key: 'coaching_min_dia', label: 'Mín. Coaching/día (1-9)', type: 'number' },
     ],
   },
   {

@@ -69,8 +69,32 @@ def vms(db: Session = Depends(get_db), current_user: Usuario = RequireCrear):
     q = db.query(RepresentanteMedico).filter(RepresentanteMedico.activo == True)  # noqa: E712
     if current_user.rol == Rol.GERENTE_DISTRITO:
         q = q.filter(RepresentanteMedico.gerente_id == (current_user.gerente_id or -1))
-    return [{"id": r.id, "nombre": r.nombre, "email": r.email}
+    return [{"id": r.id, "nombre": r.nombre, "email": r.email,
+             "coaching_min_dia": r.coaching_min_dia or 5}
             for r in q.order_by(RepresentanteMedico.nombre).all()]
+
+
+@router.get("/acompanadas-hoy", summary="Visitas acompañadas de HOY del RM (habilita la hoja)")
+def acompanadas_hoy(rm_id: int = Query(...), db: Session = Depends(get_db),
+                    current_user: Usuario = RequireCrear):
+    """Suma de visitas ACOMPAÑADAS por el GD registradas HOY para el RM. La hoja de
+    Coaching solo se habilita si esa suma >= `coaching_min_dia` del RM."""
+    from datetime import datetime, timezone
+    from sqlalchemy import func
+    from app.models.visita import VisitaRegistro
+    rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == rm_id).first()
+    if not rm:
+        raise HTTPException(status_code=404, detail="RM no encontrado")
+    hoy = datetime.now(timezone.utc).date()
+    acompanadas = (db.query(func.count(VisitaRegistro.id))
+                   .filter(VisitaRegistro.vm_id == rm_id,
+                           VisitaRegistro.ejecutada == True,      # noqa: E712
+                           VisitaRegistro.acompanado == True,     # noqa: E712
+                           func.date(VisitaRegistro.fecha_hora) == hoy)
+                   .scalar() or 0)
+    minimo = rm.coaching_min_dia or 5
+    return {"rm_id": rm_id, "fecha": hoy.isoformat(), "acompanadas": acompanadas,
+            "minimo": minimo, "habilitado": acompanadas >= minimo}
 
 
 def _guardar(db: Session, current_user: Usuario, datos: HojaIn):

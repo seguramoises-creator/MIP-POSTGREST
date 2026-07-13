@@ -8,8 +8,9 @@ import { RateReview, Save, CheckCircle, Lock, Visibility, Edit } from '@mui/icon
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
-  cmCatalogo, cmVms, cmCrear, cmCorregir, cmListar, cmDetalle, cmKpi, cmConsolidar,
+  cmCatalogo, cmVms, cmCrear, cmCorregir, cmListar, cmDetalle, cmKpi, cmConsolidar, cmAcompanadasHoy,
   type CatalogoItem, type VMItem, type HojaResumen, type HojaDetalle, type CoachingKpi, type ItemCalif,
+  type AcompanadasHoy,
 } from '../../services/coachingMore.service';
 
 const ESCALA = [
@@ -146,6 +147,7 @@ export default function CoachingMore() {
   // Estado del formulario (solo GD)
   const [rmId, setRmId] = useState<number | ''>('');
   const [medicos, setMedicos] = useState('');
+  const [acompHoy, setAcompHoy] = useState<AcompanadasHoy | null>(null);
   const [ratings, setRatings] = useState<Record<number, number>>({});
   const [fortalezas, setFortalezas] = useState('');
   const [areas, setAreas] = useState('');
@@ -162,6 +164,18 @@ export default function CoachingMore() {
   // Corrección: id de la hoja que se está enmendando + motivo.
   const [corrigiendoId, setCorrigiendoId] = useState<number | null>(null);
   const [motivoCorreccion, setMotivoCorreccion] = useState('');
+
+  // Al elegir un RM (hoja NUEVA): trae la suma de visitas ACOMPAÑADAS de hoy. "Médicos vistos
+  // ese día" pasa a ser esa suma (solo lectura); la hoja se habilita si suma >= el mínimo del RM.
+  // En modo corrección no se recalcula (se conserva lo de la hoja original).
+  useEffect(() => {
+    if (corrigiendoId) return;
+    if (!rmId) { setAcompHoy(null); setMedicos(''); return; }
+    cmAcompanadasHoy(Number(rmId))
+      .then((r) => { setAcompHoy(r); setMedicos(String(r.acompanadas)); })
+      .catch(() => { setAcompHoy(null); });
+  }, [rmId, corrigiendoId]);
+  const hojaHabilitada = corrigiendoId ? true : !!acompHoy?.habilitado;
 
   const recargar = useCallback(() => {
     cmListar().then(setHojas).catch(() => setHojas([]));
@@ -350,11 +364,38 @@ export default function CoachingMore() {
             </TextField>
           </Grid>
           <Grid item xs={12} sm={4}>
-            <TextField fullWidth size="small" type="number" label="Médicos vistos ese día" value={medicos}
-                       onChange={(e) => setMedicos(e.target.value)} inputProps={{ min: 0 }} />
+            {/* Leyenda de solo lectura: suma de visitas ACOMPAÑADAS de hoy (no editable). */}
+            <Box sx={{ border: '1px solid #e2e8f0', borderRadius: 1, px: 1.5, py: 0.75, minHeight: 56 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                Médicos vistos ese día (visitas acompañadas)
+              </Typography>
+              <Typography variant="h6" fontWeight={800}
+                          color={acompHoy ? (hojaHabilitada ? 'success.main' : 'error.main') : 'text.disabled'}>
+                {acompHoy ? acompHoy.acompanadas : (rmId ? '…' : '—')}
+                {acompHoy && (
+                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                    / mínimo {acompHoy.minimo}
+                  </Typography>
+                )}
+              </Typography>
+            </Box>
           </Grid>
         </Grid>
       </CardContent></Card>
+
+      {/* Habilitación de la hoja según el mínimo de visitas acompañadas del RM */}
+      {rmId !== '' && acompHoy && !hojaHabilitada && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Para generar la hoja de Coaching se requieren al menos <b>{acompHoy.minimo}</b> visitas
+          acompañadas hoy. Este representante tiene <b>{acompHoy.acompanadas}</b> — la hoja se
+          activará al alcanzar el mínimo.
+        </Alert>
+      )}
+      {rmId !== '' && hojaHabilitada && !corrigiendoId && (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          Hoja habilitada — {acompHoy?.acompanadas} visitas acompañadas hoy (mínimo {acompHoy?.minimo}).
+        </Alert>
+      )}
 
       {/* Escala */}
       <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
@@ -447,7 +488,7 @@ export default function CoachingMore() {
       </CardContent></Card>
 
       <Button fullWidth size="large" variant="contained" color={corrigiendoId ? 'warning' : 'primary'}
-              startIcon={<Save />} disabled={guardando} onClick={guardar} sx={{ py: 1.5 }}>
+              startIcon={<Save />} disabled={guardando || !rmId || !hojaHabilitada} onClick={guardar} sx={{ py: 1.5 }}>
         {guardando ? 'Guardando…'
           : corrigiendoId ? `Guardar corrección de la hoja #${corrigiendoId}`
           : 'Guardar Hoja de Coaching (bloquea la edición para siempre)'}

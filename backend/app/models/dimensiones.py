@@ -70,6 +70,9 @@ class RepresentanteMedico(Base):
     zona: Mapped[str | None] = mapped_column(String(100), nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     fecha_ingreso: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Mínimo de visitas ACOMPAÑADAS por día para habilitar una hoja de Coaching (MORE).
+    # Por defecto 5; configurable de 1 a 9 desde Administración.
+    coaching_min_dia: Mapped[int] = mapped_column(Integer, nullable=False, default=5, server_default="5")
 
     gerente: Mapped["Gerente"] = relationship("Gerente", back_populates="rms")
 
