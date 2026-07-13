@@ -29,8 +29,6 @@ import ImportDims from './ImportDims';
 import LsiiAdmin from './LsiiAdmin';
 import CoberturaPredictivaAdmin from './CoberturaPredictivaAdmin';
 import CategorizacionAdmin, { TabGeo } from './CategorizacionAdmin';
-import CorreoAdmin from './CorreoAdmin';
-import PasswordPolicyTab from './PasswordPolicyTab';
 
 // ── Hook: carga la lista de países y la reutiliza en toda la página ──
 function usePaises() {
@@ -1727,10 +1725,8 @@ const TAB_MANT_INDEX       = TABS_DIM.length + 2;
 const TAB_LSII_INDEX       = TABS_DIM.length + 3;
 const TAB_COBERTURA_INDEX  = TABS_DIM.length + 4;
 const TAB_CATEGORIZACION_INDEX = TABS_DIM.length + 5;
-const TAB_PASSWORD_INDEX   = TABS_DIM.length + 6;
-const TAB_GEO_INDEX        = TABS_DIM.length + 7;   // Especialidades y Centros
-const TAB_GEO2_INDEX       = TABS_DIM.length + 8;   // Provincias y Municipios
-const TAB_CORREO_INDEX     = TABS_DIM.length + 9;   // Correo (SMTP)
+const TAB_GEO_INDEX        = TABS_DIM.length + 6;   // Especialidades y Centros
+const TAB_GEO2_INDEX       = TABS_DIM.length + 7;   // Provincias y Municipios
 
 // ── Componente principal ──────────────────────────────────────────────
 export default function Admin() {
@@ -1799,10 +1795,8 @@ export default function Admin() {
             <Tab label="Matriz LSII" icon={<Psychology fontSize="small" />} iconPosition="start" />
             <Tab label="Cobertura Predictiva" icon={<TrendingUp fontSize="small" />} iconPosition="start" />
             <Tab label="Categorización Médica" icon={<LocalHospital fontSize="small" />} iconPosition="start" />
-            <Tab label="Política de contraseñas" icon={<Lock fontSize="small" />} iconPosition="start" />
             <Tab label="Especialidades y Centros" icon={<LocalHospital fontSize="small" />} iconPosition="start" />
             <Tab label="Provincias y Municipios" icon={<LocalHospital fontSize="small" />} iconPosition="start" />
-            <Tab label="Correo (SMTP)" icon={<Lock fontSize="small" />} iconPosition="start" />
           </Tabs>
 
           <Box sx={{ mt: 3 }}>
@@ -1818,14 +1812,10 @@ export default function Admin() {
               <CoberturaPredictivaAdmin />
             ) : tab === TAB_CATEGORIZACION_INDEX ? (
               <CategorizacionAdmin />
-            ) : tab === TAB_PASSWORD_INDEX ? (
-              <PasswordPolicyTab />
             ) : tab === TAB_GEO_INDEX ? (
               <TabGeo tipos={['especialidad', 'centro']} />
             ) : tab === TAB_GEO2_INDEX ? (
               <TabGeo tipos={['provincia', 'municipio']} />
-            ) : tab === TAB_CORREO_INDEX ? (
-              <CorreoAdmin />
             ) : (TABS_DIM[tab] as any).isCiclos ? (
               <CiclosPorPaisTab />
             ) : (TABS_DIM[tab] as any).hasPaisFilter ? (

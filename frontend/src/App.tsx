@@ -32,7 +32,7 @@ const Ranking = lazy(() => import('./pages/ranking/Ranking'));
 const Reconocimiento = lazy(() => import('./pages/reconocimiento/Reconocimiento'));
 const ETL = lazy(() => import('./pages/etl/ETL'));
 const Admin = lazy(() => import('./pages/admin/Admin'));
-const Usuarios = lazy(() => import('./pages/admin/Usuarios'));
+const Administracion = lazy(() => import('./pages/admin/Administracion'));
 const Reportes = lazy(() => import('./pages/reportes/Reportes'));
 const Lsii = lazy(() => import('./pages/lsii/Lsii'));
 const Examenes = lazy(() => import('./pages/examenes/Examenes'));
@@ -127,7 +127,7 @@ function AppRoutes() {
         <Route path="visita/costo-roi" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><CostoRoiVisita /></ProtectedRoute>} />
         <Route path="etl" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><ETL /></ProtectedRoute>} />
         <Route path="admin" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><Admin /></ProtectedRoute>} />
-        <Route path="usuarios" element={<ProtectedRoute allowedRoles={['ADMIN']}><Usuarios /></ProtectedRoute>} />
+        <Route path="usuarios" element={<ProtectedRoute allowedRoles={['ADMIN']}><Administracion /></ProtectedRoute>} />
         <Route path="reportes" element={<Reportes />} />
       </Route>
       <Route path="*" element={<Navigate to={inicio} />} />
