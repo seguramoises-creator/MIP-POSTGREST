@@ -101,7 +101,9 @@ export default function Usuarios() {
   // Mensaje legible desde un error de axios, incluyendo el 422 de FastAPI/Pydantic
   // (detail = array de {loc, msg}) que de otro modo se vería como "status code 422".
   const errorMsg = (e: any): string => {
-    const d = e?.response?.data?.detail;
+    // El backend puede responder con `detail` (FastAPI default) o `detalle`
+    // (handler custom de validación en main.py). Ambos pueden ser array Pydantic.
+    const d = e?.response?.data?.detail ?? e?.response?.data?.detalle ?? e?.response?.data?.error;
     if (Array.isArray(d)) {
       return d
         .map((x: any) => {
@@ -114,10 +116,13 @@ export default function Usuarios() {
   };
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  // Valida el correo antes de enviar; si falla, avisa y evita el 422 del servidor.
+  // El email es OPCIONAL: vacío se permite (usuario sin correo). Si se escribe algo,
+  // debe ser un correo válido; si no, se avisa y se evita el 422 del servidor.
   const emailInvalido = (): boolean => {
-    if (!EMAIL_RE.test((form.email || '').trim())) {
-      showMsg('El correo electrónico no es válido (ej. usuario@dominio.com).', 'error');
+    const v = (form.email || '').trim();
+    if (v === '') return false;               // opcional: sin correo, se permite
+    if (!EMAIL_RE.test(v)) {
+      showMsg('El correo electrónico no es válido. Déjalo vacío o escribe uno con formato usuario@dominio.com.', 'error');
       return true;
     }
     return false;
@@ -303,7 +308,7 @@ export default function Usuarios() {
               onChange={(e) => setForm({ ...form, nombre_completo: e.target.value })}
             />
             <TextField
-              fullWidth size="small" label="Email" type="email"
+              fullWidth size="small" label="Email (opcional)" type="email"
               value={form.email || ''}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
@@ -349,7 +354,7 @@ export default function Usuarios() {
               onChange={(e) => setForm({ ...form, nombre_completo: e.target.value })}
             />
             <TextField
-              fullWidth size="small" label="Email" type="email"
+              fullWidth size="small" label="Email (opcional)" type="email"
               value={form.email || ''}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
