@@ -81,3 +81,46 @@ def test_crear_normal_sin_duplicados(monkeypatch):
     db.refresh.assert_called_once()
     assert m.estado_validacion == "APROBADO"
     assert m.origen == "MANUAL"
+
+
+# ── detectar_duplicados: dedup real (dura/blanda), sin monkeypatch ──────────────
+from types import SimpleNamespace
+
+
+class _Q:
+    """Doble de Session.query(...).filter(...).all() controlado por fila."""
+    def __init__(self, rows): self._rows = rows
+    def filter(self, *a, **k): return self
+    def all(self): return self._rows
+
+
+def _cand(**kw):
+    base = dict(id=1, nombre="X", codigo=None, exequatur=None, cedula=None,
+                centro_medico_id=None, provincia_id=None, telefono=None)
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def test_detectar_duro_por_exequatur():
+    db = MagicMock()
+    db.query.side_effect = [_Q([_cand(id=7, exequatur="EXQ-1")])]  # 1 query: la de duros
+    res = svc.detectar_duplicados(db, "DO", exequatur="EXQ-1")
+    assert [d["id"] for d in res["duros"]] == [7]
+    assert res["blandos"] == []
+
+
+def test_detectar_blando_matchea_pese_a_acentos():
+    db = MagicMock()
+    # Sin exequátur/cédula → no hay query de duros; solo la de blandos.
+    db.query.side_effect = [_Q([_cand(id=9, nombre="JOSÉ PEÑA", centro_medico_id=5)])]
+    res = svc.detectar_duplicados(db, "DO", nombre="Jose Pena", centro_medico_id=5)
+    assert [d["id"] for d in res["blandos"]] == [9]   # "JOSÉ PEÑA" == "JOSE PENA" normalizado
+    assert res["duros"] == []
+
+
+def test_detectar_blando_requiere_ubicacion():
+    db = MagicMock()
+    # Sin centro ni provincia (y sin exequátur/cédula) → no se consulta nada.
+    res = svc.detectar_duplicados(db, "DO", nombre="Jose Pena")
+    assert res["blandos"] == [] and res["duros"] == []
+    db.query.assert_not_called()
