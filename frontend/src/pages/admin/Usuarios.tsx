@@ -98,6 +98,33 @@ export default function Usuarios() {
     setTimeout(() => setMsg(''), 4000);
   };
 
+  // Mensaje legible desde un error de axios, incluyendo el 422 de FastAPI/Pydantic
+  // (detail = array de {loc, msg}) que de otro modo se vería como "status code 422".
+  const errorMsg = (e: any): string => {
+    const d = e?.response?.data?.detail;
+    if (Array.isArray(d)) {
+      return d
+        .map((x: any) => {
+          const campo = Array.isArray(x.loc) ? x.loc[x.loc.length - 1] : '';
+          return campo ? `${campo}: ${x.msg}` : x.msg;
+        })
+        .join(' · ');
+    }
+    return d || e?.message || 'Error desconocido';
+  };
+
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  // Valida el correo antes de enviar; si falla, avisa y evita el 422 del servidor.
+  const emailInvalido = (): boolean => {
+    if (!EMAIL_RE.test((form.email || '').trim())) {
+      showMsg('El correo electrónico no es válido (ej. usuario@dominio.com).', 'error');
+      return true;
+    }
+    return false;
+  };
+  const submitCreate = () => { if (!emailInvalido()) createMut.mutate(); };
+  const submitUpdate = () => { if (!emailInvalido()) updateMut.mutate(); };
+
   const createMut = useMutation({
     mutationFn: () => api.post('/admin/usuarios', form),
     onSuccess: () => {
@@ -105,7 +132,7 @@ export default function Usuarios() {
       qc.invalidateQueries({ queryKey: ['usuarios'] });
       showMsg('Usuario creado correctamente');
     },
-    onError: (e: any) => showMsg(e.response?.data?.detail || e.message, 'error'),
+    onError: (e: any) => showMsg(errorMsg(e), 'error'),
   });
 
   const updateMut = useMutation({
@@ -115,7 +142,7 @@ export default function Usuarios() {
       qc.invalidateQueries({ queryKey: ['usuarios'] });
       showMsg('Usuario actualizado');
     },
-    onError: (e: any) => showMsg(e.response?.data?.detail || e.message, 'error'),
+    onError: (e: any) => showMsg(errorMsg(e), 'error'),
   });
 
   const toggleMut = useMutation({
@@ -125,14 +152,14 @@ export default function Usuarios() {
       qc.invalidateQueries({ queryKey: ['usuarios'] });
       showMsg('Estado cambiado');
     },
-    onError: (e: any) => showMsg(e.response?.data?.detail || e.message, 'error'),
+    onError: (e: any) => showMsg(errorMsg(e), 'error'),
   });
 
   // Restablecer contraseña de un usuario (solo ADMIN) — desde la edición.
   const resetPassMut = useMutation({
     mutationFn: () => api.post(`/admin/usuarios/${editItem?.id}/reset-password`, { password_nuevo: nuevaPass }),
     onSuccess: (r: any) => { setNuevaPass(''); showMsg(r.data?.message || 'Contraseña restablecida'); },
-    onError: (e: any) => showMsg(e.response?.data?.detail || e.message, 'error'),
+    onError: (e: any) => showMsg(errorMsg(e), 'error'),
   });
 
   const handleEdit = (row: any) => {
@@ -303,7 +330,7 @@ export default function Usuarios() {
           <Button onClick={() => setOpenNew(false)}>Cancelar</Button>
           <Button
             variant="contained"
-            onClick={() => createMut.mutate()}
+            onClick={submitCreate}
             disabled={createMut.isPending}
           >
             {createMut.isPending ? <CircularProgress size={18} /> : 'Guardar'}
@@ -361,7 +388,7 @@ export default function Usuarios() {
           <Button onClick={() => setOpenEdit(false)}>Cerrar</Button>
           <Button
             variant="contained"
-            onClick={() => updateMut.mutate()}
+            onClick={submitUpdate}
             disabled={updateMut.isPending}
           >
             {updateMut.isPending ? <CircularProgress size={18} /> : 'Actualizar'}
