@@ -693,7 +693,9 @@ def list_usuarios(db: Session = Depends(get_db), _=AdminOnly):
 @router.post("/usuarios", response_model=UsuarioResponse, status_code=201, summary="Crear usuario")
 def create_usuario(data: UsuarioCreate, db: Session = Depends(get_db), _=AdminOnly):
     if db.query(Usuario).filter(Usuario.username == data.username).first():
-        raise HTTPException(400, "Username ya existe")
+        raise HTTPException(400, "El nombre de usuario ya existe. Elige otro.")
+    if data.email and db.query(Usuario).filter(Usuario.email == data.email).first():
+        raise HTTPException(400, f"El correo '{data.email}' ya está registrado con otro usuario.")
     from datetime import datetime, timezone
     from app.services import password_policy_service
     try:
@@ -712,7 +714,11 @@ def create_usuario(data: UsuarioCreate, db: Session = Depends(get_db), _=AdminOn
 def update_usuario(id: int, data: UsuarioUpdate, db: Session = Depends(get_db), _=AdminOnly):
     obj = db.query(Usuario).filter(Usuario.id == id).first()
     if not obj: raise HTTPException(404, "Usuario no encontrado")
-    for k, v in data.model_dump(exclude_none=True).items():
+    cambios = data.model_dump(exclude_none=True)
+    if cambios.get("email") and db.query(Usuario).filter(
+            Usuario.email == cambios["email"], Usuario.id != id).first():
+        raise HTTPException(400, f"El correo '{cambios['email']}' ya está registrado con otro usuario.")
+    for k, v in cambios.items():
         setattr(obj, k, v)
     db.commit(); db.refresh(obj)
     return obj
