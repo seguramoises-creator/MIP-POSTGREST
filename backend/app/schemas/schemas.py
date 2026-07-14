@@ -15,7 +15,8 @@ class LoginRequest(BaseModel):
 
 class UsuarioCreate(BaseModel):
     username: str
-    email: EmailStr
+    # Email OPCIONAL: si se envía debe ser válido; vacío/espacios → None (sin correo).
+    email: Optional[EmailStr] = None
     password: str
     nombre_completo: str
     rol: str
@@ -23,11 +24,19 @@ class UsuarioCreate(BaseModel):
     rm_id: Optional[int] = None
     gerente_id: Optional[int] = None
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def _email_vacio_a_none(cls, v):
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s or None
+
 class UsuarioResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     username: str
-    email: str
+    email: Optional[str] = None
     nombre_completo: str
     rol: str
     pais_codigo: Optional[str]
@@ -46,6 +55,14 @@ class UsuarioUpdate(BaseModel):
     pais_codigo: Optional[str] = None
     rm_id: Optional[int] = None
     gerente_id: Optional[int] = None
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _email_vacio_a_none(cls, v):
+        if v is None:
+            return None
+        s = str(v).strip()
+        return s or None
 
 class PasswordChange(BaseModel):
     password_actual: str

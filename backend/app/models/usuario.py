@@ -24,7 +24,10 @@ class Usuario(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
-    email: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
+    # Email OPCIONAL (jul-2026): usuarios sin correo (login por username). Único cuando
+    # existe; en Postgres un índice único admite múltiples NULL, así que varios usuarios
+    # pueden no tener correo sin colisionar.
+    email: Mapped[str | None] = mapped_column(String(200), unique=True, nullable=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     nombre_completo: Mapped[str] = mapped_column(String(200), nullable=False)
     rol: Mapped[Rol] = mapped_column(Enum(Rol), nullable=False)
