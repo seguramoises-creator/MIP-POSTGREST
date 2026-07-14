@@ -84,10 +84,10 @@ def test_rechazado_no_cuenta():
     assert cuenta_en_ciclo(_med(estado_aprobacion="RECHAZADO"), _ORD[10], _ORD) is False
 
 
-def test_alta_aprobada_no_cuenta_en_el_ciclo_de_solicitud_pero_si_en_el_siguiente():
-    # Solicitada en ciclo 10 (aprobada): no cuenta en 10, sí en 11.
+def test_alta_aprobada_cuenta_en_el_mismo_ciclo_de_solicitud():
+    # v2 (jul-2026): aprobada con alta en ciclo 10 → cuenta desde el MISMO ciclo 10.
     m = _med(estado_aprobacion="APROBADO", ciclo_alta_id=10)
-    assert cuenta_en_ciclo(m, _ORD[10], _ORD) is False
+    assert cuenta_en_ciclo(m, _ORD[10], _ORD) is True
     assert cuenta_en_ciclo(m, _ORD[11], _ORD) is True
 
 
