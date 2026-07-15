@@ -22,3 +22,12 @@ export const mmCrear = (p: Partial<MaestroMedico> & { pais_codigo: string; confi
   api.post<MaestroMedico>('/medicos/maestro', p).then(r => r.data);
 export const mmActualizar = (id: number, p: Partial<MaestroMedico>) =>
   api.put<MaestroMedico>(`/medicos/maestro/${id}`, p).then(r => r.data);
+
+export interface ImportPreview { filas: number; nuevos: number; actualizados: number; posibles_duplicados: number; errores: number; detalle_errores: { fila: number; error: string }[]; }
+export interface ImportResultado { creados: number; actualizados: number; duplicados_marcados: number; errores: { fila: number; error: string }[]; }
+
+const _fd = (file: File) => { const fd = new FormData(); fd.append('archivo', file); return fd; };
+export const mmPreview = (paisCodigo: string, file: File) =>
+  api.post<ImportPreview>('/medicos/maestro/preview', _fd(file), { params: { pais_codigo: paisCodigo } }).then(r => r.data);
+export const mmImportar = (paisCodigo: string, file: File) =>
+  api.post<ImportResultado>('/medicos/maestro/importar', _fd(file), { params: { pais_codigo: paisCodigo } }).then(r => r.data);

@@ -8,8 +8,9 @@ import {
   Box, Grid, Card, CardContent, Typography, TextField, MenuItem, Button, Stack,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip,
   Dialog, DialogTitle, DialogContent, DialogActions, Alert, IconButton, Tooltip,
-  CircularProgress, InputAdornment,
+  CircularProgress, InputAdornment, Stepper, Step, StepLabel,
 } from '@mui/material';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import SearchIcon from '@mui/icons-material/Search';
@@ -17,8 +18,8 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
-  mmListar, mmKpis, mmCrear, mmActualizar,
-  type MaestroMedico,
+  mmListar, mmKpis, mmCrear, mmActualizar, mmPreview, mmImportar,
+  type MaestroMedico, type ImportPreview, type ImportResultado,
 } from '../../services/maestroMedicos.service';
 
 type Cat = { id: number; nombre: string };
@@ -42,6 +43,32 @@ export default function MaestroMedicos() {
   const [form, setForm] = useState<Record<string, any>>({});
   const [msg, setMsg] = useState<{ t: string; tipo: 'success' | 'error' } | null>(null);
   const [dupBlando, setDupBlando] = useState<{ mensaje: string; coincidencias: any[] } | null>(null);
+  // Importación Excel (Stepper)
+  const [openImport, setOpenImport] = useState(false);
+  const [impPaso, setImpPaso] = useState(0);
+  const [impFile, setImpFile] = useState<File | null>(null);
+  const [impPreview, setImpPreview] = useState<ImportPreview | null>(null);
+  const [impResultado, setImpResultado] = useState<ImportResultado | null>(null);
+  const [impBusy, setImpBusy] = useState(false);
+
+  const cerrarImport = () => {
+    setOpenImport(false); setImpPaso(0); setImpFile(null);
+    setImpPreview(null); setImpResultado(null); setImpBusy(false);
+  };
+  const previsualizar = async () => {
+    if (!impFile || !paisCodigo) return;
+    setImpBusy(true);
+    try { setImpPreview(await mmPreview(paisCodigo, impFile)); setImpPaso(1); }
+    catch (e: any) { flash(e?.response?.data?.detail || e?.message || 'No se pudo previsualizar', 'error'); }
+    finally { setImpBusy(false); }
+  };
+  const ejecutarImport = async () => {
+    if (!impFile || !paisCodigo) return;
+    setImpBusy(true);
+    try { setImpResultado(await mmImportar(paisCodigo, impFile)); setImpPaso(2); refrescar(); }
+    catch (e: any) { flash(e?.response?.data?.detail || e?.message || 'No se pudo importar', 'error'); }
+    finally { setImpBusy(false); }
+  };
 
   const flash = (t: string, tipo: 'success' | 'error' = 'success') => {
     setMsg({ t, tipo }); setTimeout(() => setMsg(null), 5000);
@@ -157,9 +184,8 @@ export default function MaestroMedicos() {
             </TextField>
             <Box sx={{ flex: 1 }} />
             <Tooltip title="Actualizar"><IconButton onClick={refrescar}><RefreshIcon /></IconButton></Tooltip>
-            <Tooltip title="Importar/Exportar Excel — próximamente (Fase 3/5)">
-              <span><Button size="small" variant="outlined" disabled>Importar / Exportar</Button></span>
-            </Tooltip>
+            <Button size="small" variant="outlined" startIcon={<UploadFileIcon />}
+              disabled={!paisCodigo} onClick={() => setOpenImport(true)}>Importar Excel</Button>
             <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={abrirCrear}>
               Nuevo médico
             </Button>
@@ -277,6 +303,73 @@ export default function MaestroMedicos() {
             onClick={() => guardar.mutate(true)}>
             Crear de todas formas
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Importación Excel — Stepper */}
+      <Dialog open={openImport} onClose={cerrarImport} maxWidth="sm" fullWidth>
+        <DialogTitle>Importar Maestro de Médicos ({paisCodigo})</DialogTitle>
+        <DialogContent>
+          <Stepper activeStep={impPaso} sx={{ my: 2 }}>
+            <Step><StepLabel>Archivo</StepLabel></Step>
+            <Step><StepLabel>Previsualizar</StepLabel></Step>
+            <Step><StepLabel>Resultado</StepLabel></Step>
+          </Stepper>
+
+          {impPaso === 0 && (
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Sube un .xlsx con al menos la columna <b>nombre</b>. Columnas reconocidas:
+                codigo, cedula, exequatur, telefono, email, direccion, sector, observaciones,
+                especialidad_id, provincia_id, municipio_id, centro_medico_id.
+              </Typography>
+              <Button variant="outlined" component="label" startIcon={<UploadFileIcon />}>
+                {impFile ? impFile.name : 'Seleccionar archivo .xlsx'}
+                <input hidden type="file" accept=".xlsx"
+                  onChange={(e) => setImpFile(e.target.files?.[0] || null)} />
+              </Button>
+            </Box>
+          )}
+
+          {impPaso === 1 && impPreview && (
+            <Box>
+              <Alert severity="info" sx={{ mb: 1.5 }}>
+                {impPreview.filas} filas · <b>{impPreview.nuevos}</b> nuevos ·{' '}
+                <b>{impPreview.actualizados}</b> actualizados ·{' '}
+                <b>{impPreview.posibles_duplicados}</b> posibles duplicados ·{' '}
+                <b>{impPreview.errores}</b> con error.
+              </Alert>
+              {impPreview.detalle_errores.length > 0 && (
+                <Box component="ul" sx={{ m: 0, pl: 2, maxHeight: 160, overflow: 'auto' }}>
+                  {impPreview.detalle_errores.map((e, i) => (
+                    <li key={i}>Fila {e.fila}: {e.error}</li>
+                  ))}
+                </Box>
+              )}
+            </Box>
+          )}
+
+          {impPaso === 2 && impResultado && (
+            <Alert severity="success">
+              Importación completada — <b>{impResultado.creados}</b> creados,{' '}
+              <b>{impResultado.actualizados}</b> actualizados,{' '}
+              <b>{impResultado.duplicados_marcados}</b> marcados como posible duplicado,{' '}
+              <b>{impResultado.errores.length}</b> con error.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cerrarImport}>{impPaso === 2 ? 'Cerrar' : 'Cancelar'}</Button>
+          {impPaso === 0 && (
+            <Button variant="contained" disabled={!impFile || impBusy} onClick={previsualizar}>
+              {impBusy ? <CircularProgress size={18} /> : 'Previsualizar'}
+            </Button>
+          )}
+          {impPaso === 1 && (
+            <Button variant="contained" color="warning" disabled={impBusy} onClick={ejecutarImport}>
+              {impBusy ? <CircularProgress size={18} /> : 'Confirmar importación'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Box>
