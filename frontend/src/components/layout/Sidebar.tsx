@@ -61,7 +61,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Maestros y planeación',
     items: [
       { label: 'Panel Médico',          path: '/visita/panel-medico', icon: <MedicalServices />, roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
-      { label: 'Categorización Médica', path: '/categorizacion',      icon: <LocalHospital />,   roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_MARCA', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
+      { label: 'Médicos',               path: '/medicos',             icon: <LocalHospital />,   roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_MARCA', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
       { label: 'Planeación Ciclo',      path: '/visita/planeacion',   icon: <EventNote />,       roles: ['ADMIN', 'REPRESENTANTE_MEDICO'] },
     ],
   },
