@@ -102,3 +102,96 @@ def actualizar_maestro(db: Session, medico: Medico, cambios: dict, usuario_id=No
     db.commit(); db.refresh(medico)
     logger.info(f"Maestro médico actualizado id={medico.id} campos={list(cambios)} por={usuario_id}")
     return medico
+
+
+# ── Importación Excel (upsert idempotente por llave dura) ───────────────────────
+_COLS_GENERALES = ("codigo", "cedula", "exequatur", "telefono", "email",
+                   "direccion", "sector", "observaciones",
+                   "especialidad_id", "provincia_id", "municipio_id", "centro_medico_id")
+
+
+def _s(v):
+    """Normaliza a str no vacío o None (tolera NaN/None/espacios)."""
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s or None if s.lower() != "nan" else None
+
+
+def _campos_generales(fila: dict) -> dict:
+    """Campos generales presentes y no vacíos (no pisa con vacío al actualizar)."""
+    out = {}
+    for k in _COLS_GENERALES:
+        if k in fila:
+            v = fila[k]
+            v = _s(v) if not str(k).endswith("_id") else v
+            if v not in (None, "") and not (isinstance(v, float) and v != v):  # descarta NaN
+                out[k] = v
+    return out
+
+
+def _resolver_por_llave_dura(db: Session, pais_codigo: str, exequatur=None, cedula=None,
+                             codigo=None) -> Medico | None:
+    """Busca un médico existente por exequátur → cédula → código (en ese orden)."""
+    base = db.query(Medico).filter(Medico.pais_codigo == pais_codigo, Medico.activo == True)  # noqa: E712
+    for campo, valor in ((Medico.exequatur, exequatur), (Medico.cedula, cedula), (Medico.codigo, codigo)):
+        if valor:
+            m = base.filter(campo == valor).first()
+            if m:
+                return m
+    return None
+
+
+def preview_excel(db: Session, pais_codigo: str, filas: list[dict]) -> dict:
+    """Cuenta el efecto de importar SIN persistir: nuevos, actualizados, posibles duplicados."""
+    nuevos = actualiza = dups = 0
+    errores = []
+    for i, fila in enumerate(filas, start=2):  # fila 1 = encabezado
+        nombre = _s(fila.get("nombre"))
+        if not nombre:
+            errores.append({"fila": i, "error": "nombre vacío"}); continue
+        existente = _resolver_por_llave_dura(db, pais_codigo, _s(fila.get("exequatur")),
+                                             _s(fila.get("cedula")), _s(fila.get("codigo")))
+        if existente:
+            actualiza += 1
+        else:
+            d = detectar_duplicados(db, pais_codigo, nombre=nombre,
+                                    centro_medico_id=fila.get("centro_medico_id"),
+                                    provincia_id=fila.get("provincia_id"))
+            if d["blandos"]:
+                dups += 1
+            nuevos += 1
+    return {"filas": len(filas), "nuevos": nuevos, "actualizados": actualiza,
+            "posibles_duplicados": dups, "errores": len(errores), "detalle_errores": errores[:20]}
+
+
+def importar_excel(db: Session, pais_codigo: str, filas: list[dict], usuario_id=None) -> dict:
+    """Upsert por llave dura (exequátur→cédula→código). El Excel es fuente autorizada:
+    si hay coincidencia blanda (nombre+centro) pero no dura, crea igual y la contabiliza."""
+    creados = actualizados = duplicados_marcados = 0
+    errores = []
+    for i, fila in enumerate(filas, start=2):
+        try:
+            nombre = _s(fila.get("nombre"))
+            if not nombre:
+                errores.append({"fila": i, "error": "nombre vacío"}); continue
+            campos = _campos_generales(fila)
+            existente = _resolver_por_llave_dura(db, pais_codigo, campos.get("exequatur"),
+                                                 campos.get("cedula"), campos.get("codigo"))
+            if existente:
+                actualizar_maestro(db, existente, campos, usuario_id)
+                actualizados += 1
+            else:
+                d = detectar_duplicados(db, pais_codigo, nombre=nombre,
+                                        centro_medico_id=fila.get("centro_medico_id"),
+                                        provincia_id=fila.get("provincia_id"))
+                if d["blandos"]:
+                    duplicados_marcados += 1
+                crear_maestro(db, pais_codigo, {"nombre": nombre, **campos}, origen="EXCEL",
+                              confirmar_duplicado=True, usuario_id=usuario_id)
+                creados += 1
+        except Exception as e:
+            db.rollback()
+            errores.append({"fila": i, "error": str(e)})
+    return {"creados": creados, "actualizados": actualizados,
+            "duplicados_marcados": duplicados_marcados, "errores": errores}

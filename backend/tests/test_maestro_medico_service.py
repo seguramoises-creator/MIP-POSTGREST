@@ -124,3 +124,35 @@ def test_detectar_blando_requiere_ubicacion():
     res = svc.detectar_duplicados(db, "DO", nombre="Jose Pena")
     assert res["blandos"] == [] and res["duros"] == []
     db.query.assert_not_called()
+
+
+# ── importar_excel: upsert idempotente por llave dura ───────────────────────────
+def test_importar_upsert(monkeypatch):
+    llamadas = {"crear": []}
+    existentes = {"E1": SimpleNamespace(id=1, exequatur="E1", cedula=None, codigo=None, telefono="OLD")}
+    monkeypatch.setattr(svc, "_resolver_por_llave_dura",
+        lambda db, pais, exequatur=None, cedula=None, codigo=None: existentes.get(exequatur))
+    monkeypatch.setattr(svc, "detectar_duplicados", lambda *a, **k: {"duros": [], "blandos": []})
+    monkeypatch.setattr(svc, "crear_maestro",
+        lambda db, pais, datos, **k: (llamadas["crear"].append(datos) or SimpleNamespace(id=99)))
+    def _act(db, m, campos, uid=None):
+        for k2, v in campos.items(): setattr(m, k2, v)
+        return m
+    monkeypatch.setattr(svc, "actualizar_maestro", _act)
+
+    filas = [
+        {"nombre": "JUAN PEREZ", "exequatur": "E1", "telefono": "NUEVO"},  # existe → actualiza
+        {"nombre": "MARIA LOPEZ", "exequatur": "E2"},                       # no existe → crea
+    ]
+    res = svc.importar_excel(MagicMock(), "DO", filas)
+    assert res["actualizados"] == 1 and res["creados"] == 1 and res["errores"] == []
+    assert existentes["E1"].telefono == "NUEVO"          # teléfono sincronizado, no duplicado
+    assert llamadas["crear"][0]["exequatur"] == "E2"     # el nuevo se creó
+
+
+def test_importar_fila_sin_nombre_es_error(monkeypatch):
+    monkeypatch.setattr(svc, "_resolver_por_llave_dura", lambda *a, **k: None)
+    monkeypatch.setattr(svc, "detectar_duplicados", lambda *a, **k: {"duros": [], "blandos": []})
+    monkeypatch.setattr(svc, "crear_maestro", lambda *a, **k: SimpleNamespace(id=1))
+    res = svc.importar_excel(MagicMock(), "DO", [{"nombre": ""}, {"exequatur": "X"}])
+    assert res["creados"] == 0 and len(res["errores"]) == 2

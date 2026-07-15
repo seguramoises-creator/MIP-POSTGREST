@@ -4,7 +4,10 @@ Fuente única del dato general del médico (país-level). La categorización
 (cat.*) y la asignación (Visita.DIM_MedicoVisita) referencian a este maestro.
 """
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
+from io import BytesIO
+
+import pandas as pd
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -55,6 +58,32 @@ def kpis(db: Session = Depends(get_db), _u: Usuario = RequireLectura):
         Medico.activo == True, ~Medico.id.in_(asignados or {-1})).scalar() or 0  # noqa: E712
     return {"total": total, "activos": activos, "nuevos_mes": nuevos,
             "sin_asignacion": sin_asig, "pendientes_validacion": pendientes}
+
+
+def _leer_excel(contenido: bytes) -> list[dict]:
+    """Valida magic bytes .xlsx y devuelve las filas como dicts (columnas en minúsculas)."""
+    if contenido[:4] != b"PK\x03\x04":
+        raise HTTPException(400, "El archivo no es un .xlsx válido.")
+    try:
+        df = pd.read_excel(BytesIO(contenido))
+    except Exception as e:
+        raise HTTPException(400, f"No se pudo leer el Excel: {e}")
+    df.columns = [str(c).strip().lower() for c in df.columns]
+    if "nombre" not in df.columns:
+        raise HTTPException(400, "El Excel debe tener una columna 'nombre'.")
+    return df.to_dict("records")
+
+
+@router.post("/maestro/preview", summary="Previsualiza el efecto de importar (no persiste)")
+async def preview_import(pais_codigo: str = Query(...), archivo: UploadFile = File(...),
+                         db: Session = Depends(get_db), _u: Usuario = RequireEscritura):
+    return svc.preview_excel(db, pais_codigo, _leer_excel(await archivo.read()))
+
+
+@router.post("/maestro/importar", summary="Importa (upsert) el maestro desde Excel")
+async def ejecutar_import(pais_codigo: str = Query(...), archivo: UploadFile = File(...),
+                          db: Session = Depends(get_db), current_user: Usuario = RequireEscritura):
+    return svc.importar_excel(db, pais_codigo, _leer_excel(await archivo.read()), current_user.id)
 
 
 @router.get("/maestro/{medico_id}", response_model=MaestroMedicoResponse)
