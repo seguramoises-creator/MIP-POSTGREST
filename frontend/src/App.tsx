@@ -55,6 +55,17 @@ const theme = createTheme({
   typography: { fontFamily: '"Inter","Roboto","Helvetica","Arial",sans-serif' },
   shape: { borderRadius: 8 },
   components: {
+    // Congelamiento en móvil (Safari iOS / Android): el scroll-lock de los overlays
+    // de MUI pone el <body> en position:fixed + backdrop y en Safari iOS a veces NO
+    // se revierte al cerrar; tras abrir varios Select/menús (los filtros) el body
+    // queda bloqueado con el velo gris encima = pantalla congelada. `disableScrollLock`
+    // evita esa manipulación del body en TODOS los overlays. Tradeoff: el fondo puede
+    // desplazarse con un menú abierto — aceptable frente al congelamiento.
+    MuiModal: { defaultProps: { disableScrollLock: true } },
+    MuiPopover: { defaultProps: { disableScrollLock: true } },
+    MuiMenu: { defaultProps: { disableScrollLock: true } },
+    MuiDialog: { defaultProps: { disableScrollLock: true } },
+    MuiDrawer: { defaultProps: { disableScrollLock: true } },
     // Elegancia: las tarjetas "outlined" llevan un borde azul oscuro y una
     // sombra sutil del mismo tono, consistente en toda la app.
     MuiCard: {
