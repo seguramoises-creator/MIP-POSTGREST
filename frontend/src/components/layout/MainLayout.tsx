@@ -37,6 +37,11 @@ export default function MainLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);   // menú lateral en móvil (overlay)
   const [instalarOpen, setInstalarOpen] = useState(false); // modal "Instalar app" (PWA)
 
+  // Red de seguridad: cerrar el menú lateral móvil en CADA cambio de ruta. Evita que
+  // el Drawer (o su backdrop) quede abierto/atascado tras navegar — causa del velo gris
+  // congelado en Safari iOS. Complementa el onMobileClose del click en cada ítem.
+  useEffect(() => { setMobileOpen(false); }, [pathname]);
+
   // El representante ve su Gerente de Distrito de la línea arriba a la derecha.
   useEffect(() => {
     if (rol === 'REPRESENTANTE_MEDICO') miGerente().then(setGd).catch(() => setGd(null));

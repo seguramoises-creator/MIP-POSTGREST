@@ -290,18 +290,23 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }:
 
       {/* MÓVIL/TABLET (< md): drawer temporal en overlay — como app nativa.
           Oculto por defecto; se abre con el botón ☰ del AppBar y se cierra al navegar. */}
-      <Drawer
-        variant="temporary"
-        open={mobileOpen}
-        onClose={onMobileClose}
-        ModalProps={{ keepMounted: true }}
-        sx={{
-          display: { xs: 'block', md: 'none' },
-          '& .MuiDrawer-paper': { ...paperSx, width: DRAWER_WIDTH },
-        }}
-      >
-        {body(false, false)}
-      </Drawer>
+      {/* Montaje CONDICIONAL: el Drawer temporal solo existe en el árbol cuando el menú
+          está abierto. Al cerrar (mobileOpen=false), React DESMONTA el Drawer y su portal
+          (backdrop incluido) directamente — sin depender de la transición de salida de
+          MUI, que en Safari iOS no disparaba `onExited` y dejaba el backdrop atascado
+          visible tapando la pantalla (el velo gris = congelamiento). `mobileOpen` solo se
+          pone true desde el botón ☰, que únicamente existe en móvil, así que esto nunca
+          se monta en escritorio. */}
+      {mobileOpen && (
+        <Drawer
+          variant="temporary"
+          open
+          onClose={onMobileClose}
+          sx={{ '& .MuiDrawer-paper': { ...paperSx, width: DRAWER_WIDTH } }}
+        >
+          {body(false, false)}
+        </Drawer>
+      )}
     </>
   );
 }
