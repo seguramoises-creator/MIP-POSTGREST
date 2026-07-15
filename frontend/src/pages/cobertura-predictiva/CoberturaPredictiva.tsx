@@ -356,6 +356,31 @@ const DashboardTab = ({
 
   if (!data) return null;
 
+  // Cuando hay un representante filtrado, las tarjetas KPI de arriba deben reflejar
+  // SOLO ese subconjunto (antes mostraban siempre el agregado país → "no cambia").
+  const filtroActivo = !!(filtroVM ?? '').trim();
+  const resumen = (() => {
+    if (!filtroActivo) return data;
+    const rms = sortedRMs;
+    const sum = (f: (r: DetalleRM) => number) => rms.reduce((a, r) => a + (f(r) || 0), 0);
+    const avg = (f: (r: DetalleRM) => number) => (rms.length ? sum(f) / rms.length : 0);
+    const cnt = (e: string) => rms.filter(r => r.estado_cobertura === e).length;
+    return {
+      ...data,
+      total_rms: rms.length,
+      cobertura_actual_promedio_pct: avg(r => r.cobertura_actual_pct),
+      cobertura_proyectada_promedio_pct: avg(r => r.cobertura_proyectada_pct),
+      medicos_programados_total: sum(r => r.medicos_programados),
+      medicos_unicos_visitados_total: sum(r => r.medicos_visitados_unicos),
+      contactos_realizados_total: sum(r => r.contactos_realizados),
+      contactos_meta_total: sum(r => r.contactos_meta_ciclo),
+      medicos_diarios_requeridos_max: rms.reduce((m, r) => Math.max(m, r.medicos_diarios_requeridos || 0), 0),
+      rms_en_verde: cnt('Verde'),
+      rms_en_amarillo: cnt('Amarillo'),
+      rms_en_rojo: cnt('Rojo'),
+    };
+  })();
+
   const progresoCiclo = data.dias_habiles_totales
     ? Math.round(data.dias_habiles_transcurridos / data.dias_habiles_totales * 100)
     : 0;
@@ -408,36 +433,36 @@ const DashboardTab = ({
       <Grid container spacing={1.5} mb={2}>
         <KpiCard
           title="Cobertura actual promedio"
-          value={`${data.cobertura_actual_promedio_pct.toFixed(1)}%`}
+          value={`${resumen.cobertura_actual_promedio_pct.toFixed(1)}%`}
           subtitle={`Meta: ${data.meta_cobertura_pct?.toFixed(0) ?? 90}%`}
-          color={data.cobertura_actual_promedio_pct >= (data.meta_cobertura_pct ?? 90) ? '#2e7d32' : '#c62828'}
+          color={resumen.cobertura_actual_promedio_pct >= (data.meta_cobertura_pct ?? 90) ? '#2e7d32' : '#c62828'}
           icon={<People />}
         />
         <KpiCard
           title="Cobertura proyectada"
-          value={`${data.cobertura_proyectada_promedio_pct.toFixed(1)}%`}
+          value={`${resumen.cobertura_proyectada_promedio_pct.toFixed(1)}%`}
           subtitle="Run-rate al fin de ciclo"
-          color={data.cobertura_proyectada_promedio_pct >= (data.meta_cobertura_pct ?? 90) ? '#2e7d32' : '#f57c00'}
+          color={resumen.cobertura_proyectada_promedio_pct >= (data.meta_cobertura_pct ?? 90) ? '#2e7d32' : '#f57c00'}
           icon={<TrendingUp />}
         />
         <KpiCard
           title="Médicos visitados / Prog."
-          value={`${data.medicos_unicos_visitados_total} / ${data.medicos_programados_total}`}
+          value={`${resumen.medicos_unicos_visitados_total} / ${resumen.medicos_programados_total}`}
           subtitle="Médicos únicos"
           color="#1565c0"
           icon={<FlagOutlined />}
         />
         <KpiCard
           title="Contactos realizados"
-          value={data.contactos_realizados_total.toLocaleString()}
-          subtitle={`Meta: ${data.contactos_meta_total.toLocaleString()}`}
+          value={resumen.contactos_realizados_total.toLocaleString()}
+          subtitle={`Meta: ${resumen.contactos_meta_total.toLocaleString()}`}
           color="#6a1b9a"
           icon={<SpeedOutlined />}
         />
-        <KpiCard title="RMs en Verde" value={data.rms_en_verde} subtitle={`de ${data.total_rms}`} color="#2e7d32" icon={<CheckCircle />} xs={6} sm={2} />
-        <KpiCard title="RMs en Amarillo" value={data.rms_en_amarillo} subtitle="Seguimiento" color="#f57c00" icon={<Warning />} xs={6} sm={2} />
-        <KpiCard title="RMs en Rojo" value={data.rms_en_rojo} subtitle="Acción inmediata" color="#c62828" icon={<Cancel />} xs={6} sm={2} />
-        <KpiCard title="Méd. diarios req. (máx)" value={data.medicos_diarios_requeridos_max} subtitle="VM más atrasado" color="#c62828" icon={<ArrowUpward />} xs={6} sm={2} />
+        <KpiCard title="RMs en Verde" value={resumen.rms_en_verde} subtitle={`de ${resumen.total_rms}`} color="#2e7d32" icon={<CheckCircle />} xs={6} sm={2} />
+        <KpiCard title="RMs en Amarillo" value={resumen.rms_en_amarillo} subtitle="Seguimiento" color="#f57c00" icon={<Warning />} xs={6} sm={2} />
+        <KpiCard title="RMs en Rojo" value={resumen.rms_en_rojo} subtitle="Acción inmediata" color="#c62828" icon={<Cancel />} xs={6} sm={2} />
+        <KpiCard title="Méd. diarios req. (máx)" value={resumen.medicos_diarios_requeridos_max} subtitle="VM más atrasado" color="#c62828" icon={<ArrowUpward />} xs={6} sm={2} />
       </Grid>
 
       {/* Cobertura por categoría de médico */}
