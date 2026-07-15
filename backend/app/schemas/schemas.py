@@ -758,3 +758,57 @@ class ConfiguracionLsiiUpdate(BaseModel):
     """Nuevo umbral de corte para los cuadrantes D1-D4 (eje Y / eje X, 0-100)."""
     corte_desempeno: Decimal = Field(..., gt=0, le=100)
     corte_receptividad: Decimal = Field(..., gt=0, le=100)
+
+
+# ── Maestro de Médicos ──────────────────────────────────────────────────────
+class MaestroMedicoBase(BaseModel):
+    nombre: str = Field(..., min_length=2, max_length=200)
+    codigo: str | None = Field(None, max_length=50)
+    cedula: str | None = Field(None, max_length=30)
+    exequatur: str | None = Field(None, max_length=50)
+    especialidad_id: int | None = None
+    telefono: str | None = Field(None, max_length=40)
+    email: str | None = Field(None, max_length=200)
+    direccion: str | None = Field(None, max_length=300)
+    provincia_id: int | None = None
+    municipio_id: int | None = None
+    centro_medico_id: int | None = None
+    sector: str | None = Field(None, max_length=100)
+    observaciones: str | None = Field(None, max_length=500)
+    activo: bool = True
+
+
+class MaestroMedicoCrear(MaestroMedicoBase):
+    pais_codigo: str = Field(..., max_length=10)
+    confirmar_duplicado: bool = False
+
+
+class MaestroMedicoActualizar(BaseModel):
+    nombre: str | None = Field(None, min_length=2, max_length=200)
+    codigo: str | None = None
+    cedula: str | None = None
+    exequatur: str | None = None
+    especialidad_id: int | None = None
+    telefono: str | None = None
+    email: str | None = None
+    direccion: str | None = None
+    provincia_id: int | None = None
+    municipio_id: int | None = None
+    centro_medico_id: int | None = None
+    sector: str | None = None
+    observaciones: str | None = None
+    activo: bool | None = None
+
+
+class MaestroMedicoResponse(MaestroMedicoBase):
+    id: int
+    pais_codigo: str
+    estado_validacion: str
+    origen: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MaestroMedicoDuplicados(BaseModel):
+    tipo: str  # "duro" | "blando"
+    mensaje: str
+    coincidencias: list[dict]
