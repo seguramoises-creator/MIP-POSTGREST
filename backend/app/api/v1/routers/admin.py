@@ -763,6 +763,27 @@ def reset_password_usuario(id: int, data: AdminSetPassword, db: Session = Depend
     return Msg(message=f"Contraseña de {obj.username} restablecida y cuenta desbloqueada")
 
 
+@router.patch("/usuarios/{id}/bloqueo", response_model=UsuarioResponse, summary="Bloquear/desbloquear un usuario (ADMIN)")
+def set_bloqueo_usuario(id: int, body: dict, db: Session = Depends(get_db), _=AdminOnly):
+    """Casilla "Bloqueado" desde Administración de Usuarios.
+    - `{"bloqueado": false}` → DESBLOQUEA (limpia intentos y bloqueo temporal).
+    - `{"bloqueado": true}`  → bloquea manualmente (bloqueo indefinido).
+    """
+    from datetime import datetime, timezone, timedelta
+    obj = db.query(Usuario).filter(Usuario.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Usuario no encontrado")
+    bloquear = bool(body.get("bloqueado"))
+    if bloquear:
+        # Bloqueo manual indefinido (fecha muy lejana). Se levanta al desmarcar.
+        obj.bloqueado_hasta = datetime.now(timezone.utc) + timedelta(days=3650)
+    else:
+        obj.intentos_fallidos = 0
+        obj.bloqueado_hasta = None
+    db.commit(); db.refresh(obj)
+    return obj
+
+
 # ── Parámetros de sistema en runtime (solo ADMIN) ─────────────────────────────
 from app.core.config import settings as _settings   # noqa: E402
 from app.services import config_service as _cfg      # noqa: E402

@@ -43,6 +43,7 @@ class UsuarioResponse(BaseModel):
     rm_id: Optional[int] = None
     gerente_id: Optional[int] = None
     activo: bool
+    bloqueado: bool = False          # cuenta bloqueada ahora (bloqueado_hasta futuro)
     ultimo_login: Optional[datetime]
     debe_cambiar_password: bool = False
     password_expira_en_dias: Optional[int] = None

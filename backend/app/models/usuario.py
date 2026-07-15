@@ -43,6 +43,17 @@ class Usuario(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    @property
+    def bloqueado(self) -> bool:
+        """True si la cuenta está bloqueada AHORA (bloqueado_hasta en el futuro).
+        Comparación timezone-aware: bloqueado_hasta se guarda naive (UTC)."""
+        if self.bloqueado_hasta is None:
+            return False
+        bh = self.bloqueado_hasta
+        if bh.tzinfo is None:
+            bh = bh.replace(tzinfo=timezone.utc)
+        return bh > datetime.now(timezone.utc)
+
 
 class TokenRevocado(Base):
     """

@@ -9,7 +9,7 @@ import {
   TableContainer, TableHead, TableRow, Paper, Button, Chip, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, Alert,
   CircularProgress, MenuItem, Select, FormControl, InputLabel,
-  IconButton, Tooltip, Stack, Divider, InputAdornment,
+  IconButton, Tooltip, Stack, Divider, InputAdornment, Checkbox,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -182,6 +182,17 @@ export default function Usuarios() {
     onError: (e: any) => showMsg(errorMsg(e), 'error'),
   });
 
+  // Bloquear/desbloquear un usuario con la casilla "Bloqueado" (solo ADMIN).
+  const bloqueoMut = useMutation({
+    mutationFn: (v: { id: number; bloqueado: boolean }) =>
+      api.patch(`/admin/usuarios/${v.id}/bloqueo`, { bloqueado: v.bloqueado }),
+    onSuccess: (_r, v) => {
+      qc.invalidateQueries({ queryKey: ['usuarios'] });
+      showMsg(v.bloqueado ? 'Usuario bloqueado' : 'Usuario desbloqueado');
+    },
+    onError: (e: any) => showMsg(errorMsg(e), 'error'),
+  });
+
   // Restablecer contraseña de un usuario (solo ADMIN) — desde la edición.
   const resetPassMut = useMutation({
     mutationFn: () => api.post(`/admin/usuarios/${editItem?.id}/reset-password`, { password_nuevo: nuevaPass }),
@@ -249,7 +260,7 @@ export default function Usuarios() {
               <Table size="small">
                 <TableHead sx={{ bgcolor: 'primary.main' }}>
                   <TableRow>
-                    {['#', 'Usuario', 'Nombre', 'Email', 'Rol', 'Estado', ''].map((h) => (
+                    {['#', 'Usuario', 'Nombre', 'Email', 'Rol', 'Estado', 'Bloqueado', ''].map((h) => (
                       <TableCell key={h} sx={{ color: 'white', fontWeight: 700 }}>{h}</TableCell>
                     ))}
                   </TableRow>
@@ -257,7 +268,7 @@ export default function Usuarios() {
                 <TableBody>
                   {usuarios.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                      <TableCell colSpan={8} align="center" sx={{ py: 4, color: 'text.secondary' }}>
                         Sin usuarios registrados
                       </TableCell>
                     </TableRow>
@@ -282,6 +293,16 @@ export default function Usuarios() {
                             size="small"
                             variant={row.activo ? 'filled' : 'outlined'}
                           />
+                        </TableCell>
+                        <TableCell>
+                          <Tooltip title={row.bloqueado ? 'Bloqueado — desmarca para desbloquear' : 'Marca para bloquear el acceso'}>
+                            <Checkbox
+                              size="small" color="error"
+                              checked={!!row.bloqueado}
+                              disabled={bloqueoMut.isPending}
+                              onChange={() => bloqueoMut.mutate({ id: row.id, bloqueado: !row.bloqueado })}
+                            />
+                          </Tooltip>
                         </TableCell>
                         <TableCell>
                           <Stack direction="row" spacing={0.5}>
