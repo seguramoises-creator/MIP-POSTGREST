@@ -664,14 +664,18 @@ def dashboard_vivo(db: Session, ciclo_codigo: str, pais_codigo: str,
 
 
 def categorias_vivo(db: Session, ciclo_codigo: str, pais_codigo: str,
-                    gd: Optional[str] = None, linea: Optional[str] = None) -> list:
-    """Avance por categoría de médico (A/B/C/D) EN VIVO: planeados vs visitados."""
+                    gd: Optional[str] = None, linea: Optional[str] = None,
+                    rep: Optional[str] = None) -> list:
+    """Avance por categoría de médico (A/B/C/D) EN VIVO: planeados vs visitados.
+    `rep` = código del representante para acotar a un solo VM (opcional)."""
     ciclo = _resolver_ciclo_vivo(db, ciclo_codigo, pais_codigo)
     if not ciclo:
         return []
     lineas_map = {l.id: l.nombre for l in db.query(Linea).all()}
     gerentes_map = {g.id: g.nombre for g in db.query(Gerente).all()}
     rms = _rms_con_planeacion(db, ciclo.id, pais_codigo, linea, gd, lineas_map, gerentes_map)
+    if rep:
+        rms = [rm for rm in rms if (rm.codigo or "").lower() == rep.lower()]
     scope_ids = [rm.id for rm in rms]
     if not scope_ids:
         return []

@@ -200,11 +200,13 @@ def vivo_categorias(
     pais_codigo: str = Query(..., description="Código de país, ej. DO"),
     gd: Optional[str] = Query(None, description="Filtrar por nombre de GD"),
     linea: Optional[str] = Query(None, description="Filtrar por nombre de línea"),
+    rep: Optional[str] = Query(None, description="Filtrar por código de representante"),
     db: Session = Depends(get_db),
     current_user: Usuario = AnyAuth,
 ):
     gd = _scope_gd_nombre(db, current_user, gd)  # el GD se limita a su equipo
-    return categorias_vivo(db, ciclo_codigo=ciclo_codigo, pais_codigo=pais_codigo, gd=gd, linea=linea)
+    return categorias_vivo(db, ciclo_codigo=ciclo_codigo, pais_codigo=pais_codigo,
+                           gd=gd, linea=linea, rep=rep)
 
 
 # ─────────────────────────────────────────────────────────────────────────

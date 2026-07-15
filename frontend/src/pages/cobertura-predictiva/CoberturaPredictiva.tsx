@@ -690,10 +690,12 @@ export default function CoberturaPredictiva() {
   }, [dashData]);
 
   const { data: catData, isLoading: catLoading } = useQuery<CoberturaCategoria[]>({
-    queryKey: ['cob-categorias', cicloSeleccionado, paisCodigo, gdFiltro],
+    queryKey: ['cob-categorias', cicloSeleccionado, paisCodigo, gdFiltro, lineaFiltro, busquedaVM],
     queryFn: () => {
       const p = new URLSearchParams({ ciclo_codigo: cicloSeleccionado, pais_codigo: paisCodigo });
       if (gdFiltro) p.set('gd', gdFiltro);
+      if (lineaFiltro) p.set('linea', lineaFiltro);
+      if (busquedaVM) p.set('rep', busquedaVM);   // filtra el panel de categorías por representante
       return api.get(`/cobertura-predictiva/vivo/categorias?${p}`).then(r => r.data);
     },
     enabled: dashboardEnabled,
