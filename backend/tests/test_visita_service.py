@@ -459,3 +459,41 @@ def test_medico_pendiente_no_visitable():
     aprob = SimpleNamespace(id=5, vm_id=3, activo=True, estado_aprobacion="APROBADO")
     db.query.return_value.filter.return_value.first.return_value = aprob
     assert rs._medico_del_vm(db, 3, 5) is aprob
+
+
+# ── Puente Panel → Maestro (Fase 4.3) ─────────────────────────────────
+from app.schemas.visita import MedicoVisitaActualizar
+import app.services.maestro_medico_service as _mm
+
+
+def test_resolver_o_crear_maestro_crea_pendiente(monkeypatch):
+    monkeypatch.setattr(visita_service, "_pais_de_vm", lambda db, vm: "DO")
+    monkeypatch.setattr(_mm, "_resolver_por_llave_dura", lambda *a, **k: None)  # sin match duro
+    capt = {}
+    monkeypatch.setattr(_mm, "crear_maestro",
+        lambda db, pais, campos, **k: (capt.update(campos=campos, k=k) or SimpleNamespace(id=55)))
+    datos = MedicoVisitaCrear(vm_id=1, nombre_completo="MARIA LOPEZ SANTOS", categoria="A", telefono="8095551234")
+    assert visita_service._resolver_o_crear_maestro(MagicMock(), datos, 1) == 55
+    assert capt["k"].get("origen") == "PANEL" and capt["k"].get("estado") == "PENDIENTE"
+    assert capt["campos"].get("nombre") == "MARIA LOPEZ SANTOS"   # nombre_completo → nombre
+    assert capt["campos"].get("telefono") == "809-555-1234"
+
+
+def test_resolver_o_crear_maestro_linkea_si_existe(monkeypatch):
+    monkeypatch.setattr(visita_service, "_pais_de_vm", lambda db, vm: "DO")
+    monkeypatch.setattr(_mm, "_resolver_por_llave_dura", lambda *a, **k: SimpleNamespace(id=99))
+    datos = MedicoVisitaCrear(vm_id=1, nombre_completo="JUAN X PEREZ", categoria="A", exequatur="E1")
+    assert visita_service._resolver_o_crear_maestro(MagicMock(), datos, 1) == 99   # linkeó, no creó
+
+
+def test_actualizar_sincroniza_solo_generales(monkeypatch):
+    sync = []
+    monkeypatch.setattr(_mm, "actualizar_maestro", lambda db, m, campos, uid=None: sync.append(campos))
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(id=7)  # el maestro
+    medico = SimpleNamespace(id=1, maestro_medico_id=7, nombre_completo="JUAN PEREZ GOMEZ", telefono=None)
+    visita_service.actualizar_medico(db, medico, MedicoVisitaActualizar(telefono="8095551234"), 1)
+    assert sync and sync[-1] == {"telefono": "809-555-1234"}       # general → sincroniza
+    sync.clear()
+    visita_service.actualizar_medico(db, medico, MedicoVisitaActualizar(frecuencia_visita="Mensual"), 1)
+    assert sync == []                                            # asignación → NO sincroniza

@@ -7,7 +7,7 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.models.visita import MedicoVisita
-from app.models.dimensiones import Especialidad, RepresentanteMedico, Linea
+from app.models.dimensiones import Especialidad, RepresentanteMedico, Linea, Medico
 from app.schemas.visita import MedicoVisitaCrear, MedicoVisitaActualizar
 
 
@@ -16,6 +16,44 @@ class DuplicadoMedicoError(Exception):
     def __init__(self, duplicados: list[dict]):
         self.duplicados = duplicados
         super().__init__("Posible duplicidad de médico")
+
+
+# Campos GENERALES del panel que se sincronizan al Maestro (panel → maestro).
+# Los de asignación (frecuencia_visita, zona, ruta, categoría, potencial…) NO se propagan.
+_MAESTRO_SYNC = {
+    "nombre_completo": "nombre", "codigo": "codigo", "especialidad_id": "especialidad_id",
+    "exequatur": "exequatur", "telefono": "telefono", "email": "email",
+    "direccion": "direccion", "sector": "sector",
+}
+
+
+def _pais_de_vm(db: Session, vm_id: int) -> str | None:
+    return db.query(RepresentanteMedico.pais_codigo).filter(RepresentanteMedico.id == vm_id).scalar()
+
+
+def _resolver_o_crear_maestro(db: Session, datos: MedicoVisitaCrear, usuario_id: int | None) -> int | None:
+    """Resuelve el médico central del Maestro para un alta del Panel: match duro
+    (exequátur→código) → linkea; sin match → crea (origen=PANEL, estado=PENDIENTE).
+    Convierte el duplicado del Maestro en DuplicadoMedicoError (409 ya manejado)."""
+    from app.services import maestro_medico_service as mm
+    pais = _pais_de_vm(db, datos.vm_id)
+    if not pais:
+        return None
+    existente = mm._resolver_por_llave_dura(db, pais, mm._s(datos.exequatur), None, mm._s(datos.codigo))
+    if existente:
+        return existente.id
+    campos = {}
+    for src, dst in _MAESTRO_SYNC.items():
+        v = getattr(datos, src, None)
+        if v not in (None, ""):
+            campos[dst] = v
+    try:
+        m = mm.crear_maestro(db, pais, campos, origen="PANEL", estado="PENDIENTE",
+                             confirmar_duplicado=getattr(datos, "confirmar_duplicado", False),
+                             usuario_id=usuario_id)
+    except (mm.DuplicadoDuroError, mm.PosibleDuplicadoError) as e:
+        raise DuplicadoMedicoError(e.coincidencias)
+    return m.id
 
 
 def detectar_duplicados(db: Session, nombre: str, excluir_id: int | None = None) -> list[dict]:
@@ -50,8 +88,11 @@ def crear_medico(db: Session, datos: MedicoVisitaCrear, usuario_id: int | None) 
             raise DuplicadoMedicoError(dups)
     from datetime import date as _date, datetime as _dt, timezone as _tz
     from app.services.visita_aprobacion_service import ciclo_actual_id
+    # Puente al Maestro central: linkea (match duro) o crea el médico del Maestro.
+    maestro_id = _resolver_o_crear_maestro(db, datos, usuario_id)
     medico = MedicoVisita(
         vm_id=datos.vm_id,
+        maestro_medico_id=maestro_id,
         codigo=datos.codigo,
         nombre_completo=datos.nombre_completo,
         nombre=datos.nombre,
@@ -121,6 +162,15 @@ def actualizar_medico(db: Session, medico: MedicoVisita,
         setattr(medico, campo, valor)
     db.commit()
     db.refresh(medico)
+    # Sincronizar al Maestro SOLO los campos generales que cambiaron (los de
+    # asignación —frecuencia, zona, etc.— no se propagan).
+    if getattr(medico, "maestro_medico_id", None):
+        generales = {_MAESTRO_SYNC[k]: cambios[k] for k in cambios if k in _MAESTRO_SYNC}
+        if generales:
+            from app.services import maestro_medico_service as mm
+            m = db.query(Medico).filter(Medico.id == medico.maestro_medico_id).first()
+            if m:
+                mm.actualizar_maestro(db, m, generales, usuario_id)
     logger.info(f"Médico de visita actualizado id={medico.id} "
                 f"(campos: {', '.join(cambios) or 'ninguno'}) por usuario={usuario_id}")
     return medico
