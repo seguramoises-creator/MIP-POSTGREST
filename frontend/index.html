@@ -80,42 +80,6 @@
         });
       })();
     </script>
-    <!-- Medidor de diagnóstico (HUD). Se activa SOLO con ?diag=1 en la URL y persiste
-         hasta ?diag=0. Muestra memoria JS (heap), ruta actual, nº de navegaciones y un
-         reloj que se actualiza cada 500 ms. Si el reloj se detiene, ahí se congeló, y el
-         heap de ese momento revela si fue agotamiento de memoria del teléfono. Invisible
-         para los usuarios normales. En iOS `performance.memory` no existe → muestra "?",
-         pero reloj/ruta/nav siguen sirviendo para ubicar el instante del congelamiento. -->
-    <script>
-      (function () {
-        try {
-          if (/[?&]diag=0/.test(location.search)) { localStorage.removeItem('vista_diag'); return; }
-          var on = /[?&]diag=1/.test(location.search) || localStorage.getItem('vista_diag') === '1';
-          if (!on) return;
-          try { localStorage.setItem('vista_diag', '1'); } catch (e) {}
-        } catch (e) { return; }
-        var nav = 0;
-        try {
-          var _ps = history.pushState;
-          history.pushState = function () { nav++; return _ps.apply(this, arguments); };
-          window.addEventListener('popstate', function () { nav++; });
-        } catch (e) {}
-        var hud = document.createElement('div');
-        hud.style.cssText = 'position:fixed;top:0;left:0;z-index:2147483646;background:rgba(0,0,0,.82);' +
-          'color:#39ff14;font:11px/1.35 ui-monospace,Menlo,Consolas,monospace;padding:4px 7px;' +
-          'pointer-events:none;max-width:72vw;border-bottom-right-radius:6px;white-space:pre';
-        function mb(n) { return Math.round(n / 1048576); }
-        function upd() {
-          var m = performance.memory;
-          var heap = m ? (mb(m.usedJSHeapSize) + '/' + mb(m.jsHeapSizeLimit) + 'MB') : 'heap n/d';
-          var t = new Date();
-          var hh = ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) + ':' + ('0' + t.getSeconds()).slice(-2);
-          hud.textContent = 'DIAG ' + hh + '  ' + heap + '  nav:' + nav + '\n' + location.pathname;
-        }
-        function boot() { (document.body || document.documentElement).appendChild(hud); upd(); setInterval(upd, 500); }
-        if (document.body) boot(); else window.addEventListener('DOMContentLoaded', boot);
-      })();
-    </script>
     <script type="module" src="/src/main.tsx"></script>
     <!-- PWA: registro del service worker (aditivo, tolerante a fallos).
          Relevo limpio: cuando un SW NUEVO toma control, recarga UNA vez para servir el
