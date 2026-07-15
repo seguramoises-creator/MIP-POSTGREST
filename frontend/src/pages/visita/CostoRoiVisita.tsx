@@ -13,18 +13,35 @@ import {
 
 // Campo numérico: muestra vacío cuando el valor es 0 (para que al escribir el número
 // reemplace el cero en vez de anteponerse) y selecciona todo al enfocar. Solo números.
-function NumField({ value, onNum, width = 90, disabled, label, sx }: {
+// `fmt` (opcional): al PERDER el foco muestra el valor con formato 999,999,999.99
+// (separador de miles + 2 decimales); al ENFOCAR muestra el número crudo para editar.
+function NumField({ value, onNum, width = 90, disabled, label, sx, fmt }: {
   value: number; onNum: (n: number) => void; width?: number;
-  disabled?: boolean; label?: string; sx?: object;
+  disabled?: boolean; label?: string; sx?: object; fmt?: boolean;
 }) {
+  const [focused, setFocused] = useState(false);
+  const [raw, setRaw] = useState('');
+  const vacio = value === 0 || value == null;
+  const display = fmt
+    ? (focused ? raw : (vacio ? '' : value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })))
+    : (vacio ? '' : String(value));
   return (
     <TextField
-      size="small" type="number" label={label}
-      value={value === 0 || value == null ? '' : value}
+      size="small" type={fmt ? 'text' : 'number'} label={label}
+      value={display}
       disabled={disabled} sx={{ width, ...sx }}
-      onFocus={(e) => (e.target as HTMLInputElement).select()}
-      onChange={(e) => onNum(e.target.value === '' ? 0 : Number(e.target.value))}
-      inputProps={{ min: 0 }}
+      inputProps={fmt ? { inputMode: 'decimal' } : { min: 0 }}
+      onFocus={(e) => { if (fmt) { setFocused(true); setRaw(vacio ? '' : String(value)); } (e.target as HTMLInputElement).select(); }}
+      onBlur={() => { if (fmt) setFocused(false); }}
+      onChange={(e) => {
+        if (fmt) {
+          const clean = e.target.value.replace(/[^0-9.]/g, '');
+          setRaw(clean);
+          onNum(clean === '' ? 0 : Number(clean));
+        } else {
+          onNum(e.target.value === '' ? 0 : Number(e.target.value));
+        }
+      }}
     />
   );
 }
@@ -233,9 +250,9 @@ export default function CostoRoiVisita() {
               {prods.map((p, i) => (
                 <TableRow key={p.producto}>
                   <TableCell>{i + 1}</TableCell><TableCell sx={{ fontWeight: 600 }}>{p.producto}</TableCell>
-                  <TableCell align="center"><NumField value={p.pool_ventas} width={140} disabled={cerrado} onNum={(n) => setP(i, 'pool_ventas', n)} /></TableCell>
-                  <TableCell align="center"><NumField value={p.visitas_detalladas} width={100} disabled={cerrado} onNum={(n) => setP(i, 'visitas_detalladas', n)} /></TableCell>
-                  <TableCell align="right"><Typography variant="body2" fontWeight={700} color="success.main">{p.visitas_detalladas ? money(p.pool_ventas / p.visitas_detalladas) : '—'}</Typography></TableCell>
+                  <TableCell align="center"><NumField value={p.pool_ventas} width={160} fmt disabled={cerrado} onNum={(n) => setP(i, 'pool_ventas', n)} /></TableCell>
+                  <TableCell align="center"><NumField value={p.visitas_detalladas} width={130} fmt disabled={cerrado} onNum={(n) => setP(i, 'visitas_detalladas', n)} /></TableCell>
+                  <TableCell align="right"><Typography variant="body2" fontWeight={700} color="success.main">{p.visitas_detalladas ? money2(p.pool_ventas / p.visitas_detalladas) : '—'}</Typography></TableCell>
                 </TableRow>
               ))}
               {/* Fila de TOTALES (formato 999,999,999.99 con 2 decimales). */}
