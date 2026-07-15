@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { useEffect, useState, lazy, Suspense } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import axios from 'axios';
+import { lazyWithReload, ErrorBoundary } from './components/common/resilience';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider, createTheme, CssBaseline, Box, Typography } from '@mui/material';
 import { useAuthStore } from './store/auth.store';
@@ -9,7 +10,7 @@ import MainLayout from './components/layout/MainLayout';
 import Login from './pages/auth/Login';
 import CambiarPassword from './pages/auth/CambiarPassword';
 import Setup from './pages/setup/Setup';
-const DashboardEjecutivo = lazy(() => import('./pages/dashboard/DashboardEjecutivo'));
+const DashboardEjecutivo = lazyWithReload(() => import('./pages/dashboard/DashboardEjecutivo'));
 import { NAV_ITEMS } from './components/layout/Sidebar';
 import { Rol } from './types';
 
@@ -23,29 +24,29 @@ function rutaInicial(rol: Rol | null): string {
 }
 // Páginas cargadas bajo demanda (code-splitting): cada ruta baja su propio chunk
 // al abrirla, aligerando la carga inicial de la app.
-const Productividad = lazy(() => import('./pages/productividad/Productividad'));
-const CoberturaPredictiva = lazy(() => import('./pages/cobertura-predictiva/CoberturaPredictiva'));
-const Coaching = lazy(() => import('./pages/coaching/Coaching'));
-const CoachingMore = lazy(() => import('./pages/coaching-more/CoachingMore'));
-const Categorizacion = lazy(() => import('./pages/categorizacion/Categorizacion'));
-const Medicos = lazy(() => import('./pages/medicos/Medicos'));
-const Ranking = lazy(() => import('./pages/ranking/Ranking'));
-const Reconocimiento = lazy(() => import('./pages/reconocimiento/Reconocimiento'));
-const ETL = lazy(() => import('./pages/etl/ETL'));
-const Admin = lazy(() => import('./pages/admin/Admin'));
-const Administracion = lazy(() => import('./pages/admin/Administracion'));
-const Reportes = lazy(() => import('./pages/reportes/Reportes'));
-const Lsii = lazy(() => import('./pages/lsii/Lsii'));
-const Examenes = lazy(() => import('./pages/examenes/Examenes'));
-const MisExamenes = lazy(() => import('./pages/examenes/MisExamenes'));
-const EquipoExamenes = lazy(() => import('./pages/examenes/EquipoExamenes'));
-const PanelMedico = lazy(() => import('./pages/visita/PanelMedico'));
-const CoberturaDashboard = lazy(() => import('./pages/visita/CoberturaDashboard'));
-const RegistrarVisita = lazy(() => import('./pages/visita/RegistrarVisita'));
-const PlaneacionVisita = lazy(() => import('./pages/visita/PlaneacionVisita'));
-const RupturaVisita = lazy(() => import('./pages/visita/RupturaVisita'));
-const ParrillaVisita = lazy(() => import('./pages/visita/ParrillaVisita'));
-const CostoRoiVisita = lazy(() => import('./pages/visita/CostoRoiVisita'));
+const Productividad = lazyWithReload(() => import('./pages/productividad/Productividad'));
+const CoberturaPredictiva = lazyWithReload(() => import('./pages/cobertura-predictiva/CoberturaPredictiva'));
+const Coaching = lazyWithReload(() => import('./pages/coaching/Coaching'));
+const CoachingMore = lazyWithReload(() => import('./pages/coaching-more/CoachingMore'));
+const Categorizacion = lazyWithReload(() => import('./pages/categorizacion/Categorizacion'));
+const Medicos = lazyWithReload(() => import('./pages/medicos/Medicos'));
+const Ranking = lazyWithReload(() => import('./pages/ranking/Ranking'));
+const Reconocimiento = lazyWithReload(() => import('./pages/reconocimiento/Reconocimiento'));
+const ETL = lazyWithReload(() => import('./pages/etl/ETL'));
+const Admin = lazyWithReload(() => import('./pages/admin/Admin'));
+const Administracion = lazyWithReload(() => import('./pages/admin/Administracion'));
+const Reportes = lazyWithReload(() => import('./pages/reportes/Reportes'));
+const Lsii = lazyWithReload(() => import('./pages/lsii/Lsii'));
+const Examenes = lazyWithReload(() => import('./pages/examenes/Examenes'));
+const MisExamenes = lazyWithReload(() => import('./pages/examenes/MisExamenes'));
+const EquipoExamenes = lazyWithReload(() => import('./pages/examenes/EquipoExamenes'));
+const PanelMedico = lazyWithReload(() => import('./pages/visita/PanelMedico'));
+const CoberturaDashboard = lazyWithReload(() => import('./pages/visita/CoberturaDashboard'));
+const RegistrarVisita = lazyWithReload(() => import('./pages/visita/RegistrarVisita'));
+const PlaneacionVisita = lazyWithReload(() => import('./pages/visita/PlaneacionVisita'));
+const RupturaVisita = lazyWithReload(() => import('./pages/visita/RupturaVisita'));
+const ParrillaVisita = lazyWithReload(() => import('./pages/visita/ParrillaVisita'));
+const CostoRoiVisita = lazyWithReload(() => import('./pages/visita/CostoRoiVisita'));
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
 
@@ -99,6 +100,7 @@ function AppRoutes() {
   if (checking) return null;
 
   return (
+    <ErrorBoundary>
     <Suspense fallback={<Box sx={{ p: 6, textAlign: 'center' }}><Typography color="text.secondary">Cargando…</Typography></Box>}>
     <Routes>
       <Route path="/setup" element={<Setup />} />
@@ -135,6 +137,7 @@ function AppRoutes() {
       <Route path="*" element={<Navigate to={inicio} />} />
     </Routes>
     </Suspense>
+    </ErrorBoundary>
   );
 }
 
