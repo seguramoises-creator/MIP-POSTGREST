@@ -76,7 +76,8 @@ class MedicoVisita(Base):
     ciclos_sin_visita: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)  # Estado Activo/Inactivo
     fecha_alta: Mapped[date | None] = mapped_column(Date, nullable=True)         # Fecha de alta (negocio)
-    # Flujo de aprobación de alta/baja por el Gerente de Distrito (efecto al próximo ciclo).
+    # Flujo de aprobación de alta/baja por el Gerente de Distrito. El ALTA, una vez
+    # aprobada, cuenta desde el MISMO ciclo (v2 jul-2026); la BAJA surte efecto el ciclo siguiente.
     # estado_aprobacion: APROBADO | PENDIENTE_ALTA | PENDIENTE_BAJA | RECHAZADO
     estado_aprobacion: Mapped[str] = mapped_column(String(16), nullable=False, default="APROBADO")
     ciclo_alta_id: Mapped[int | None] = mapped_column(

@@ -45,7 +45,7 @@ def cuenta_en_ciclo(m: MedicoVisita, ciclo_orden: int | None, ordenes: dict[int,
         return True
     if m.ciclo_alta_id is not None:
         oa = ordenes.get(m.ciclo_alta_id)
-        if oa is not None and ciclo_orden <= oa:   # alta efectiva el ciclo siguiente
+        if oa is not None and ciclo_orden < oa:   # alta efectiva el MISMO ciclo (v2 jul-2026)
             return False
     if m.ciclo_baja_id is not None:
         ob = ordenes.get(m.ciclo_baja_id)
