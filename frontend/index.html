@@ -16,6 +16,70 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Capturador de errores VISIBLE (diagnóstico móvil).
+         Muestra en un recuadro rojo, en la propia pantalla del teléfono, cualquier
+         error JS no capturado, fallo de carga de recurso/chunk o promesa rechazada.
+         Se instala ANTES de main.tsx para atrapar hasta los fallos de arranque.
+         Es aditivo y silencioso mientras no haya errores. Botón "Copiar" + "Cerrar". -->
+    <script>
+      (function () {
+        var box;
+        function render(titulo, detalle) {
+          try {
+            if (!box) {
+              box = document.createElement('div');
+              box.setAttribute('id', '__err_overlay__');
+              box.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:2147483647;' +
+                'max-height:55vh;overflow:auto;background:#b71c1c;color:#fff;' +
+                'font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;padding:12px 12px 10px;' +
+                'box-shadow:0 -4px 18px rgba(0,0,0,.4);-webkit-user-select:text;user-select:text';
+              var bar = document.createElement('div');
+              bar.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-bottom:8px';
+              var bCopy = document.createElement('button');
+              bCopy.textContent = 'Copiar';
+              bCopy.style.cssText = 'padding:6px 12px;border:0;border-radius:6px;background:#fff;color:#b71c1c;font-weight:700';
+              bCopy.onclick = function () {
+                var t = box.__log || '';
+                try { navigator.clipboard.writeText(t); bCopy.textContent = 'Copiado ✓'; }
+                catch (e) { var ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); bCopy.textContent = 'Copiado ✓'; } catch (_) {} ta.remove(); }
+              };
+              var bClose = document.createElement('button');
+              bClose.textContent = 'Cerrar';
+              bClose.style.cssText = 'padding:6px 12px;border:0;border-radius:6px;background:rgba(255,255,255,.25);color:#fff;font-weight:700';
+              bClose.onclick = function () { box.style.display = 'none'; };
+              bar.appendChild(bCopy); bar.appendChild(bClose);
+              box.appendChild(bar);
+              box.__body = document.createElement('div');
+              box.appendChild(box.__body);
+              (document.body || document.documentElement).appendChild(box);
+            }
+            box.style.display = 'block';
+            var line = '▸ ' + titulo + (detalle ? '\n' + detalle : '');
+            box.__log = (box.__log ? box.__log + '\n\n' : '') + line;
+            var pre = document.createElement('pre');
+            pre.style.cssText = 'white-space:pre-wrap;word-break:break-word;margin:0 0 10px';
+            pre.textContent = line;
+            box.__body.appendChild(pre);
+          } catch (e) { /* nunca romper por el propio overlay */ }
+        }
+        window.addEventListener('error', function (ev) {
+          if (ev && ev.target && (ev.target.src || ev.target.href) && ev.target.tagName) {
+            // Error de carga de recurso (script/css/img) — típico de un chunk 404 tras deploy.
+            render('No cargó un recurso: ' + ev.target.tagName + ' ' + (ev.target.src || ev.target.href));
+          } else {
+            var m = ev && ev.message ? ev.message : 'Error';
+            var d = ev && ev.error && ev.error.stack ? ev.error.stack : (ev && ev.filename ? (ev.filename + ':' + ev.lineno + ':' + ev.colno) : '');
+            render(m, d);
+          }
+        }, true); // captura: atrapa también errores de carga de recursos
+        window.addEventListener('unhandledrejection', function (ev) {
+          var r = ev && ev.reason;
+          var m = r && r.message ? r.message : ('Promesa rechazada: ' + String(r));
+          var d = r && r.stack ? r.stack : '';
+          render(m, d);
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
     <!-- PWA: registro del service worker (aditivo, tolerante a fallos).
          Relevo limpio: cuando un SW NUEVO toma control, recarga UNA vez para servir el
