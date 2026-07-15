@@ -561,6 +561,34 @@ Mantenimiento de catálogos (`DIM_CategoriaMedica`, `DIM_CriterioCategoria` + `D
 
 ---
 
+## 14b. Módulo Maestro de Médicos (jul-2026)
+
+**Archivos**: `app/api/v1/routers/maestro_medicos.py` (`prefix="/medicos"`), `app/services/maestro_medico_service.py`. Frontend: `pages/medicos/Medicos.tsx` (contenedor con **dos subpestañas**: Categorización | Maestro de Médicos) + `pages/medicos/MaestroMedicos.tsx` + `services/maestroMedicos.service.ts`. Ruta `/medicos`, ítem de menú "Médicos" (sustituye "Categorización Médica"; `/categorizacion` se conserva por compatibilidad).
+
+**Idea central**: `Config.DIM_Medico` promovido a **Maestro país-level** — fuente única del dato *general* del médico. Tres planos separados: **Maestro** (identidad + datos generales) · **Categorización** (esquema `cat.*`, snapshot A/B/C/D por período, intacto) · **Asignación** (`Visita.DIM_MedicoVisita`, panel del rep, ahora con FK `maestro_medico_id`, migración `0013`).
+
+**Modelo** (migración `0012`): `DIM_Medico` enriquecido con `telefono, direccion, sector, exequatur, observaciones, estado_validacion (APROBADO|PENDIENTE), origen (MANUAL|EXCEL|PANEL|…), created_at, updated_at`. Índice `IX_Medico_exequatur`.
+
+**Dedup en cascada** (`maestro_medico_service.detectar_duplicados`): **DURA** (bloquea, `DuplicadoDuroError`) = exequátur **o** cédula ya existentes; **BLANDA** (advierte, `PosibleDuplicadoError` salvo `confirmar_duplicado`) = mismo nombre normalizado (acentos incluidos, compara en Python) **y** mismo centro/provincia — requiere al menos una dimensión de ubicación (evita falsos positivos por homónimos).
+
+**Puente Panel↔Maestro** (`visita_service`): al **crear** un médico en el Panel se resuelve/crea su médico central (match duro → linkea; sin match → `crear_maestro(origen=PANEL, estado=PENDIENTE)`); al **editar**, solo los campos GENERALES (`_MAESTRO_SYNC`: nombre/código/especialidad/exequátur/teléfono/email/dirección/sector) se sincronizan al Maestro — los de asignación (frecuencia, zona…) no. Backfill idempotente: `scripts/backfill_maestro_medicos.py`.
+
+**Endpoints** (`RequireEscritura` = ADMIN/GERENTE_PRODUCTIVIDAD para escritura; lectura = autenticado):
+
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/medicos/maestro` | Listado paginado + filtros (`q, especialidad_id, provincia_id, estado, activo`) |
+| GET | `/medicos/maestro/kpis` | `{total, activos, nuevos_mes, sin_asignacion, pendientes_validacion}` |
+| GET | `/medicos/maestro/preview` · `/importar` | Importación Excel: preview (no persiste) + upsert idempotente por llave dura |
+| GET | `/medicos/maestro/exportar` | Exporta a Excel (in-memory, respeta filtros) |
+| GET | `/medicos/maestro/{id}` · `/{id}/historial` | Ficha + historial de cambios (`Audit.FACT_Auditoria`, tabla=DIM_Medico) |
+| POST | `/medicos/maestro` | Crear (409 `{tipo: duro/blando, coincidencias}` si dup) |
+| PUT | `/medicos/maestro/{id}` | Actualizar |
+
+> **No ciclo-dependiente**: el Maestro es país-level, el guard de ciclo abierto no aplica (sí a la asignación del Panel). El esquema `cat.*` no se toca.
+
+---
+
 ## 15. Módulo Exportación / Reportes
 
 **Archivo**: `app/api/v1/routers/exportacion.py` (99 líneas). Router: `prefix="/exportacion"`. Resuelve el pendiente histórico de v1.0 "Exportación PDF/Excel de reportes".
