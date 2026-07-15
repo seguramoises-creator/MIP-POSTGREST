@@ -17,11 +17,22 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
-    <!-- PWA: registro del service worker (aditivo, tolerante a fallos) -->
+    <!-- PWA: registro del service worker (aditivo, tolerante a fallos).
+         Relevo limpio: cuando un SW NUEVO toma control, recarga UNA vez para servir el
+         bundle fresco — evita que un SW viejo siga sirviendo index/chunks obsoletos
+         (la causa del congelamiento en móvil/PWA tras un deploy). -->
     <script>
       if ('serviceWorker' in navigator) {
+        var _swRecargando = false;
+        navigator.serviceWorker.addEventListener('controllerchange', function () {
+          if (_swRecargando) return;
+          _swRecargando = true;
+          window.location.reload();
+        });
         window.addEventListener('load', function () {
-          navigator.serviceWorker.register('/pwa-sw.js').catch(function () {});
+          navigator.serviceWorker.register('/pwa-sw.js').then(function (reg) {
+            if (reg && reg.update) reg.update().catch(function () {}); // busca versión nueva
+          }).catch(function () {});
         });
       }
     </script>
