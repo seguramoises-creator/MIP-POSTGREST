@@ -33,3 +33,7 @@ export const mmImportar = (paisCodigo: string, file: File) =>
   api.post<ImportResultado>('/medicos/maestro/importar', _fd(file), { params: { pais_codigo: paisCodigo } }).then(r => r.data);
 export const mmExportar = (params: Record<string, any> = {}) =>
   api.get('/medicos/maestro/exportar', { params, responseType: 'blob' }).then(r => r.data as Blob);
+
+export interface HistorialItem { fecha: string | null; usuario: string; accion: string; detalle: string | null; }
+export const mmHistorial = (id: number) =>
+  api.get<HistorialItem[]>(`/medicos/maestro/${id}/historial`).then(r => r.data);

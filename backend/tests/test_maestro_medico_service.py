@@ -61,7 +61,7 @@ def test_crear_permite_duplicado_blando_si_se_confirma(monkeypatch):
         db, "DO", {"nombre": "Juan Perez", "centro_medico_id": 5},
         confirmar_duplicado=True,
     )
-    db.add.assert_called_once()
+    assert db.add.call_count == 2  # médico + registro de auditoría
     db.commit.assert_called_once()
     assert m.estado_validacion == "APROBADO"
     assert m.origen == "MANUAL"
@@ -76,7 +76,7 @@ def test_crear_normal_sin_duplicados(monkeypatch):
         lambda *a, **k: {"duros": [], "blandos": []},
     )
     m = svc.crear_maestro(db, "DO", {"nombre": "NUEVO MEDICO"})
-    db.add.assert_called_once()
+    assert db.add.call_count == 2  # médico + registro de auditoría
     db.commit.assert_called_once()
     db.refresh.assert_called_once()
     assert m.estado_validacion == "APROBADO"

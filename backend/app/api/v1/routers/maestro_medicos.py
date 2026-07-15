@@ -118,6 +118,20 @@ def obtener(medico_id: int, db: Session = Depends(get_db), _u: Usuario = Require
     return m
 
 
+@router.get("/maestro/{medico_id}/historial", summary="Historial de cambios del médico")
+def historial(medico_id: int, db: Session = Depends(get_db), _u: Usuario = RequireLectura):
+    from app.models.hechos import Auditoria
+    from app.models.usuario import Usuario as U
+    filas = (db.query(Auditoria)
+             .filter(Auditoria.tabla == "DIM_Medico", Auditoria.registro_id == str(medico_id))
+             .order_by(Auditoria.fecha_hora.desc()).limit(100).all())
+    ids = {f.usuario_id for f in filas if f.usuario_id}
+    nombres = dict(db.query(U.id, U.nombre_completo).filter(U.id.in_(ids)).all()) if ids else {}
+    return [{"fecha": f.fecha_hora.isoformat() if f.fecha_hora else None,
+             "usuario": nombres.get(f.usuario_id) or f.username or (f"#{f.usuario_id}" if f.usuario_id else "sistema"),
+             "accion": f.accion, "detalle": f.detalle} for f in filas]
+
+
 @router.post("/maestro", response_model=MaestroMedicoResponse, status_code=201)
 def crear(datos: MaestroMedicoCrear, db: Session = Depends(get_db),
           current_user: Usuario = RequireEscritura):

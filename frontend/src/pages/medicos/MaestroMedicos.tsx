@@ -18,9 +18,10 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
-  mmListar, mmKpis, mmCrear, mmActualizar, mmPreview, mmImportar, mmExportar,
-  type MaestroMedico, type ImportPreview, type ImportResultado,
+  mmListar, mmKpis, mmCrear, mmActualizar, mmPreview, mmImportar, mmExportar, mmHistorial,
+  type MaestroMedico, type ImportPreview, type ImportResultado, type HistorialItem,
 } from '../../services/maestroMedicos.service';
+import HistoryIcon from '@mui/icons-material/History';
 
 type Cat = { id: number; nombre: string };
 
@@ -106,6 +107,12 @@ export default function MaestroMedicos() {
   const refrescar = () => {
     qc.invalidateQueries({ queryKey: ['mm-listar'] });
     qc.invalidateQueries({ queryKey: ['mm-kpis'] });
+  };
+
+  const [hist, setHist] = useState<{ medico: MaestroMedico; items: HistorialItem[] } | null>(null);
+  const verHistorial = async (m: MaestroMedico) => {
+    try { setHist({ medico: m, items: await mmHistorial(m.id) }); }
+    catch (e: any) { flash(e?.response?.data?.detail || e?.message || 'No se pudo cargar el historial', 'error'); }
   };
 
   const exportar = async () => {
@@ -230,7 +237,8 @@ export default function MaestroMedicos() {
                           color={m.estado_validacion === 'APROBADO' ? 'success' : 'warning'} />
                         {!m.activo && <Chip size="small" label="Inactivo" sx={{ ml: 0.5 }} />}
                       </TableCell>
-                      <TableCell align="right">
+                      <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                        <Tooltip title="Historial"><IconButton size="small" onClick={() => verHistorial(m)}><HistoryIcon fontSize="small" /></IconButton></Tooltip>
                         <IconButton size="small" onClick={() => abrirEditar(m)}><EditIcon fontSize="small" /></IconButton>
                       </TableCell>
                     </TableRow>
@@ -384,6 +392,25 @@ export default function MaestroMedicos() {
             </Button>
           )}
         </DialogActions>
+      </Dialog>
+
+      {/* Historial de cambios */}
+      <Dialog open={!!hist} onClose={() => setHist(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Historial — {hist?.medico.nombre}</DialogTitle>
+        <DialogContent dividers>
+          {hist && hist.items.length === 0 && (
+            <Typography variant="body2" color="text.secondary">Sin registros de cambios.</Typography>
+          )}
+          {hist?.items.map((h, i) => (
+            <Box key={i} sx={{ mb: 1, pb: 1, borderBottom: '1px solid #eee' }}>
+              <Typography variant="caption" color="text.secondary">
+                {h.fecha ? new Date(h.fecha).toLocaleString() : '—'} · {h.usuario}
+              </Typography>
+              <Typography variant="body2"><b>{h.accion}</b>{h.detalle ? ` — ${h.detalle}` : ''}</Typography>
+            </Box>
+          ))}
+        </DialogContent>
+        <DialogActions><Button onClick={() => setHist(null)}>Cerrar</Button></DialogActions>
       </Dialog>
     </Box>
   );

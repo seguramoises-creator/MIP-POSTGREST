@@ -75,6 +75,13 @@ def detectar_duplicados(db: Session, pais_codigo: str, *, exequatur=None, cedula
     return {"duros": duros, "blandos": blandos}
 
 
+def _auditar(db: Session, usuario_id, medico_id, accion: str, detalle: str) -> None:
+    """Deja rastro estructurado en Audit.FACT_Auditoria (fuente del historial del médico)."""
+    from app.models.hechos import Auditoria
+    db.add(Auditoria(usuario_id=usuario_id, accion=accion, modulo="MAESTRO_MEDICOS",
+                     tabla="DIM_Medico", registro_id=str(medico_id), detalle=detalle))
+
+
 def crear_maestro(db: Session, pais_codigo: str, datos: dict, *, origen="MANUAL",
                   estado="APROBADO", confirmar_duplicado=False, usuario_id=None) -> Medico:
     dups = detectar_duplicados(db, pais_codigo,
@@ -89,16 +96,20 @@ def crear_maestro(db: Session, pais_codigo: str, datos: dict, *, origen="MANUAL"
 
     m = Medico(pais_codigo=pais_codigo, origen=origen, estado_validacion=estado,
                activo=True, **{k: v for k, v in datos.items() if hasattr(Medico, k)})
-    db.add(m); db.commit(); db.refresh(m)
+    db.add(m); db.flush()
+    _auditar(db, usuario_id, m.id, "CREATE", f"Alta (origen={origen}, estado={estado})")
+    db.commit(); db.refresh(m)
     logger.info(f"Maestro médico creado id={m.id} '{m.nombre}' pais={pais_codigo} origen={origen}")
     return m
 
 
 def actualizar_maestro(db: Session, medico: Medico, cambios: dict, usuario_id=None) -> Medico:
+    aplicados = []
     for k, v in cambios.items():
         if hasattr(Medico, k) and k not in ("id", "pais_codigo", "created_at"):
-            setattr(medico, k, v)
+            setattr(medico, k, v); aplicados.append(k)
     medico.updated_at = datetime.now(timezone.utc)
+    _auditar(db, usuario_id, medico.id, "UPDATE", f"Campos: {', '.join(aplicados) or 'ninguno'}")
     db.commit(); db.refresh(medico)
     logger.info(f"Maestro médico actualizado id={medico.id} campos={list(cambios)} por={usuario_id}")
     return medico
