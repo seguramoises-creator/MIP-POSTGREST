@@ -18,7 +18,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
-  mmListar, mmKpis, mmCrear, mmActualizar, mmPreview, mmImportar,
+  mmListar, mmKpis, mmCrear, mmActualizar, mmPreview, mmImportar, mmExportar,
   type MaestroMedico, type ImportPreview, type ImportResultado,
 } from '../../services/maestroMedicos.service';
 
@@ -108,6 +108,18 @@ export default function MaestroMedicos() {
     qc.invalidateQueries({ queryKey: ['mm-kpis'] });
   };
 
+  const exportar = async () => {
+    try {
+      const blob = await mmExportar({ q: q || undefined, estado: estado || undefined });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'maestro_medicos.xlsx'; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      flash(e?.response?.data?.detail || e?.message || 'No se pudo exportar', 'error');
+    }
+  };
+
   const abrirCrear = () => { setEditId(null); setForm({ activo: true }); setOpenForm(true); };
   const abrirEditar = (m: MaestroMedico) => {
     setEditId(m.id);
@@ -186,6 +198,7 @@ export default function MaestroMedicos() {
             <Tooltip title="Actualizar"><IconButton onClick={refrescar}><RefreshIcon /></IconButton></Tooltip>
             <Button size="small" variant="outlined" startIcon={<UploadFileIcon />}
               disabled={!paisCodigo} onClick={() => setOpenImport(true)}>Importar Excel</Button>
+            <Button size="small" variant="outlined" onClick={exportar}>Exportar Excel</Button>
             <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={abrirCrear}>
               Nuevo médico
             </Button>

@@ -31,3 +31,5 @@ export const mmPreview = (paisCodigo: string, file: File) =>
   api.post<ImportPreview>('/medicos/maestro/preview', _fd(file), { params: { pais_codigo: paisCodigo } }).then(r => r.data);
 export const mmImportar = (paisCodigo: string, file: File) =>
   api.post<ImportResultado>('/medicos/maestro/importar', _fd(file), { params: { pais_codigo: paisCodigo } }).then(r => r.data);
+export const mmExportar = (params: Record<string, any> = {}) =>
+  api.get('/medicos/maestro/exportar', { params, responseType: 'blob' }).then(r => r.data as Blob);

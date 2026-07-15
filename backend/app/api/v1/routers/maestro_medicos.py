@@ -8,6 +8,7 @@ from io import BytesIO
 
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -26,12 +27,7 @@ RequireSupervisor = Depends(require_roles(
     Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO, Rol.GERENTE_MARCA))
 
 
-@router.get("/maestro", response_model=list[MaestroMedicoResponse])
-def listar(q: str | None = None, especialidad_id: int | None = None,
-           provincia_id: int | None = None, estado: str | None = None,
-           activo: bool | None = None, skip: int = 0, limit: int = Query(100, le=500),
-           db: Session = Depends(get_db), _u: Usuario = RequireLectura):
-    query = db.query(Medico)
+def _filtrar(query, q, especialidad_id, provincia_id, estado, activo):
     if q:
         like = f"%{q.upper()}%"
         query = query.filter(func.upper(Medico.nombre).like(like) |
@@ -41,7 +37,16 @@ def listar(q: str | None = None, especialidad_id: int | None = None,
     if provincia_id:    query = query.filter(Medico.provincia_id == provincia_id)
     if estado:          query = query.filter(Medico.estado_validacion == estado)
     if activo is not None: query = query.filter(Medico.activo == activo)
-    return query.order_by(Medico.nombre).offset(skip).limit(limit).all()
+    return query.order_by(Medico.nombre)
+
+
+@router.get("/maestro", response_model=list[MaestroMedicoResponse])
+def listar(q: str | None = None, especialidad_id: int | None = None,
+           provincia_id: int | None = None, estado: str | None = None,
+           activo: bool | None = None, skip: int = 0, limit: int = Query(100, le=500),
+           db: Session = Depends(get_db), _u: Usuario = RequireLectura):
+    return _filtrar(db.query(Medico), q, especialidad_id, provincia_id, estado, activo) \
+        .offset(skip).limit(limit).all()
 
 
 @router.get("/maestro/kpis")
@@ -84,6 +89,26 @@ async def preview_import(pais_codigo: str = Query(...), archivo: UploadFile = Fi
 async def ejecutar_import(pais_codigo: str = Query(...), archivo: UploadFile = File(...),
                           db: Session = Depends(get_db), current_user: Usuario = RequireEscritura):
     return svc.importar_excel(db, pais_codigo, _leer_excel(await archivo.read()), current_user.id)
+
+
+_EXPORT_COLS = ["id", "nombre", "codigo", "cedula", "exequatur", "telefono", "email",
+                "direccion", "sector", "especialidad_id", "provincia_id", "municipio_id",
+                "centro_medico_id", "estado_validacion", "origen", "activo"]
+
+
+@router.get("/maestro/exportar", summary="Exporta el Maestro a Excel (respeta filtros)")
+def exportar(q: str | None = None, especialidad_id: int | None = None,
+             provincia_id: int | None = None, estado: str | None = None,
+             activo: bool | None = None, db: Session = Depends(get_db), _u: Usuario = RequireLectura):
+    filas = _filtrar(db.query(Medico), q, especialidad_id, provincia_id, estado, activo).all()
+    df = pd.DataFrame([{c: getattr(m, c) for c in _EXPORT_COLS} for m in filas], columns=_EXPORT_COLS)
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as w:
+        df.to_excel(w, index=False, sheet_name="Maestro")
+    buf.seek(0)
+    return StreamingResponse(
+        buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=maestro_medicos.xlsx"})
 
 
 @router.get("/maestro/{medico_id}", response_model=MaestroMedicoResponse)
