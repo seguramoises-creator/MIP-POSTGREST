@@ -63,6 +63,9 @@ export default function CostoRoiVisita() {
 
   const moneda = full?.moneda ?? 'RD$';
   const money = (v: number) => `${moneda} ${Math.round(v).toLocaleString()}`;
+  // Formato pedido para totales: 999,999,999.99 (miles con coma, 2 decimales).
+  const nf2 = (v: number) => (v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const money2 = (v: number) => `${moneda} ${nf2(v)}`;
   const lineaParam = esGestor ? (lineaId || undefined) : undefined;
   const cicloParam = cicloId || undefined;
   const cerrado = esSoloLectura;               // "no editable" = ciclo != abierto (cubre cerrado y futuro)
@@ -235,6 +238,14 @@ export default function CostoRoiVisita() {
                   <TableCell align="right"><Typography variant="body2" fontWeight={700} color="success.main">{p.visitas_detalladas ? money(p.pool_ventas / p.visitas_detalladas) : '—'}</Typography></TableCell>
                 </TableRow>
               ))}
+              {/* Fila de TOTALES (formato 999,999,999.99 con 2 decimales). */}
+              <TableRow sx={{ '& td': { fontWeight: 800, borderTop: '2px solid', borderColor: 'divider', bgcolor: 'rgba(46,91,255,0.06)' } }}>
+                <TableCell />
+                <TableCell>TOTALES</TableCell>
+                <TableCell align="center">{money2(prods.reduce((s, p) => s + (p.pool_ventas || 0), 0))}</TableCell>
+                <TableCell align="center">{nf2(prods.reduce((s, p) => s + (p.visitas_detalladas || 0), 0))}</TableCell>
+                <TableCell align="right"><Typography variant="body2" fontWeight={800} color="success.main">{money2(prods.reduce((s, p) => s + (p.visitas_detalladas ? p.pool_ventas / p.visitas_detalladas : 0), 0))}</Typography></TableCell>
+              </TableRow>
             </TableBody></Table>
           </CardContent></Card>
         </Grid>
