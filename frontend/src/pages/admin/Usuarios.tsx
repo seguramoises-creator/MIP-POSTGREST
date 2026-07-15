@@ -9,12 +9,32 @@ import {
   TableContainer, TableHead, TableRow, Paper, Button, Chip, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, Alert,
   CircularProgress, MenuItem, Select, FormControl, InputLabel,
-  IconButton, Tooltip, Stack, Divider,
+  IconButton, Tooltip, Stack, Divider, InputAdornment,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import EditIcon from '@mui/icons-material/Edit';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import Casino from '@mui/icons-material/Casino';
 import { api } from '../../services/api';
+
+// Genera una contraseña que cumple la política (mín. 12, mayúscula, minúscula,
+// número y carácter especial). Evita ambigüedades (0/O, 1/l/I) para dictado.
+function generarPassword(): string {
+  const May = 'ABCDEFGHJKLMNPQRSTUVWXYZ', min = 'abcdefghijkmnpqrstuvwxyz';
+  const num = '23456789', esp = '!@#$%*?';
+  const pick = (s: string) => s[Math.floor(Math.random() * s.length)];
+  const base = [pick(May), pick(min), pick(num), pick(esp)];
+  const todos = May + min + num + esp;
+  for (let i = 0; i < 10; i++) base.push(pick(todos));
+  // barajar (Fisher–Yates)
+  for (let i = base.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [base[i], base[j]] = [base[j], base[i]];
+  }
+  return base.join('');
+}
 
 const ROLES = [
   'ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD',
@@ -38,6 +58,8 @@ export default function Usuarios() {
   const [openEdit, setOpenEdit]   = useState(false);
   const [editItem, setEditItem]   = useState<any>(null);
   const [nuevaPass, setNuevaPass] = useState('');
+  const [showPwd, setShowPwd]         = useState(false);   // ver contraseña (crear)
+  const [showResetPwd, setShowResetPwd] = useState(false); // ver contraseña (restablecer)
   const [form, setForm]           = useState<Record<string, any>>({});
   const [msg, setMsg]             = useState('');
   const [msgType, setMsgType]     = useState<'success' | 'error'>('success');
@@ -299,6 +321,7 @@ export default function Usuarios() {
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
               fullWidth size="small" label="Usuario (login)"
+              autoComplete="off"
               value={form.username || ''}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
             />
@@ -309,14 +332,36 @@ export default function Usuarios() {
             />
             <TextField
               fullWidth size="small" label="Email (opcional)" type="email"
+              autoComplete="off"
               value={form.email || ''}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
+            {/* autoComplete="new-password" evita que el navegador autocomplete este
+                campo con las credenciales guardadas del ADMIN (causa de que el rep
+                quedara con una contraseña distinta a la esperada). El botón del ojo
+                deja VER la clave real; "Generar" crea una que cumple la política. */}
             <TextField
-              fullWidth size="small" label="Contrasena" type="password"
-              helperText="Minimo 12 caracteres, mayuscula, minuscula y numero"
+              fullWidth size="small" label="Contraseña"
+              type={showPwd ? 'text' : 'password'}
+              autoComplete="new-password"
+              helperText="Mín. 8 caracteres (12 para ADMIN) · mayúscula, minúscula, número y carácter especial (!@#$%…)"
               value={form.password || ''}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title="Generar contraseña segura">
+                      <IconButton edge="end" size="small"
+                                  onClick={() => { setForm({ ...form, password: generarPassword() }); setShowPwd(true); }}>
+                        <Casino fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <IconButton edge="end" size="small" onClick={() => setShowPwd((v) => !v)}>
+                      {showPwd ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
             />
             <FormControl fullWidth size="small">
               <InputLabel>Rol</InputLabel>
@@ -375,13 +420,30 @@ export default function Usuarios() {
             <Divider textAlign="left" sx={{ pt: 1 }}>Restablecer contraseña</Divider>
             <Stack direction="row" spacing={1} alignItems="flex-start">
               <TextField
-                fullWidth size="small" label="Nueva contraseña" type="password"
+                fullWidth size="small" label="Nueva contraseña"
+                type={showResetPwd ? 'text' : 'password'}
+                autoComplete="new-password"
                 value={nuevaPass} onChange={(e) => setNuevaPass(e.target.value)}
-                helperText="Mín. 12 · mayúscula, minúscula, número y carácter especial"
+                helperText="Mín. 8 (12 para ADMIN) · mayúscula, minúscula, número y carácter especial"
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <Tooltip title="Generar contraseña segura">
+                        <IconButton edge="end" size="small"
+                                    onClick={() => { setNuevaPass(generarPassword()); setShowResetPwd(true); }}>
+                          <Casino fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <IconButton edge="end" size="small" onClick={() => setShowResetPwd((v) => !v)}>
+                        {showResetPwd ? <VisibilityOff fontSize="small" /> : <Visibility fontSize="small" />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
               />
               <Button
                 variant="outlined" sx={{ whiteSpace: 'nowrap', mt: 0.25 }}
-                disabled={resetPassMut.isPending || nuevaPass.trim().length < 12}
+                disabled={resetPassMut.isPending || nuevaPass.trim().length < 8}
                 onClick={() => resetPassMut.mutate()}
               >
                 {resetPassMut.isPending ? <CircularProgress size={18} /> : 'Restablecer'}

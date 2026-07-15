@@ -720,6 +720,10 @@ def update_usuario(id: int, data: UsuarioUpdate, db: Session = Depends(get_db), 
         raise HTTPException(400, f"El correo '{cambios['email']}' ya está registrado con otro usuario.")
     for k, v in cambios.items():
         setattr(obj, k, v)
+    # Reactivar un usuario también lo desbloquea (limpia intentos/bloqueo temporal).
+    if cambios.get("activo") is True:
+        obj.intentos_fallidos = 0
+        obj.bloqueado_hasta = None
     db.commit(); db.refresh(obj)
     return obj
 
@@ -750,8 +754,13 @@ def reset_password_usuario(id: int, data: AdminSetPassword, db: Session = Depend
     obj.hashed_password = hash_password(data.password_nuevo)
     obj.password_actualizado_en = datetime.now(timezone.utc)
     obj.debe_cambiar_password = True
+    # Al restablecer la clave, desbloquear la cuenta: limpia intentos fallidos y el
+    # bloqueo temporal — así el ADMIN puede rescatar de inmediato a un usuario que
+    # quedó bloqueado por intentos con la contraseña anterior.
+    obj.intentos_fallidos = 0
+    obj.bloqueado_hasta = None
     db.commit()
-    return Msg(message=f"Contraseña de {obj.username} restablecida correctamente")
+    return Msg(message=f"Contraseña de {obj.username} restablecida y cuenta desbloqueada")
 
 
 # ── Parámetros de sistema en runtime (solo ADMIN) ─────────────────────────────
