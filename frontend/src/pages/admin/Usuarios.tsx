@@ -9,7 +9,7 @@ import {
   TableContainer, TableHead, TableRow, Paper, Button, Chip, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, Alert,
   CircularProgress, MenuItem, Select, FormControl, InputLabel,
-  IconButton, Tooltip, Stack, Divider, InputAdornment, Checkbox,
+  IconButton, Tooltip, Stack, Divider, InputAdornment, Checkbox, FormControlLabel,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -58,6 +58,7 @@ export default function Usuarios() {
   const [openEdit, setOpenEdit]   = useState(false);
   const [editItem, setEditItem]   = useState<any>(null);
   const [nuevaPass, setNuevaPass] = useState('');
+  const [editBloqueado, setEditBloqueado] = useState(false); // casilla bloqueado (editar)
   const [showPwd, setShowPwd]         = useState(false);   // ver contraseña (crear)
   const [showResetPwd, setShowResetPwd] = useState(false); // ver contraseña (restablecer)
   const [form, setForm]           = useState<Record<string, any>>({});
@@ -203,6 +204,7 @@ export default function Usuarios() {
   const handleEdit = (row: any) => {
     setEditItem(row);
     setNuevaPass('');
+    setEditBloqueado(!!row.bloqueado);
     setForm({ nombre_completo: row.nombre_completo || '', email: row.email || '', rol: row.rol || '',
               rm_id: row.rm_id ?? null, gerente_id: row.gerente_id ?? null });
     setOpenEdit(true);
@@ -435,6 +437,23 @@ export default function Usuarios() {
               </Select>
             </FormControl>
             {renderRelacion()}
+
+            {/* Casilla de bloqueo: marcada = usuario bloqueado; desmarcar = desbloquear. */}
+            <FormControlLabel
+              control={
+                <Checkbox
+                  color="error"
+                  checked={editBloqueado}
+                  disabled={bloqueoMut.isPending}
+                  onChange={() => {
+                    const nuevo = !editBloqueado;
+                    setEditBloqueado(nuevo);
+                    if (editItem?.id != null) bloqueoMut.mutate({ id: editItem.id, bloqueado: nuevo });
+                  }}
+                />
+              }
+              label={editBloqueado ? 'Usuario BLOQUEADO — desmarque para desbloquear' : 'Usuario desbloqueado (marque para bloquear)'}
+            />
 
             {/* Restablecer contraseña (solo ADMIN). Mín. 12 caracteres con mayúscula,
                 minúscula, número y carácter especial. El usuario deberá cambiarla al entrar. */}
