@@ -291,7 +291,7 @@ export default function CoachingMore() {
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Registradas por tu Gerente de Distrito — solo lectura, nunca editables.
         </Typography>
-        <ListaHojas hojas={hojas} onVer={setVerId} />
+        <VistaRM hojas={hojas} onVer={setVerId} />
         {verId != null && <DetalleHoja id={verId} onClose={() => setVerId(null)} />}
       </Box>
     );
@@ -506,6 +506,91 @@ export default function CoachingMore() {
         <DialogActions><Button variant="contained" onClick={() => setOkDialog(false)}>Entendido</Button></DialogActions>
       </Dialog>
     </Box>
+  );
+}
+
+// ── Vista del representante: sus hojas por ciclo + promedios ──────────────────
+const promedioDe = (hs: HojaResumen[]) =>
+  hs.length ? r2(hs.reduce((a, h) => a + h.evaluacion_promedio, 0) / hs.length) : null;
+
+function VistaRM({ hojas, onVer }: { hojas: HojaResumen[]; onVer: (id: number) => void }) {
+  const cicloIdCtx = useCicloStore((s) => s.cicloId);
+  // Una hoja de corrección enmienda a su original (que queda inmutable, nunca se edita):
+  // para los promedios cuenta solo la vigente — igual que el KPI del GD, así los dos
+  // números del sistema coinciden.
+  const vigentes = useMemo(() => hojas.filter((h) => !h.tiene_correccion), [hojas]);
+
+  const ciclos = useMemo(() => {
+    const m = new Map<number, string>();
+    vigentes.forEach((h) => {
+      if (h.ciclo_id != null) m.set(h.ciclo_id, h.ciclo_nombre ?? `Ciclo ${h.ciclo_id}`);
+    });
+    return [...m.entries()].sort((a, b) => b[1].localeCompare(a[1]));  // más reciente primero
+  }, [vigentes]);
+
+  // 'auto' = el ciclo del contexto global si tiene hojas; si no, el más reciente con hojas.
+  const [filtro, setFiltro] = useState<number | 'todos' | 'auto'>('auto');
+  const sel: number | 'todos' = filtro !== 'auto' ? filtro
+    : (cicloIdCtx && ciclos.some(([id]) => id === cicloIdCtx) ? cicloIdCtx : (ciclos[0]?.[0] ?? 'todos'));
+
+  const delCiclo = sel === 'todos' ? vigentes : vigentes.filter((h) => h.ciclo_id === sel);
+  const promCiclo = promedioDe(delCiclo);
+  const promAcum = promedioDe(vigentes);
+  const nombreSel = sel === 'todos' ? 'todos los ciclos' : (ciclos.find(([id]) => id === sel)?.[1] ?? '—');
+
+  if (!vigentes.length) return <Alert severity="info">No hay hojas de coaching todavía.</Alert>;
+
+  return (
+    <>
+      <Grid container spacing={2} sx={{ mb: 2 }}>
+        <Grid item xs={12} sm={4}>
+          <Card variant="outlined"><CardContent sx={{ py: 1.5 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={600}>
+              PROMEDIO · {nombreSel.toUpperCase()}
+            </Typography>
+            <Typography variant="h4" fontWeight={800}
+                        sx={{ color: promCiclo != null ? colorProm(promCiclo) : 'text.disabled' }}>
+              {promCiclo != null ? promCiclo.toFixed(2) : '—'}
+              <Typography component="span" variant="body2" color="text.secondary"> / 4.00</Typography>
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {delCiclo.length} {delCiclo.length === 1 ? 'hoja' : 'hojas'}
+            </Typography>
+          </CardContent></Card>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <Card variant="outlined"><CardContent sx={{ py: 1.5 }}>
+            <Typography variant="caption" color="text.secondary" fontWeight={600}>
+              ACUMULADO A LA FECHA
+            </Typography>
+            <Typography variant="h4" fontWeight={800}
+                        sx={{ color: promAcum != null ? colorProm(promAcum) : 'text.disabled' }}>
+              {promAcum != null ? promAcum.toFixed(2) : '—'}
+              <Typography component="span" variant="body2" color="text.secondary"> / 4.00</Typography>
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {vigentes.length} {vigentes.length === 1 ? 'hoja' : 'hojas'} · {ciclos.length}{' '}
+              {ciclos.length === 1 ? 'ciclo' : 'ciclos'}
+            </Typography>
+          </CardContent></Card>
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <TextField select fullWidth size="small" label="Ciclo" value={sel}
+                     onChange={(e) => setFiltro(e.target.value === 'todos' ? 'todos' : Number(e.target.value))}
+                     sx={{ mt: 0.5 }}>
+            <MenuItem value="todos">Todos los ciclos</MenuItem>
+            {ciclos.map(([id, nombre]) => <MenuItem key={id} value={id}>{nombre}</MenuItem>)}
+          </TextField>
+          <Stack direction="row" spacing={0.5} sx={{ mt: 1 }} flexWrap="wrap" useFlexGap>
+            {ESCALA.map((e) => (
+              <Chip key={e.v} size="small" label={`${e.v} ${e.l}`}
+                    sx={{ bgcolor: e.color, color: '#fff', fontWeight: 700, height: 20, fontSize: 11 }} />
+            ))}
+          </Stack>
+        </Grid>
+      </Grid>
+      <ListaHojas hojas={delCiclo} onVer={onVer} />
+    </>
   );
 }
 

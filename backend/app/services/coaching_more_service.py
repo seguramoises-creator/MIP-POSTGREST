@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 from app.models.coaching_more_models import (
     CoachingSesion, CoachingItemEvaluado, CoachingItemCatalogo, SECCIONES_MORE,
 )
-from app.models.dimensiones import RepresentanteMedico
+from app.core.tiempo import hoy_local
+from app.models.dimensiones import Ciclo, RepresentanteMedico
 from app.models.usuario import Usuario, Rol
 
 
@@ -105,8 +106,21 @@ def validar(db: Session, datos) -> list[str]:
 # Creación (INMUTABLE) — hoja normal o hoja de corrección
 # ─────────────────────────────────────────────────────────────────────────
 
-def _ciclo_pais_de_rm(db: Session, rm: RepresentanteMedico):
-    """(ciclo_id abierto del país del RM, pais_codigo) para el KPI por ciclo."""
+def _ciclo_pais_de_rm(db: Session, rm: RepresentanteMedico, fecha: date):
+    """(ciclo_id que CONTIENE `fecha` en el país del RM, pais_codigo).
+
+    FIX jul-2026: antes delegaba en `ciclo_por_defecto`, que devuelve el ciclo ABIERTO
+    de número más alto del país. Con C12 abierto, una hoja del 10-jul quedó archivada en
+    C12-2026 (diciembre), porque 12 > 7. El ciclo de una hoja lo define su FECHA, no cuál
+    ciclo esté abierto. Si ninguna ventana cubre la fecha (los ciclos van del 1 al 28, así
+    que los días 29-31 quedan fuera), se cae al ciclo abierto del país.
+    """
+    c = (db.query(Ciclo)
+         .filter(Ciclo.pais_codigo == rm.pais_codigo,
+                 Ciclo.fecha_inicio <= fecha, Ciclo.fecha_fin >= fecha)
+         .order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first())
+    if c:
+        return c.id, rm.pais_codigo
     from app.services.visita_cobertura_service import ciclo_por_defecto
     return ciclo_por_defecto(db, rm.id), rm.pais_codigo
 
@@ -115,11 +129,16 @@ def crear_hoja(db: Session, gd_user: Usuario, datos) -> CoachingSesion:
     """Crea una hoja de coaching tras validar. Lanza ValueError con el detalle si falta algo.
     La hoja queda INMUTABLE (trigger de BD). Si `datos.corrige_a_id` viene, es una hoja de
     corrección que enmienda a otra (no la edita)."""
+    rm = (db.query(RepresentanteMedico).filter(RepresentanteMedico.id == datos.rm_id).first()
+          if datos.rm_id else None)
+    # La fecha la fija el SERVIDOR (nunca el cliente) y en hora LOCAL del país del RM:
+    # el día del coaching es el día laboral del GD, no el día UTC — que a partir de las
+    # 8 p.m. en RD ya avanzó al siguiente.
+    datos.fecha_coaching = hoy_local(db, rm.pais_codigo) if rm else date.today()
+
     errores = validar(db, datos)
     if errores:
         raise ValueError(" · ".join(errores))
-
-    rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == datos.rm_id).first()
     if not rm:
         raise ValueError("El representante (RM) no existe.")
 
@@ -136,7 +155,7 @@ def crear_hoja(db: Session, gd_user: Usuario, datos) -> CoachingSesion:
             raise ValueError("Indica el motivo de la corrección.")
 
     prom = calcular_promedios([{"seccion": i.seccion, "calificacion": i.calificacion} for i in datos.items])
-    ciclo_id, pais_codigo = _ciclo_pais_de_rm(db, rm)
+    ciclo_id, pais_codigo = _ciclo_pais_de_rm(db, rm, datos.fecha_coaching)
 
     sesion = CoachingSesion(
         gd_usuario_id=gd_user.id,
@@ -233,6 +252,8 @@ def _serializar(db: Session, s: CoachingSesion, resumen: bool) -> dict:
         "evaluacion_promedio": float(s.evaluacion_promedio),
         "rm_acuerdo": s.rm_acuerdo,
         "ciclo_id": s.ciclo_id,
+        "ciclo_nombre": (db.query(Ciclo.nombre).filter(Ciclo.id == s.ciclo_id).scalar()
+                         if s.ciclo_id else None),
         "corrige_a_id": s.corrige_a_id,
         "es_correccion": s.corrige_a_id is not None,
         "tiene_correccion": tiene_correccion,   # → mostrar como "enmendada"

@@ -78,19 +78,25 @@ def vms(db: Session = Depends(get_db), current_user: Usuario = RequireCrear):
 def acompanadas_hoy(rm_id: int = Query(...), db: Session = Depends(get_db),
                     current_user: Usuario = RequireCrear):
     """Suma de visitas ACOMPAÑADAS por el GD registradas HOY para el RM. La hoja de
-    Coaching solo se habilita si esa suma >= `coaching_min_dia` del RM."""
-    from datetime import datetime, timezone
+    Coaching solo se habilita si esa suma >= `coaching_min_dia` del RM.
+
+    "Hoy" es el día LOCAL del país del RM, no el día UTC: en RD (UTC−4) el día UTC
+    cambia a las 8 p.m. locales, y un GD que cerraba su hoja de noche quedaba bloqueado
+    porque sus visitas de la tarde contaban como "ayer".
+    """
     from sqlalchemy import func
+    from app.core.tiempo import ventana_dia_local
     from app.models.visita import VisitaRegistro
     rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == rm_id).first()
     if not rm:
         raise HTTPException(status_code=404, detail="RM no encontrado")
-    hoy = datetime.now(timezone.utc).date()
+    hoy, desde, hasta = ventana_dia_local(db, rm.pais_codigo)
     acompanadas = (db.query(func.count(VisitaRegistro.id))
                    .filter(VisitaRegistro.vm_id == rm_id,
                            VisitaRegistro.ejecutada == True,      # noqa: E712
                            VisitaRegistro.acompanado == True,     # noqa: E712
-                           func.date(VisitaRegistro.fecha_hora) == hoy)
+                           VisitaRegistro.fecha_hora >= desde,
+                           VisitaRegistro.fecha_hora < hasta)
                    .scalar() or 0)
     minimo = rm.coaching_min_dia or 5
     return {"rm_id": rm_id, "fecha": hoy.isoformat(), "acompanadas": acompanadas,
@@ -98,7 +104,8 @@ def acompanadas_hoy(rm_id: int = Query(...), db: Session = Depends(get_db),
 
 
 def _guardar(db: Session, current_user: Usuario, datos: HojaIn):
-    datos.fecha_coaching = date.today()  # fecha del servidor
+    # `fecha_coaching` la fija `svc.crear_hoja` con la fecha del SERVIDOR en hora local
+    # del país del RM (allí se conoce el país); nunca se acepta del cliente.
     try:
         s = svc.crear_hoja(db, current_user, datos)
     except ValueError as e:

@@ -2,6 +2,7 @@
 y reglas de bloqueo del guardado (Sección 8 del spec)."""
 from datetime import date
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -113,3 +114,31 @@ def test_plan_accion_obligatorio():
     d = _datos_validos(); d.plan_que_haras = ""
     errs = svc.validar(None, d)
     assert any("¿Qué harás?" in e for e in errs)
+
+
+# ── Ciclo de la hoja: lo define la FECHA, no cuál ciclo esté abierto ───────────
+
+def test_ciclo_de_la_hoja_es_el_que_contiene_la_fecha():
+    """Regresión: una hoja del 10-jul quedó archivada en C12-2026 porque diciembre
+    estaba abierto y `ciclo_por_defecto` toma el ciclo abierto de número más alto."""
+    c07 = SimpleNamespace(id=41, pais_codigo="DO")
+    db = MagicMock()
+    db.query.return_value.filter.return_value.order_by.return_value.first.return_value = c07
+    rm = SimpleNamespace(id=47, pais_codigo="DO")
+
+    ciclo_id, pais = svc._ciclo_pais_de_rm(db, rm, date(2026, 7, 10))
+
+    assert (ciclo_id, pais) == (41, "DO")
+
+
+def test_sin_ciclo_que_cubra_la_fecha_cae_al_ciclo_abierto(monkeypatch):
+    """Los ciclos van del 1 al 28: un coaching del 30 no lo cubre ninguna ventana."""
+    db = MagicMock()
+    db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+    import app.services.visita_cobertura_service as vcs
+    monkeypatch.setattr(vcs, "ciclo_por_defecto", lambda _db, vm_id: 41)
+    rm = SimpleNamespace(id=47, pais_codigo="DO")
+
+    ciclo_id, pais = svc._ciclo_pais_de_rm(db, rm, date(2026, 7, 30))
+
+    assert (ciclo_id, pais) == (41, "DO")

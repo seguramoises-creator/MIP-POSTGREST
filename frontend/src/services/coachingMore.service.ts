@@ -21,7 +21,8 @@ export interface HojaPayload {
 export interface HojaResumen {
   id: number; fecha_coaching: string; rm_id: number; rm_nombre: string | null;
   gd_nombre: string | null; medicos_vistos: number; evaluacion_promedio: number;
-  rm_acuerdo: string; ciclo_id: number | null; corrige_a_id: number | null;
+  rm_acuerdo: string; ciclo_id: number | null; ciclo_nombre: string | null;
+  corrige_a_id: number | null;
   es_correccion: boolean; tiene_correccion: boolean; created_at: string | null;
 }
 export interface SeccionDetalle { seccion: string; promedio: number | null; items: { texto: string; calificacion: number }[]; }
