@@ -21,6 +21,23 @@ def _guard_ciclo_abierto(db, ciclo_id):
         raise ValueError("El ciclo está cerrado — solo lectura")
 
 
+def _guard_ventana_ciclo(db, ciclo_id, fecha):
+    """Control de calidad temporal: la fecha de la visita debe caer dentro de la ventana
+    [fecha_inicio, fecha_fin] del ciclo. Evita registrar visitas sobre un ciclo cuya
+    ventana ya venció (ciclo 'zombi'), que ensuciaría cobertura/ritmo."""
+    from datetime import date as _date
+    from app.models.dimensiones import Ciclo
+    c = db.query(Ciclo).filter(Ciclo.id == ciclo_id).first()
+    if (c is not None and isinstance(getattr(c, "fecha_inicio", None), _date)
+            and isinstance(getattr(c, "fecha_fin", None), _date)
+            and not (c.fecha_inicio <= fecha <= c.fecha_fin)):
+        raise ValueError(
+            f"Hoy ({fecha}) está fuera de la ventana del ciclo vigente "
+            f"'{c.nombre}' ({c.fecha_inicio} a {c.fecha_fin}). "
+            "El administrador debe actualizar/abrir el ciclo del mes en curso antes de registrar visitas."
+        )
+
+
 def _medico_del_vm(db: Session, vm_id: int, medico_id: int) -> MedicoVisita:
     m = db.query(MedicoVisita).filter(
         MedicoVisita.id == medico_id, MedicoVisita.activo == True).first()  # noqa: E712
@@ -43,6 +60,7 @@ def registrar_visita(db: Session, vm_id: int, datos: VisitaRegistrar, usuario_id
     _guard_ciclo_abierto(db, ciclo_id)
     # Hora del servidor menos los minutos indicados (ventana 60 min ya validada en el schema).
     fecha_hora = datetime.now(timezone.utc) - timedelta(minutes=datos.hace_minutos)
+    _guard_ventana_ciclo(db, ciclo_id, fecha_hora.date())
     productos = "|".join(f"{p.producto}:{p.mencion}" for p in datos.productos) or None
     v = VisitaRegistro(
         vm_id=vm_id, ciclo_id=ciclo_id, medico_id=datos.medico_id,
@@ -64,6 +82,7 @@ def registrar_no_visita(db: Session, vm_id: int, datos: VisitaNoVisita, usuario_
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
     _guard_ciclo_abierto(db, ciclo_id)
+    _guard_ventana_ciclo(db, ciclo_id, datetime.now(timezone.utc).date())
     v = VisitaRegistro(
         vm_id=vm_id, ciclo_id=ciclo_id, medico_id=datos.medico_id,
         tipo_visita="V", fecha_hora=datetime.now(timezone.utc),
