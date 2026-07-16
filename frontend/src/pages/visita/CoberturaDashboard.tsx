@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import { InfoOutlined, FilterList } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import SaludCiclo from '../../components/SaludCiclo';
 import {
   coberturaResumen, coberturaRanking, listarVMs, listarGerentesVisita, listarLineasVisita,
   type CoberturaResumen, type RankingVM, type Catalogo,
@@ -129,6 +130,9 @@ export default function CoberturaDashboard() {
           <> · <strong>{data.acompanadas}</strong> visitas acompañadas por el GD ({data.pct_acompanamiento ?? 0}% de {data.visitas_ejecutadas ?? 0})</>
         )}
       </Typography>
+
+      {/* Panel de salud/completitud del ciclo (Feature 4) */}
+      <SaludCiclo />
 
       {/* Filtros (solo ADMIN/GERENTE) */}
       {!esVM && (

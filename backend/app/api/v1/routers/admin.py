@@ -572,6 +572,70 @@ def open_ciclo(id: int, db: Session = Depends(get_db), _=AdminOnly):
     return Msg(message=f"Ciclo '{obj.nombre}' abierto correctamente")
 
 
+@router.get("/ciclos/{id}/salud", summary="Panel de salud/completitud de un ciclo")
+def ciclo_salud(id: int, db: Session = Depends(get_db), _=AnyAuth):
+    """Indicadores de salud del ciclo: ventana temporal, estado, completitud de
+    planeación, cobertura del panel, configuración (parrilla/costo) y ciclos vencidos
+    sin cerrar del país. Alimenta el panel de salud del frontend."""
+    from datetime import date
+    from sqlalchemy import func, distinct
+    from app.models.dimensiones import RepresentanteMedico
+    from app.models.visita import (
+        MedicoVisita, VisitaRegistro, PlaneacionCiclo, ParrillaPromocional, CostoEstructura,
+    )
+    c = db.query(Ciclo).filter(Ciclo.id == id).first()
+    if not c:
+        raise HTTPException(404, "Ciclo no encontrado")
+
+    hoy = date.today()
+    totales = c.dias_laborables or _dias_habiles(db, c.pais_codigo, c.fecha_inicio, c.fecha_fin)
+    transcurridos = _dias_habiles(db, c.pais_codigo, c.fecha_inicio, min(hoy, c.fecha_fin)) if hoy >= c.fecha_inicio else 0
+    restantes = _dias_habiles(db, c.pais_codigo, hoy, c.fecha_fin) if hoy <= c.fecha_fin else 0
+    progreso = round(transcurridos / totales * 100) if totales else 0
+
+    # VMs del país y cuántos tienen planeación cargada en el ciclo.
+    vms_pais = [r.id for r in db.query(RepresentanteMedico.id).filter(
+        RepresentanteMedico.pais_codigo == c.pais_codigo, RepresentanteMedico.activo == True).all()]  # noqa: E712
+    vm_total = len(vms_pais)
+    vm_con_plan = db.query(func.count(distinct(PlaneacionCiclo.vm_id))).filter(
+        PlaneacionCiclo.ciclo_id == id).scalar() or 0
+
+    # Panel de médicos (aprobados/activos) de esos VMs, y cuántos se visitaron en el ciclo.
+    medicos_panel = db.query(func.count(MedicoVisita.id)).filter(
+        MedicoVisita.vm_id.in_(vms_pais or [-1]),
+        MedicoVisita.activo == True, MedicoVisita.estado_aprobacion == "APROBADO").scalar() or 0  # noqa: E712
+    medicos_visitados = db.query(func.count(distinct(VisitaRegistro.medico_id))).filter(
+        VisitaRegistro.ciclo_id == id, VisitaRegistro.ejecutada == True).scalar() or 0  # noqa: E712
+    visitas_registradas = db.query(func.count(VisitaRegistro.id)).filter(
+        VisitaRegistro.ciclo_id == id).scalar() or 0
+
+    parrilla_publicada = (db.query(func.count(ParrillaPromocional.id)).filter(
+        ParrillaPromocional.ciclo_id == id, ParrillaPromocional.activo == True).scalar() or 0) > 0  # noqa: E712
+    costo_configurado = (db.query(func.count(CostoEstructura.id)).filter(
+        CostoEstructura.ciclo_id == id).scalar() or 0) > 0
+
+    # Ciclos VENCIDOS sin cerrar del país (abiertos con fecha fin ya pasada).
+    vencidos = db.query(func.count(Ciclo.id)).filter(
+        Ciclo.pais_codigo == c.pais_codigo, Ciclo.activo == True,  # noqa: E712
+        Ciclo.cerrado == False, Ciclo.fecha_fin < hoy).scalar() or 0
+
+    return {
+        "ciclo_id": c.id, "nombre": c.nombre, "estado": c.estado, "vencido": c.vencido,
+        "fecha_inicio": c.fecha_inicio.isoformat(), "fecha_fin": c.fecha_fin.isoformat(),
+        "dias_totales": totales, "dias_transcurridos": transcurridos,
+        "dias_restantes": restantes, "progreso_pct": progreso,
+        "vm_total": vm_total, "vm_con_planeacion": vm_con_plan,
+        "vm_sin_planeacion": max(0, vm_total - vm_con_plan),
+        "pct_planeacion": round(vm_con_plan / vm_total * 100) if vm_total else 0,
+        "medicos_panel": medicos_panel, "medicos_visitados": medicos_visitados,
+        "medicos_sin_visitar": max(0, medicos_panel - medicos_visitados),
+        "pct_cobertura": round(medicos_visitados / medicos_panel * 100) if medicos_panel else 0,
+        "visitas_registradas": visitas_registradas,
+        "parrilla_publicada": parrilla_publicada, "costo_configurado": costo_configurado,
+        "ciclos_vencidos_sin_cerrar": vencidos,
+    }
+
+
 # ── Feriados / Días no laborables (DIM_Feriado) ───────────────────────────────
 # Fechas entre semana (lun-vie) que NO se cuentan como días laborables del ciclo.
 
