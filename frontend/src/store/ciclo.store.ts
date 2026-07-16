@@ -4,6 +4,9 @@ import { api } from '../services/api';
 export type Ciclo = {
   id: number; nombre: string; nombre_canonico?: string;
   pais_codigo: string; anio: number; numero: number; cerrado: boolean;
+  fecha_inicio?: string; fecha_fin?: string; dias_laborables?: number;
+  estado?: 'PLANIFICADO' | 'VIGENTE' | 'POR_CERRAR' | 'CERRADO';
+  vencido?: boolean;   // abierto pero con fecha fin ya pasada
 };
 
 const ROLES_MULTIPAIS = ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD'];

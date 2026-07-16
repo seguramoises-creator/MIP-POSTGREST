@@ -14,6 +14,7 @@ import { api } from '../../services/api';
 import { miGerente, type MiGerente } from '../../services/visita.service';
 import CicloPaisBadge from '../CicloPaisBadge';
 import CicloPaisHeader from '../CicloPaisHeader';
+import { useCicloStore } from '../../store/ciclo.store';
 
 export default function MainLayout() {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ export default function MainLayout() {
   ];
   const headerEnLayout = !HEADER_OCULTO.includes(pathname);
   const { nombreCompleto, accessToken, rol, logout } = useAuthStore();
+  const cicloAbierto = useCicloStore((s) => s.cicloAbierto);
   const debeCambiarPassword = useAuthStore((s) => s.debeCambiarPassword);
   const passwordMotivo = useAuthStore((s) => s.passwordMotivo);
   const passwordExpiraEnDias = useAuthStore((s) => s.passwordExpiraEnDias);
@@ -188,6 +190,23 @@ export default function MainLayout() {
         </Dialog>
 
         <Box sx={{ flexGrow: 1, p: { xs: 1.5, sm: 3 }, bgcolor: '#f5f6fa', minWidth: 0, overflowX: 'hidden' }}>
+          {cicloAbierto?.vencido && (
+            <Alert
+              severity="warning"
+              sx={{ mb: 2 }}
+              action={
+                (rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD') ? (
+                  <Button color="inherit" size="small" onClick={() => navigate('/admin')}>
+                    Ir a Ciclos
+                  </Button>
+                ) : undefined
+              }
+            >
+              El ciclo de trabajo <b>{cicloAbierto.nombre}</b> ya venció (fin {cicloAbierto.fecha_fin}).
+              Actualiza sus fechas al mes en curso, o ciérralo y abre el siguiente. Mientras tanto,
+              el registro de visitas y el "ritmo diario requerido" no aplican.
+            </Alert>
+          )}
           {avisoVencimiento && (
             <Alert
               severity="warning"
