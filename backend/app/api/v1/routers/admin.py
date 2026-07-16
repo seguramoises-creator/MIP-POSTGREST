@@ -600,10 +600,18 @@ def ciclo_salud(id: int, db: Session = Depends(get_db), _=AnyAuth):
     vm_con_plan = db.query(func.count(distinct(PlaneacionCiclo.vm_id))).filter(
         PlaneacionCiclo.ciclo_id == id).scalar() or 0
 
-    # Panel de médicos (aprobados/activos) de esos VMs, y cuántos se visitaron en el ciclo.
-    medicos_panel = db.query(func.count(MedicoVisita.id)).filter(
-        MedicoVisita.vm_id.in_(vms_pais or [-1]),
-        MedicoVisita.activo == True, MedicoVisita.estado_aprobacion == "APROBADO").scalar() or 0  # noqa: E712
+    # Panel de médicos. IMPORTANTE: se cuenta el panel EFECTIVO del ciclo aplicando el
+    # mismo criterio que el Dashboard de Cobertura (`cuenta_en_ciclo`: activo, aprobado y
+    # vigente según su ciclo de alta/baja). Así este panel refleja lo mismo que la
+    # cobertura y delata desfases (p. ej. médicos con alta en un ciclo posterior, que
+    # dejan el panel efectivo en 0 aunque haya médicos cargados).
+    from app.services.visita_aprobacion_service import ordenes_ciclo, cuenta_en_ciclo
+    ordenes = ordenes_ciclo(db)
+    ciclo_orden = ordenes.get(id)
+    _medicos = db.query(MedicoVisita).filter(MedicoVisita.vm_id.in_(vms_pais or [-1])).all()
+    medicos_registrados = sum(1 for m in _medicos if m.activo)
+    medicos_panel = sum(1 for m in _medicos if cuenta_en_ciclo(m, ciclo_orden, ordenes))
+    medicos_fuera_de_ciclo = max(0, medicos_registrados - medicos_panel)
     medicos_visitados = db.query(func.count(distinct(VisitaRegistro.medico_id))).filter(
         VisitaRegistro.ciclo_id == id, VisitaRegistro.ejecutada == True).scalar() or 0  # noqa: E712
     visitas_registradas = db.query(func.count(VisitaRegistro.id)).filter(
@@ -627,7 +635,10 @@ def ciclo_salud(id: int, db: Session = Depends(get_db), _=AnyAuth):
         "vm_total": vm_total, "vm_con_planeacion": vm_con_plan,
         "vm_sin_planeacion": max(0, vm_total - vm_con_plan),
         "pct_planeacion": round(vm_con_plan / vm_total * 100) if vm_total else 0,
-        "medicos_panel": medicos_panel, "medicos_visitados": medicos_visitados,
+        "medicos_panel": medicos_panel,                       # vigentes para ESTE ciclo
+        "medicos_registrados": medicos_registrados,           # activos en el panel (todos)
+        "medicos_fuera_de_ciclo": medicos_fuera_de_ciclo,     # cargados pero no vigentes aquí
+        "medicos_visitados": medicos_visitados,
         "medicos_sin_visitar": max(0, medicos_panel - medicos_visitados),
         "pct_cobertura": round(medicos_visitados / medicos_panel * 100) if medicos_panel else 0,
         "visitas_registradas": visitas_registradas,

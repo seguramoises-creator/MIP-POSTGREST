@@ -19,7 +19,8 @@ type Salud = {
   fecha_inicio: string; fecha_fin: string;
   dias_totales: number; dias_transcurridos: number; dias_restantes: number; progreso_pct: number;
   vm_total: number; vm_con_planeacion: number; vm_sin_planeacion: number; pct_planeacion: number;
-  medicos_panel: number; medicos_visitados: number; medicos_sin_visitar: number; pct_cobertura: number;
+  medicos_panel: number; medicos_registrados: number; medicos_fuera_de_ciclo: number;
+  medicos_visitados: number; medicos_sin_visitar: number; pct_cobertura: number;
   visitas_registradas: number; parrilla_publicada: boolean; costo_configurado: boolean;
   ciclos_vencidos_sin_cerrar: number;
 };
@@ -78,6 +79,15 @@ export default function SaludCiclo() {
           Ciérralos para mantener un único ciclo vigente.
         </Alert>
       )}
+      {data.medicos_fuera_de_ciclo > 0 && (
+        <Alert severity={data.medicos_panel === 0 ? 'error' : 'warning'} sx={{ mb: 1.5 }}>
+          <b>{data.medicos_fuera_de_ciclo.toLocaleString()}</b> de {data.medicos_registrados.toLocaleString()} médicos
+          del panel <b>no están vigentes en este ciclo</b> (su ciclo de alta es posterior).
+          {data.medicos_panel === 0
+            ? ' El panel efectivo es 0: la cobertura saldrá en 0% aunque haya visitas registradas. Corrige el ciclo de alta de los médicos.'
+            : ' No cuentan para la cobertura de este ciclo.'}
+        </Alert>
+      )}
       {data.pct_planeacion < 100 && data.estado !== 'CERRADO' && (
         <Alert severity={data.pct_planeacion < 50 ? 'warning' : 'info'} sx={{ mb: 1.5 }}>
           Planeación incompleta: <b>{data.vm_sin_planeacion}</b> de {data.vm_total} representantes aún no
@@ -100,7 +110,10 @@ export default function SaludCiclo() {
         <Grid item xs={6} sm={4} md={2.4}>
           <Metrica icon={<TrackChanges sx={{ fontSize: 16 }} />} label="COBERTURA PANEL"
             valor={`${data.pct_cobertura}%`} pct={data.pct_cobertura}
-            sub={`${data.medicos_visitados}/${data.medicos_panel} médicos`} color="#00897b" />
+            sub={data.medicos_fuera_de_ciclo > 0
+              ? `${data.medicos_visitados}/${data.medicos_panel} vigentes (de ${data.medicos_registrados} cargados)`
+              : `${data.medicos_visitados}/${data.medicos_panel} médicos`}
+            color={data.medicos_panel === 0 ? '#c62828' : '#00897b'} />
         </Grid>
         <Grid item xs={6} sm={4} md={2.4}>
           <Metrica icon={<Warning sx={{ fontSize: 16 }} />} label="SIN VISITAR"
