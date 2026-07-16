@@ -79,10 +79,10 @@ export default function CostoRoiVisita() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const moneda = full?.moneda ?? 'RD$';
-  const money = (v: number) => `${moneda} ${Math.round(v).toLocaleString()}`;
-  // Formato pedido para totales: 999,999,999.99 (miles con coma, 2 decimales).
+  // Formato de números en TODA la pantalla: 999,999,999.99 (miles + 2 decimales).
   const nf2 = (v: number) => (v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const money2 = (v: number) => `${moneda} ${nf2(v)}`;
+  const money = (v: number) => `${moneda} ${nf2(v)}`;
+  const money2 = money;   // alias (mismo formato)
   const lineaParam = esGestor ? (lineaId || undefined) : undefined;
   const cicloParam = cicloId || undefined;
   const cerrado = esSoloLectura;               // "no editable" = ciclo != abierto (cubre cerrado y futuro)
@@ -127,10 +127,10 @@ export default function CostoRoiVisita() {
 
   if (cargando || !est || !full) return <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /></Box>;
 
-  const num = (label: string, val: number, k: keyof CostoEstructuraInput, sub?: string, width = 150) => (
+  const num = (label: string, val: number, k: keyof CostoEstructuraInput, sub?: string, width = 150, fmt?: boolean) => (
     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ py: 0.75 }}>
       <Box><Typography variant="body2" fontWeight={600}>{label}</Typography>{sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}</Box>
-      <NumField value={val} width={width} disabled={cerrado} onNum={(n) => setE(k, n)} />
+      <NumField value={val} width={width} fmt={fmt} disabled={cerrado} onNum={(n) => setE(k, n)} />
     </Stack>
   );
   const kpi = (label: string, valor: string, color = 'text.primary', sub?: string) => (
@@ -195,10 +195,10 @@ export default function CostoRoiVisita() {
         <Grid item xs={12} md={6}>
           <Card variant="outlined" sx={{ height: '100%' }}><CardContent>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}><MonetizationOn fontSize="small" color="action" /><Typography variant="subtitle1" fontWeight={700}>Estructura de costo del representante</Typography></Stack>
-            {num('Salario mensual bruto', est.salario_mensual, 'salario_mensual', 'Incluye sueldo base')}
+            {num('Salario mensual bruto', est.salario_mensual, 'salario_mensual', 'Incluye sueldo base', 150, true)}
             {num('Cargas y beneficios (%)', est.cargas_pct, 'cargas_pct', 'TSS, AFP, ARS, regalía', 90)}
-            {num('Viáticos por día de campo', est.viaticos_dia, 'viaticos_dia', 'Combustible + alimentación')}
-            {num('Materiales promo por ciclo', est.materiales_ciclo, 'materiales_ciclo', 'Folletos, detailads, gimmicks')}
+            {num('Viáticos por día de campo', est.viaticos_dia, 'viaticos_dia', 'Combustible + alimentación', 150, true)}
+            {num('Materiales promo por ciclo', est.materiales_ciclo, 'materiales_ciclo', 'Folletos, detailads, gimmicks', 150, true)}
             {num('Días de campo en el ciclo', est.dias_campo, 'dias_campo', 'Días hábiles de visita', 90)}
             {num('Total visitas del ciclo', est.total_visitas, 'total_visitas', 'Visitas registradas', 90)}
             <Box sx={{ mt: 1.5, p: 1.5, bgcolor: 'rgba(46,91,255,0.06)', borderRadius: 1 }}>
@@ -222,7 +222,7 @@ export default function CostoRoiVisita() {
                 <TableRow key={p.producto}>
                   <TableCell>{i + 1}</TableCell>
                   <TableCell>{p.producto}</TableCell>
-                  <TableCell align="center"><NumField value={p.costo_unitario_muestra} disabled={cerrado} onNum={(n) => setP(i, 'costo_unitario_muestra', n)} /></TableCell>
+                  <TableCell align="center"><NumField value={p.costo_unitario_muestra} width={120} fmt disabled={cerrado} onNum={(n) => setP(i, 'costo_unitario_muestra', n)} /></TableCell>
                   <TableCell align="center"><NumField value={p.cantidad_muestras} disabled={cerrado} onNum={(n) => setP(i, 'cantidad_muestras', n)} /></TableCell>
                   <TableCell align="right">{money(p.costo_unitario_muestra * p.cantidad_muestras)}</TableCell>
                 </TableRow>
@@ -295,14 +295,23 @@ export default function CostoRoiVisita() {
                 return (
                   <TableRow key={p.producto}>
                     <TableCell>{p.producto}</TableCell>
-                    <TableCell align="center"><NumField value={p.presupuesto_anual} width={130} disabled={cerrado} onNum={(n) => setP(i, 'presupuesto_anual', n)} /></TableCell>
-                    <TableCell align="center"><NumField value={p.precio_prom} disabled={cerrado} onNum={(n) => setP(i, 'precio_prom', n)} /></TableCell>
+                    <TableCell align="center"><NumField value={p.presupuesto_anual} width={160} fmt disabled={cerrado} onNum={(n) => setP(i, 'presupuesto_anual', n)} /></TableCell>
+                    <TableCell align="center"><NumField value={p.precio_prom} width={120} fmt disabled={cerrado} onNum={(n) => setP(i, 'precio_prom', n)} /></TableCell>
                     <TableCell align="right">{money(pr?.productiv_obj_contacto ?? 0)}</TableCell>
                     <TableCell align="right">{(pr?.unidades_obj_contacto ?? 0).toFixed(1)} uds</TableCell>
                     <TableCell align="center"><Chip size="small" color={cumpl >= 100 ? 'success' : cumpl >= 80 ? 'warning' : 'error'} label={`${cumpl}%`} /></TableCell>
                   </TableRow>
                 );
               })}
+              {/* Fila de TOTALES — totaliza el Presupuesto anual (y las unidades obj.). */}
+              <TableRow sx={{ '& td': { fontWeight: 800, borderTop: '2px solid', borderColor: 'divider', bgcolor: 'rgba(46,91,255,0.06)' } }}>
+                <TableCell>TOTALES</TableCell>
+                <TableCell align="center">{money2(prods.reduce((s, p) => s + (p.presupuesto_anual || 0), 0))}</TableCell>
+                <TableCell />
+                <TableCell />
+                <TableCell align="right">{nf2(pa.productos.reduce((s, x) => s + (x.unidades_obj_contacto || 0), 0))} uds</TableCell>
+                <TableCell />
+              </TableRow>
             </TableBody></Table>
           </CardContent></Card>
         </Grid>
