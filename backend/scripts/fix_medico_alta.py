@@ -5,7 +5,7 @@ Problema: la carga masiva dejó a TODOS los médicos con ciclo_alta_id = el cicl
 más reciente al momento de importar (p. ej. C12-2026). Como el alta surte efecto
 "el ciclo siguiente" (regla de `cuenta_en_ciclo`), ningún médico resulta VIGENTE
 en los ciclos de trabajo (C01..C11), y el panel efectivo sale en 0 aunque haya
-médicos y visitas registradas → Dashboard de Cobertura en blanco.
+médicos y visitas registradas -> Dashboard de Cobertura en blanco.
 
 Solución: fijar el alta de cada médico al PRIMER ciclo del año de su país
 (C01), de modo que quede vigente en los ciclos siguientes. No toca médicos que
@@ -49,7 +49,7 @@ def main() -> None:
         for pais, ids in por_pais.items():
             destino = c01[pais]
             if dry:
-                print(f"  {pais}: {len(ids)} médicos → alta=C01 (id={destino})  [dry-run]")
+                print(f"  {pais}: {len(ids)} médicos -> alta=C01 (id={destino})  [dry-run]")
                 continue
             n = db.execute(text('''
                 UPDATE "Visita"."DIM_MedicoVisita"
@@ -57,7 +57,7 @@ def main() -> None:
                 WHERE id = ANY(:ids) AND ciclo_alta_id IS DISTINCT FROM :dest
             '''), {"dest": destino, "ids": ids}).rowcount
             total += n
-            print(f"  {pais}: {n} médicos actualizados → alta=C01 (id={destino})")
+            print(f"  {pais}: {n} médicos actualizados -> alta=C01 (id={destino})")
 
         if not dry:
             db.commit()
