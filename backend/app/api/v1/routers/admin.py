@@ -461,6 +461,23 @@ def _dias_habiles(db: Session, pais_codigo: str, inicio, fin) -> int:
     return total
 
 
+def _validar_fechas_ciclo(db: Session, pais_codigo: str, inicio, fin, excluir_id=None):
+    """Control de calidad de fechas del ciclo: inicio anterior a fin y SIN solapamiento
+    con otro ciclo activo del mismo país (garantiza un único ciclo por ventana de tiempo)."""
+    if inicio is None or fin is None or fin <= inicio:
+        raise HTTPException(400, "La fecha de inicio debe ser anterior a la fecha de fin.")
+    q = (db.query(Ciclo).filter(
+            Ciclo.activo == True, Ciclo.pais_codigo == pais_codigo,  # noqa: E712
+            Ciclo.fecha_inicio <= fin, Ciclo.fecha_fin >= inicio))
+    if excluir_id is not None:
+        q = q.filter(Ciclo.id != excluir_id)
+    solapado = q.first()
+    if solapado:
+        raise HTTPException(400,
+            f"Las fechas se solapan con el ciclo '{solapado.nombre}' "
+            f"({solapado.fecha_inicio} a {solapado.fecha_fin}). Ajusta el rango.")
+
+
 def _ciclo_actual_de(ciclos):
     """Ciclo abierto (cerrado=False) más reciente: max por (anio, numero)."""
     abiertos = [c for c in ciclos if not c.cerrado]
@@ -514,6 +531,7 @@ def ciclo_dias_habiles(pais_codigo: str, fecha_inicio: date, fecha_fin: date,
 
 @router.post("/ciclos", response_model=CicloResponse, status_code=201, summary="Crear ciclo")
 def create_ciclo(data: CicloCreate, db: Session = Depends(get_db), _=AdminOnly):
+    _validar_fechas_ciclo(db, data.pais_codigo, data.fecha_inicio, data.fecha_fin)
     payload = data.model_dump()
     # dias_laborables SIEMPRE se calcula (lun-vie menos feriados), no se toma del cliente.
     payload["dias_laborables"] = _dias_habiles(db, data.pais_codigo, data.fecha_inicio, data.fecha_fin)
@@ -529,6 +547,7 @@ def update_ciclo(id: int, data: CicloUpdate, db: Session = Depends(get_db), _=Ad
         raise HTTPException(404, "Ciclo no encontrado")
     for campo, valor in data.model_dump(exclude_unset=True).items():
         setattr(obj, campo, valor)
+    _validar_fechas_ciclo(db, obj.pais_codigo, obj.fecha_inicio, obj.fecha_fin, excluir_id=obj.id)
     # Recalcular días laborables con las fechas (nuevas o vigentes) y los feriados del país.
     obj.dias_laborables = _dias_habiles(db, obj.pais_codigo, obj.fecha_inicio, obj.fecha_fin)
     db.commit(); db.refresh(obj)

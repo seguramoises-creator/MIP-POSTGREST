@@ -292,6 +292,27 @@ class Ciclo(Base):
     cerrado: Mapped[bool] = mapped_column(Boolean, default=False)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    @property
+    def estado(self) -> str:
+        """Ciclo de vida derivado de las fechas + `cerrado`:
+        PLANIFICADO (aún no inicia) · VIGENTE (hoy dentro de la ventana) ·
+        POR_CERRAR (fecha fin ya pasó, aún abierto) · CERRADO (snapshot inmutable)."""
+        from datetime import date as _date
+        if self.cerrado:
+            return "CERRADO"
+        hoy = _date.today()
+        if self.fecha_inicio and hoy < self.fecha_inicio:
+            return "PLANIFICADO"
+        if self.fecha_fin and hoy > self.fecha_fin:
+            return "POR_CERRAR"
+        return "VIGENTE"
+
+    @property
+    def vencido(self) -> bool:
+        """True si está abierto pero su fecha fin ya pasó (ciclo 'zombi' por cerrar)."""
+        from datetime import date as _date
+        return (not self.cerrado) and self.fecha_fin is not None and _date.today() > self.fecha_fin
+
 
 class Mes(Base):
     __tablename__ = "DIM_Mes"

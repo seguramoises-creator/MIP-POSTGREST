@@ -299,6 +299,8 @@ class CicloResponse(BaseModel):
     dias_laborables: int
     cerrado: bool
     activo: bool
+    estado: str = "VIGENTE"      # PLANIFICADO | VIGENTE | POR_CERRAR | CERRADO
+    vencido: bool = False        # abierto pero con fecha fin ya pasada
 
 
 class FeriadoIn(BaseModel):
