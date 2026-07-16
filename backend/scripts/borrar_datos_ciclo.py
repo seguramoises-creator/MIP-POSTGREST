@@ -49,7 +49,8 @@ def _clases_ciclo():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ciclo", type=int, help="ID del ciclo cuyos datos se borran")
-    ap.add_argument("--pais", default=None, help="Para --listar")
+    ap.add_argument("--num", type=int, help="Nº de ciclo (con --pais), ej. 12")
+    ap.add_argument("--pais", default=None, help="País (para --listar o --num)")
     ap.add_argument("--listar", action="store_true", help="Lista los ciclos y sus IDs")
     ap.add_argument("--dry-run", action="store_true", help="No borra; solo muestra")
     ap.add_argument("--confirmar", action="store_true", help="Confirma el borrado real")
@@ -65,8 +66,12 @@ def main():
                 print(f"id={c.id:>3}  {c.pais_codigo}  {c.nombre:<12} {c.fecha_inicio}->{c.fecha_fin}  cerrado={c.cerrado}")
             return
 
+        if not args.ciclo and args.num and args.pais:
+            cc = (db.query(Ciclo).filter(Ciclo.pais_codigo == args.pais, Ciclo.numero == args.num)
+                  .order_by(Ciclo.anio.desc()).first())
+            args.ciclo = cc.id if cc else None
         if not args.ciclo:
-            print("ERROR: indica --ciclo <id> (usa --listar para ver los IDs).")
+            print("ERROR: indica --ciclo <id> o --pais --num <n>. Usa --listar para ver los ciclos.")
             return
         c = db.query(Ciclo).filter(Ciclo.id == args.ciclo).first()
         if not c:

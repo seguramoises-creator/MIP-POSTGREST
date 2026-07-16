@@ -80,11 +80,19 @@ def _copiar_tabla(db, cls, origen, destino, dry):
     return len(filas)
 
 
+def _resolver_id(db, pais, num):
+    c = (db.query(Ciclo).filter(Ciclo.pais_codigo == pais, Ciclo.numero == num)
+         .order_by(Ciclo.anio.desc()).first())
+    return c.id if c else None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--origen", type=int, help="ID del ciclo origen (con los datos)")
     ap.add_argument("--destino", type=int, help="ID del ciclo destino (mes en curso)")
-    ap.add_argument("--pais", default=None, help="Para --listar")
+    ap.add_argument("--origen-num", type=int, help="Nº de ciclo origen (con --pais), ej. 3")
+    ap.add_argument("--destino-num", type=int, help="Nº de ciclo destino (con --pais), ej. 7")
+    ap.add_argument("--pais", default=None, help="País (para --listar o --*-num)")
     ap.add_argument("--listar", action="store_true", help="Lista los ciclos y sus IDs")
     ap.add_argument("--dry-run", action="store_true", help="No escribe; solo muestra")
     ap.add_argument("--reabrir-destino", action="store_true", help="Marca el ciclo destino como abierto")
@@ -101,8 +109,14 @@ def main():
                 print(f"id={c.id:>3}  {c.pais_codigo}  {c.nombre:<12} {c.fecha_inicio}->{c.fecha_fin}  cerrado={c.cerrado}")
             return
 
+        # Resolver por país + número si no se dieron IDs directos.
+        if not args.origen and args.origen_num and args.pais:
+            args.origen = _resolver_id(db, args.pais, args.origen_num)
+        if not args.destino and args.destino_num and args.pais:
+            args.destino = _resolver_id(db, args.pais, args.destino_num)
         if not args.origen or not args.destino:
-            print("ERROR: indica --origen y --destino (usa --listar para ver los IDs).")
+            print("ERROR: indica --origen/--destino (IDs) o --pais --origen-num --destino-num. "
+                  "Usa --listar para ver los ciclos.")
             return
         if args.origen == args.destino:
             print("ERROR: origen y destino son el mismo ciclo.")
