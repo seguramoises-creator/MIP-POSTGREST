@@ -398,6 +398,10 @@ const DashboardTab = ({
     contactos_dia: r.contactos_diarios_requeridos,
     fill: SEM[r.estado_ritmo],
   }));
+  // El "ritmo diario requerido" es 0 cuando no quedan días hábiles en el ciclo
+  // (transcurridos = totales). En ese caso el gráfico saldría vacío: mostramos un
+  // mensaje claro en vez de barras en cero.
+  const ritmoSinDias = (data.dias_habiles_restantes ?? 0) <= 0;
 
   return (
     <Box>
@@ -508,6 +512,17 @@ const DashboardTab = ({
             <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
               Ritmo diario requerido (méd. + contactos)
             </Typography>
+            {ritmoSinDias ? (
+              <Box sx={{ height: 280, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'text.secondary', px: 2 }}>
+                <Warning sx={{ fontSize: 40, color: '#f57c00', mb: 1 }} />
+                <Typography variant="body2" fontWeight={700}>Sin días hábiles restantes en el ciclo</Typography>
+                <Typography variant="caption">
+                  {data.dias_habiles_transcurridos}/{data.dias_habiles_totales} días transcurridos · 0 restantes.
+                  El ritmo diario requerido no aplica cuando el ciclo ya llegó a su fin.
+                  Verifica la <b>fecha fin</b> y los <b>días laborables</b> del ciclo si esperabas días disponibles.
+                </Typography>
+              </Box>
+            ) : (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart data={chartRitmo} margin={{ top: 5, right: 10, left: -10, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -520,6 +535,7 @@ const DashboardTab = ({
                 <Bar dataKey="contactos_dia" name="Cont/día" fill="#ab47bc" radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            )}
           </Paper>
         </Grid>
       </Grid>
