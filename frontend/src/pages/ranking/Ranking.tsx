@@ -10,6 +10,8 @@ import { Download } from '@mui/icons-material';
 import { useMemo, useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
+import { useAuthStore } from '../../store/auth.store';
+import MiRanking from './MiRanking';
 import type { RankingItem } from '../../types';
 
 /* ── utilidades ───────────────────────────────────────────── */
@@ -63,7 +65,15 @@ function SimpleRow({ row, i }: { row: any; i: number }) {
 }
 
 /* ── página principal ─────────────────────────────────────── */
+/** El representante ve SU POSICIÓN ("estás 12 de 45"), no el ranking completo: publicar la
+ *  tabla con nombres y puntajes expondría el dato individual de cada colega a los otros 44.
+ *  La gerencia sí ve el mapa integral. Wrapper porque los hooks no admiten return temprano. */
 export default function Ranking() {
+  const rolActual = useAuthStore((s) => s.rol);
+  return rolActual === 'REPRESENTANTE_MEDICO' ? <MiRanking /> : <RankingGerencia />;
+}
+
+function RankingGerencia() {
   const [tab,        setTab]        = useState(0);
   // País y ciclo salen del CONTEXTO GLOBAL (barra superior); el ranking sigue al ciclo
   // elegido arriba (por defecto el ABIERTO) en vez de auto-elegir el "último con datos" (Item 8).

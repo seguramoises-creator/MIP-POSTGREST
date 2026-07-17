@@ -4,7 +4,7 @@ GET /api/v1/ranking  — Ranking acumulado ciclo 1..N, score = AVG (igual al das
 Tendencia: compara score del ciclo N vs ciclo N-1 para cada RM.
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -17,6 +17,58 @@ from app.schemas.schemas import RankingResponse, RankingRequest
 
 router = APIRouter(prefix="/ranking", tags=["Ranking"])
 AnyAuth = Depends(get_current_active_user)
+
+
+@router.get("/mi-posicion", response_model=dict, summary="Mi posición en el ranking (sin ver a nadie más)")
+def get_mi_posicion(ciclo_id: Optional[int] = Query(None), db: Session = Depends(get_db),
+                    current_user=AnyAuth):
+    """Dónde está el representante y contra cuántos compite — nunca QUIÉN es quién.
+
+    Decisión del cliente (jul-2026): el representante ve su posición ("estás 12 de 45"), no el
+    ranking completo. Un ranking con nombres y puntajes es el dato individual de cada colega
+    expuesto a los otros 44, y contradiría la regla que él mismo fijó para Productividad
+    ("no puede ver ningún dato de ningún otro visitador"). Aquí solo salen su fila y CONTEOS
+    del universo: nunca una fila ajena.
+    """
+    if current_user.rol != Rol.REPRESENTANTE_MEDICO:
+        raise HTTPException(403, "Esta vista es la de un representante médico.")
+    if not current_user.rm_id:
+        raise HTTPException(403, "Tu usuario no está vinculado a un representante médico.")
+
+    q = db.query(RankingRM).filter(RankingRM.rm_id == current_user.rm_id,
+                                   RankingRM.tipo_ranking == "MENSUAL")
+    if ciclo_id:
+        q = q.filter(RankingRM.ciclo_id == ciclo_id)
+    fila = q.order_by(RankingRM.ciclo_id.desc()).first()
+    if not fila:
+        return {"sin_datos": True, "posicion": None, "total": None,
+                "motivo": "Todavía no tienes resultados en el ranking de este ciclo."}
+
+    # Universo con el que compite: mismo ciclo, país y tipo. Solo se cuenta — no se lee
+    # ninguna fila ajena.
+    base = db.query(RankingRM).filter(RankingRM.ciclo_id == fila.ciclo_id,
+                                      RankingRM.pais_codigo == fila.pais_codigo,
+                                      RankingRM.tipo_ranking == "MENSUAL")
+    total = base.count()
+    total_linea = base.filter(RankingRM.linea_id == fila.linea_id).count() if fila.linea_id else None
+
+    ciclo = db.query(Ciclo.nombre).filter(Ciclo.id == fila.ciclo_id).scalar()
+    linea = db.query(Linea.nombre).filter(Linea.id == fila.linea_id).scalar() if fila.linea_id else None
+    # Percentil: a cuántos supera, en %. Con 1 solo participante no significa nada.
+    percentil = round((total - fila.posicion_global) / (total - 1) * 100) if total > 1 else None
+    delta = (fila.posicion_anterior - fila.posicion_global) if fila.posicion_anterior else None
+
+    return {
+        "sin_datos": False,
+        "ciclo": ciclo, "ciclo_id": fila.ciclo_id,
+        "posicion": fila.posicion_global, "total": total,
+        "posicion_linea": fila.posicion_linea, "total_linea": total_linea, "linea": linea,
+        "score_total": float(fila.score_total or 0),
+        "percentil": percentil,
+        "posicion_anterior": fila.posicion_anterior,
+        "variacion": delta,           # + = subió puestos, − = bajó
+        "elegible": bool(fila.elegible),
+    }
 
 
 def _ciclos_acumulados(db: Session, ciclo_id: int):
@@ -129,7 +181,12 @@ def get_ranking(
     )
     if pais_codigo:
         sub = sub.filter(RankingRM.pais_codigo == pais_codigo)
-    if current_user.rol == Rol.REPRESENTANTE_MEDICO and current_user.rm_id:
+    # FAIL-CLOSED: era `if rol == RM and current_user.rm_id`. Con rm_id nulo la condición era
+    # falsa, el filtro NO se aplicaba y el representante veía el ranking COMPLETO de todos sus
+    # compañeros. El representante usa /ranking/mi-posicion; aquí solo puede ver su fila.
+    if current_user.rol == Rol.REPRESENTANTE_MEDICO:
+        if not current_user.rm_id:
+            raise HTTPException(403, "Tu usuario no está vinculado a un representante médico.")
         sub = sub.filter(RankingRM.rm_id == current_user.rm_id)
     sub = sub.group_by(RankingRM.rm_id).subquery()
 
