@@ -34,7 +34,17 @@ export default function MainLayout() {
     '/medicos', '/categorizacion',
     // Parrilla y Costo/ROI ya traen su PROPIO selector de ciclo: la franja los duplicaba.
     '/visita/parrilla', '/visita/costo-roi',
+    // No leen el ciclo en absoluto: la franja solo sugeria que influia en algo.
+    '/visita/panel-medico', '/mis-examenes', '/examenes-equipo',
+    // Solo usaban el ciclo para derivar `esSoloLectura` y apagar el boton de guardar. Sin
+    // franja no hay forma de elegir un ciclo pasado, asi que siempre se trabaja sobre el
+    // ABIERTO — que es la regla. El candado real no se pierde: el backend sigue rechazando
+    // con 409 cualquier escritura sobre un ciclo cerrado (recalculo_service).
+    '/visita/planeacion', '/visita/ruptura',
   ];
+  // Se conserva SOLO donde cambiar el ciclo cambia lo que se ve o lo que se crea:
+  //   /visita/cobertura → el panel Salud del Ciclo consulta el ciclo elegido.
+  //   /examenes         → define a que ciclo va el examen que se crea.
   const headerEnLayout = !HEADER_OCULTO.includes(pathname);
   const { nombreCompleto, accessToken, rol, logout } = useAuthStore();
   const cicloAbierto = useCicloStore((s) => s.cicloAbierto);
