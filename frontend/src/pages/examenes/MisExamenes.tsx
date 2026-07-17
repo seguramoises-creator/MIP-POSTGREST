@@ -3,12 +3,21 @@ import {
   Box, Typography, Card, CardContent, Button, LinearProgress, Chip, Stack,
   RadioGroup, FormControlLabel, Radio, Divider, Alert, CircularProgress, TextField,
 } from '@mui/material';
-import { AccessTime, CheckCircle, Cancel, Assignment } from '@mui/icons-material';
+import { AccessTime, CheckCircle, Cancel, Assignment, Lock } from '@mui/icons-material';
 import { History } from '@mui/icons-material';
 import {
-  misPendientes, iniciarExamen, responder, responderTexto, entregar, miHistorial,
+  misPendientes, iniciarExamen, responder, responderTexto, entregar, miHistorial, reporteIntento,
   type Asignacion, type IntentoIniciado, type ReporteIntento,
 } from '../../services/examenes.service';
+import { useAuthStore } from '../../store/auth.store';
+
+const FEEDBACK_HORAS = 48;
+/** Horas que quedan para ver el detalle (desde fecha_fin + 48h). null = sin fecha. */
+function horasRestantes(fechaFin: string | null): number | null {
+  if (!fechaFin) return null;
+  const vence = new Date(fechaFin).getTime() + FEEDBACK_HORAS * 3600_000;
+  return Math.max(0, Math.round((vence - Date.now()) / 3600_000));
+}
 
 interface IntentoHistorial {
   intento_id: number; fecha_fin: string | null;
@@ -20,6 +29,7 @@ type Vista = 'lista' | 'tomando' | 'reporte';
 const lsKey = (intentoId: number) => `examen_intento_${intentoId}`;
 
 export default function MisExamenes() {
+  const nombreUsuario = useAuthStore((s) => s.nombreCompleto) || useAuthStore((s) => s.username) || '';
   const [vista, setVista] = useState<Vista>('lista');
   const [pendientes, setPendientes] = useState<Asignacion[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -97,6 +107,17 @@ export default function MisExamenes() {
     if (!intento) return;
     const texto = respuestasTexto[preguntaId] ?? '';
     void responderTexto(intento.intento_id, preguntaId, texto).catch(() => {});
+  }
+
+  // Reabrir el reporte de un intento del historial (solo dentro de las 48h — el backend poda
+  // el detalle si venció, y muestra el aviso de vencido).
+  async function verReporte(intentoId: number) {
+    try {
+      setReporte(await reporteIntento(intentoId));
+      setVista('reporte');
+    } catch {
+      setError('No se pudo cargar la revisión de este examen.');
+    }
   }
 
   async function handleEntregar() {
@@ -195,6 +216,12 @@ export default function MisExamenes() {
                       <Typography variant="caption" color="text.secondary">
                         {h.fecha_fin ? new Date(h.fecha_fin).toLocaleString() : 'sin entregar'}
                       </Typography>
+                      {/* El detalle solo se puede reabrir dentro de la ventana de 48h. */}
+                      {h.fecha_fin && (horasRestantes(h.fecha_fin) ?? 0) > 0 && (
+                        <Button size="small" onClick={() => verReporte(h.intento_id)}>
+                          Ver revisión (~{horasRestantes(h.fecha_fin)} h)
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -281,8 +308,25 @@ export default function MisExamenes() {
   }
 
   if (vista === 'reporte' && reporte) {
+    const vencido = !!reporte.feedback_vencido;
+    const horas = horasRestantes(reporte.fecha_fin);
+    // Marca de agua diagonal repetida: desalienta compartir capturas (llevan el nombre y la hora
+    // de quien las tomó). No es infalible — la barrera real es la ventana de 48h del backend.
+    const sello = `${nombreUsuario} · ${new Date().toLocaleString()}`;
+    const watermark = vencido ? {} : {
+      position: 'relative' as const,
+      '&::before': {
+        content: `"${sello}"`, position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none',
+        color: 'rgba(120,120,120,0.10)', fontSize: 13, fontWeight: 700, whiteSpace: 'pre',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transform: 'rotate(-30deg)', textShadow: '0 0 1px rgba(120,120,120,0.05)',
+      },
+    };
     return (
-      <Box sx={{ maxWidth: 720, mx: 'auto', p: { xs: 1.5, sm: 3 } }}>
+      // El bloque de reporte NO se imprime (@media print) y bloquea el menú contextual.
+      <Box sx={{ maxWidth: 720, mx: 'auto', p: { xs: 1.5, sm: 3 },
+                 '@media print': { display: 'none' } }}
+           onContextMenu={(e) => e.preventDefault()}>
         <Card variant="outlined" sx={{ mb: 2 }}>
           <CardContent sx={{ textAlign: 'center' }}>
             <Typography variant="h6">{reporte.examen_nombre}</Typography>
@@ -291,10 +335,11 @@ export default function MisExamenes() {
               color={reporte.provisional ? 'warning.main' : reporte.aprobado ? 'success.main' : 'error.main'}>
               {reporte.score}%
             </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {reporte.correctas} de {reporte.total} correctas · nota mínima {reporte.nota_minima}%
-            </Typography>
-            <Button sx={{ mt: 1 }} onClick={() => window.print()}>Imprimir / Guardar PDF</Button>
+            {!vencido && (
+              <Typography variant="body2" color="text.secondary">
+                {reporte.correctas} de {reporte.total} correctas · nota mínima {reporte.nota_minima}%
+              </Typography>
+            )}
           </CardContent>
         </Card>
 
@@ -312,45 +357,55 @@ export default function MisExamenes() {
         ) : (
           <Alert severity="error" icon={<Cancel />} sx={{ mb: 2 }}>
             <Typography fontWeight={700}>Examen no aprobado — por debajo de nota mínima</Typography>
-            Nota obtenida: <b>{reporte.score}%</b> · Nota mínima requerida: <b>{reporte.nota_minima}%</b><br />
-            ❌ Este resultado NO suma para KPI. Solicita un nuevo intento a tu supervisor de capacitación.
+            Nota obtenida: <b>{reporte.score}%</b> · Nota mínima requerida: <b>{reporte.nota_minima}%</b>
           </Alert>
         )}
 
-        <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Revisión pregunta por pregunta</Typography>
-        <Stack spacing={1.5}>
-          {reporte.respuestas.map((r, i) => (
-            <Card key={i} variant="outlined">
-              <CardContent>
-                {r.tipo === 'objecion' && r.escenario && (
-                  <Box sx={{ p: 1.25, mb: 1, bgcolor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 1 }}>
-                    <Typography variant="caption" sx={{ color: '#e65100', fontWeight: 700, display: 'block' }}>
-                      🛡️ Objeción del Médico sobre el Producto
-                    </Typography>
-                    <Typography variant="body2">{r.escenario}</Typography>
-                  </Box>
-                )}
-                <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-                  {r.es_correcta ? <CheckCircle color="success" /> : <Cancel color="error" />}
-                  <Typography fontWeight={600}>{r.pregunta_texto}</Typography>
-                </Box>
-                <Divider sx={{ my: 1 }} />
-                <Typography variant="body2">Tu respuesta: {r.texto_elegido ?? '(sin responder)'}</Typography>
-                {!r.es_correcta && (
-                  <Typography variant="body2" color="success.main">Correcta: {r.texto_correcto}</Typography>
-                )}
-                {r.explicacion && (
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{r.explicacion}</Typography>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </Stack>
+        {vencido ? (
+          <Alert severity="info" icon={<Lock />} sx={{ mb: 2 }}>
+            <Typography fontWeight={700}>La revisión detallada ya no está disponible</Typography>
+            El detalle de tus respuestas se mostraba durante {FEEDBACK_HORAS} horas después de
+            entregar el examen. Tu nota y resultado quedan en tu historial.
+          </Alert>
+        ) : (
+          <>
+            <Alert severity="warning" icon={<AccessTime />} sx={{ mb: 2 }}>
+              Esta revisión está disponible <b>solo por {FEEDBACK_HORAS} horas</b> desde que
+              entregaste{horas != null && <> — te quedan <b>~{horas} h</b></>}. No es imprimible
+              ni descargable.
+            </Alert>
 
-        <Alert severity="info" icon={<span>📧</span>} sx={{ mt: 2 }}>
-          Recibirás por correo las correcciones de tus respuestas incorrectas 30 minutos después
-          de concluido el tiempo hábil del examen.
-        </Alert>
+            <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>Revisión pregunta por pregunta</Typography>
+            <Stack spacing={1.5} sx={watermark}>
+              {reporte.respuestas.map((r, i) => (
+                <Card key={i} variant="outlined" sx={{ position: 'relative', zIndex: 0 }}>
+                  <CardContent>
+                    {r.tipo === 'objecion' && r.escenario && (
+                      <Box sx={{ p: 1.25, mb: 1, bgcolor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 1 }}>
+                        <Typography variant="caption" sx={{ color: '#e65100', fontWeight: 700, display: 'block' }}>
+                          🛡️ Objeción del Médico sobre el Producto
+                        </Typography>
+                        <Typography variant="body2">{r.escenario}</Typography>
+                      </Box>
+                    )}
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                      {r.es_correcta ? <CheckCircle color="success" /> : <Cancel color="error" />}
+                      <Typography fontWeight={600}>{r.pregunta_texto}</Typography>
+                    </Box>
+                    <Divider sx={{ my: 1 }} />
+                    <Typography variant="body2">Tu respuesta: {r.texto_elegido ?? '(sin responder)'}</Typography>
+                    {!r.es_correcta && (
+                      <Typography variant="body2" color="success.main">Correcta: {r.texto_correcto}</Typography>
+                    )}
+                    {r.explicacion && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{r.explicacion}</Typography>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </Stack>
+          </>
+        )}
 
         <Button sx={{ mt: 2 }} variant="contained" onClick={() => { setVista('lista'); cargarPendientes(); }}>
           Volver a mis exámenes

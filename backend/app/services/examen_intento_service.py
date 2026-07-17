@@ -15,6 +15,22 @@ from app.models.exam_models import (
     PreguntaOpcion,
 )
 
+# El feedback (detalle pregunta-por-pregunta) solo se muestra al evaluado durante esta ventana,
+# anclada a la fecha de ENTREGA del intento (`fecha_fin`). Pasada, el evaluado sigue viendo su
+# nota y aprobado/reprobado, pero NO el detalle — para que no lo reuse de guía si se le reasigna
+# el mismo examen. Gerencia lo ve completo siempre (por otra vía, examen_resultados_service).
+FEEDBACK_HORAS = 48
+
+
+def feedback_vencido(intento) -> bool:
+    """True si ya pasó la ventana de feedback (now > fecha_fin + FEEDBACK_HORAS)."""
+    if getattr(intento, "fecha_fin", None) is None:
+        return False
+    entregado = intento.fecha_fin
+    if entregado.tzinfo is None:               # fecha_fin se guarda naïve-UTC
+        entregado = entregado.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) > entregado + timedelta(hours=FEEDBACK_HORAS)
+
 
 def barajar(items: list, rng: random.Random) -> list:
     """Fisher-Yates in-place; retorna la misma lista barajada."""
@@ -446,7 +462,12 @@ def calificar_respuesta(db: Session, intento_id: int, respuesta_id: int, puntos:
 
 
 def _notificar_resultado_examen(db, intento, examen, correctas: int, total: int) -> None:
-    """Resuelve el email del evaluado (vía su usuario) y envía el correo de resultado."""
+    """Avisa al evaluado que su feedback está disponible EN LA PLATAFORMA.
+
+    Cambio jul-2026: antes enviaba el reporte completo por correo (score/correctas/estado).
+    Ahora el correo es solo un AVISO — el resultado se ve únicamente in-app, y solo durante
+    `FEEDBACK_HORAS` (ver generar_reporte). Así el detalle de respuestas no viaja por correo
+    y no puede reusarse de guía si se reasigna el examen."""
     from app.models.usuario import Usuario
     from app.services import notification_service
 
@@ -457,16 +478,12 @@ def _notificar_resultado_examen(db, intento, examen, correctas: int, total: int)
         usuario = q.filter(Usuario.gerente_id == intento.evaluado_gerente_id).first()
     if usuario is None or not usuario.email:
         return
-    notification_service.notificar_resultado_examen(
+    notification_service.notificar_feedback_disponible(
         destinatario=usuario.email,
-        nombre_visitador=usuario.nombre_completo or usuario.username,
+        nombre=usuario.nombre_completo or usuario.username,
         examen_nombre=examen.nombre,
-        producto=examen.producto,
-        score=float(intento.score) if intento.score is not None else 0,
-        aprobado=bool(intento.aprobado),
-        correctas=correctas,
-        total=total,
-        fecha_fin=str(intento.fecha_fin) if intento.fecha_fin else None,
+        horas=FEEDBACK_HORAS,
+        link="/mis-examenes",
     )
 
 

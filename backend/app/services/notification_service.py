@@ -308,6 +308,50 @@ def notificar_resultado_examen(
     return _enviar(destinatario, asunto, cuerpo)
 
 
+def notificar_asignacion_examen(destinatario: str, nombre: str, examen_nombre: str,
+                                fecha_limite: Optional[str] = None,
+                                link: Optional[str] = None) -> bool:
+    """Avisa al evaluado que se le asignó un examen. SIN preguntas ni contenido — solo el
+    aviso y el enlace a la plataforma. Best-effort (no rompe la asignación si falla)."""
+    if not _habilitado() or not destinatario:
+        return False
+    fecha = f"<li>Fecha límite: <strong>{fecha_limite}</strong></li>" if fecha_limite else ""
+    enlace = (f"<p><a href='{link}'>Entra a la plataforma para tomarlo</a></p>" if link else
+              "<p>Entra a la plataforma, sección <strong>Mis Exámenes</strong>, para tomarlo.</p>")
+    cuerpo = f"""<html><body style="font-family:Arial,sans-serif;color:#333;">
+  <h2 style="color:{_COLOR_TITULO};">Nuevo examen asignado</h2>
+  <p>Hola <strong>{nombre}</strong>, se te asignó un examen:</p>
+  <ul>
+    <li>Examen: <strong>{examen_nombre}</strong></li>
+    {fecha}
+  </ul>
+  {enlace}
+  {_pie_pagina()}
+</body></html>"""
+    return _enviar(destinatario, f"Nuevo examen asignado - {examen_nombre}", cuerpo)
+
+
+def notificar_feedback_disponible(destinatario: str, nombre: str, examen_nombre: str,
+                                  horas: int = 48, link: Optional[str] = None) -> bool:
+    """Avisa que el feedback de un examen entregado ya está disponible EN LA PLATAFORMA.
+    NO incluye score, correctas, estado ni PDF — el resultado solo se ve dentro de la app,
+    y solo durante `horas` horas. Best-effort."""
+    if not _habilitado() or not destinatario:
+        return False
+    enlace = (f"<p><a href='{link}'>Ver mi feedback en la plataforma</a></p>" if link else
+              "<p>Entra a la plataforma, sección <strong>Mis Exámenes</strong>, para revisarlo.</p>")
+    cuerpo = f"""<html><body style="font-family:Arial,sans-serif;color:#333;">
+  <h2 style="color:{_COLOR_TITULO};">Tu feedback está disponible</h2>
+  <p>Hola <strong>{nombre}</strong>, ya puedes revisar el feedback de tu examen
+     <strong>{examen_nombre}</strong> en la plataforma.</p>
+  <p style="color:#c0392b;"><strong>Disponible solo durante las próximas {horas} horas.</strong>
+     Revísalo a tiempo — después dejará de mostrarse el detalle.</p>
+  {enlace}
+  {_pie_pagina()}
+</body></html>"""
+    return _enviar(destinatario, f"Feedback disponible - {examen_nombre}", cuerpo)
+
+
 def _correo_evaluado(db, intento) -> Optional[str]:
     """Resuelve el email del evaluado (RM/Gerente) de un intento. None si no tiene."""
     from app.models.dimensiones import RepresentanteMedico, Gerente

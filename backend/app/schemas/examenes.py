@@ -167,6 +167,9 @@ class ReporteIntento(BaseModel):
     correctas: int
     total: int
     fecha_fin: datetime | None
+    # True cuando el evaluado consulta pasadas las 48h: se conservan nota/estado, pero
+    # `respuestas` viene vacío (el detalle deja de mostrarse). Ver examen_intento_service.
+    feedback_vencido: bool = False
     respuestas: list[ReporteRespuesta]
 
 

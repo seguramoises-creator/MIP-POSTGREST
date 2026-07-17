@@ -199,7 +199,29 @@ def asignar_examen(
     for a in creadas:
         db.refresh(a)
     logger.info(f"Examen id={examen_id} asignado a {len(creadas)} evaluado(s)")
+    if notif_activa:
+        _notificar_asignaciones(db, examen, creadas, fecha_limite)
     return creadas
+
+
+def _notificar_asignaciones(db: Session, examen, asignaciones, fecha_limite) -> None:
+    """Correo de asignación a cada evaluado con email (best-effort — un fallo de correo no
+    revierte la asignación, que ya está commiteada)."""
+    from app.models.usuario import Usuario
+    from app.services import notification_service
+    for a in asignaciones:
+        try:
+            q = db.query(Usuario)
+            u = (q.filter(Usuario.rm_id == a.evaluado_rm_id).first() if a.evaluado_tipo == "RM"
+                 else q.filter(Usuario.gerente_id == a.evaluado_gerente_id).first())
+            if u and u.email:
+                notification_service.notificar_asignacion_examen(
+                    destinatario=u.email, nombre=u.nombre_completo or u.username,
+                    examen_nombre=examen.nombre,
+                    fecha_limite=str(fecha_limite) if fecha_limite else None,
+                    link="/mis-examenes")
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Correo de asignación falló (no bloquea) evaluado={a.id}: {e}")
 
 
 def publicar_examen(db: Session, examen_id: int) -> Examen:

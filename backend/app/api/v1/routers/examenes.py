@@ -875,6 +875,14 @@ def reporte(
     _verificar_intento_del_evaluado(intento, tipo, eid)
 
     try:
-        return intento_svc.generar_reporte(db, intento_id)
+        rep = intento_svc.generar_reporte(db, intento_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    # Ventana de 48h: este endpoint es la vista del EVALUADO (el `_verificar_` de arriba lo
+    # garantiza). Pasada la ventana, se poda el detalle en el BACKEND — no basta ocultarlo en el
+    # frontend, porque el evaluado podría pedir este endpoint directo. Conserva nota y estado.
+    if intento_svc.feedback_vencido(intento):
+        rep["feedback_vencido"] = True
+        rep["respuestas"] = []
+    return rep

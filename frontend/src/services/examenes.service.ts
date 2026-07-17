@@ -58,6 +58,7 @@ export interface ReporteIntento {
   intento_id: number; examen_nombre: string; producto: string | null;
   score: number; aprobado: boolean; nota_minima: number; provisional?: boolean;
   correctas: number; total: number; fecha_fin: string | null;
+  feedback_vencido?: boolean;   // true si se consulta pasadas las 48h → sin detalle
   respuestas: ReporteRespuesta[];
 }
 
