@@ -887,7 +887,7 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 | Notificaciones email | **Resuelto** | `notification_service.py` (smtplib, best-effort, no-op si `MAIL_SERVER=""`) cableado a: `ranking_service` (`notificar_ranking_generado`), `reconocimiento_service` (`notificar_reconocimiento_otorgado`), `examen_intento_service` (`notificar_resultado_examen`) y `notificar_correcciones_examen` (correcciones de examen, T+30min vía APScheduler). Gmail SMTP configurado en `.env`; envío real verificado. |
 | Tests unitarios | **Resuelto (en curso)** | Suite `pytest` con **187 tests** (`backend/tests/test_*.py`): IUP, puntaje, elegibilidad, token_store, módulo Exámenes (incl. `test_examen_consolidacion_service.py`) y módulo Visita (`test_visita_service.py`, incl. guards de ciclo cerrado y foto/GPS). CI de GitHub Actions corre pytest+build. Cobertura ampliable a routers/ETL. |
 | Refresh token en BD | **Resuelto** (FIX W-04 v2) | La blacklist vive en la base de datos (`Security.FACT_TokenRevocado`, modelo `TokenRevocado`). `token_store.revocar_token`/`token_esta_revocado` reciben `db`; revocación consistente entre workers y duradera tras reinicio. Purga oportuna de expirados con `purgar_expirados`. |
-| Dashboard Power BI | Pendiente | Sin conexión a Power BI Embedded |
+| Dashboard Power BI | **DESCARTADO** | Decisión del cliente (jul-2026): *"nunca voy a trabajar con Dashboard Power BI"*. No proponerlo ni retomarlo. Los dashboards del sistema (ejecutivo, cobertura, LSII, categorización) se construyen dentro de la app con recharts — esa es la vía definitiva, no un paso intermedio. |
 
 ---
 
