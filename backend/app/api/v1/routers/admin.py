@@ -814,8 +814,36 @@ def create_premio(data: PremioCreate, db: Session = Depends(get_db), _=AdminOnly
 def list_usuarios(db: Session = Depends(get_db), _=AdminOnly):
     return db.query(Usuario).all()
 
+# Mismo listado que `ROLES_MULTIPAIS` en `frontend/src/store/ciclo.store.ts`: si cambia uno,
+# tiene que cambiar el otro.
+ROLES_MULTIPAIS = {"ADMIN", "PRESIDENCIA", "DIR_COMERCIAL", "GERENTE_PRODUCTIVIDAD"}
+
+
+def _validar_pais_usuario(db: Session, rol, pais_codigo):
+    """El país es OBLIGATORIO salvo para los roles multipaís.
+
+    Sin país, `ciclo.store.init()` nunca llama a `setPais()` y **toda la tienda de
+    País+Ciclo queda vacía** para ese usuario: sin badge, sin `cicloId`, sin lista de
+    ciclos. Y falla en silencio — nada da error, cada módulo se las arregla con un
+    fallback y el usuario simplemente ve menos de lo que debería. Se detectó con 7 de 9
+    representantes en producción (jul-2026).
+
+    Los 4 roles multipaís (mismo listado que `ROLES_MULTIPAIS` en `ciclo.store.ts`) ven
+    todos los países y pueden cambiarlos: para ellos el país propio es opcional a propósito.
+    """
+    r = getattr(rol, "value", str(rol)).upper()
+    if r in ROLES_MULTIPAIS:
+        return
+    if not (pais_codigo or "").strip():
+        raise HTTPException(422, f"El país es obligatorio para el rol {r}: sin país el "
+                                 f"usuario no puede resolver su ciclo de trabajo.")
+    if not db.query(Pais.codigo).filter(Pais.codigo == pais_codigo).first():
+        raise HTTPException(422, f"El país '{pais_codigo}' no existe.")
+
+
 @router.post("/usuarios", response_model=UsuarioResponse, status_code=201, summary="Crear usuario")
 def create_usuario(data: UsuarioCreate, db: Session = Depends(get_db), _=AdminOnly):
+    _validar_pais_usuario(db, data.rol, data.pais_codigo)
     if db.query(Usuario).filter(Usuario.username == data.username).first():
         raise HTTPException(400, "El nombre de usuario ya existe. Elige otro.")
     if data.email and db.query(Usuario).filter(Usuario.email == data.email).first():
@@ -839,6 +867,11 @@ def update_usuario(id: int, data: UsuarioUpdate, db: Session = Depends(get_db), 
     obj = db.query(Usuario).filter(Usuario.id == id).first()
     if not obj: raise HTTPException(404, "Usuario no encontrado")
     cambios = data.model_dump(exclude_none=True)
+    # El país no puede perderse al editar: se valida el resultado FINAL (lo que llega o,
+    # si no llega, lo que ya tiene), contra el rol final.
+    _validar_pais_usuario(db,
+                          cambios.get("rol", obj.rol),
+                          cambios.get("pais_codigo", obj.pais_codigo))
     if cambios.get("email") and db.query(Usuario).filter(
             Usuario.email == cambios["email"], Usuario.id != id).first():
         raise HTTPException(400, f"El correo '{cambios['email']}' ya está registrado con otro usuario.")
