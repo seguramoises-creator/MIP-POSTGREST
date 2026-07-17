@@ -105,6 +105,31 @@ def get_lotes(
 
 
 # ── GET /categorizacion/resumen ────────────────────────────────────────────────
+@router.get("/mi-panel", summary="Categorización del panel del representante")
+def get_mi_panel(current_user: Usuario = RequireAuth, db: Session = Depends(get_db)):
+    """Categorización DEL PANEL del representante — plano de asignación, no del motor.
+
+    Son dos categorías distintas por diseño (ver §14b):
+      · La **general** la calcula el motor de 5 criterios (`cat.*`), por período, y es un
+        proceso aparte del administrador.
+      · La **del panel** (`Visita.DIM_MedicoVisita.categoria`) es la del médico DENTRO del
+        panel de ESE representante: al darlo de alta el sistema le propone la calculada y
+        él la ajusta a su criterio. Es sobre este panel que programa visitas y revisitas.
+        Cambiarla NO altera la categorización general (`categoria` no está en
+        `_MAESTRO_SYNC` y nada escribe de vuelta a `cat.*`).
+
+    Por eso esta vista **no depende del ciclo**: la categoría del panel es estable entre
+    ciclos, tal como pide el negocio. La pantalla del RM leía el motor general —donde un
+    representante dado de alta después de la última carga de Excel no existe— y salía en
+    ceros aunque su panel estuviera categorizado.
+    """
+    if current_user.rol != Rol.REPRESENTANTE_MEDICO:
+        raise HTTPException(403, "Esta vista es del panel de un representante médico.")
+    if not current_user.rm_id:
+        raise HTTPException(403, "Tu usuario no está vinculado a un representante médico.")
+    return svc.get_panel_rm(db, current_user.rm_id)
+
+
 @router.get("/resumen", summary="Resumen ejecutivo de categorización")
 def get_resumen(
     periodo: Optional[str] = Query(None, description="Filtrar por período YYYY-MM"),

@@ -22,6 +22,8 @@ import {
 } from 'recharts';
 import { api } from '../../services/api';
 import DetalleMedicos from './DetalleMedicos';
+import PanelRM from './PanelRM';
+import { CAT_PAL, CATS } from './paleta';
 import { useAuthStore } from '../../store/auth.store';
 
 // ── Paleta profesional A/B/C/D (sincronizada con DetalleMedicos.tsx) ─────────
@@ -33,13 +35,7 @@ const COL_COLORS = {
   D: '#455a64',
 } as const;
 
-const CAT_PAL: Record<string, { dark: string; mid: string; light: string; text: string }> = {
-  A: { dark: '#00695c', mid: '#00897b', light: '#e0f2f1', text: '#fff' },
-  B: { dark: '#1a237e', mid: '#283593', light: '#e8eaf6', text: '#fff' },
-  C: { dark: '#e65100', mid: '#ef6c00', light: '#fff3e0', text: '#fff' },
-  D: { dark: '#37474f', mid: '#455a64', light: '#eceff1', text: '#fff' },
-};
-const CATS = ['A', 'B', 'C', 'D'] as const;
+// La paleta vive en ./paleta para compartirla con PanelRM sin importación circular.
 
 // Celda de número con barra proporcional
 function NumCell({ v, cat, max }: { v: number; cat?: typeof CATS[number]; max?: number }) {
@@ -154,7 +150,15 @@ function CatChip({ cat }: { cat: string | null }) {
 }
 
 // ── Componente principal ───────────────────────────────────────────────────────
+/** El representante ve la categorización de SU PANEL (plano de asignación); la gerencia ve
+ *  el motor general de 5 criterios. Son dos categorías distintas por diseño — ver PanelRM.tsx.
+ *  La bifurcación va en un wrapper porque los hooks no admiten un return temprano. */
 export default function Categorizacion() {
+  const rol = useAuthStore((s) => s.rol);
+  return rol === 'REPRESENTANTE_MEDICO' ? <PanelRM /> : <CategorizacionMotor />;
+}
+
+function CategorizacionMotor() {
   const [tab, setTab] = useState(0);
   // Requerimiento Mallén (Item 5): acceso a variables/pesos y al detalle por médico solo para
   // Gerente de Producto / Área MKT / Dirección General → mapeado a estos roles del sistema.

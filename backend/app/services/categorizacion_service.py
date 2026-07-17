@@ -1137,3 +1137,55 @@ def resolver_medico_por_codigo(
         {"pc": pais_codigo, "cod": codigo},
     ).scalar()
     return int(new_id) if new_id else 0
+
+
+# ── Categorización del PANEL de un representante ──────────────────────────────
+
+def get_panel_rm(db: Session, rm_id: int) -> dict:
+    """Categorización del panel de UN representante (plano de asignación).
+
+    Distinta de `get_resumen`, que resume el MOTOR de 5 criterios (`cat.*`, por período y
+    alimentado por el Excel del administrador). Esta lee `Visita.DIM_MedicoVisita`: la
+    categoría que el propio representante fijó para el médico DENTRO de su panel — el
+    sistema le propone la calculada al darlo de alta y él la ajusta a su criterio.
+
+    **No recibe ciclo, y es a propósito**: la categoría del panel es un dato estable entre
+    ciclos (regla de negocio: solo cambia con una actualización manual o una carga masiva,
+    2-3 veces al año). Sobre este panel el rep programa sus visitas y revisitas.
+
+    Solo cuenta médicos activos: los dados de baja ya no se programan.
+    """
+    from app.models.dimensiones import Especialidad
+    from app.models.visita import MedicoVisita
+
+    esp_nom = dict(db.query(Especialidad.id, Especialidad.nombre).all())
+    medicos = (db.query(MedicoVisita)
+               .filter(MedicoVisita.vm_id == rm_id, MedicoVisita.activo == True)  # noqa: E712
+               .order_by(MedicoVisita.categoria, MedicoVisita.nombre_completo).all())
+
+    conteo = {"A": 0, "B": 0, "C": 0, "D": 0}
+    sin_categoria = 0
+    filas = []
+    for m in medicos:
+        cat = (m.categoria or "").strip().upper()
+        if cat in conteo:
+            conteo[cat] += 1
+        else:
+            sin_categoria += 1  # dato viejo o fuera de A/B/C/D: se reporta, no se inventa
+        filas.append({
+            "id": m.id,
+            "nombre": m.nombre_completo,
+            "especialidad": esp_nom.get(m.especialidad_id),
+            "categoria": cat if cat in conteo else None,
+            "centro_trabajo": m.centro_trabajo,
+            "frecuencia_visita": m.frecuencia_visita,
+            "estado_aprobacion": m.estado_aprobacion,
+        })
+
+    return {
+        "total_medicos": len(filas),
+        "categoria_a": conteo["A"], "categoria_b": conteo["B"],
+        "categoria_c": conteo["C"], "categoria_d": conteo["D"],
+        "sin_categoria": sin_categoria,
+        "medicos": filas,
+    }
