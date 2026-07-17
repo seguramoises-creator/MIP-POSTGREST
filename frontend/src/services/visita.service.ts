@@ -380,6 +380,18 @@ export interface CostoFull {
 }
 export const costoEstructura = (cicloId?: number, lineaId?: number) =>
   api.get<CostoFull>('/visita/costo/estructura', { params: { ...(cicloId && { ciclo_id: cicloId }), ...(lineaId && { linea_id: lineaId }) } }).then(r => r.data);
+
+// Vista del REPRESENTANTE: solo las 2 piezas autorizadas de su línea (auto-scoped en backend).
+export interface CostoMiLinea {
+  ciclo_id: number | null; linea_id: number | null; moneda: string; configurado: boolean;
+  unidades_por_contacto: { producto: string; unidades_obj_contacto: number; cumplimiento_pct: number }[];
+  impacto_cobertura: {
+    categorias: { categoria: string; medicos_sin_visitar: number }[];
+    venta_riesgo_bajo: number; venta_riesgo_alto: number; total_medicos_sin_visitar: number;
+  };
+}
+export const costoMiLinea = (cicloId?: number) =>
+  api.get<CostoMiLinea>('/visita/costo/mi-linea', { params: cicloId ? { ciclo_id: cicloId } : {} }).then(r => r.data);
 export const guardarCostoEstructura = (datos: CostoEstructuraInput & { productos: CostoProdInput[] }) =>
   api.post<CostoFull>('/visita/costo/estructura', datos).then(r => r.data);
 export const importarCostoExcel = (file: File, cicloId?: number, lineaId?: number) => {

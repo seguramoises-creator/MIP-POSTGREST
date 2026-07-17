@@ -288,6 +288,40 @@ def _med_sin_visitar_por_cat(db: Session, ciclo_id, linea_id) -> dict:
     return cat
 
 
+def vista_representante(db: Session, ciclo_id, linea_id) -> dict:
+    """Recorte de `calcular_full` para el REPRESENTANTE — solo las dos piezas que el cliente
+    autorizó (jul-2026): las UNIDADES a producir por contacto/producto para llegar al 100% de
+    su presupuesto, y el IMPACTO económico de la cobertura en el presupuesto de su línea.
+
+    NO devuelve nada gerencial: ni salarios, ni costos fijos/variables, ni ROI de la fuerza de
+    venta, ni presupuesto total, ni headcount. Se deriva de `calcular_full` (no se recalcula)
+    para que nunca se desincronice del número que ve gerencia, y luego se PODA — la fuente
+    financiera se lee una sola vez y solo se expone el subconjunto permitido.
+    """
+    full = calcular_full(db, ciclo_id, linea_id)
+    # Meta por producto: cuántas unidades por contacto para el 100%. De `plan_anual.productos`
+    # se conservan producto, unidades objetivo y cumplimiento; se OMITEN presupuesto_anual,
+    # precio_prom y retorno_real (cifras de negocio de la línea, no del representante).
+    metas = [{"producto": p["producto"],
+              "unidades_obj_contacto": p["unidades_obj_contacto"],
+              "cumplimiento_pct": p["cumplimiento_pct"]}
+             for p in full["plan_anual"]["productos"]]
+    # Impacto de la cobertura en el presupuesto de la línea: médicos sin visitar y venta en
+    # riesgo por categoría. Se PODA `headcount_equivalente` (cuántos visitadores harían falta)
+    # porque es una lectura de gestión sobre la fuerza de venta, no del representante.
+    imp = full["impacto"]
+    impacto = {"categorias": imp["categorias"],
+               "venta_riesgo_bajo": imp["venta_riesgo_bajo"],
+               "venta_riesgo_alto": imp["venta_riesgo_alto"],
+               "total_medicos_sin_visitar": imp["total_medicos_sin_visitar"]}
+    return {
+        "ciclo_id": full["ciclo_id"], "linea_id": full["linea_id"], "moneda": full["moneda"],
+        "configurado": full["configurado"],
+        "unidades_por_contacto": metas,
+        "impacto_cobertura": impacto,
+    }
+
+
 def calcular_full(db: Session, ciclo_id, linea_id) -> dict:
     ciclo_id = ciclo_id or ciclo_por_defecto(db)
     e = obtener_estructura(db, ciclo_id, linea_id)

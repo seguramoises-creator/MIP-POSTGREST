@@ -29,6 +29,11 @@ RequireGerenteProducto = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVI
 # Desbloquear una planeación publicada: SOLO ADMIN (decisión del cliente, jul-2026). Ni el
 # Gerente de Distrito — es justo quien tiene interés en que su distrito luzca bien.
 RequireDesbloqueo = Depends(require_roles(Rol.ADMIN))
+# Costo & ROI (salarios, costos, ROI de la fuerza de venta, presupuestos): dato gerencial.
+# El representante NO entra aquí — usa /costo/mi-linea (recorte autorizado: unidades por
+# contacto + impacto de la cobertura en el presupuesto de su línea).
+RequireFinanciero = Depends(require_roles(
+    Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO, Rol.GERENTE_MARCA))
 RequireAnyAuth = Depends(get_current_active_user)
 
 
@@ -612,16 +617,14 @@ def resumen_muestras(vm_id: int | None = None, ciclo_id: int | None = None,
 
 
 # ── Costo & ROI (Parte 8) ─────────────────────────────────────────────────────
+# Los parámetros de costo (salario, viáticos, materiales) y el ROI por VM son datos
+# financieros: solo gestión. `RequireFinanciero` está definido más arriba, junto a
+# /costo/estructura.
 @router.get("/costo/parametros", response_model=dict)
 def obtener_parametros_costo(linea_id: int | None = None, ciclo_id: int | None = None,
-                             db: Session = Depends(get_db), current_user=RequireVisita):
-    """Parámetros de costo resueltos (cascada línea → default del ciclo)."""
+                             db: Session = Depends(get_db), current_user=RequireFinanciero):
+    """Parámetros de costo resueltos (cascada línea → default del ciclo). Solo gestión."""
     from app.services import visita_costo_service
-    if linea_id is None:
-        vm = _scope_vm(current_user, None)
-        if vm:
-            from app.services.visita_parrilla_service import linea_de_vm
-            linea_id = linea_de_vm(db, vm)
     return visita_costo_service.obtener_parametros(db, ciclo_id, linea_id)
 
 
@@ -637,10 +640,11 @@ def guardar_parametros_costo(datos: ParametroCostoGuardar, db: Session = Depends
 
 @router.get("/costo/roi", response_model=dict)
 def costo_roi(vm_id: int | None = None, ciclo_id: int | None = None,
-              db: Session = Depends(get_db), current_user=RequireVisita):
-    """Costo & ROI del ciclo: costo por contacto/médico, ingresos, utilidad y ROI. VM ve el suyo."""
+              db: Session = Depends(get_db), current_user=RequireFinanciero):
+    """Costo & ROI del ciclo: costo por contacto/médico, ingresos, utilidad y ROI. Solo gestión
+    (dato financiero). El representante ve su recorte en /costo/mi-linea."""
     from app.services import visita_costo_service
-    return visita_costo_service.roi(db, ciclo_id, _scope_vm(current_user, vm_id))
+    return visita_costo_service.roi(db, ciclo_id, vm_id)
 
 
 @router.get("/costo/ranking", response_model=dict)
@@ -650,14 +654,38 @@ def costo_ranking(ciclo_id: int | None = None, db: Session = Depends(get_db), cu
     return visita_costo_service.roi_ranking(db, ciclo_id)
 
 
+def _linea_del_representante(db, current_user) -> int | None:
+    """Línea del representante logueado (para auto-acotar su vista de Costo)."""
+    vm = _scope_vm(current_user, None)
+    if not vm:
+        return None
+    from app.services.visita_parrilla_service import linea_de_vm
+    return linea_de_vm(db, vm)
+
+
 # ── Costo & ROI de Visita — modelo financiero completo ────────────────────────
 @router.get("/costo/estructura", response_model=dict)
 def costo_estructura(linea_id: int | None = None, ciclo_id: int | None = None,
-                     db: Session = Depends(get_db), current_user=RequireVisita):
+                     db: Session = Depends(get_db), current_user=RequireFinanciero):
     """Modelo financiero completo (costo fijo, muestras, pool de ventas, plan anual,
-    resumen ROI e impacto de cobertura) por (ciclo, línea)."""
+    resumen ROI e impacto de cobertura) por (ciclo, línea). Solo gestión."""
     from app.services import visita_costo_service
     return visita_costo_service.calcular_full(db, ciclo_id, linea_id)
+
+
+@router.get("/costo/mi-linea", response_model=dict)
+def costo_mi_linea(ciclo_id: int | None = None, db: Session = Depends(get_db),
+                   current_user=RequireVisita):
+    """Vista del REPRESENTANTE en Costo & ROI: SOLO las unidades a producir por contacto para
+    el 100% de su presupuesto + el impacto de la cobertura en el presupuesto de su línea.
+    Nada de salarios, costos, ROI de la fuerza de venta ni presupuesto total (dato gerencial)."""
+    from app.services import visita_costo_service
+    if _rol(current_user) != "REPRESENTANTE_MEDICO":
+        raise HTTPException(403, "Esta vista es la de un representante médico.")
+    linea_id = _linea_del_representante(db, current_user)
+    if not linea_id:
+        raise HTTPException(403, "Tu representante no tiene una línea asignada.")
+    return visita_costo_service.vista_representante(db, ciclo_id, linea_id)
 
 
 @router.post("/costo/estructura", response_model=dict, status_code=status.HTTP_201_CREATED)

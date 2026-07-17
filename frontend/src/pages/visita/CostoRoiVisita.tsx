@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import { Paid, Save, UploadFile, Calculate, Inventory2, MonetizationOn, CalendarMonth, Assessment, WarningAmber } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import CostoMiLinea from './CostoMiLinea';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
   costoEstructura, guardarCostoEstructura, importarCostoExcel, listarLineasVisita,
@@ -62,7 +63,15 @@ function productosDe(full: CostoFull): CostoProdInput[] {
   return Object.values(map);
 }
 
+/** El representante ve SOLO su meta de línea (unidades por contacto + impacto de cobertura);
+ *  todo el modelo financiero — salarios, costos, ROI de la fuerza de venta, presupuestos — es
+ *  gerencial. Wrapper por rol: los hooks no admiten un return temprano. */
 export default function CostoRoiVisita() {
+  const rolActual = useAuthStore((s) => s.rol);
+  return rolActual === 'REPRESENTANTE_MEDICO' ? <CostoMiLinea /> : <CostoRoiGerencia />;
+}
+
+function CostoRoiGerencia() {
   const rol = useAuthStore((s) => s.rol);
   const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD';
 
