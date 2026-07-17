@@ -151,6 +151,39 @@ class PlaneacionCiclo(Base):
         Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
 
 
+class PlaneacionEvento(Base):
+    """Bitácora de publicación/desbloqueo de la planeación de un VM en un ciclo.
+
+    La planeación es el **denominador de la cobertura** (`visitados / planeados`): si se
+    pudiera editar a mitad de ciclo, un VM subiría su cobertura quitando del plan a los
+    médicos que no visitó, sin visitar a nadie más. Por eso, publicada = congelada.
+
+    Estado = el ÚLTIMO evento de (vm_id, ciclo_id):
+      · sin eventos    → BORRADOR (editable, se guarda cuantas veces haga falta)
+      · PUBLICADA      → congelada; `guardar_planeacion` la rechaza
+      · DESBLOQUEADA   → vuelve a borrador (solo ADMIN, con motivo obligatorio)
+
+    Append-only por diseño (igual que las hojas de coaching): nunca se borra ni se edita
+    una fila, así el rastro de quién desbloqueó, cuándo y por qué no se puede perder.
+    """
+    __tablename__ = "PlaneacionEvento"
+    __table_args__ = (
+        Index("IX_PlaneacionEvento_vm_ciclo", "vm_id", "ciclo_id"),
+        {"schema": "Visita"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    vm_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_RM.id"), nullable=False)
+    ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
+    evento: Mapped[str] = mapped_column(String(14), nullable=False)   # PUBLICADA | DESBLOQUEADA
+    fecha: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+    usuario_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+    motivo: Mapped[str | None] = mapped_column(String(300), nullable=True)  # obligatorio al desbloquear
+    # Cuántas filas de planeación tenía al publicar: deja constancia de lo que se congeló.
+    items: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
 class CierreCicloVisita(Base):
     """Registro de un cierre de ciclo de visita (Parte 5 — Ruptura de Secuencia).
 

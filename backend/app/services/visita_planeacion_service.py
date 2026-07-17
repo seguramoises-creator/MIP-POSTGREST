@@ -3,16 +3,26 @@
   P02 la Revisita en semana >= semana de la Vista
   P03 Vista y Revisita no el mismo día
 Patrón delete-then-insert por (vm, ciclo). Cat A sin Revisita se reporta como aviso.
+
+**Borrador → Publicada (jul-2026).** La planeación es el DENOMINADOR de la cobertura
+(`visitados / planeados`): editable a mitad de ciclo, un VM subiría su cobertura quitando
+del plan a los médicos que no visitó, sin visitar a nadie más. Por eso se guarda libremente
+como borrador y, al publicarla, queda CONGELADA. Solo un ADMIN puede desbloquearla, con
+motivo obligatorio y dejando rastro (`PlaneacionEvento`, append-only).
 """
 from datetime import datetime, timezone
 
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.models.visita import MedicoVisita, PlaneacionCiclo
+from app.models.visita import MedicoVisita, PlaneacionCiclo, PlaneacionEvento
 from app.schemas.visita import PlaneacionItem
 from app.services.visita_cobertura_service import ciclo_por_defecto, CICLO_DIAS_DEFAULT
 from app.services import recalculo_service
+
+
+class PlaneacionPublicadaError(Exception):
+    """La planeación ya está publicada: es dato base de cálculo y no se puede modificar."""
 
 
 def _guard_ciclo_abierto(db, ciclo_id):
@@ -21,6 +31,81 @@ def _guard_ciclo_abierto(db, ciclo_id):
         recalculo_service.validar_ciclo_abierto(db, ciclo_id)
     except recalculo_service.CicloCerradoError:
         raise ValueError("El ciclo está cerrado — solo lectura")
+
+
+def _ultimo_evento(db: Session, vm_id: int, ciclo_id: int) -> PlaneacionEvento | None:
+    return (db.query(PlaneacionEvento)
+            .filter(PlaneacionEvento.vm_id == vm_id, PlaneacionEvento.ciclo_id == ciclo_id)
+            .order_by(PlaneacionEvento.fecha.desc(), PlaneacionEvento.id.desc()).first())
+
+
+def esta_publicada(db: Session, vm_id: int, ciclo_id: int) -> bool:
+    """Publicada = el último evento del (vm, ciclo) es PUBLICADA. Sin eventos → borrador."""
+    ev = _ultimo_evento(db, vm_id, ciclo_id)
+    return ev is not None and ev.evento == "PUBLICADA"
+
+
+def _guard_no_publicada(db: Session, vm_id: int, ciclo_id: int) -> None:
+    if esta_publicada(db, vm_id, ciclo_id):
+        raise PlaneacionPublicadaError(
+            "La planeación de este ciclo ya fue publicada y no puede modificarse: es el dato "
+            "base con el que se calcula tu cobertura. Si hay un error, un administrador debe "
+            "desbloquearla indicando el motivo.")
+
+
+def publicar_planeacion(db: Session, vm_id: int, ciclo_id: int | None, usuario_id: int | None) -> dict:
+    """Congela la planeación del (vm, ciclo). Irreversible salvo desbloqueo del ADMIN."""
+    ciclo_id = ciclo_id or ciclo_por_defecto(db, vm_id)
+    if ciclo_id is None:
+        raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
+    _guard_no_publicada(db, vm_id, ciclo_id)
+    n = db.query(PlaneacionCiclo).filter(
+        PlaneacionCiclo.vm_id == vm_id, PlaneacionCiclo.ciclo_id == ciclo_id).count()
+    if n == 0:
+        raise ValueError("No hay planeación que publicar: guarda al menos un médico primero.")
+    db.add(PlaneacionEvento(vm_id=vm_id, ciclo_id=ciclo_id, evento="PUBLICADA",
+                            usuario_id=usuario_id, items=n))
+    db.commit()
+    logger.info(f"Planeación PUBLICADA vm={vm_id} ciclo={ciclo_id} items={n} por usuario={usuario_id}")
+    return {"publicada": True, "items": n, "ciclo_id": ciclo_id}
+
+
+def desbloquear_planeacion(db: Session, vm_id: int, ciclo_id: int | None,
+                           usuario_id: int | None, motivo: str) -> dict:
+    """Devuelve la planeación a borrador. **Solo ADMIN** (lo exige el router) y con motivo:
+    sin él, desbloquear sería una vía silenciosa para maquillar la cobertura."""
+    ciclo_id = ciclo_id or ciclo_por_defecto(db, vm_id)
+    if ciclo_id is None:
+        raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
+    if not (motivo or "").strip():
+        raise ValueError("Indica el motivo del desbloqueo (queda registrado).")
+    if not esta_publicada(db, vm_id, ciclo_id):
+        raise ValueError("La planeación de este ciclo no está publicada.")
+    db.add(PlaneacionEvento(vm_id=vm_id, ciclo_id=ciclo_id, evento="DESBLOQUEADA",
+                            usuario_id=usuario_id, motivo=motivo.strip()))
+    db.commit()
+    logger.warning(f"Planeación DESBLOQUEADA vm={vm_id} ciclo={ciclo_id} por usuario={usuario_id}: {motivo}")
+    return {"publicada": False, "ciclo_id": ciclo_id}
+
+
+def estado_planeacion(db: Session, vm_id: int, ciclo_id: int | None) -> dict:
+    """Estado + historial de publicación (para que la UI sepa qué mostrar y el admin audite)."""
+    ciclo_id = ciclo_id or ciclo_por_defecto(db, vm_id)
+    if ciclo_id is None:
+        return {"ciclo_id": None, "publicada": False, "historial": []}
+    eventos = (db.query(PlaneacionEvento)
+               .filter(PlaneacionEvento.vm_id == vm_id, PlaneacionEvento.ciclo_id == ciclo_id)
+               .order_by(PlaneacionEvento.fecha.desc(), PlaneacionEvento.id.desc()).all())
+    return {
+        "ciclo_id": ciclo_id,
+        "publicada": bool(eventos) and eventos[0].evento == "PUBLICADA",
+        "publicada_en": eventos[0].fecha.isoformat() if eventos and eventos[0].evento == "PUBLICADA" else None,
+        "historial": [{"evento": e.evento, "fecha": e.fecha.isoformat(),
+                       "usuario_id": e.usuario_id, "motivo": e.motivo, "items": e.items}
+                      for e in eventos],
+    }
 
 
 def _validar(items: list[PlaneacionItem]) -> None:
@@ -46,10 +131,13 @@ def _validar(items: list[PlaneacionItem]) -> None:
 
 def guardar_planeacion(db: Session, vm_id: int, ciclo_id: int | None,
                        items: list[PlaneacionItem], usuario_id: int | None) -> int:
-    ciclo_id = ciclo_id or ciclo_por_defecto(db)
+    ciclo_id = ciclo_id or ciclo_por_defecto(db, vm_id)
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
     _guard_ciclo_abierto(db, ciclo_id)
+    # Publicada = congelada. El guard va ANTES del delete-then-insert: sin él, un re-guardado
+    # borraria el plan publicado y lo reescribiria, moviendo el denominador de la cobertura.
+    _guard_no_publicada(db, vm_id, ciclo_id)
     _validar(items)
     db.query(PlaneacionCiclo).filter(
         PlaneacionCiclo.vm_id == vm_id, PlaneacionCiclo.ciclo_id == ciclo_id).delete(synchronize_session=False)

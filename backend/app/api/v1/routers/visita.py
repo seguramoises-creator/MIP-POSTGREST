@@ -4,7 +4,7 @@ Prefijo: /visita.  Reutiliza Config.DIM_RM (VM), Config.DIM_Especialidad.
 RBAC: el VM (REPRESENTANTE_MEDICO) gestiona su propio panel (auto-filtro por rm_id);
 ADMIN/GERENTE ven/gestionan el de cualquier VM.
 """
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Body, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles, get_current_active_user
@@ -26,6 +26,9 @@ RequireCierre = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
 RequireAprobador = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO))
 # Parrilla promocional: solo el Gerente de Producto (marca/productividad) + ADMIN.
 RequireGerenteProducto = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_MARCA))
+# Desbloquear una planeación publicada: SOLO ADMIN (decisión del cliente, jul-2026). Ni el
+# Gerente de Distrito — es justo quien tiene interés en que su distrito luzca bien.
+RequireDesbloqueo = Depends(require_roles(Rol.ADMIN))
 RequireAnyAuth = Depends(get_current_active_user)
 
 
@@ -411,12 +414,55 @@ def obtener_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
 @router.post("/planeacion", response_model=dict, status_code=status.HTTP_201_CREATED)
 def guardar_planeacion(datos: PlaneacionGuardar, vm_id: int | None = None, ciclo_id: int | None = None,
                        db: Session = Depends(get_db), current_user=RequireVisita):
-    """Guarda (reemplaza) la planeación del ciclo. Valida reglas P01/P02/P03."""
+    """Guarda (reemplaza) la planeación del ciclo. Valida reglas P01/P02/P03.
+    Rechaza con 409 si la planeación ya fue publicada (congelada)."""
     from app.services import visita_planeacion_service
     try:
         n = visita_planeacion_service.guardar_planeacion(
             db, _vm_registro(current_user, vm_id), ciclo_id, datos.items, getattr(current_user, "id", None))
         return {"guardadas": n}
+    except visita_planeacion_service.PlaneacionPublicadaError as e:
+        # No es ValueError: sin este except escapaba como 500 "Error interno del servidor" y
+        # el representante nunca leia el motivo real.
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    except ValueError as e:
+        _raise_captura_error(e)
+
+
+@router.get("/planeacion/estado", response_model=dict)
+def estado_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
+                      db: Session = Depends(get_db), current_user=RequireVisita):
+    """Si la planeación del ciclo está publicada (congelada) + su historial de eventos."""
+    from app.services import visita_planeacion_service
+    return visita_planeacion_service.estado_planeacion(db, _vm_registro(current_user, vm_id), ciclo_id)
+
+
+@router.post("/planeacion/publicar", response_model=dict)
+def publicar_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
+                        db: Session = Depends(get_db), current_user=RequireVisita):
+    """Publica (CONGELA) la planeación del ciclo. Irreversible salvo desbloqueo del ADMIN:
+    es el denominador con el que se calcula la cobertura."""
+    from app.services import visita_planeacion_service
+    try:
+        return visita_planeacion_service.publicar_planeacion(
+            db, _vm_registro(current_user, vm_id), ciclo_id, getattr(current_user, "id", None))
+    except visita_planeacion_service.PlaneacionPublicadaError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    except ValueError as e:
+        _raise_captura_error(e)
+
+
+@router.post("/planeacion/desbloquear", response_model=dict)
+def desbloquear_planeacion(vm_id: int, motivo: str = Body(..., embed=True),
+                           ciclo_id: int | None = None,
+                           db: Session = Depends(get_db), current_user=RequireDesbloqueo):
+    """Devuelve la planeación a borrador. **Solo ADMIN** y con motivo: queda registrado quién
+    desbloqueó, cuándo y por qué (`PlaneacionEvento`, append-only). `vm_id` es obligatorio —
+    un admin desbloquea la de un representante concreto, nunca la suya "por defecto"."""
+    from app.services import visita_planeacion_service
+    try:
+        return visita_planeacion_service.desbloquear_planeacion(
+            db, vm_id, ciclo_id, getattr(current_user, "id", None), motivo)
     except ValueError as e:
         _raise_captura_error(e)
 

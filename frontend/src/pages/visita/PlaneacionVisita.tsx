@@ -3,14 +3,18 @@ import {
   Box, Typography, Card, CardContent, Button, Stack, Chip, Alert, MenuItem,
   Select, FormControl, CircularProgress, Table, TableHead, TableRow, TableCell,
   TableBody, Grid, Tooltip, TextField, Avatar, Divider, TablePagination,
+  Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
-import { Save, EventNote, Warning, CheckCircle, FilterList, Search, Badge, SupervisorAccount, Layers } from '@mui/icons-material';
+import { Save, EventNote, Warning, CheckCircle, FilterList, Search, Badge, SupervisorAccount, Layers,
+         Lock, LockOpen, PublishedWithChanges } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
 import { catChipSx } from './categoriaColores';
 import {
   listarMedicos, obtenerPlaneacion, planeacionResumen, guardarPlaneacion, listarVMs, miGerente,
+  planeacionEstado, publicarPlaneacion, desbloquearPlaneacion,
   type MedicoVisita, type PlaneacionItem, type PlaneacionResumen, type Catalogo, type MiGerente,
+  type PlaneacionEstado,
 } from '../../services/visita.service';
 
 function msgError(e: unknown, fallback: string): string {
@@ -51,6 +55,16 @@ export default function PlaneacionVisita() {
   const POR_PAGINA = 25;
   // Ficha del representante (Gerente de Distrito + Línea) — viene de la dim del RM.
   const [infoRep, setInfoRep] = useState<MiGerente | null>(null);
+  // La planeación es el DENOMINADOR de la cobertura: publicada = congelada.
+  const [estado, setEstado] = useState<PlaneacionEstado | null>(null);
+  const [confirmarPublicar, setConfirmarPublicar] = useState(false);
+  const [dlgDesbloqueo, setDlgDesbloqueo] = useState(false);
+  const [motivoDesbloqueo, setMotivoDesbloqueo] = useState('');
+  const [publicando, setPublicando] = useState(false);
+  const congelada = !!estado?.publicada;
+  // Bloquea la parrilla: ciclo en consulta (solo lectura) o planeación ya publicada.
+  const bloqueado = esSoloLectura || congelada;
+  const esAdmin = rol === 'ADMIN';
 
   // Filtro visual (no afecta el guardado: se persiste TODO el plan, no solo lo visible).
   const medicosVisibles = useMemo(() => {
@@ -86,10 +100,12 @@ export default function PlaneacionVisita() {
     if (!listo) { setMedicos([]); setPlan({}); setResumen(null); setCargando(false); return; }
     setCargando(true);
     try {
-      const [m, p, r] = await Promise.all([
-        listarMedicos(vmParam, false, true), obtenerPlaneacion(vmParam), planeacionResumen(vmParam)]);
+      const [m, p, r, e] = await Promise.all([
+        listarMedicos(vmParam, false, true), obtenerPlaneacion(vmParam), planeacionResumen(vmParam),
+        planeacionEstado(vmParam).catch(() => null)]);
       setMedicos(m);
       setResumen(r);
+      setEstado(e);
       const mapa: Record<number, Fila> = {};
       m.forEach((med) => { mapa[med.id] = { ...F0 }; });
       p.forEach((it: PlaneacionItem) => {
@@ -172,6 +188,33 @@ export default function PlaneacionVisita() {
     } finally { setGuardando(false); }
   }
 
+  // Publicar CONGELA la planeación: a partir de aquí el denominador de la cobertura no se
+  // mueve. Irreversible salvo desbloqueo del ADMIN.
+  async function publicar() {
+    setPublicando(true); setMsg(null);
+    try {
+      const r = await publicarPlaneacion(vmParam);
+      setConfirmarPublicar(false);
+      setMsg({ tipo: 'success', texto: `Planeación publicada (${r.items} visitas). Ya no puede modificarse.` });
+      setEstado(await planeacionEstado(vmParam));
+    } catch (e) {
+      setMsg({ tipo: 'error', texto: msgError(e, 'No se pudo publicar la planeación.') });
+    } finally { setPublicando(false); }
+  }
+
+  async function desbloquear() {
+    if (!vmParam) { setMsg({ tipo: 'error', texto: 'Selecciona el representante a desbloquear.' }); return; }
+    setPublicando(true); setMsg(null);
+    try {
+      await desbloquearPlaneacion(vmParam, motivoDesbloqueo.trim());
+      setDlgDesbloqueo(false);
+      setMsg({ tipo: 'success', texto: 'Planeación desbloqueada. El motivo quedó registrado.' });
+      setEstado(await planeacionEstado(vmParam));
+    } catch (e) {
+      setMsg({ tipo: 'error', texto: msgError(e, 'No se pudo desbloquear.') });
+    } finally { setPublicando(false); }
+  }
+
   if (cargando) return <Box sx={{ p: 4, textAlign: 'center' }}><CircularProgress /></Box>;
 
   const kpi = (label: string, valor: string | number, color = 'text.primary') => (
@@ -207,6 +250,19 @@ export default function PlaneacionVisita() {
       {esSoloLectura && (
         <Alert severity="info" sx={{ mb: 2 }}>
           Ciclo en solo lectura — el registro de visitas solo está disponible en el ciclo abierto.
+        </Alert>
+      )}
+      {congelada && (
+        <Alert severity="success" icon={<Lock />} sx={{ mb: 2 }}
+               action={esAdmin ? (
+                 <Button color="inherit" size="small" startIcon={<LockOpen />}
+                         onClick={() => { setMotivoDesbloqueo(''); setDlgDesbloqueo(true); }}>
+                   Desbloquear
+                 </Button>
+               ) : undefined}>
+          <b>Planeación publicada</b>{estado?.publicada_en ? ` el ${estado.publicada_en.slice(0, 10)}` : ''} —
+          ya no puede modificarse. Es el dato base con el que se calcula tu cobertura del ciclo.
+          {!esAdmin && ' Si hay un error, un administrador debe desbloquearla.'}
         </Alert>
       )}
 
@@ -341,7 +397,7 @@ export default function PlaneacionVisita() {
                     {/* Semana de la Vista */}
                     <TableCell align="center">
                       <FormControl size="small" sx={{ minWidth: 92 }}>
-                        <Select value={f.vSemana} onChange={(e) => setVSemana(m.id, Number(e.target.value))}>
+                        <Select value={f.vSemana} disabled={bloqueado} onChange={(e) => setVSemana(m.id, Number(e.target.value))}>
                           <MenuItem value={0}><em>—</em></MenuItem>
                           {SEMANAS.map((s) => <MenuItem key={s} value={s}>Sem {s}</MenuItem>)}
                         </Select>
@@ -350,7 +406,7 @@ export default function PlaneacionVisita() {
                     {/* Día de la Vista */}
                     <TableCell align="center">
                       <FormControl size="small" sx={{ minWidth: 110 }}>
-                        <Select value={f.vDia} displayEmpty disabled={f.vSemana === 0}
+                        <Select value={f.vDia} displayEmpty disabled={bloqueado || f.vSemana === 0}
                                 onChange={(e) => setVDia(m.id, String(e.target.value))}>
                           <MenuItem value=""><em>— día —</em></MenuItem>
                           {DIAS.map((d) => <MenuItem key={d} value={d}>{d}</MenuItem>)}
@@ -362,7 +418,7 @@ export default function PlaneacionVisita() {
                       <Tooltip title={f.vSemana === 0 ? 'Primero asigna la Vista'
                         : rOk ? '' : 'La revisita solo aplica a Vistas en Sem 1 o 2'}>
                         <FormControl size="small" sx={{ minWidth: 80 }}>
-                          <Select value={f.revisita ? 'Si' : 'No'} disabled={!rOk}
+                          <Select value={f.revisita ? 'Si' : 'No'} disabled={bloqueado || !rOk}
                                   onChange={(e) => toggleRevisita(m.id, e.target.value === 'Si')}>
                             <MenuItem value="No">No</MenuItem>
                             <MenuItem value="Si">Sí</MenuItem>
@@ -373,7 +429,7 @@ export default function PlaneacionVisita() {
                     {/* Semana de la Revisita (propuesta editable, posterior a la Vista) */}
                     <TableCell align="center">
                       <FormControl size="small" sx={{ minWidth: 92 }}>
-                        <Select value={f.revisita ? f.rSemana : 0} disabled={!f.revisita}
+                        <Select value={f.revisita ? f.rSemana : 0} disabled={bloqueado || !f.revisita}
                                 onChange={(e) => setRSemana(m.id, Number(e.target.value))}>
                           <MenuItem value={0}><em>—</em></MenuItem>
                           {SEMANAS.filter((s) => s > f.vSemana).map((s) => (
@@ -413,10 +469,18 @@ export default function PlaneacionVisita() {
         </Box>
       </Card>
 
-      <Stack direction="row" spacing={2} alignItems="center">
-        <Button variant="contained" startIcon={<Save />} disabled={guardando || esSoloLectura || medicos.length === 0} onClick={guardar}>
+      <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
+        <Button variant="contained" startIcon={<Save />} disabled={guardando || bloqueado || medicos.length === 0} onClick={guardar}>
           {guardando ? 'Guardando…' : 'Guardar planeación'}
         </Button>
+        {/* Publicar CONGELA la planeación. Solo tiene sentido sobre un borrador con datos. */}
+        {!congelada && (
+          <Button variant="outlined" color="success" startIcon={<PublishedWithChanges />}
+                  disabled={publicando || bloqueado || !resumen?.total_planeadas}
+                  onClick={() => setConfirmarPublicar(true)}>
+            Publicar planeación del ciclo
+          </Button>
+        )}
         {resumen && (
           <Stack direction="row" spacing={1} alignItems="center" color="text.secondary">
             <CheckCircle fontSize="small" color="success" />
@@ -426,6 +490,56 @@ export default function PlaneacionVisita() {
           </Stack>
         )}
       </Stack>
+
+      {/* Confirmación de publicación: es irreversible, así que se dice sin rodeos. */}
+      <Dialog open={confirmarPublicar} onClose={() => setConfirmarPublicar(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Lock color="success" /> Publicar la planeación
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 1.5 }}>
+            Vas a congelar <b>{resumen?.total_planeadas} visitas planeadas</b> ({resumen?.cobertura_planeada_pct}% de
+            cobertura) para este ciclo.
+          </Typography>
+          <Alert severity="warning" sx={{ mb: 1 }}>
+            <b>No podrás modificarla después.</b> Es el dato base con el que se calcula tu cobertura:
+            si cambiara a mitad de ciclo, el porcentaje dejaría de ser comparable. Solo un
+            administrador puede desbloquearla, dejando constancia del motivo.
+          </Alert>
+          <Typography variant="caption" color="text.secondary">
+            Revisa la parrilla antes de continuar.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmarPublicar(false)}>Cancelar</Button>
+          <Button variant="contained" color="success" disabled={publicando} onClick={publicar}>
+            {publicando ? 'Publicando…' : 'Sí, publicar y congelar'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Desbloqueo — solo ADMIN. El motivo es obligatorio y queda registrado. */}
+      <Dialog open={dlgDesbloqueo} onClose={() => setDlgDesbloqueo(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <LockOpen color="warning" /> Desbloquear la planeación
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            La planeación volverá a ser editable y su cobertura podrá cambiar. Queda registrado
+            quién desbloqueó, cuándo y por qué.
+          </Alert>
+          <TextField fullWidth autoFocus multiline minRows={2} label="Motivo del desbloqueo *"
+                     value={motivoDesbloqueo} onChange={(e) => setMotivoDesbloqueo(e.target.value)}
+                     placeholder="Ej: el representante planeó al médico equivocado" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDlgDesbloqueo(false)}>Cancelar</Button>
+          <Button variant="contained" color="warning" disabled={publicando || !motivoDesbloqueo.trim()}
+                  onClick={desbloquear}>
+            Desbloquear
+          </Button>
+        </DialogActions>
+      </Dialog>
       </>
       )}
     </Box>

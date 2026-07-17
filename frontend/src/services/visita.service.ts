@@ -235,6 +235,25 @@ export const guardarPlaneacion = (items: PlaneacionItem[], vmId?: number) =>
 export const planeacionResumen = (vmId?: number) =>
   api.get<PlaneacionResumen>('/visita/planeacion/resumen', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
 
+// ── Publicación de la planeación (la CONGELA: es el denominador de la cobertura) ──
+export interface PlaneacionEvento {
+  evento: 'PUBLICADA' | 'DESBLOQUEADA'; fecha: string;
+  usuario_id: number | null; motivo: string | null; items: number | null;
+}
+export interface PlaneacionEstado {
+  ciclo_id: number | null; publicada: boolean; publicada_en: string | null;
+  historial: PlaneacionEvento[];
+}
+export const planeacionEstado = (vmId?: number) =>
+  api.get<PlaneacionEstado>('/visita/planeacion/estado', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+export const publicarPlaneacion = (vmId?: number) =>
+  api.post<{ publicada: boolean; items: number }>('/visita/planeacion/publicar', null,
+    { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);
+/** Solo ADMIN. `vmId` es obligatorio y el motivo queda registrado. */
+export const desbloquearPlaneacion = (vmId: number, motivo: string) =>
+  api.post<{ publicada: boolean }>('/visita/planeacion/desbloquear', { motivo },
+    { params: { vm_id: vmId } }).then(r => r.data);
+
 // ── Ruptura de secuencia / Cierre de ciclo ────────────────────────────
 export interface RupturaMedico {
   id: number; nombre: string; categoria: string;
