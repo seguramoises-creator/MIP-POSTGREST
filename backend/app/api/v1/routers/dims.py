@@ -173,6 +173,27 @@ def _i(v) -> Optional[int]:
         except (TypeError, ValueError):
             return None
 
+
+def _ciclo_nace_cerrado(db: Session, pais_codigo: str, cupo: set) -> bool:
+    """REGLA DE NEGOCIO: **un solo ciclo abierto por país**.
+
+    El PRIMER ciclo de un país nace ABIERTO (si no, el país quedaría sin ciclo de trabajo);
+    los demás nacen CERRADOS y el admin los abre cuando les toca, cerrando el anterior.
+
+    Antes se importaba todo con `cerrado=False` hardcodeado: los 12 ciclos del Excel nacían
+    abiertos y el motor elegía el de NÚMERO MÁS ALTO (C12, diciembre) en vez del del mes en
+    curso — de ahí salieron los médicos con alta en C12, la hoja de coaching archivada en
+    diciembre y el panel de cobertura en 0.
+
+    `cupo` traquea los países que ya gastaron su ciclo abierto en esta misma importación: las
+    filas recién añadidas todavía no están en la BD, así que la consulta no las vería.
+    """
+    if pais_codigo in cupo:
+        return True
+    cupo.add(pais_codigo)  # este ciclo ocupa el cupo del país (nazca abierto o cerrado)
+    return db.query(Ciclo.id).filter(
+        Ciclo.pais_codigo == pais_codigo, Ciclo.cerrado == False).first() is not None  # noqa: E712
+
 def _d(v) -> Optional[Decimal]:
     try: return Decimal(str(v))
     except: return None
@@ -596,6 +617,8 @@ def _importar_hoja(
     """
     rows = _leer_hoja(ws)
     ins = om = err = 0
+    # Países que ya gastaron su único ciclo abierto en ESTA importación (ver _ciclo_nace_cerrado).
+    _cupo_abierto: set[str] = set()
 
     # ── DIM_PAIS ──────────────────────────────────────────────────────
     if nombre_canonico == "DIM_PAIS":
@@ -965,7 +988,9 @@ def _importar_hoja(
                             nombre_canonico=f"Ciclo {ciclo_num} {anio}",
                             fecha_inicio=date(anio, mes_num or 1, 1),
                             fecha_fin=date(anio, mes_num or 12, 28),
-                            dias_laborables=21, cerrado=False, activo=True,
+                            dias_laborables=21,
+                            cerrado=_ciclo_nace_cerrado(db, pais_codigo, _cupo_abierto),
+                            activo=True,
                         ))
         db.commit()
 
@@ -983,7 +1008,9 @@ def _importar_hoja(
                     pais_codigo=pais_codigo, anio=2026, numero=numero,
                     nombre=nombre, nombre_canonico=canon,
                     fecha_inicio=date(2026, 1, 1), fecha_fin=date(2026, 12, 31),
-                    dias_laborables=21, cerrado=False, activo=True,
+                    dias_laborables=21,
+                    cerrado=_ciclo_nace_cerrado(db, pais_codigo, _cupo_abierto),
+                    activo=True,
                 ))
                 ins += 1
         db.commit()

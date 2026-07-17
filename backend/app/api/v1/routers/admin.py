@@ -478,6 +478,31 @@ def _validar_fechas_ciclo(db: Session, pais_codigo: str, inicio, fin, excluir_id
             f"({solapado.fecha_inicio} a {solapado.fecha_fin}). Ajusta el rango.")
 
 
+def _ciclo_abierto_de(db: Session, pais_codigo: str, excluir_id=None):
+    """El ciclo abierto del país, si lo hay. Soporte de la regla "un solo ciclo abierto"."""
+    q = db.query(Ciclo).filter(Ciclo.pais_codigo == pais_codigo, Ciclo.cerrado == False)  # noqa: E712
+    if excluir_id is not None:
+        q = q.filter(Ciclo.id != excluir_id)
+    return q.first()
+
+
+def _validar_ciclo_unico_abierto(db: Session, pais_codigo: str, nombre_nuevo: str, excluir_id=None):
+    """REGLA DE NEGOCIO: **un solo ciclo abierto por país** (decisión del cliente, jul-2026).
+
+    Hasta ahora la regla solo vivía en la disciplina de cerrar a mano: `Ciclo.cerrado` tiene
+    `default=False`, así que todo ciclo nacía ABIERTO por las tres vías (crear, importar,
+    reabrir). Importar los 12 ciclos del Excel dejaba 12 abiertos, y el que elegía el motor
+    era el de número más alto (C12), no el del mes en curso — de ahí salieron los médicos con
+    alta en diciembre, la hoja de coaching archivada en C12 y el panel de cobertura en 0.
+    """
+    abierto = _ciclo_abierto_de(db, pais_codigo, excluir_id)
+    if abierto:
+        raise HTTPException(409,
+            f"Ya hay un ciclo abierto en {pais_codigo}: '{abierto.nombre}' "
+            f"({abierto.fecha_inicio} a {abierto.fecha_fin}). Solo puede haber un ciclo abierto "
+            f"por país: ciérralo antes de abrir '{nombre_nuevo}'.")
+
+
 def _ciclo_actual_de(ciclos):
     """Ciclo abierto (cerrado=False) más reciente: max por (anio, numero)."""
     abiertos = [c for c in ciclos if not c.cerrado]
@@ -535,6 +560,10 @@ def create_ciclo(data: CicloCreate, db: Session = Depends(get_db), _=AdminOnly):
     payload = data.model_dump()
     # dias_laborables SIEMPRE se calcula (lun-vie menos feriados), no se toma del cliente.
     payload["dias_laborables"] = _dias_habiles(db, data.pais_codigo, data.fecha_inicio, data.fecha_fin)
+    # Un solo ciclo abierto por país: el PRIMER ciclo del país nace abierto (si no, el país
+    # quedaría sin ciclo de trabajo); los demás nacen CERRADOS y se abren explícitamente
+    # cuando les toque, cerrando el anterior. `cerrado` nunca se acepta del cliente.
+    payload["cerrado"] = _ciclo_abierto_de(db, data.pais_codigo) is not None
     obj = Ciclo(**payload)
     db.add(obj); db.commit(); db.refresh(obj)
     return obj
@@ -567,6 +596,7 @@ def close_ciclo(id: int, db: Session = Depends(get_db), _=AdminOnly):
 def open_ciclo(id: int, db: Session = Depends(get_db), _=AdminOnly):
     obj = db.query(Ciclo).filter(Ciclo.id == id).first()
     if not obj: raise HTTPException(404, "Ciclo no encontrado")
+    _validar_ciclo_unico_abierto(db, obj.pais_codigo, obj.nombre, excluir_id=obj.id)
     obj.cerrado = False
     db.commit()
     return Msg(message=f"Ciclo '{obj.nombre}' abierto correctamente")
