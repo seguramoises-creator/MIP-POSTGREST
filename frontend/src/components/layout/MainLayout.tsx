@@ -23,10 +23,17 @@ export default function MainLayout() {
   // (el registro siempre va al ciclo abierto) y en las páginas que ya traen sus
   // propios selectores de País/Ciclo o no dependen del ciclo (dashboard, LSII, los
   // módulos de análisis, ETL/Reportes con filtros propios, y Admin/Usuarios).
+  // La píldora de la barra superior (CicloPaisBadge) ya informa país + ciclo abierto: la
+  // franja solo se justifica donde de verdad haga falta CAMBIAR el ciclo en consulta.
   const HEADER_OCULTO = [
     '/visita/registrar', '/dashboard', '/lsii',
     '/coaching', '/productividad', '/ranking', '/reconocimiento', '/cobertura-predictiva',
     '/etl', '/reportes', '/usuarios', '/admin',
+    // Médicos: la categorización NO depende del ciclo (la categoría del médico es estable
+    // entre ciclos, jul-2026), así que la franja no afectaba nada de lo que se ve ahí.
+    '/medicos', '/categorizacion',
+    // Parrilla y Costo/ROI ya traen su PROPIO selector de ciclo: la franja los duplicaba.
+    '/visita/parrilla', '/visita/costo-roi',
   ];
   const headerEnLayout = !HEADER_OCULTO.includes(pathname);
   const { nombreCompleto, accessToken, rol, logout } = useAuthStore();
