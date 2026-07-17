@@ -9,6 +9,7 @@ from datetime import date, timedelta
 from loguru import logger
 from sqlalchemy.orm import Session
 
+from app.core.tiempo import hoy_local
 from app.models.visita import MedicoVisita, VisitaRegistro
 from app.models.dimensiones import RepresentanteMedico, Ciclo
 
@@ -17,27 +18,50 @@ OBJ_COMPLETA = 60.0
 CICLO_DIAS_DEFAULT = 19  # días hábiles del ciclo (parámetro operativo RD, spec Parte 1)
 
 
+def _elegir_ciclo(ciclos: list[Ciclo], hoy: date) -> Ciclo | None:
+    """De una lista de ciclos, el que CONTIENE `hoy`; si ninguno, el más reciente.
+
+    FIX jul-2026: antes se elegía siempre el ciclo abierto de NÚMERO MÁS ALTO. Con un
+    único ciclo abierto acertaba por accidente, pero al abrir un segundo ciclo de número
+    mayor (p.ej. reabrir C12 estando en julio) devolvía diciembre, y `_guard_ventana_ciclo`
+    rechazaba TODOS los registros de visita del país: los visitadores no podían trabajar
+    hasta que un admin cerrara el ciclo intruso. El ciclo de trabajo es el que corresponde
+    a HOY, no el de número más alto.
+
+    Fallback al más reciente cuando ninguna ventana cubre hoy: los ciclos van del día 1 al
+    28, así que los días 29-31 no caen en ninguno.
+    """
+    vigentes = [c for c in ciclos
+                if c.fecha_inicio and c.fecha_fin and c.fecha_inicio <= hoy <= c.fecha_fin]
+    return max(vigentes or ciclos, key=lambda c: (c.anio, c.numero), default=None)
+
+
+def _ciclo_abierto(db: Session, pais_codigo: str | None) -> Ciclo | None:
+    """El ciclo ABIERTO de trabajo (ver `_elegir_ciclo`). Los ciclos abiertos de un país
+    son unos pocos, así que se traen y se decide en Python."""
+    q = db.query(Ciclo).filter(Ciclo.cerrado == False)  # noqa: E712
+    if pais_codigo:
+        q = q.filter(Ciclo.pais_codigo == pais_codigo)
+    return _elegir_ciclo(q.all(), hoy_local(db, pais_codigo))
+
+
 def ciclo_por_defecto(db: Session, vm_id: int | None = None) -> int | None:
     """Ciclo de trabajo por defecto.
 
-    Con `vm_id`: el ciclo ABIERTO más reciente del PAÍS del VM — es el ciclo al
+    Con `vm_id`: el ciclo abierto del PAÍS del VM que corresponde a hoy — es el ciclo al
     que se registran visitas/muestras y del que se lee la parrilla.
-    FIX jul-2026: sin este filtro se tomaba el ciclo más reciente GLOBAL (de
-    cualquier país, incluso cerrado), y los registros de un VM de DO caían en
-    el ciclo de otro país."""
+    FIX jul-2026: sin el filtro por país se tomaba el ciclo más reciente GLOBAL (de
+    cualquier país, incluso cerrado), y los registros de un VM de DO caían en el ciclo de
+    otro país."""
     if vm_id:
         rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
         if rm and rm.pais_codigo:
-            c = (db.query(Ciclo)
-                 .filter(Ciclo.pais_codigo == rm.pais_codigo, Ciclo.cerrado == False)  # noqa: E712
-                 .order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first())
+            c = _ciclo_abierto(db, rm.pais_codigo)
             if c:
                 return c.id
-    # Sin vm_id (vista agregada): preferir el ciclo ABIERTO más reciente, nunca un
-    # ciclo cerrado global (que dejaba el dashboard en blanco cuando el más reciente
-    # por (anio,numero) estaba cerrado).
-    c = (db.query(Ciclo).filter(Ciclo.cerrado == False)  # noqa: E712
-         .order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first())
+    # Sin vm_id (vista agregada): nunca un ciclo cerrado global (que dejaba el dashboard
+    # en blanco cuando el más reciente por (anio,numero) estaba cerrado).
+    c = _ciclo_abierto(db, None)
     if c is None:  # si no hay ninguno abierto, cae al más reciente global
         c = db.query(Ciclo).order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first()
     return c.id if c else None
