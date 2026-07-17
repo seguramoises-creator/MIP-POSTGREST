@@ -12,6 +12,8 @@ import { useMemo, useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import { KPI_ORDEN, kpiNombre } from '../../constants/kpi';
 import { useCicloStore } from '../../store/ciclo.store';
+import { useAuthStore } from '../../store/auth.store';
+import MiProductividad from './MiProductividad';
 
 function FilterLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -50,7 +52,17 @@ const CICLO_COLORS = [
 
 // KPI_ORDEN y kpiNombre importados desde ../../constants/kpi
 
+/** El representante ve SOLO lo suyo + el agregado de su línea (MiProductividad); la gerencia
+ *  ve el mapa integral. Son pantallas distintas porque la de gerencia consulta
+ *  /admin/lineas, /admin/indicadores y /ranking — endpoints que su rol no puede tocar, así
+ *  que al representante le salía vacía. La bifurcación va en un wrapper: los hooks no
+ *  admiten un return temprano. */
 export default function Productividad() {
+  const rolActual = useAuthStore((s) => s.rol);
+  return rolActual === 'REPRESENTANTE_MEDICO' ? <MiProductividad /> : <ProductividadGerencia />;
+}
+
+function ProductividadGerencia() {
   // País y ciclo salen del CONTEXTO GLOBAL (barra superior). Así la página y su gráfico
   // siguen al ciclo elegido arriba (por defecto el ABIERTO), en vez de auto-elegir el
   // "último ciclo con datos" por su cuenta (Item 7 Mallén).

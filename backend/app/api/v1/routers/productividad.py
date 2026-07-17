@@ -13,7 +13,7 @@ respuestas JSON se conservan (valor_real, cumplimiento_pct, puntaje, etc.)
 para no romper al frontend — solo cambia el origen ORM de los datos.
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -73,7 +73,12 @@ def get_productividad(
         q = q.filter(ResultadoIndicador.linea_id == linea_id)
 
     # Filtro por rol: RM solo ve su propia información
-    if current_user.rol == Rol.REPRESENTANTE_MEDICO and current_user.rm_id:
+    # FAIL-CLOSED: antes era `if rol == RM and current_user.rm_id`, así que un representante
+    # SIN rm_id (usuario mal creado) se saltaba el filtro y veía a TODOS los RMs. Ahora sin
+    # rm_id se deniega — mismo criterio que Cobertura Predictiva y Categorización.
+    if current_user.rol == Rol.REPRESENTANTE_MEDICO:
+        if not current_user.rm_id:
+            raise HTTPException(403, "Tu usuario no está vinculado a un representante médico.")
         q = q.filter(ResultadoIndicador.rm_id == current_user.rm_id)
 
     results = q.group_by(
@@ -154,6 +159,89 @@ def get_productividad_rm(
         "ciclo_id": ciclo_id,
         "kpis": kpis,
         "puntaje_total_productividad": sum(v["puntaje"] for v in kpis.values()),
+    }
+
+
+# Mínimo de RMs con datos para poder mostrar el promedio de la línea. Con 2, el promedio
+# revelaría al otro exactamente (promedio×2 − el mío); con 3+ solo se obtiene la suma de los
+# demás, nunca un dato individual. Con 1, el "promedio de la línea" sería él mismo.
+MIN_RMS_LINEA = 3
+
+
+@router.get("/mi-linea", response_model=dict, summary="Mi productividad vs. el promedio de mi línea")
+def get_mi_linea(ciclo_id: Optional[int] = Query(None), db: Session = Depends(get_db),
+                 current_user=AnyAuth):
+    """Lo del representante + el PROMEDIO de su línea, para que sepa si va bien o mal.
+
+    Nunca expone a un colega: de la línea solo salen agregados (promedio y nº de RMs), jamás
+    filas individuales. Y el promedio se oculta si la línea tiene menos de `MIN_RMS_LINEA`
+    representantes con datos, porque con 2 el promedio permite despejar al otro.
+    """
+    if current_user.rol != Rol.REPRESENTANTE_MEDICO:
+        raise HTTPException(403, "Esta vista es la de un representante médico.")
+    if not current_user.rm_id:
+        raise HTTPException(403, "Tu usuario no está vinculado a un representante médico.")
+
+    rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == current_user.rm_id).first()
+    if not rm:
+        raise HTTPException(404, "Representante no encontrado.")
+    linea_nombre = (db.query(Linea.nombre).filter(Linea.id == rm.linea_id).scalar()
+                    if rm.linea_id else None)
+
+    base = (db.query(ResultadoIndicador)
+            .join(Indicador, Indicador.id == ResultadoIndicador.indicador_id)
+            .filter(Indicador.modulo == "GESTION", ResultadoIndicador.activo == True))  # noqa: E712
+    if ciclo_id:
+        base = base.filter(ResultadoIndicador.ciclo_id == ciclo_id)
+
+    def _agg(q):
+        r = q.with_entities(
+            func.avg(ResultadoIndicador.resultado_porcentaje),
+            func.sum(ResultadoIndicador.puntos_obtenidos),
+            func.count(func.distinct(ResultadoIndicador.rm_id)),
+        ).first()
+        return (float(r[0] or 0), float(r[1] or 0), int(r[2] or 0))
+
+    mi_pct, mis_puntos, _ = _agg(base.filter(ResultadoIndicador.rm_id == current_user.rm_id))
+
+    linea = None
+    motivo = None
+    if not rm.linea_id:
+        motivo = "Tu representante no tiene una línea asignada."
+    else:
+        q_linea = base.join(RepresentanteMedico, RepresentanteMedico.id == ResultadoIndicador.rm_id) \
+                      .filter(RepresentanteMedico.linea_id == rm.linea_id)
+        l_pct, l_puntos, l_rms = _agg(q_linea)
+        if l_rms < MIN_RMS_LINEA:
+            motivo = (f"Tu línea tiene {l_rms} representante(s) con datos: no se muestra el "
+                      f"promedio porque permitiría deducir resultados individuales.")
+        else:
+            linea = {"nombre": linea_nombre, "rms": l_rms,
+                     "cumplimiento_pct": round(l_pct, 1),
+                     "puntos_promedio": round(l_puntos / l_rms, 1)}
+
+    # Sus indicadores, en la misma respuesta: la vista los necesita siempre y así no hay que
+    # exponer su rm_id al frontend solo para pedir el detalle por separado.
+    filas = (base.filter(ResultadoIndicador.rm_id == current_user.rm_id)
+             .with_entities(
+                 Indicador.codigo, Indicador.nombre,
+                 func.sum(ResultadoIndicador.resultado_real).label("valor"),
+                 func.avg(ResultadoIndicador.resultado_porcentaje).label("cumplimiento"),
+                 func.sum(ResultadoIndicador.puntos_obtenidos).label("puntaje"))
+             .group_by(Indicador.codigo, Indicador.nombre)
+             .order_by(Indicador.codigo).all())
+
+    return {
+        "rm": {"nombre": rm.nombre, "codigo": rm.codigo, "linea": linea_nombre,
+               "cumplimiento_pct": round(mi_pct, 1), "puntos": round(mis_puntos, 1),
+               "sin_datos": not filas},
+        "linea": linea,
+        "linea_oculta_motivo": motivo,
+        "indicadores": [{"codigo": f.codigo, "nombre": f.nombre,
+                         "valor": float(f.valor or 0),
+                         "cumplimiento_pct": round(float(f.cumplimiento or 0), 1),
+                         "puntaje": round(float(f.puntaje or 0), 1)} for f in filas],
+        "ciclo_id": ciclo_id,
     }
 
 
