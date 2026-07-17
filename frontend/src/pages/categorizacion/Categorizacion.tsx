@@ -165,7 +165,6 @@ function CategorizacionMotor() {
   const rol = useAuthStore((s) => s.rol);
   const accesoCompleto = ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_MARCA']
     .includes(rol ?? '');
-  const [periodo, setPeriodo] = useState<string>('');
   const [categoria, setCategoria] = useState('');
   const [busqueda, setBusqueda] = useState('');              // representante
   const [busquedaMedico, setBusquedaMedico] = useState('');  // nombre del médico
@@ -175,21 +174,18 @@ function CategorizacionMotor() {
 
   // Resumen
   const { data: resumen, isLoading: loadingResumen } = useQuery<Resumen>({
-    queryKey: ['cat-resumen', periodo],
+    queryKey: ['cat-resumen'],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (periodo) params.set('periodo', periodo);
-      const r = await api.get(`/categorizacion/resumen?${params}`);
+      const r = await api.get('/categorizacion/resumen');
       return r.data;
     },
   });
 
   // Resultados paginados
   const { data: resultados, isLoading: loadingResultados } = useQuery({
-    queryKey: ['cat-resultados', periodo, categoria, busqueda, busquedaMedico, especialidadFiltro, page, rowsPerPage],
+    queryKey: ['cat-resultados', categoria, busqueda, busquedaMedico, especialidadFiltro, page, rowsPerPage],
     queryFn: async () => {
       const params = new URLSearchParams({ skip: String(page * rowsPerPage), limit: String(rowsPerPage) });
-      if (periodo) params.set('periodo', periodo);
       if (categoria) params.set('categoria', categoria);
       if (busqueda) params.set('representante', busqueda);
       if (busquedaMedico) params.set('medico', busquedaMedico);
@@ -211,22 +207,18 @@ function CategorizacionMotor() {
 
   // Por representante
   const { data: porRep = [] } = useQuery<FilaRepresentante[]>({
-    queryKey: ['cat-por-rep', periodo],
+    queryKey: ['cat-por-rep'],
     queryFn: async () => {
-      const p = new URLSearchParams();
-      if (periodo) p.set('periodo', periodo);
-      const r = await api.get(`/categorizacion/por-representante?${p}`);
+      const r = await api.get('/categorizacion/por-representante');
       return r.data;
     },
   });
 
   // Por especialidad
   const { data: porEsp = [] } = useQuery<FilaEspecialidad[]>({
-    queryKey: ['cat-por-esp', periodo],
+    queryKey: ['cat-por-esp'],
     queryFn: async () => {
-      const p = new URLSearchParams();
-      if (periodo) p.set('periodo', periodo);
-      const r = await api.get(`/categorizacion/por-especialidad?${p}`);
+      const r = await api.get('/categorizacion/por-especialidad');
       return r.data;
     },
   });
@@ -274,25 +266,11 @@ function CategorizacionMotor() {
         </Box>
       </Box>
 
-      {/* Selector de período */}
-      {resumen && resumen.periodos_disponibles.length > 0 && (
-        <Box mb={3} maxWidth={240}>
-          <FormControl fullWidth size="small">
-            <InputLabel>Período</InputLabel>
-            <Select
-              value={periodo}
-              label="Período"
-              onChange={(e) => { setPeriodo(e.target.value); setPage(0); }}
-            >
-              <MenuItem value="">Todos</MenuItem>
-              {resumen.periodos_disponibles.map((p) => (
-                <MenuItem key={p} value={p}>{p}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
-      )}
-
+      {/* Sin selector de período (jul-2026): la categoría del médico es un dato ESTABLE que
+          solo cambia con una actualización manual o una carga masiva (2-3 veces al año), no
+          por ciclo. Ofrecer un filtro por período sugería lo contrario e inducía a error —
+          hacía leer "sin datos para el período seleccionado" como si faltara la carga del mes.
+          El backend conserva el parámetro `periodo` (histórico); esta vista ya no lo envía. */}
 
       {/* ── Pestañas — mismo estilo que Admin.tsx ──────────────────────── */}
       <Box mb={3}>
@@ -688,7 +666,7 @@ function CategorizacionMotor() {
       )}
 
       {/* Tab 1: Detalle por Médico — solo roles con acceso completo */}
-      {tab === 1 && accesoCompleto && <DetalleMedicos periodo={periodo} />}
+      {tab === 1 && accesoCompleto && <DetalleMedicos />}
     </Box>
   );
 }

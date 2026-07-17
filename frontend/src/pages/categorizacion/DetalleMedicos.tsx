@@ -152,9 +152,8 @@ function ComponenteRow({ key_ }: { key_: number }) {
 }
 
 // ── Componente principal ──────────────────────────────────────────────────────
-interface Props { periodo: string }
 
-export default function DetalleMedicos({ periodo }: Props) {
+export default function DetalleMedicos() {
   const [pais, setPais] = useState('');
   const [provincia, setProvincia] = useState('');
   const [municipio, setMunicipio] = useState('');
@@ -166,7 +165,7 @@ export default function DetalleMedicos({ periodo }: Props) {
   const [expanded, setExpanded] = useState<number | null>(null);
 
   // Reiniciar paginación al cambiar filtros
-  useEffect(() => { setPage(0); setExpanded(null); }, [pais, provincia, municipio, especialidad, representante, categoria, periodo]);
+  useEffect(() => { setPage(0); setExpanded(null); }, [pais, provincia, municipio, especialidad, representante, categoria]);
   useEffect(() => { setProvincia(''); setMunicipio(''); }, [pais]);
   useEffect(() => { setMunicipio(''); }, [provincia]);
 
@@ -185,10 +184,9 @@ export default function DetalleMedicos({ periodo }: Props) {
 
   // ── Estadísticas para gráficos: mismos filtros que la tabla (sin paginación) ─
   const { data: statsGlobales } = useQuery({
-    queryKey: ['cat-stats-detalle', periodo, pais, provincia, municipio, especialidad, representante],
+    queryKey: ['cat-stats-detalle', pais, provincia, municipio, especialidad, representante],
     queryFn: async () => {
       const p = new URLSearchParams();
-      if (periodo)       p.set('periodo',       periodo);
       if (pais)          p.set('pais',           pais);
       if (provincia)     p.set('provincia',      provincia);
       if (municipio)     p.set('municipio',      municipio);
@@ -206,10 +204,9 @@ export default function DetalleMedicos({ periodo }: Props) {
 
   // Detalle paginado
   const { data: detalle, isLoading, error: detalleError } = useQuery({
-    queryKey: ['cat-detalle', periodo, pais, provincia, municipio, especialidad, representante, categoria, page, rowsPerPage],
+    queryKey: ['cat-detalle', pais, provincia, municipio, especialidad, representante, categoria, page, rowsPerPage],
     queryFn: async () => {
       const p = new URLSearchParams({ skip: String(page * rowsPerPage), limit: String(rowsPerPage) });
-      if (periodo) p.set('periodo', periodo);
       if (pais) p.set('pais', pais);
       if (provincia) p.set('provincia', provincia);
       if (municipio) p.set('municipio', municipio);
