@@ -152,13 +152,6 @@ def crear_hoja(db: Session, gd_user: Usuario, datos) -> CoachingSesion:
         if not gd_user.gerente_id or rm.gerente_id != gd_user.gerente_id:
             raise ValueError("Este RM no pertenece a tu equipo.")
 
-    if datos.corrige_a_id:
-        orig = db.query(CoachingSesion).filter(CoachingSesion.id == datos.corrige_a_id).first()
-        if not orig:
-            raise ValueError("La hoja a corregir no existe.")
-        if not (datos.motivo_correccion or "").strip():
-            raise ValueError("Indica el motivo de la corrección.")
-
     prom = calcular_promedios([{"seccion": i.seccion, "calificacion": i.calificacion} for i in datos.items])
     ciclo_id, pais_codigo = _ciclo_pais_de_rm(db, rm, datos.fecha_coaching)
 
@@ -181,8 +174,9 @@ def crear_hoja(db: Session, gd_user: Usuario, datos) -> CoachingSesion:
         rm_justificacion_desacuerdo=(datos.rm_justificacion_desacuerdo or None),
         rm_firma_imagen=datos.rm_firma_imagen,
         rm_firma_timestamp=datetime.now(timezone.utc),
-        corrige_a_id=datos.corrige_a_id,
-        motivo_correccion=(datos.motivo_correccion or None),
+        # corrige_a_id / motivo_correccion: siempre NULL. La corrección se retiró (el guard de
+        # arriba rechaza cualquier `corrige_a_id`); las columnas se conservan por compatibilidad
+        # con el esquema y los datos históricos, pero ninguna hoja nueva las usa.
         pdf_generado=True,   # el PDF se genera en el mismo flujo (best-effort para el correo)
         created_at=datetime.now(timezone.utc),
     )
@@ -195,7 +189,7 @@ def crear_hoja(db: Session, gd_user: Usuario, datos) -> CoachingSesion:
     db.commit()
     db.refresh(sesion)
     logger.info(f"Coaching MORE: hoja {sesion.id} creada gd={gd_user.id} rm={rm.id} "
-                f"prom={prom['general']} corrige_a={datos.corrige_a_id}")
+                f"prom={prom['general']}")
 
     # PDF + correo al RM (best-effort, no bloquea el guardado)
     try:
