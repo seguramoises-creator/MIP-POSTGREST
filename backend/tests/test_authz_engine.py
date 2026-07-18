@@ -61,8 +61,10 @@ def test_alcance_export_modulo_capado_por_lectura():
     assert engine.alcance_export_modulo(gd, Recurso.DASHBOARD_EJECUTIVO) == Alcance.TEAM
     # GD no lee config.parametros → export sobre ese módulo = None
     assert engine.alcance_export_modulo(gd, Recurso.CONFIG_PARAMETROS) is None
-    # GD configura parrilla.configurar (⇒ read all) y exporta team → min = team
-    assert engine.alcance_export_modulo(gd, Recurso.PARRILLA_CONFIGURAR) == Alcance.TEAM
+    # GD ya NO configura parrilla.configurar (decisión jul-2026) → no lo lee → export None
+    assert engine.alcance_export_modulo(gd, Recurso.PARRILLA_CONFIGURAR) is None
+    # pero GD sí lee parrilla.consulta (team) → export capado a team
+    assert engine.alcance_export_modulo(gd, Recurso.PARRILLA_CONSULTA) == Alcance.TEAM
     rm = U(Rol.REPRESENTANTE_MEDICO)  # RM no exporta nada
     assert engine.alcance_export_modulo(rm, Recurso.DASHBOARD_EJECUTIVO) is None
     ana = U(Rol.ANALISTA_DATOS)  # export all, lee medico.panel all → all

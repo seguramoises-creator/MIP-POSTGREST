@@ -92,6 +92,16 @@ def test_visita_planeacion_registrar_solo_rm():
         "/api/v1/visita/planeacion/publicar").status_code != 403
 
 
+def test_parrilla_configura_gerente_producto_no_gd():
+    from app.api.v1.routers.visita import router
+    # parrilla.configurar: GD NO configura (solo consulta) → publicar 403
+    assert _client(router, U(Rol.GERENTE_DISTRITO, gerente_id=1)).post(
+        "/api/v1/visita/parrilla/publicar", params={"linea_id": 1}).status_code == 403
+    # GERENTE_MARCA (Gerente de Producto) sí configura → pasa el guard
+    assert _client(router, U(Rol.GERENTE_MARCA)).post(
+        "/api/v1/visita/parrilla/publicar", params={"linea_id": 1}).status_code != 403
+
+
 def test_costoroi_segregacion_finanzas_configura_director_aprueba():
     from app.api.v1.routers.visita import router
     # Aprobar: FINANZAS no puede (solo configura) → 403; el Director sí pasa el guard

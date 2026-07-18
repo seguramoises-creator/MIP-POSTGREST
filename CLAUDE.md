@@ -1012,9 +1012,10 @@ auditada). **Workflow Costo/ROI** (Finanzas CONFIGURE → Director APPROVE): `Vi
 migración `0018`; UI en `CostoRoiVisita.tsx`. Tests `tests/test_authz_wiring.py`.
 
 **DEUDA / decisiones pendientes (Fase 2):**
-- **`parrilla.configurar`**: la matriz la asigna al **GD**, la app al **Gerente de Producto**
-  (`RequireGerenteProducto` en `visita.py`) — **conflicto sin resolver**; se conservó el comportamiento
-  actual (solo se cableó `parrilla.consulta` read). Decidir cuál gobierna.
+- ~~`parrilla.configurar`~~ **RESUELTO (jul-2026)**: configura el **Gerente de Producto** (`GERENTE_MARCA`)
+  + ADMIN (decisión del cliente). Matriz fila 9 ajustada (GERENTE_MARCA=configure, GD=solo consulta);
+  `POST /visita/parrilla` y `/parrilla/publicar` con `require(CONFIGURE, parrilla.configurar)`; frontend
+  `ParrillaVisita` edita solo ADMIN/GERENTE_MARCA.
 - **`categorizacion.detalle`** (config de pesos): la matriz da `configure` al Gerente de Producto; hoy es
   ADMIN-only en `admin.py`. Sin cablear (0 usuarios `GERENTE_MARCA`).
 - **Módulos fuera de la matriz del prompt** (`reconocimiento`, `lsii`, `etl`, la megapantalla Admin de

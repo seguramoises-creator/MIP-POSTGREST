@@ -143,7 +143,7 @@ Columnas = enum `Rol`. Leyenda: `—`=sin acceso · `R:own/team/all`=read · `RE
 | 6 | `planeacion.ciclo` | REG:own | R:team | — | — | — | — | R:all | R:all | — | ADMIN |
 | 7 | `cobertura.diaria` | R:own | R:team | R:all | R:all | R:all | R:all | R:all | R:all | R:all | ADMIN |
 | 8 | `cobertura.predictiva` | R:own | R:team | R:all | R:all | R:all | R:all | R:all | R:all | — | ADMIN |
-| 9 | `parrilla.configurar` | — | CFG | — | — | — | — | R:all | R:all | — | ADMIN |
+| 9 | `parrilla.configurar` | — | — | CFG | — | — | — | R:all | R:all | — | ADMIN | *(jul-2026: configura el Gerente de Producto, no el GD)* |
 | 10 | `parrilla.consulta` | R:own | R:team | R:all | R:all | R:all | R:all | R:all | R:all | R:all | ADMIN |
 | 11 | `productividad.comercial` | R:own | R:team | R:all | R:all | R:all | **—** | R:all | R:all | R:all | ADMIN |
 | 12 | `ranking.rkt` | R:own | R:team | R:all | R:all | R:all | **—** | R:all | R:all | R:all | ADMIN |
@@ -278,10 +278,11 @@ Costo/ROI; **flip** de la matriz. Se planifica aparte.
 La Fase 2 cableó los endpoints de los módulos cubiertos por la matriz (`require/autorizar` + scope) y el
 frontend (`usePuede`/`ProtectedRoute`/`Sidebar`). Pendientes que quedaron **flagged sin resolver**:
 
-1. **`parrilla.configurar` — conflicto matriz vs app.** La matriz (§5, fila 9) asigna la configuración de
-   la parrilla al **GD**; la app la asigna al **Gerente de Producto** (`RequireGerenteProducto` en
-   `visita.py`). Se conservó el comportamiento actual (solo se cableó `parrilla.consulta` read). **Decisión
-   de negocio pendiente:** ¿quién configura la parrilla, el GD (matriz) o el Gerente de Producto (app)?
+1. **`parrilla.configurar`** — ~~conflicto~~ **RESUELTO (jul-2026)**: decisión del cliente = configura el
+   **Gerente de Producto** (`GERENTE_MARCA`) + ADMIN (inversión de marca). La matriz §5 fila 9 se ajustó
+   (GERENTE_MARCA=configure, GD=sin acceso→solo consulta vía `parrilla.consulta`); endpoints `POST /visita/parrilla`
+   y `/parrilla/publicar` cableados a `require(CONFIGURE, parrilla.configurar)`; frontend `ParrillaVisita`
+   configura solo ADMIN/GERENTE_MARCA.
 2. **`categorizacion.detalle`** (config de pesos de la categorización): la matriz da `configure` al Gerente
    de Producto; hoy el CRUD de criterios es ADMIN-only en `admin.py`. No se cableó (0 usuarios
    `GERENTE_MARCA` reales). Cablear si se activa ese rol.

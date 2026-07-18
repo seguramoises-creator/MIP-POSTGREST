@@ -34,7 +34,7 @@ ORACULO = {
     Recurso.PLANEACION_CICLO:        [GO, RT, _,  _,  _,  _,  RA, RA, _,  AD],
     Recurso.COBERTURA_DIARIA:        [RO, RT, RA, RA, RA, RA, RA, RA, RA, AD],
     Recurso.COBERTURA_PREDICTIVA:    [RO, RT, RA, RA, RA, RA, RA, RA, _,  AD],
-    Recurso.PARRILLA_CONFIGURAR:     [_,  CF, _,  _,  _,  _,  RA, RA, _,  AD],
+    Recurso.PARRILLA_CONFIGURAR:     [_,  _,  CF, _,  _,  _,  RA, RA, _,  AD],
     Recurso.PARRILLA_CONSULTA:       [RO, RT, RA, RA, RA, RA, RA, RA, RA, AD],
     Recurso.PRODUCTIVIDAD_COMERCIAL: [RO, RT, RA, RA, RA, _,  RA, RA, RA, AD],
     Recurso.RANKING_RKT:             [RO, RT, RA, RA, RA, _,  RA, RA, RA, AD],

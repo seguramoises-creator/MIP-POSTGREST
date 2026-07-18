@@ -36,15 +36,17 @@ RequireFinanciero = Depends(require_roles(
     Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO, Rol.GERENTE_MARCA))
 RequireAnyAuth = Depends(get_current_active_user)
 # RBAC Fase 2: captura por matriz. Registrar visita = RM (register) + ADMIN; planeación = RM
-# register / GD read (equipo). Parrilla consulta = lectura amplia. La CONFIG de parrilla
-# (RequireGerenteProducto) NO se toca: la matriz la asigna al GD pero la app la asigna al
-# Gerente de Producto — conflicto pendiente de decisión, se conserva el comportamiento actual.
+# register / GD read (equipo). Parrilla consulta = lectura amplia. Parrilla CONFIG = Gerente de
+# Producto (GERENTE_MARCA) + ADMIN — DECISIÓN jul-2026: se resolvió el conflicto matriz-vs-app a
+# favor del Gerente de Producto (inversión de marca); la matriz se ajustó (parrilla.configurar →
+# GERENTE_MARCA configure, GD solo consulta).
 from app.core.authz.deps import require as _require_authz
 from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
 RegistrarVisitaGuard = Depends(_require_authz(_Acc.REGISTER, _Rec.VISITA_REGISTRAR))
 ReadPlaneacion = Depends(_require_authz(_Acc.READ, _Rec.PLANEACION_CICLO))
 RegistrarPlaneacion = Depends(_require_authz(_Acc.REGISTER, _Rec.PLANEACION_CICLO))
 ReadParrilla = Depends(_require_authz(_Acc.READ, _Rec.PARRILLA_CONSULTA))
+ConfigurarParrilla = Depends(_require_authz(_Acc.CONFIGURE, _Rec.PARRILLA_CONFIGURAR))
 # Costo/ROI: Finanzas CONFIGURA (BORRADOR), Director APRUEBA. Segregación estructural (quien
 # configura no aprueba: FINANZAS≠PRESIDENCIA). ADMIN puede ambas + reabrir (dato cerrado).
 ConfigurarCosto = Depends(_require_authz(_Acc.CONFIGURE, _Rec.COSTOROI_CONFIGURAR))
@@ -585,7 +587,7 @@ def parrilla_penetracion(linea_id: int | None = None, ciclo_id: int | None = Non
 
 @router.post("/parrilla/publicar", response_model=dict)
 def publicar_parrilla(linea_id: int, ciclo_id: int | None = None,
-                      db: Session = Depends(get_db), current_user=RequireGerenteProducto):
+                      db: Session = Depends(get_db), current_user=ConfigurarParrilla):
     """Publica la parrilla al equipo (Gerente de Producto). El VM la recibe en solo lectura."""
     from app.services import visita_parrilla_service
     try:
@@ -596,7 +598,7 @@ def publicar_parrilla(linea_id: int, ciclo_id: int | None = None,
 
 
 @router.post("/parrilla", response_model=dict, status_code=status.HTTP_201_CREATED)
-def guardar_parrilla(datos: ParrillaGuardar, db: Session = Depends(get_db), current_user=RequireGerenteProducto):
+def guardar_parrilla(datos: ParrillaGuardar, db: Session = Depends(get_db), current_user=ConfigurarParrilla):
     """Guarda (reemplaza) la parrilla de una línea en el ciclo. Solo Gerente de Producto.
     Queda en borrador hasta publicar."""
     from app.services import visita_parrilla_service

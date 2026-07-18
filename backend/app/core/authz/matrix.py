@@ -47,7 +47,7 @@ MATRIZ: dict[str, dict] = {
     Recurso.PLANEACION_CICLO:        _fila(REG_OWN, R_TEAM,   _N,      _N,      _N,      _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.COBERTURA_DIARIA:        _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
     Recurso.COBERTURA_PREDICTIVA:    _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
-    Recurso.PARRILLA_CONFIGURAR:     _fila(_N,      CFG,      _N,      _N,      _N,      _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.PARRILLA_CONFIGURAR:     _fila(_N,      _N,       CFG,     _N,      _N,      _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),  # decisión jul-2026: configura el Gerente de Producto (GERENTE_MARCA), no el GD
     Recurso.PARRILLA_CONSULTA:       _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
     Recurso.PRODUCTIVIDAD_COMERCIAL: _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
     Recurso.RANKING_RKT:             _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),

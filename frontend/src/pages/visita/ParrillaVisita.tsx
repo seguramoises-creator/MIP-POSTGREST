@@ -24,7 +24,9 @@ function msgError(e: unknown, fallback: string): string {
 
 export default function ParrillaVisita() {
   const rol = useAuthStore((s) => s.rol);
-  const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD' || rol === 'GERENTE_MARCA';
+  // RBAC Fase 2 (decisión jul-2026): la parrilla la configura el Gerente de Producto (GERENTE_MARCA)
+  // + ADMIN. El GD y demás roles solo consultan (soloLectura). Coincide con parrilla.configurar de la matriz.
+  const esGestor = rol === 'ADMIN' || rol === 'GERENTE_MARCA';
   const puedeConfigProductos = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD';
   const navigate = useNavigate();
 
