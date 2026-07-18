@@ -92,7 +92,7 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Datos',
     items: [
       { label: 'Carga Excel (ETL)', path: '/etl',      icon: <CloudUpload />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
-      { label: 'Reportes',          path: '/reportes', icon: <Assessment />,  recurso: 'exportacion', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },
+      { label: 'Reportes',          path: '/reportes', icon: <Assessment />,  recurso: 'exportacion', accion: 'export', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },
     ],
   },
   {

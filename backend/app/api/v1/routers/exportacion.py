@@ -22,15 +22,29 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_roles
-from app.models.usuario import Rol
+from app.core.deps import get_db
+from app.core.authz.deps import autorizar_export, Autorizacion
+from app.core.authz.constantes import Recurso
+from app.core.authz import scope
+from app.core.authz.audit import registrar_evento_seguridad
 from app.services import exportacion_service
 
 router = APIRouter(prefix="/exportacion", tags=["Exportación"])
 
-RequireReportes = Depends(require_roles(
-    Rol.ADMIN, Rol.PRESIDENCIA, Rol.DIR_COMERCIAL, Rol.GERENTE_PRODUCTIVIDAD
-))
+# RBAC Fase 2: exportar es un permiso INDEPENDIENTE de leer, y su alcance se CAPA por la lectura
+# del módulo (ranking.rkt). Deniega a quien no lee el módulo (p.ej. GERENTE_MEDICO) y filtra los
+# datos por scope (GD → solo su equipo). Reconocimientos se derivan del ranking → mismo recurso.
+ExportRanking = Depends(autorizar_export(Recurso.RANKING_RKT))
+
+
+def _rm_ids(db: Session, auth: Autorizacion):
+    """Conjunto de rm_id exportables según el alcance efectivo (None = todos)."""
+    return scope.rm_ids_visibles(db, auth.usuario, auth.alcance)
+
+
+def _auditar(db: Session, auth: Autorizacion, detalle: str):
+    registrar_evento_seguridad(db, auth.usuario, "EXPORTACION", recurso=Recurso.RANKING_RKT,
+                               accion="export", alcance=auth.alcance.value, detalle=detalle)
 
 _XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _PDF_MEDIA_TYPE = "application/pdf"
@@ -55,9 +69,10 @@ def exportar_ranking_excel(
     ciclo_id: Optional[int] = None,
     tipo_ranking: str = "MENSUAL",
     db: Session = Depends(get_db),
-    current_user=RequireReportes,
+    auth: Autorizacion = ExportRanking,
 ):
-    buffer = exportacion_service.exportar_ranking_excel(db, pais_codigo=pais_codigo, ciclo_id=ciclo_id, tipo_ranking=tipo_ranking)
+    buffer = exportacion_service.exportar_ranking_excel(db, pais_codigo=pais_codigo, ciclo_id=ciclo_id, tipo_ranking=tipo_ranking, rm_ids=_rm_ids(db, auth))
+    _auditar(db, auth, "ranking/excel")
     return _stream(buffer, _XLSX_MEDIA_TYPE, _nombre_archivo(f"ranking_{tipo_ranking.lower()}", "xlsx"))
 
 
@@ -68,11 +83,12 @@ def exportar_ranking_pdf(
     tipo_ranking: str = "MENSUAL",
     top: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user=RequireReportes,
+    auth: Autorizacion = ExportRanking,
 ):
     buffer = exportacion_service.exportar_ranking_pdf(
-        db, pais_codigo=pais_codigo, ciclo_id=ciclo_id, tipo_ranking=tipo_ranking, top=top
+        db, pais_codigo=pais_codigo, ciclo_id=ciclo_id, tipo_ranking=tipo_ranking, top=top, rm_ids=_rm_ids(db, auth)
     )
+    _auditar(db, auth, "ranking/pdf")
     return _stream(buffer, _PDF_MEDIA_TYPE, _nombre_archivo(f"ranking_{tipo_ranking.lower()}", "pdf"))
 
 
@@ -81,9 +97,10 @@ def exportar_reconocimientos_excel(
     pais_codigo: Optional[str] = None,
     ciclo_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user=RequireReportes,
+    auth: Autorizacion = ExportRanking,
 ):
-    buffer = exportacion_service.exportar_reconocimientos_excel(db, pais_codigo=pais_codigo, ciclo_id=ciclo_id)
+    buffer = exportacion_service.exportar_reconocimientos_excel(db, pais_codigo=pais_codigo, ciclo_id=ciclo_id, rm_ids=_rm_ids(db, auth))
+    _auditar(db, auth, "reconocimientos/excel")
     return _stream(buffer, _XLSX_MEDIA_TYPE, _nombre_archivo("reconocimientos", "xlsx"))
 
 
@@ -92,7 +109,8 @@ def exportar_reconocimientos_pdf(
     pais_codigo: Optional[str] = None,
     ciclo_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user=RequireReportes,
+    auth: Autorizacion = ExportRanking,
 ):
-    buffer = exportacion_service.exportar_reconocimientos_pdf(db, pais_codigo=pais_codigo, ciclo_id=ciclo_id)
+    buffer = exportacion_service.exportar_reconocimientos_pdf(db, pais_codigo=pais_codigo, ciclo_id=ciclo_id, rm_ids=_rm_ids(db, auth))
+    _auditar(db, auth, "reconocimientos/pdf")
     return _stream(buffer, _PDF_MEDIA_TYPE, _nombre_archivo("reconocimientos", "pdf"))

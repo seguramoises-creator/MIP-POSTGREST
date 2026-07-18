@@ -68,6 +68,17 @@ def test_coaching_kpi_lectura():
     assert _client(router, U(Rol.GERENTE_DISTRITO, gerente_id=1)).get("/api/v1/coaching").status_code != 403
 
 
+def test_exportacion_capada_por_lectura():
+    from app.api.v1.routers.exportacion import router
+    # GERENTE_MEDICO no lee ranking.rkt → no puede exportar ranking → 403
+    assert _client(router, U(Rol.GERENTE_MEDICO)).get("/api/v1/exportacion/ranking/excel").status_code == 403
+    # RM: exportacion=none → 403
+    assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).get("/api/v1/exportacion/ranking/pdf").status_code == 403
+    # GERENTE_DISTRITO: export team (capado, filtrado) → pasa el guard
+    assert _client(router, U(Rol.GERENTE_DISTRITO, gerente_id=1)).get(
+        "/api/v1/exportacion/ranking/excel").status_code != 403
+
+
 def test_visita_planeacion_registrar_solo_rm():
     from app.api.v1.routers.visita import router
     # planeacion.ciclo: GD NO registra (solo lee equipo) → publicar 403

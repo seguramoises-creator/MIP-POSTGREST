@@ -47,3 +47,15 @@ def autorizar(accion: Accion, recurso: str):
             raise _denegado(accion, recurso)
         return Autorizacion(user, alcance)
     return _dep
+
+
+def autorizar_export(recurso_modulo: str):
+    """Dependency de exportación: 403 si el usuario no puede exportar `recurso_modulo`. El alcance
+    devuelto es el EFECTIVO (capado por su lectura del módulo) — el endpoint lo usa para filtrar
+    los datos exportados y así el export nunca excede el alcance de lectura."""
+    def _dep(user: Usuario = Depends(get_current_active_user)) -> Autorizacion:
+        alcance = engine.alcance_export_modulo(user, recurso_modulo)
+        if alcance is None:
+            raise _denegado(Accion.EXPORT, recurso_modulo)
+        return Autorizacion(user, alcance)
+    return _dep

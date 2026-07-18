@@ -55,7 +55,8 @@ def _nombre_ciclo(db: Session, ciclo_id: Optional[int]) -> str:
     return ciclo.nombre_canonico or ciclo.nombre if ciclo else f"Ciclo #{ciclo_id}"
 
 
-def _query_ranking(db: Session, pais_codigo: Optional[str], ciclo_id: Optional[int], tipo_ranking: str):
+def _query_ranking(db: Session, pais_codigo: Optional[str], ciclo_id: Optional[int], tipo_ranking: str,
+                   rm_ids: Optional[set] = None):
     q = (
         db.query(
             RankingRM,
@@ -69,10 +70,13 @@ def _query_ranking(db: Session, pais_codigo: Optional[str], ciclo_id: Optional[i
         q = q.filter(RankingRM.pais_codigo == pais_codigo)
     if ciclo_id:
         q = q.filter(RankingRM.ciclo_id == ciclo_id)
+    if rm_ids is not None:  # RBAC Fase 2: export capado por scope (equipo) — nunca > lectura
+        q = q.filter(RankingRM.rm_id.in_(rm_ids))
     return q.order_by(RankingRM.posicion_global.asc()).all()
 
 
-def _query_reconocimientos(db: Session, pais_codigo: Optional[str], ciclo_id: Optional[int]):
+def _query_reconocimientos(db: Session, pais_codigo: Optional[str], ciclo_id: Optional[int],
+                           rm_ids: Optional[set] = None):
     q = (
         db.query(
             ReconocimientoRM,
@@ -87,6 +91,8 @@ def _query_reconocimientos(db: Session, pais_codigo: Optional[str], ciclo_id: Op
         q = q.filter(ReconocimientoRM.pais_codigo == pais_codigo)
     if ciclo_id:
         q = q.filter(ReconocimientoRM.ciclo_id == ciclo_id)
+    if rm_ids is not None:  # RBAC Fase 2: export capado por scope
+        q = q.filter(ReconocimientoRM.rm_id.in_(rm_ids))
     return q.order_by(ReconocimientoRM.fecha_calculo.desc()).all()
 
 
@@ -143,9 +149,10 @@ def exportar_ranking_excel(
     pais_codigo: Optional[str] = None,
     ciclo_id: Optional[int] = None,
     tipo_ranking: str = "MENSUAL",
+    rm_ids: Optional[set] = None,
 ) -> BytesIO:
     """Exporta el ranking filtrado a un libro Excel (.xlsx) en memoria."""
-    rows = _query_ranking(db, pais_codigo, ciclo_id, tipo_ranking)
+    rows = _query_ranking(db, pais_codigo, ciclo_id, tipo_ranking, rm_ids=rm_ids)
 
     encabezados = [
         "Posición", "Posición anterior", "Variación", "Código RM", "Nombre RM",
@@ -175,9 +182,10 @@ def exportar_reconocimientos_excel(
     db: Session,
     pais_codigo: Optional[str] = None,
     ciclo_id: Optional[int] = None,
+    rm_ids: Optional[set] = None,
 ) -> BytesIO:
     """Exporta los reconocimientos otorgados a un libro Excel (.xlsx) en memoria."""
-    rows = _query_reconocimientos(db, pais_codigo, ciclo_id)
+    rows = _query_reconocimientos(db, pais_codigo, ciclo_id, rm_ids=rm_ids)
 
     encabezados = [
         "Código RM", "Nombre RM", "Premio", "Score al momento", "Posición en ranking",
@@ -211,6 +219,7 @@ def exportar_ranking_pdf(
     ciclo_id: Optional[int] = None,
     tipo_ranking: str = "MENSUAL",
     top: Optional[int] = None,
+    rm_ids: Optional[set] = None,
 ) -> BytesIO:
     """
     Exporta el ranking filtrado a un PDF tabular en memoria (orientación
@@ -224,7 +233,7 @@ def exportar_ranking_pdf(
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-    rows = _query_ranking(db, pais_codigo, ciclo_id, tipo_ranking)
+    rows = _query_ranking(db, pais_codigo, ciclo_id, tipo_ranking, rm_ids=rm_ids)
     if top:
         rows = rows[:top]
 
@@ -297,6 +306,7 @@ def exportar_reconocimientos_pdf(
     db: Session,
     pais_codigo: Optional[str] = None,
     ciclo_id: Optional[int] = None,
+    rm_ids: Optional[set] = None,
 ) -> BytesIO:
     """Exporta el listado de reconocimientos otorgados a un PDF tabular en memoria."""
     from reportlab.lib.pagesizes import A4, landscape
@@ -306,7 +316,7 @@ def exportar_reconocimientos_pdf(
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_CENTER, TA_LEFT
 
-    rows = _query_reconocimientos(db, pais_codigo, ciclo_id)
+    rows = _query_reconocimientos(db, pais_codigo, ciclo_id, rm_ids=rm_ids)
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=landscape(A4),

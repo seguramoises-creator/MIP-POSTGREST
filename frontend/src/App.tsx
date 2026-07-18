@@ -148,7 +148,7 @@ function AppRoutes() {
         <Route path="etl" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><ETL /></ProtectedRoute>} />
         <Route path="admin" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><Admin /></ProtectedRoute>} />
         <Route path="usuarios" element={<ProtectedRoute recurso="config.usuarios" allowedRoles={['ADMIN']}><Administracion /></ProtectedRoute>} />
-        <Route path="reportes" element={<ProtectedRoute recurso="exportacion" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','CONSULTA']}><Reportes /></ProtectedRoute>} />
+        <Route path="reportes" element={<ProtectedRoute recurso="exportacion" accion="export" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','CONSULTA']}><Reportes /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to={inicio} />} />
     </Routes>
