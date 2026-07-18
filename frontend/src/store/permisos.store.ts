@@ -24,6 +24,17 @@ interface PermisosState {
   reset: () => void;
 }
 
+/**
+ * Hook para gatear en componentes. SUSCRIBE a `permisos`, así el componente se re-renderiza
+ * cuando los permisos terminan de cargar (seleccionar `s.puede` directamente NO re-renderiza,
+ * porque la función es estable). Devuelve null mientras no cargan → fallback por rol en el caller.
+ */
+export function usePuede() {
+  const permisos = usePermisosStore((s) => s.permisos);
+  return (recurso: string, accion: string = 'read'): boolean | null =>
+    permisos === null ? null : Boolean(permisos[recurso] && permisos[recurso][accion]);
+}
+
 export const usePermisosStore = create<PermisosState>((set, get) => ({
   permisos: null,
   cargando: false,

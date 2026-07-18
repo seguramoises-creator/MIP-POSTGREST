@@ -3,12 +3,14 @@ import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert, MenuItem,
   CircularProgress, Grid, Divider, Table, TableHead, TableRow, TableCell, TableBody, Slider,
 } from '@mui/material';
-import { Paid, Save, UploadFile, Calculate, Inventory2, MonetizationOn, CalendarMonth, Assessment, WarningAmber } from '@mui/icons-material';
+import { Paid, Save, UploadFile, Calculate, Inventory2, MonetizationOn, CalendarMonth, Assessment, WarningAmber, CheckCircle, LockOpen } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import { usePuede } from '../../store/permisos.store';
 import CostoMiLinea from './CostoMiLinea';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
   costoEstructura, guardarCostoEstructura, importarCostoExcel, listarLineasVisita,
+  aprobarCostoEstructura, reabrirCostoEstructura,
   type CostoFull, type CostoEstructuraInput, type CostoProdInput, type Catalogo,
 } from '../../services/visita.service';
 
@@ -73,7 +75,14 @@ export default function CostoRoiVisita() {
 
 function CostoRoiGerencia() {
   const rol = useAuthStore((s) => s.rol);
-  const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD';
+  const puede = usePuede();
+  // RBAC Fase 2: la vista gerencial + selector de línea la ven quienes leen costoroi.configurar
+  // (Finanzas, Director, Admin) además de los gestores previos (ADMIN/GERPROD).
+  const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD' || puede('costoroi.configurar', 'read') === true;
+  // Configurar (guardar/importar) = FINANZAS + ADMIN (matriz). Aprobar = Director + ADMIN.
+  const puedeConfigurar = rol === 'ADMIN' || puede('costoroi.configurar', 'configure') === true;
+  const puedeAprobar = puede('costoroi.configurar', 'approve') === true;
+  const esAdmin = rol === 'ADMIN';
 
   const { cicloId, esSoloLectura } = useCicloStore();
 
@@ -95,7 +104,7 @@ function CostoRoiGerencia() {
   const lineaParam = esGestor ? (lineaId || undefined) : undefined;
   const cicloParam = cicloId || undefined;
   const cerrado = esSoloLectura;               // "no editable" = ciclo != abierto (cubre cerrado y futuro)
-  const editable = esGestor && !cerrado;
+  const editable = puedeConfigurar && !cerrado;   // solo Finanzas/ADMIN editan la config
 
   const aplicar = (f: CostoFull) => { setFull(f); setEst({ ...f.estructura }); setProds(productosDe(f)); };
   const cargar = useCallback(() => {
@@ -108,8 +117,8 @@ function CostoRoiGerencia() {
   }, [esGestor]);   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!esGestor || lineaId) cargar(); }, [esGestor, lineaId, cargar]);
 
-  const setE = (k: keyof CostoEstructuraInput, v: number | string | null) => { if (cerrado) return; setEst((e) => e ? { ...e, [k]: v } : e); };
-  const setP = (i: number, k: keyof CostoProdInput, v: number) => { if (cerrado) return; setProds((ps) => ps.map((p, idx) => idx === i ? { ...p, [k]: v } : p)); };
+  const setE = (k: keyof CostoEstructuraInput, v: number | string | null) => { if (!editable) return; setEst((e) => e ? { ...e, [k]: v } : e); };
+  const setP = (i: number, k: keyof CostoProdInput, v: number) => { if (!editable) return; setProds((ps) => ps.map((p, idx) => idx === i ? { ...p, [k]: v } : p)); };
 
   async function guardar() {
     if (!est) return;
@@ -120,6 +129,28 @@ function CostoRoiGerencia() {
       setMsg({ tipo: 'success', texto: 'Estructura guardada y recalculada.' });
     } catch (e) {
       setMsg({ tipo: 'error', texto: errMsg(e, 'No se pudo guardar.') });
+    } finally { setGuardando(false); }
+  }
+
+  // RBAC Fase 2 — workflow de aprobación (Finanzas configura → Director aprueba).
+  const estado = full?.estado ?? 'BORRADOR';
+
+  async function aprobar() {
+    setGuardando(true); setMsg(null);
+    try {
+      aplicar(await aprobarCostoEstructura(cicloParam, lineaParam));
+      setMsg({ tipo: 'success', texto: 'Estructura APROBADA por la Dirección.' });
+    } catch (e) {
+      setMsg({ tipo: 'error', texto: errMsg(e, 'No se pudo aprobar.') });
+    } finally { setGuardando(false); }
+  }
+  async function reabrir() {
+    setGuardando(true); setMsg(null);
+    try {
+      aplicar(await reabrirCostoEstructura(cicloParam, lineaParam));
+      setMsg({ tipo: 'success', texto: 'Estructura reabierta (BORRADOR).' });
+    } catch (e) {
+      setMsg({ tipo: 'error', texto: errMsg(e, 'No se pudo reabrir.') });
     } finally { setGuardando(false); }
   }
 
@@ -188,16 +219,29 @@ function CostoRoiGerencia() {
               {lineas.map((l) => <MenuItem key={l.id} value={l.id}>{l.nombre}</MenuItem>)}
             </TextField>
           )}
+          {/* Estado del workflow: BORRADOR (Finanzas configura) / APROBADO (Director aprobó). */}
+          {full && (estado === 'APROBADO'
+            ? <Chip size="small" color="success" icon={<CheckCircle />} label="Aprobado por Dirección" />
+            : <Chip size="small" color="warning" label="Borrador" />)}
           {cerrado && <Chip size="small" color="default" label="Ciclo cerrado — solo lectura" />}
-          {esGestor && <>
+          {puedeConfigurar && <>
             <input ref={fileRef} type="file" accept=".xlsx,.xls" hidden onChange={(e) => e.target.files?.[0] && importar(e.target.files[0])} />
             <Button size="small" startIcon={<UploadFile />} onClick={() => fileRef.current?.click()} disabled={guardando || cerrado}>Importar Excel</Button>
             <Button size="small" variant="contained" startIcon={<Calculate />} onClick={guardar} disabled={guardando || cerrado}>{guardando ? 'Guardando…' : 'Guardar y recalcular'}</Button>
           </>}
+          {/* Director aprueba un BORRADOR; ADMIN puede reabrir un APROBADO. */}
+          {puedeAprobar && estado === 'BORRADOR' && (
+            <Button size="small" color="success" variant="contained" startIcon={<CheckCircle />}
+                    onClick={aprobar} disabled={guardando || cerrado || !full}>Aprobar</Button>
+          )}
+          {esAdmin && estado === 'APROBADO' && (
+            <Button size="small" color="warning" variant="outlined" startIcon={<LockOpen />}
+                    onClick={reabrir} disabled={guardando || cerrado}>Reabrir</Button>
+          )}
         </Stack>
       </Stack>
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
-      {esGestor && <Alert severity="info" sx={{ mb: 2 }}>Edita los campos y pulsa <b>Guardar y recalcular</b> para actualizar los resultados. También puedes <b>importar un Excel</b> con columnas: producto, costo_unitario_muestra, cantidad_muestras, pool_ventas, visitas_detalladas, presupuesto_anual, precio_prom.</Alert>}
+      {puedeConfigurar && <Alert severity="info" sx={{ mb: 2 }}>Edita los campos y pulsa <b>Guardar y recalcular</b> para actualizar los resultados. También puedes <b>importar un Excel</b> con columnas: producto, costo_unitario_muestra, cantidad_muestras, pool_ventas, visitas_detalladas, presupuesto_anual, precio_prom.</Alert>}
 
       <Grid container spacing={2}>
         {/* Bloque 1 — Estructura de costo del representante */}

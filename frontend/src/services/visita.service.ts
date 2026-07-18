@@ -377,6 +377,8 @@ export interface CostoFull {
   plan_anual: { contactos_anio: number; contactos_anio_vm: number; presupuesto_total: number; presupuesto_por_vm: number; productiv_obj_contacto: number; productos: { producto: string; presupuesto_anual: number; precio_prom: number; productiv_obj_contacto: number; unidades_obj_contacto: number; cumplimiento_pct: number; retorno_real: number }[] };
   resumen: { costo_total_visita: number; retorno_prom_visita: number; roi_promedio: number | null; productos: { producto: string; costo_visita: number; retorno_visita: number; roi: number; estado: string }[] };
   impacto: { categorias: { categoria: string; medicos_sin_visitar: number; psp: number; venta_riesgo_bajo: number; venta_riesgo_alto: number }[]; venta_riesgo_bajo: number; venta_riesgo_alto: number; total_medicos_sin_visitar: number; headcount_equivalente: number };
+  // RBAC Fase 2 — workflow de aprobación (Finanzas configura → Director aprueba)
+  estado?: 'BORRADOR' | 'APROBADO'; aprobado_por?: number | null; aprobado_en?: string | null;
 }
 export const costoEstructura = (cicloId?: number, lineaId?: number) =>
   api.get<CostoFull>('/visita/costo/estructura', { params: { ...(cicloId && { ciclo_id: cicloId }), ...(lineaId && { linea_id: lineaId }) } }).then(r => r.data);
@@ -394,6 +396,13 @@ export const costoMiLinea = (cicloId?: number) =>
   api.get<CostoMiLinea>('/visita/costo/mi-linea', { params: cicloId ? { ciclo_id: cicloId } : {} }).then(r => r.data);
 export const guardarCostoEstructura = (datos: CostoEstructuraInput & { productos: CostoProdInput[] }) =>
   api.post<CostoFull>('/visita/costo/estructura', datos).then(r => r.data);
+// RBAC Fase 2 — workflow: el Director aprueba (BORRADOR→APROBADO); ADMIN reabre (APROBADO→BORRADOR).
+export const aprobarCostoEstructura = (cicloId?: number, lineaId?: number) =>
+  api.post<CostoFull>('/visita/costo/estructura/aprobar', null,
+    { params: { ...(cicloId && { ciclo_id: cicloId }), ...(lineaId && { linea_id: lineaId }) } }).then(r => r.data);
+export const reabrirCostoEstructura = (cicloId?: number, lineaId?: number) =>
+  api.post<CostoFull>('/visita/costo/estructura/reabrir', null,
+    { params: { ...(cicloId && { ciclo_id: cicloId }), ...(lineaId && { linea_id: lineaId }) } }).then(r => r.data);
 export const importarCostoExcel = (file: File, cicloId?: number, lineaId?: number) => {
   const fd = new FormData(); fd.append('archivo', file);
   return api.post<CostoFull & { importados: number }>('/visita/costo/importar', fd,

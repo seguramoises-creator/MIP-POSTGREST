@@ -1,6 +1,6 @@
 import { Navigate } from 'react-router-dom';
 import { useAuthStore } from '../../store/auth.store';
-import { usePermisosStore } from '../../store/permisos.store';
+import { usePuede } from '../../store/permisos.store';
 import { Rol } from '../../types';
 
 interface Props {
@@ -14,7 +14,7 @@ interface Props {
 
 export default function ProtectedRoute({ children, allowedRoles, recurso, accion = 'read' }: Props) {
   const { isAuthenticated, rol } = useAuthStore();
-  const puede = usePermisosStore((s) => s.puede);
+  const puede = usePuede();
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;
 

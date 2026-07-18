@@ -12,7 +12,7 @@ import {
   ChevronLeft, ChevronRight, Add, Remove, RateReview,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
-import { usePermisosStore } from '../../store/permisos.store';
+import { usePuede } from '../../store/permisos.store';
 import { Rol } from '../../types';
 import logoImg from '../../assets/vista-logo.svg';
 
@@ -112,7 +112,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }:
   const navigate = useNavigate();
   const location = useLocation();
   const { rol }  = useAuthStore();
-  const puedePerm = usePermisosStore((s) => s.puede);
+  const puedePerm = usePuede();
   const theme = useTheme();
   const isNarrow = useMediaQuery(theme.breakpoints.down('md'));
 
