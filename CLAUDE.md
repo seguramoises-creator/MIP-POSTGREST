@@ -984,7 +984,13 @@ Productividad, `PRESIDENCIA`=Director General, `ADMIN`=Superadmin. **La matriz c
 `DIR_COMERCIAL`=fila de `ANALISTA_DATOS`, `CONSULTA`=igual sin export (derivados en `matrix.py`);
 **`CAPACITACION`=fila PROPIA mínima** (coordinador de exámenes: solo `examen.configurar` CFG + `examen.rendir`
 read all; NO hereda de GERENTE_PRODUCTIVIDAD — ajuste jul-2026 para que no gane LSII/ETL/reconocimiento/ranking).
-Nota: el acceso real de CAPACITACION al módulo Exámenes no cambia (`examenes.py` usa `RequireCapacitacion`, no la matriz).
+
+**Módulo Exámenes 100% matriz-driven (jul-2026)**: `examenes.py` (antes `RequireCapacitacion`) ahora usa la
+matriz: gestión (crear/publicar/preguntas/asignar/calificar/resultados/consolidar) = `require(CONFIGURE,
+examen.configurar)` (CAPACITACION+GERPROD+GERENTE_MEDICO+ADMIN); vista de equipo (resumen/recomendaciones) =
+`require(READ, examen.rendir)` (GD ve su equipo — celda ajustada); el **auto-servicio** (rendir/responder/
+entregar/reporte propios) sigue en `RequireAnyAuth` (la autorización es tener el examen ASIGNADO, self-scoped,
+no un rol). **Toda la app queda matriz-driven salvo `/admin`** (megapantalla de catálogos = admin de sistema).
 
 **Contrato frontend**: `GET /authz/me/permisos` (capacidades efectivas del usuario). El frontend deriva
 navegación/rutas/controles de aquí vía el hook `usePuede()` (store `permisos.store.ts`, suscribe a `permisos`

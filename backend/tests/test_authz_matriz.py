@@ -44,7 +44,7 @@ ORACULO = {
     Recurso.FARMACIA_COBERTURA:      [RO, RT, RA, RA, RA, _,  RA, RA, _,  AD],
     Recurso.COACHING_HOJA:           [RO, GT, _,  _,  RT, RA, RA, RA, _,  AD],
     Recurso.COACHING_KPI:            [_,  RT, _,  _,  RA, RA, RA, RA, _,  AD],
-    Recurso.EXAMEN_RENDIR:           [GO, _,  _,  _,  RT, RA, RA, RA, _,  AD],
+    Recurso.EXAMEN_RENDIR:           [GO, RT, _,  _,  RT, RA, RA, RA, _,  AD],
     Recurso.EXAMEN_CONFIGURAR:       [_,  RT, _,  _,  CF, CF, RA, RA, _,  AD],
     Recurso.INTELIGENCIA_MATRIZ:     [RO, RT, CF, CF, _,  RA, RA, RA, _,  AD],
     Recurso.ENCUESTA_CONFIGURAR:     [_,  _,  CF, CF, _,  RA, RA, RA, _,  AD],

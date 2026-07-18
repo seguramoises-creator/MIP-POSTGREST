@@ -115,6 +115,16 @@ def _validar_magic_bytes_ia(content: bytes, ext: str) -> bool:
 RequireCapacitacion = Depends(require_roles(Rol.ADMIN, Rol.CAPACITACION))
 RequireEquipo = Depends(require_roles(Rol.ADMIN, Rol.CAPACITACION, Rol.GERENTE_DISTRITO))
 RequireAnyAuth = Depends(get_current_active_user)
+# RBAC Fase 2 (deuda #3 — Exámenes 100% matriz-driven, jul-2026):
+#  - GESTIÓN (crear/publicar/preguntas/asignar/calificar/resultados/consolidar) = examen.configurar
+#    (CONFIGURE) → CAPACITACION + GERENTE_PRODUCTIVIDAD + GERENTE_MEDICO + ADMIN (según la matriz).
+#  - VISTA DE EQUIPO (resumen/recomendaciones del equipo) = examen.rendir (READ) → GD ve su equipo.
+#  - AUTO-SERVICIO (rendir/responder/entregar/reporte propios) = RequireAnyAuth: la autorización es
+#    tener el examen ASIGNADO (self-scoped por _resolver_evaluado), no un rol → NO se gatea por matriz.
+from app.core.authz.deps import require as _require_authz
+from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
+ConfigExamen = Depends(_require_authz(_Acc.CONFIGURE, _Rec.EXAMEN_CONFIGURAR))
+ReadExamenEquipo = Depends(_require_authz(_Acc.READ, _Rec.EXAMEN_RENDIR))
 
 # ---------------------------------------------------------------------------
 # Routers
@@ -228,7 +238,7 @@ def mi_historial(
 @router.get("/resumen", response_model=list[dict])
 def resumen_capacitacion(
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """Dashboard de capacitación: tabla de exámenes con sus KPIs principales."""
     from app.services import examen_resultados_service
@@ -238,7 +248,7 @@ def resumen_capacitacion(
 @router.get("/evaluados", response_model=dict)
 def listar_evaluados(
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """Catálogo para el selector de asignación: Representantes Médicos y Gerentes
     de Distrito activos (id + nombre), para elegir el evaluado por nombre en vez
@@ -276,7 +286,7 @@ def _resolver_gid_equipo(current_user, gerente_id: int | None) -> int:
 def resumen_equipo_examenes(
     gerente_id: int | None = None,
     db: Session = Depends(get_db),
-    current_user=RequireEquipo,
+    current_user=ReadExamenEquipo,
 ):
     """Resultados del equipo. Un GERENTE_DISTRITO ve solo su equipo (vía su
     gerente_id); ADMIN/CAPACITACION pueden pasar ?gerente_id=."""
@@ -289,7 +299,7 @@ def resumen_equipo_examenes(
 def exportar_equipo_excel(
     gerente_id: int | None = None,
     db: Session = Depends(get_db),
-    current_user=RequireEquipo,
+    current_user=ReadExamenEquipo,
 ):
     """Exporta a Excel los resultados de exámenes del equipo (una fila por examen de cada visitador)."""
     gid = _resolver_gid_equipo(current_user, gerente_id)
@@ -330,7 +340,7 @@ async def generar_ia(
     texto_pegado: str | None = Form(default=None),
     archivo: UploadFile | None = File(default=None),
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """Crea un examen en estado borrador y lanza la generación de preguntas con IA en background.
 
@@ -424,7 +434,7 @@ async def generar_ia(
 def estado_generacion_ia(
     job_id: int,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """Devuelve el estado del job de generación IA y la cantidad de preguntas ya insertadas."""
     fuente = db.query(FuenteIA).filter(FuenteIA.id == job_id).first()
@@ -452,7 +462,7 @@ def estado_generacion_ia(
 def crear(
     datos: ExamenCrear,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     return examen_service.crear_examen(db, datos, creado_por_usuario_id=current_user.id)
 
@@ -460,7 +470,7 @@ def crear(
 @router.get("", response_model=list[ExamenResponse])
 def listar(
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     return examen_service.listar_examenes(db)
 
@@ -470,7 +480,7 @@ def consolidacion_estado(
     ciclo_id: int,
     pais_codigo: str,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """Preview del gate EVAL_CONOCIMIENTOS para un (ciclo, país): cuántos RM tienen
     nota, quiénes, promedio, estado del gate y si el ciclo está abierto. No escribe."""
@@ -482,7 +492,7 @@ def consolidacion_estado(
 def consolidacion_ejecutar(
     body: ConsolidarCiclo,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """Consolida el (ciclo, país): escribe la nota EVAL_CONOCIMIENTOS de cada RM a
     DW.FACT_ResultadoIndicador y dispara un único recálculo. Solo Capacitación."""
@@ -495,7 +505,7 @@ def consolidacion_ejecutar(
 def obtener(
     examen_id: int,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     examen = examen_service.obtener_examen(db, examen_id)
     if examen is None:
@@ -507,7 +517,7 @@ def obtener(
 def publicar(
     examen_id: int,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     try:
         return examen_service.publicar_examen(db, examen_id)
@@ -520,7 +530,7 @@ def agregar_pregunta(
     examen_id: int,
     datos: PreguntaCrear,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     try:
         return examen_service.agregar_pregunta(db, examen_id, datos)
@@ -533,7 +543,7 @@ def eliminar_pregunta(
     examen_id: int,
     pregunta_id: int,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     try:
         examen_service.eliminar_pregunta(db, examen_id, pregunta_id)
@@ -545,7 +555,7 @@ def eliminar_pregunta(
 def eliminar_examen(
     examen_id: int,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """Elimina un examen. Solo si NO ha sido tomado (sin intentos); si ya tiene
     intentos, se preserva y devuelve 409."""
@@ -562,7 +572,7 @@ def reordenar_preguntas(
     examen_id: int,
     orden_ids: list[int],
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     try:
         examen_service.reordenar_preguntas(db, examen_id, orden_ids)
@@ -575,7 +585,7 @@ def asignar(
     examen_id: int,
     datos: AsignacionCrear,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     try:
         asignaciones = examen_service.asignar_examen(
@@ -601,7 +611,7 @@ def asignar(
 def enviar_correcciones(
     examen_id: int,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """Envía (o simula en modo demo) las correcciones de las preguntas incorrectas a
     todos los participantes ahora mismo. Devuelve el número de correos."""
@@ -614,7 +624,7 @@ def enviar_correcciones(
 def examen_recomendaciones(
     examen_id: int,
     db: Session = Depends(get_db),
-    current_user=RequireEquipo,
+    current_user=ReadExamenEquipo,
 ):
     """Preguntas con desacierto ≥ 40% (brecha crítica) + quiénes fallaron."""
     from app.services import examen_resultados_service
@@ -647,7 +657,7 @@ def iniciar(
 def resultados_examen(
     examen_id: int,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """KPIs consolidados del examen: completitud, promedio, %aprobación, ranking (último intento)."""
     from app.services import examen_resultados_service
@@ -661,7 +671,7 @@ def resultados_examen(
 def exportar_resultados_excel(
     examen_id: int,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """Exporta a Excel el ranking de resultados del examen (último intento por evaluado)."""
     from app.services import examen_resultados_service, exportacion_service
@@ -693,7 +703,7 @@ def exportar_resultados_excel(
 def analisis_preguntas_examen(
     examen_id: int,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """% de error por pregunta sobre todos los intentos (RN-08)."""
     from app.services import examen_resultados_service
@@ -704,7 +714,7 @@ def analisis_preguntas_examen(
 def respuestas_abiertas_examen(
     examen_id: int,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """Respuestas de preguntas abiertas / caso-abierto para calificación manual del Gerente."""
     from app.services import examen_resultados_service
@@ -715,7 +725,7 @@ def respuestas_abiertas_examen(
 def listar_preguntas_examen(
     examen_id: int,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """Lista las preguntas (con sus opciones) del examen — para revisión/edición
     por Capacitación, incluidas las generadas por IA antes de publicar."""
@@ -785,7 +795,7 @@ def calificar(
     intento_id: int,
     payload: CalificarRespuesta,
     db: Session = Depends(get_db),
-    current_user=RequireCapacitacion,
+    current_user=ConfigExamen,
 ):
     """El Gerente (Capacitación) asigna puntos a una respuesta abierta y recalcula el score."""
     try:

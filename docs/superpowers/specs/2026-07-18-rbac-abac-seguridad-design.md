@@ -313,6 +313,12 @@ frontend (`usePuede`/`ProtectedRoute`/`Sidebar`). Pendientes que quedaron **flag
 `team` para roles no-GD, módulos inexistentes (Farmacias, Inteligencia/Encuestas), separación de
 `medical_contact.read` — que dependen de features que aún no existen en la app.
 
+**Cierre extra (jul-2026): módulo Exámenes 100% matriz-driven.** `examenes.py` migró de `RequireCapacitacion`
+a la matriz: gestión → `require(CONFIGURE, examen.configurar)`; vista de equipo → `require(READ, examen.rendir)`
+(se ajustó la celda `examen.rendir` GD → read:team, decisión = app gobierna, como parrilla); el auto-servicio
+(rendir/responder/entregar/reporte propios) queda en `RequireAnyAuth` porque la autorización es tener el examen
+ASIGNADO (self-scoped), no un rol. **Toda la app queda matriz-driven salvo `/admin`** (admin de sistema por diseño).
+
 ## 10. Compatibilidad
 
 - No se reemplaza el sistema de autenticación (JWT) — se extiende.

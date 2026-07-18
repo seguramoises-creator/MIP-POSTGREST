@@ -57,7 +57,7 @@ MATRIZ: dict[str, dict] = {
     Recurso.FARMACIA_COBERTURA:      _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.COACHING_HOJA:           _fila(R_OWN,   REG_TEAM, _N,      _N,      R_TEAM,  R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.COACHING_KPI:            _fila(_N,      R_TEAM,   _N,      _N,      R_ALL,   R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
-    Recurso.EXAMEN_RENDIR:           _fila(REG_OWN, _N,       _N,      _N,      R_TEAM,  R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.EXAMEN_RENDIR:           _fila(REG_OWN, R_TEAM,   _N,      _N,      R_TEAM,  R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),  # GD ve resultados de su equipo (Exámenes — Equipo; decisión jul-2026 = app gobierna)
     Recurso.EXAMEN_CONFIGURAR:       _fila(_N,      R_TEAM,   _N,      _N,      CFG,     CFG,     R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.INTELIGENCIA_MATRIZ:     _fila(R_OWN,   R_TEAM,   CFG,     CFG,     _N,      R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.ENCUESTA_CONFIGURAR:     _fila(_N,      _N,       CFG,     CFG,     _N,      R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),

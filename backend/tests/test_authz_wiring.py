@@ -107,6 +107,19 @@ def test_reconocimiento_lsii_etl_por_matriz():
     assert _client(etl, U(Rol.GERENTE_PRODUCTIVIDAD)).get("/api/v1/etl/historial").status_code != 403
 
 
+def test_examenes_por_matriz():
+    from app.api.v1.routers.examenes import router
+    # examen.configurar (gestión): CAPACITACION sí configura; GD NO (solo ve equipo)
+    assert _client(router, U(Rol.CAPACITACION)).get("/api/v1/examenes").status_code != 403
+    assert _client(router, U(Rol.GERENTE_DISTRITO, gerente_id=1)).get("/api/v1/examenes").status_code == 403
+    # examen.rendir (vista de equipo): GD sí lee su equipo (matriz ajustada)
+    assert _client(router, U(Rol.GERENTE_DISTRITO, gerente_id=1)).get("/api/v1/examenes/equipo/resumen").status_code != 403
+    # GERENTE_MEDICO configura exámenes (matriz del prompt)
+    assert _client(router, U(Rol.GERENTE_MEDICO)).get("/api/v1/examenes").status_code != 403
+    # RM no gestiona exámenes → 403
+    assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).get("/api/v1/examenes").status_code == 403
+
+
 def test_categorizacion_detalle_config_gerente_producto():
     from app.api.v1.routers.admin import router
     # categorizacion.detalle configure: GD NO configura criterios → delete 403
