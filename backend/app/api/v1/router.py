@@ -22,6 +22,7 @@ from app.api.v1.routers.examenes      import intentos_router
 from app.api.v1.routers.visita        import router as visita_router
 from app.api.v1.routers.coaching_more import router as coaching_more_router
 from app.api.v1.routers.maestro_medicos import router as maestro_medicos_router
+from app.api.v1.routers.authz         import router as authz_router
 
 api_router = APIRouter()
 
@@ -44,3 +45,4 @@ api_router.include_router(intentos_router)
 api_router.include_router(visita_router)  # Módulo de Visita Médica (esquema Visita)
 api_router.include_router(coaching_more_router)  # Coaching MORE (esquema coaching)
 api_router.include_router(maestro_medicos_router)  # Maestro de Médicos (Config.DIM_Medico)
+api_router.include_router(authz_router)  # RBAC Fase 1: contrato de autorizacion (/authz/me/permisos)
