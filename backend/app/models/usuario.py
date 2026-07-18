@@ -17,6 +17,14 @@ class Rol(str, PyEnum):
     REPRESENTANTE_MEDICO   = "REPRESENTANTE_MEDICO"
     CONSULTA               = "CONSULTA"
     CAPACITACION           = "CAPACITACION"
+    # RBAC Fase 1 (jul-2026): roles canónicos de la matriz de seguridad (spec
+    # 2026-07-18-rbac-abac-seguridad-design.md). GERENTE_MARCA=Gerente de Producto,
+    # GERENTE_PRODUCTIVIDAD=Gerente de Capacitación y Productividad, PRESIDENCIA=Director
+    # General, ADMIN=Superadmin. Estos 4 no tenían equivalente y se agregan nuevos.
+    GERENTE_MARKETING      = "GERENTE_MARKETING"
+    GERENTE_MEDICO         = "GERENTE_MEDICO"
+    ANALISTA_DATOS         = "ANALISTA_DATOS"
+    FINANZAS               = "FINANZAS"
 
 class Usuario(Base):
     __tablename__ = "DIM_Usuario"
@@ -40,6 +48,9 @@ class Usuario(Base):
     bloqueado_hasta: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     ultimo_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     password_actualizado_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # RBAC Fase 1: al cambiar el rol se fija a now(); un access token con iat anterior deja de
+    # ser válido (revocación de permisos, ver deps.get_current_user).
+    roles_actualizado_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

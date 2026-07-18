@@ -31,6 +31,7 @@ from app.models import cat_models  # noqa: F401,E402  ← cat.* / stg.* (Categor
 from app.models import exam_models  # noqa: F401,E402  ← esquema exam (Módulo de Exámenes)
 from app.models import visita  # noqa: F401,E402  ← esquema Visita (Módulo de Visita Médica)
 from app.models import coaching_more_models  # noqa: F401,E402  ← esquema coaching (Coaching MORE)
+from app.models import seguridad_rbac  # noqa: F401,E402  ← RBAC Fase 1 (DIM_Recurso/FACT_RolPermiso/AuditoriaSeguridad)
 
 target_metadata = Base.metadata
 
