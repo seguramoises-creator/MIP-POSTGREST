@@ -15,6 +15,7 @@ R_TEAM = (Accion.READ, Alcance.TEAM)
 R_ALL = (Accion.READ, Alcance.ALL)
 REG_OWN = (Accion.REGISTER, Alcance.OWN)
 REG_TEAM = (Accion.REGISTER, Alcance.TEAM)
+REG_ALL = (Accion.REGISTER, Alcance.ALL)
 CFG = (Accion.CONFIGURE, Alcance.ALL)
 APR = (Accion.APPROVE, Alcance.ALL)
 EXP_TEAM = (Accion.EXPORT, Alcance.TEAM)
@@ -67,6 +68,12 @@ MATRIZ: dict[str, dict] = {
     Recurso.CONFIG_USUARIOS:         _fila(_N,      _N,       _N,      _N,      _N,      _N,      _N,      _N,      _N,      ADMIN_CELL),
     Recurso.CONFIG_PARAMETROS:       _fila(_N,      _N,       _N,      _N,      _N,      _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.EXPORTACION:             _fila(_N,      EXP_TEAM, EXP_ALL, EXP_ALL, EXP_ALL, EXP_ALL, EXP_ALL, EXP_ALL, EXP_ALL, ADMIN_CELL),
+    # Recursos de módulos fuera de las 28 del prompt (deuda #3, jul-2026), alineados con sus guards actuales.
+    #                                   RM       GD        MARCA    MKT      PROD     MED      PRES     ANAL     FIN      ADMIN
+    Recurso.RECONOCIMIENTO:          _fila(_N,      _N,       _N,      _N,      CFG,     _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.LSII_EVALUAR:            _fila(_N,      REG_TEAM, REG_ALL, _N,      REG_ALL, _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.LSII_ADMIN:              _fila(_N,      _N,       _N,      _N,      CFG,     _N,      _N,      _N,      _N,      ADMIN_CELL),
+    Recurso.ETL_CARGAR:              _fila(_N,      _N,       _N,      _N,      CFG,     _N,      _N,      _N,      _N,      ADMIN_CELL),
 }
 
 # ── Roles legacy fuera de la matriz canónica de 10 columnas (Fase 2) ──────────────────────────

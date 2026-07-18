@@ -1019,9 +1019,9 @@ migración `0018`; UI en `CostoRoiVisita.tsx`. Tests `tests/test_authz_wiring.py
 - ~~`categorizacion.detalle`~~ **RESUELTO (jul-2026)**: las escrituras del motor (criterios+pesos+categorías)
   en `admin.py` → `require(CONFIGURE, categorizacion.detalle)` = Gerente de Producto (GERENTE_MARCA) + ADMIN.
   Lecturas amplias (datos de referencia de la vista básica).
-- **Módulos fuera de la matriz del prompt** (`reconocimiento`, `lsii`, `etl`, la megapantalla Admin de
-  Configuración): sin recurso en la matriz → siguen gateados por `require_roles`/`allowedRoles`. Extender
-  la matriz o dejarlos así es decisión de negocio.
+- ~~Módulos fuera de la matriz~~ **RESUELTO (jul-2026, extender)**: +4 recursos (matriz 28→**32**):
+  `reconocimiento`, `lsii.evaluar`, `lsii.admin`, `etl.cargar` (wireados en sus routers + nav/rutas). Solo
+  `/admin` (megapantalla de catálogos = administración de sistema) queda por rol (ADMIN+GERPROD).
 - **Export scope**: `exportacion` ya filtra por `rm_ids` (GD exporta su equipo). Otros módulos con export
   aún no tienen endpoint de export dedicado.
 - Del spec §9 (Fase 1): `team` para roles no-GD (`GERENTE_PRODUCTIVIDAD` en coaching/examen — alcance

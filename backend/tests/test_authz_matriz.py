@@ -17,6 +17,7 @@ RT = (Accion.READ, Alcance.TEAM)
 RA = (Accion.READ, Alcance.ALL)
 GO = (Accion.REGISTER, Alcance.OWN)
 GT = (Accion.REGISTER, Alcance.TEAM)
+GA = (Accion.REGISTER, Alcance.ALL)
 CF = (Accion.CONFIGURE, Alcance.ALL)
 AP = (Accion.APPROVE, Alcance.ALL)
 ET = (Accion.EXPORT, Alcance.TEAM)
@@ -54,11 +55,16 @@ ORACULO = {
     Recurso.CONFIG_USUARIOS:         [_,  _,  _,  _,  _,  _,  _,  _,  _,  AD],
     Recurso.CONFIG_PARAMETROS:       [_,  _,  _,  _,  _,  _,  RA, RA, _,  AD],
     Recurso.EXPORTACION:             [_,  ET, EA, EA, EA, EA, EA, EA, EA, AD],
+    # Recursos de módulos fuera de las 28 del prompt (deuda #3)
+    Recurso.RECONOCIMIENTO:          [_,  _,  _,  _,  CF, _,  RA, RA, _,  AD],
+    Recurso.LSII_EVALUAR:            [_,  GT, GA, _,  GA, _,  RA, RA, _,  AD],
+    Recurso.LSII_ADMIN:              [_,  _,  _,  _,  CF, _,  _,  _,  _,  AD],
+    Recurso.ETL_CARGAR:              [_,  _,  _,  _,  CF, _,  _,  _,  _,  AD],
 }
 
 
-def test_matriz_tiene_28_recursos():
-    assert len(RECURSOS) == 28
+def test_matriz_tiene_32_recursos():
+    assert len(RECURSOS) == 32
     assert set(MATRIZ) == set(RECURSOS)
     assert set(ORACULO) == set(RECURSOS)
 

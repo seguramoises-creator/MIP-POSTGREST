@@ -35,6 +35,12 @@ from app.services import lsii_service
 
 router = APIRouter(prefix="/lsii", tags=["LSII - Matriz de Desarrollo"])
 AnyAuth = Depends(get_current_active_user)
+from app.core.authz.deps import require as _require_authz
+from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
+# RBAC Fase 2 (deuda #3): lsii.evaluar (evaluar/ver) y lsii.admin (catálogo).
+ReadEvaluar = Depends(_require_authz(_Acc.READ, _Rec.LSII_EVALUAR))
+RegistrarEvaluar = Depends(_require_authz(_Acc.REGISTER, _Rec.LSII_EVALUAR))
+ConfigLsiiAdmin = Depends(_require_authz(_Acc.CONFIGURE, _Rec.LSII_ADMIN))
 RequireEvaluador = Depends(require_roles(
     Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO, Rol.GERENTE_MARCA
 ))
@@ -50,7 +56,7 @@ RequireAdminLsii = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
 )
 def get_catalogo(
     db: Session = Depends(get_db),
-    current_user=RequireEvaluador,
+    current_user=ReadEvaluar,
 ):
     return lsii_service.obtener_dimensiones_catalogo(db)
 
@@ -64,7 +70,7 @@ def get_catalogo(
 def evaluar(
     data: EvaluacionLsiiCreate,
     db: Session = Depends(get_db),
-    current_user=RequireEvaluador,
+    current_user=RegistrarEvaluar,
 ):
     try:
         cabecera = lsii_service.registrar_evaluacion(
@@ -173,7 +179,7 @@ def get_historico_rm(
 def admin_listar_dimensiones(
     incluir_inactivas: bool = False,
     db: Session = Depends(get_db),
-    current_user=RequireAdminLsii,
+    current_user=ConfigLsiiAdmin,
 ):
     return lsii_service.listar_dimensiones_admin(db, incluir_inactivas=incluir_inactivas)
 
@@ -186,7 +192,7 @@ def admin_listar_dimensiones(
 def admin_guardar_dimension(
     data: DimensionLsiiUpsert,
     db: Session = Depends(get_db),
-    current_user=RequireAdminLsii,
+    current_user=ConfigLsiiAdmin,
 ):
     try:
         return lsii_service.upsert_dimension_admin(
@@ -203,7 +209,7 @@ def admin_guardar_dimension(
 def admin_desactivar_dimension(
     dimension_codigo: str,
     db: Session = Depends(get_db),
-    current_user=RequireAdminLsii,
+    current_user=ConfigLsiiAdmin,
 ):
     try:
         cantidad = lsii_service.desactivar_dimension_admin(db, dimension_codigo)
@@ -221,7 +227,7 @@ def admin_actualizar_opcion(
     opcion_id: int,
     data: OpcionLsiiUpdate,
     db: Session = Depends(get_db),
-    current_user=RequireAdminLsii,
+    current_user=ConfigLsiiAdmin,
 ):
     try:
         return lsii_service.actualizar_opcion_admin(
@@ -254,7 +260,7 @@ def obtener_configuracion_publica(
 )
 def admin_obtener_configuracion(
     db: Session = Depends(get_db),
-    current_user=RequireAdminLsii,
+    current_user=ConfigLsiiAdmin,
 ):
     return lsii_service.obtener_configuracion(db)
 
@@ -267,7 +273,7 @@ def admin_obtener_configuracion(
 def admin_actualizar_configuracion(
     data: ConfiguracionLsiiUpdate,
     db: Session = Depends(get_db),
-    current_user=RequireAdminLsii,
+    current_user=ConfigLsiiAdmin,
 ):
     return lsii_service.actualizar_configuracion(
         db,

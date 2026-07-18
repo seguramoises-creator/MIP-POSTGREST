@@ -64,6 +64,11 @@ class Recurso:
     CONFIG_USUARIOS = "config.usuarios"
     CONFIG_PARAMETROS = "config.parametros"
     EXPORTACION = "exportacion"
+    # Recursos de módulos de la app fuera de las 28 funcionalidades del prompt (deuda #3, jul-2026)
+    RECONOCIMIENTO = "reconocimiento"
+    LSII_EVALUAR = "lsii.evaluar"
+    LSII_ADMIN = "lsii.admin"
+    ETL_CARGAR = "etl.cargar"
 
 
 # (slug, nombre legible, módulo) — orden = filas del spec §5
@@ -96,6 +101,10 @@ RECURSOS_META: dict[str, tuple[str, str]] = {
     Recurso.CONFIG_USUARIOS: ("Usuarios y asignación de roles", "Configuración del sistema"),
     Recurso.CONFIG_PARAMETROS: ("Parámetros generales", "Configuración del sistema"),
     Recurso.EXPORTACION: ("Exportar datos y reportes", "Exportación"),
+    Recurso.RECONOCIMIENTO: ("Reconocimientos / Premios", "Reconocimiento"),
+    Recurso.LSII_EVALUAR: ("Evaluación LSII (Receptividad)", "LSII"),
+    Recurso.LSII_ADMIN: ("Configuración catálogo LSII", "LSII"),
+    Recurso.ETL_CARGAR: ("Carga de datos (ETL)", "Datos"),
 }
 
 RECURSOS: list[str] = list(RECURSOS_META.keys())

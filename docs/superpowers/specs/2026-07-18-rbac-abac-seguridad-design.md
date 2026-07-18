@@ -288,9 +288,14 @@ frontend (`usePuede`/`ProtectedRoute`/`Sidebar`). Pendientes que quedaron **flag
    `require(CONFIGURE, categorizacion.detalle)` = **Gerente de Producto (GERENTE_MARCA) + ADMIN**. Las
    LECTURAS se dejaron amplias a propósito (son datos de referencia que consumen las pantallas de
    categorización; restringirlas rompería la vista básica A/B/C de RM/GD).
-3. **Módulos fuera de la matriz del prompt** (`reconocimiento`, `lsii`, `etl`, la megapantalla Admin de
-   Configuración): no tienen recurso en los 28. Siguen gateados por `require_roles`/`allowedRoles`.
-   **Decisión:** extender la matriz con recursos para estos módulos, o dejarlos por rol.
+3. **Módulos fuera de la matriz del prompt** — **RESUELTO (jul-2026, decisión = extender)**: se agregaron
+   4 recursos (matriz 28 → 32): `reconocimiento` (read consolidado + configure=otorgar por GERPROD/ADMIN),
+   `lsii.evaluar` (register por GD/MARCA/GERPROD, read por Dirección/Analista), `lsii.admin` (configure
+   catálogo por GERPROD/ADMIN), `etl.cargar` (configure por GERPROD/ADMIN). Wireados en `reconocimiento.py`,
+   `lsii.py`, `etl.py` + nav/rutas del frontend. Así los 4 roles nuevos obtienen su acceso correcto
+   automáticamente. **`/admin`** (megapantalla de catálogos país/línea/ciclos/reglas) se dejó como
+   **administración de sistema** por rol (ADMIN+GERPROD) — es un superconjunto que no corresponde a una de
+   las "funcionalidades" de negocio (análogo a `config.usuarios`, ADMIN-only).
 4. **Export por scope:** `exportacion` ya filtra por `rm_ids` (GD exporta su equipo, no toda la empresa).
    Si a futuro se agregan endpoints de export por módulo, aplicar el mismo `alcance_export_modulo` + filtro.
 5. **UI Costo/ROI:** implementada (badge estado + Aprobar/Reabrir). El workflow no incluye notificación al

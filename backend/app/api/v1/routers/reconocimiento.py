@@ -11,6 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_active_user, require_roles
+from app.core.authz.deps import require as _require_authz
+from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
 from app.models.usuario import Rol
 from app.models.hechos import ReconocimientoRM, RankingRM
 from app.models.dimensiones import RepresentanteMedico, Premio
@@ -18,6 +20,9 @@ from app.schemas.schemas import ReconocimientoCreate, ReconocimientoResponse
 
 router = APIRouter(prefix="/reconocimiento", tags=["Reconocimiento"])
 AnyAuth = Depends(get_current_active_user)
+# RBAC Fase 2 (deuda #3): recurso `reconocimiento`. Lectura = gerencial/consolidado; otorgar = configure.
+ReadReconocimiento = Depends(_require_authz(_Acc.READ, _Rec.RECONOCIMIENTO))
+ConfigReconocimiento = Depends(_require_authz(_Acc.CONFIGURE, _Rec.RECONOCIMIENTO))
 
 
 @router.get("", response_model=List[dict], summary="Listar reconocimientos")
@@ -26,7 +31,7 @@ def list_reconocimientos(
     ciclo_id: Optional[int] = None,
     premio_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user=AnyAuth,
+    current_user=ReadReconocimiento,
 ):
     q = db.query(
         ReconocimientoRM,
@@ -70,7 +75,7 @@ def create_reconocimiento(
     data: ReconocimientoCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD)),
+    current_user=ConfigReconocimiento,
 ):
     """
     Crea un reconocimiento manual. El certificado PDF se genera en background.
@@ -132,7 +137,7 @@ def generar_reconocimientos_automatico(
     ciclo_id: Optional[int] = None,
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD)),
+    current_user=ConfigReconocimiento,
 ):
     """
     Genera automáticamente los reconocimientos para todos los RMs elegibles

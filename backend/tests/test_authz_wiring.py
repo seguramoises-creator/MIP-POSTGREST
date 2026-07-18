@@ -92,6 +92,21 @@ def test_visita_planeacion_registrar_solo_rm():
         "/api/v1/visita/planeacion/publicar").status_code != 403
 
 
+def test_reconocimiento_lsii_etl_por_matriz():
+    from app.api.v1.routers.reconocimiento import router as reco
+    from app.api.v1.routers.lsii import router as lsii
+    from app.api.v1.routers.etl import router as etl
+    # reconocimiento: RM sin acceso a la lista → 403; GERENTE_PRODUCTIVIDAD sí
+    assert _client(reco, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).get("/api/v1/reconocimiento").status_code == 403
+    assert _client(reco, U(Rol.GERENTE_PRODUCTIVIDAD)).get("/api/v1/reconocimiento").status_code != 403
+    # lsii.admin: solo ADMIN/GERPROD configuran → GD 403
+    assert _client(lsii, U(Rol.GERENTE_DISTRITO, gerente_id=1)).get("/api/v1/lsii/admin/dimensiones").status_code == 403
+    assert _client(lsii, U(Rol.GERENTE_PRODUCTIVIDAD)).get("/api/v1/lsii/admin/dimensiones").status_code != 403
+    # etl.cargar: GD 403; GERENTE_PRODUCTIVIDAD sí
+    assert _client(etl, U(Rol.GERENTE_DISTRITO, gerente_id=1)).get("/api/v1/etl/historial").status_code == 403
+    assert _client(etl, U(Rol.GERENTE_PRODUCTIVIDAD)).get("/api/v1/etl/historial").status_code != 403
+
+
 def test_categorizacion_detalle_config_gerente_producto():
     from app.api.v1.routers.admin import router
     # categorizacion.detalle configure: GD NO configura criterios → delete 403

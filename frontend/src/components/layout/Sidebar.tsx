@@ -74,8 +74,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Indicadores Desempeño', path: '/coaching',             icon: <Leaderboard />,  recurso: 'coaching.kpi', roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO'] },
       { label: 'Productividad',         path: '/productividad',        icon: <TrendingUp />,   recurso: 'productividad.comercial', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'REPRESENTANTE_MEDICO'] },
       { label: 'Ranking',               path: '/ranking',              icon: <SportsScore />,  recurso: 'ranking.rkt', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
-      { label: 'Reconocimiento',        path: '/reconocimiento',       icon: <EmojiEvents />,  roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },
-      { label: 'Matriz LSII',           path: '/lsii',                 icon: <ScatterPlot />,  roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'CONSULTA'] },
+      { label: 'Reconocimiento',        path: '/reconocimiento',       icon: <EmojiEvents />,  recurso: 'reconocimiento', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },
+      { label: 'Matriz LSII',           path: '/lsii',                 icon: <ScatterPlot />,  recurso: 'lsii.evaluar', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'CONSULTA'] },
       { label: 'Cobertura Predictiva',  path: '/cobertura-predictiva', icon: <TrackChanges />, recurso: 'cobertura.predictiva', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA'] },
       { label: 'Costo & ROI',           path: '/visita/costo-roi',     icon: <Paid />,         recurso: 'costoroi.ver', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
     ],
@@ -91,7 +91,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Datos',
     items: [
-      { label: 'Carga Excel (ETL)', path: '/etl',      icon: <CloudUpload />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
+      { label: 'Carga Excel (ETL)', path: '/etl',      icon: <CloudUpload />, recurso: 'etl.cargar', roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
       { label: 'Reportes',          path: '/reportes', icon: <Assessment />,  recurso: 'exportacion', accion: 'export', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },
     ],
   },

@@ -25,7 +25,12 @@ from app.schemas.schemas import ETLJobResponse, ETLJobStatus
 from app.core.config import settings
 
 router = APIRouter(prefix="/etl", tags=["ETL — Carga Excel"])
+from app.core.authz.deps import require as _require_authz
+from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
 AdminOrGerProd = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
+# RBAC Fase 2 (deuda #3): recurso etl.cargar.
+ConfigEtl = Depends(_require_authz(_Acc.CONFIGURE, _Rec.ETL_CARGAR))
+ReadEtl = Depends(_require_authz(_Acc.READ, _Rec.ETL_CARGAR))
 
 TIPOS_PERMITIDOS      = {"KPI_RM", "PRODUCTIVIDAD", "COMERCIAL", "COACHING", "CAPACITACION"}
 EXTENSIONES_PERMITIDAS= {".xlsx", ".xls"}
@@ -69,7 +74,7 @@ async def cargar_excel(
     ciclo_id: Optional[int] = Form(None, description="Opcional para KPI_RM — se lee del archivo"),
     modo: str = Form("SIMULACION", description="SIMULACION | PRODUCCION"),
     db: Session = Depends(get_db),
-    current_user: Usuario = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD)),
+    current_user: Usuario = ConfigEtl,
 ):
     """
     Sube un archivo Excel y lo procesa mediante el motor ETL.
@@ -146,7 +151,7 @@ async def cargar_excel(
 def get_etl_status(
     job_id: int,
     db: Session = Depends(get_db),
-    current_user=AdminOrGerProd,
+    current_user=ReadEtl,
 ):
     job = db.query(CargaExcel).filter(CargaExcel.id == job_id).first()
     if not job:
@@ -183,7 +188,7 @@ def recalcular(
     ciclo_id: int,
     pais_codigo: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user=AdminOrGerProd,
+    current_user=ConfigEtl,
 ):
     """
     Ejecuta el proceso de cálculo post-carga (solo si el ciclo está ABIERTO —
@@ -204,7 +209,7 @@ def get_etl_historial(
     tipo: Optional[str] = None,
     limit: int = 50,
     db: Session = Depends(get_db),
-    current_user=AdminOrGerProd,
+    current_user=ReadEtl,
 ):
     q = db.query(CargaExcel)
     if pais_codigo: q = q.filter(CargaExcel.pais_codigo == pais_codigo)
