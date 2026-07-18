@@ -328,6 +328,13 @@ class CostoEstructura(Base):
     fecha_actualizacion: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
     modificado_por: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+    # RBAC Fase 2 — workflow de aprobación (Finanzas configura → Director aprueba):
+    # BORRADOR al guardar; APROBADO al aprobar el Director. Un APROBADO no se edita salvo que
+    # ADMIN (Superadmin) lo reabra (excepción de dato cerrado, auditada). Quien configura no aprueba.
+    estado: Mapped[str] = mapped_column(String(12), nullable=False, default="BORRADOR")  # BORRADOR|APROBADO
+    aprobado_por: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+    aprobado_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class CostoProducto(Base):

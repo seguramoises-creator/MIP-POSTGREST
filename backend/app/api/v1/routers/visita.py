@@ -45,6 +45,10 @@ RegistrarVisitaGuard = Depends(_require_authz(_Acc.REGISTER, _Rec.VISITA_REGISTR
 ReadPlaneacion = Depends(_require_authz(_Acc.READ, _Rec.PLANEACION_CICLO))
 RegistrarPlaneacion = Depends(_require_authz(_Acc.REGISTER, _Rec.PLANEACION_CICLO))
 ReadParrilla = Depends(_require_authz(_Acc.READ, _Rec.PARRILLA_CONSULTA))
+# Costo/ROI: Finanzas CONFIGURA (BORRADOR), Director APRUEBA. Segregación estructural (quien
+# configura no aprueba: FINANZAS≠PRESIDENCIA). ADMIN puede ambas + reabrir (dato cerrado).
+ConfigurarCosto = Depends(_require_authz(_Acc.CONFIGURE, _Rec.COSTOROI_CONFIGURAR))
+AprobarCosto = Depends(_require_authz(_Acc.APPROVE, _Rec.COSTOROI_CONFIGURAR))
 
 
 def _rol(u) -> str:
@@ -639,7 +643,7 @@ def obtener_parametros_costo(linea_id: int | None = None, ciclo_id: int | None =
 
 
 @router.post("/costo/parametros", response_model=dict, status_code=status.HTTP_201_CREATED)
-def guardar_parametros_costo(datos: ParametroCostoGuardar, db: Session = Depends(get_db), current_user=RequireCierre):
+def guardar_parametros_costo(datos: ParametroCostoGuardar, db: Session = Depends(get_db), current_user=ConfigurarCosto):
     """Configura los parámetros de costo del ciclo (por línea o default). Solo gestión."""
     from app.services import visita_costo_service
     try:
@@ -678,9 +682,10 @@ def _linea_del_representante(db, current_user) -> int | None:
 def costo_estructura(linea_id: int | None = None, ciclo_id: int | None = None,
                      db: Session = Depends(get_db), current_user=RequireFinanciero):
     """Modelo financiero completo (costo fijo, muestras, pool de ventas, plan anual,
-    resumen ROI e impacto de cobertura) por (ciclo, línea). Solo gestión."""
+    resumen ROI e impacto de cobertura) por (ciclo, línea). Incluye el estado de aprobación."""
     from app.services import visita_costo_service
-    return visita_costo_service.calcular_full(db, ciclo_id, linea_id)
+    full = visita_costo_service.calcular_full(db, ciclo_id, linea_id)
+    return {**full, **visita_costo_service.estado_estructura(db, ciclo_id, linea_id)}
 
 
 @router.get("/costo/mi-linea", response_model=dict)
@@ -699,19 +704,64 @@ def costo_mi_linea(ciclo_id: int | None = None, db: Session = Depends(get_db),
 
 
 @router.post("/costo/estructura", response_model=dict, status_code=status.HTTP_201_CREATED)
-def guardar_costo_estructura(datos: CostoEstructuraGuardar, db: Session = Depends(get_db), current_user=RequireCierre):
-    """Guarda la estructura de costo + datos financieros por producto (Finanzas/Gerencia)."""
+def guardar_costo_estructura(datos: CostoEstructuraGuardar, db: Session = Depends(get_db),
+                             current_user=ConfigurarCosto):
+    """Guarda la estructura (Finanzas configura → estado BORRADOR). Una config ya APROBADA solo
+    la edita ADMIN (debe reabrirse primero)."""
     from app.services import visita_costo_service
+    from app.core.authz.audit import registrar_evento_seguridad
+    es_admin = _rol(current_user) == "ADMIN"
     try:
-        return visita_costo_service.guardar_estructura(db, datos, getattr(current_user, "id", None))
+        r = visita_costo_service.guardar_estructura(db, datos, getattr(current_user, "id", None), es_admin=es_admin)
+    except visita_costo_service.CostoAprobadoError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
     except ValueError as e:
         _raise_captura_error(e)
+    registrar_evento_seguridad(db, current_user, "CONFIG_COSTO_ROI",
+                               recurso=_Rec.COSTOROI_CONFIGURAR, accion="configure",
+                               objetivo=f"ciclo={datos.ciclo_id} linea={datos.linea_id}", resultado="OK")
+    return r
+
+
+@router.post("/costo/estructura/aprobar", response_model=dict)
+def aprobar_costo_estructura(linea_id: int | None = None, ciclo_id: int | None = None,
+                             db: Session = Depends(get_db), current_user=AprobarCosto):
+    """Director aprueba la estructura de Costo/ROI (BORRADOR → APROBADO). El que configura
+    (Finanzas) NO puede aprobar: la matriz separa CONFIGURE (Finanzas) de APPROVE (Director)."""
+    from app.services import visita_costo_service
+    from app.core.authz.audit import registrar_evento_seguridad
+    try:
+        r = visita_costo_service.aprobar_estructura(db, ciclo_id, linea_id, getattr(current_user, "id", None))
+    except ValueError as e:
+        _raise_captura_error(e)
+    registrar_evento_seguridad(db, current_user, "APROBACION_COSTO_ROI",
+                               recurso=_Rec.COSTOROI_CONFIGURAR, accion="approve",
+                               objetivo=f"ciclo={ciclo_id} linea={linea_id}", resultado="OK")
+    return r
+
+
+@router.post("/costo/estructura/reabrir", response_model=dict)
+def reabrir_costo_estructura(linea_id: int | None = None, ciclo_id: int | None = None,
+                             db: Session = Depends(get_db), current_user=RequireDesbloqueo):
+    """Reabre una estructura APROBADA (→ BORRADOR). **Solo ADMIN** (excepción de dato cerrado),
+    auditada."""
+    from app.services import visita_costo_service
+    from app.core.authz.audit import registrar_evento_seguridad
+    try:
+        r = visita_costo_service.reabrir_estructura(db, ciclo_id, linea_id, getattr(current_user, "id", None))
+    except ValueError as e:
+        _raise_captura_error(e)
+    registrar_evento_seguridad(db, current_user, "EXCEPCION_SUPERADMIN",
+                               recurso=_Rec.COSTOROI_CONFIGURAR, accion="admin",
+                               objetivo=f"ciclo={ciclo_id} linea={linea_id}",
+                               detalle="reapertura de Costo/ROI aprobado", resultado="OK")
+    return r
 
 
 @router.post("/costo/importar", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def importar_costo_excel(linea_id: int | None = None, ciclo_id: int | None = None,
                                archivo: UploadFile = File(...),
-                               db: Session = Depends(get_db), current_user=RequireCierre):
+                               db: Session = Depends(get_db), current_user=ConfigurarCosto):
     """Importa los datos financieros por producto desde un Excel (.xlsx). Columnas:
     producto, costo_unitario_muestra, cantidad_muestras, pool_ventas, visitas_detalladas,
     presupuesto_anual, precio_prom."""

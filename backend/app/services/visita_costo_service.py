@@ -243,13 +243,22 @@ def _semilla_desde_parrilla(db: Session, ciclo_id, linea_id):
     return seed
 
 
-def guardar_estructura(db: Session, datos, usuario_id) -> dict:
+class CostoAprobadoError(Exception):
+    """La estructura de Costo/ROI ya fue APROBADA: no se edita salvo reapertura por ADMIN."""
+
+
+def guardar_estructura(db: Session, datos, usuario_id, es_admin: bool = False) -> dict:
     ciclo_id = datos.ciclo_id or ciclo_por_defecto(db)
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
     _guard_ciclo_abierto(db, ciclo_id)
     e = db.query(CostoEstructura).filter(
         CostoEstructura.ciclo_id == ciclo_id, CostoEstructura.linea_id == datos.linea_id).first()
+    # Workflow: una config APROBADA no se edita salvo que un ADMIN (Superadmin) la reabra.
+    if e and e.estado == "APROBADO" and not es_admin:
+        raise CostoAprobadoError(
+            "La configuración de Costo/ROI de este ciclo/línea ya fue APROBADA por la Dirección. "
+            "Debe reabrirse (solo un administrador) antes de poder editarse.")
     if not e:
         e = CostoEstructura(ciclo_id=ciclo_id, linea_id=datos.linea_id); db.add(e)
     for f in ("moneda", "salario_mensual", "cargas_pct", "viaticos_dia", "materiales_ciclo",
@@ -259,6 +268,10 @@ def guardar_estructura(db: Session, datos, usuario_id) -> dict:
         setattr(e, f, getattr(datos, f))
     e.fecha_actualizacion = _dt.now(_tz.utc)
     e.modificado_por = usuario_id
+    # Editar vuelve a BORRADOR: cualquier cambio invalida la aprobación previa (re-aprobación).
+    e.estado = "BORRADOR"
+    e.aprobado_por = None
+    e.aprobado_en = None
     db.query(CostoProducto).filter(
         CostoProducto.ciclo_id == ciclo_id, CostoProducto.linea_id == datos.linea_id).delete(synchronize_session=False)
     for i, p in enumerate(datos.productos, 1):
@@ -268,8 +281,56 @@ def guardar_estructura(db: Session, datos, usuario_id) -> dict:
             pool_ventas=p.pool_ventas, visitas_detalladas=p.visitas_detalladas,
             presupuesto_anual=p.presupuesto_anual, precio_prom=p.precio_prom))
     db.commit()
-    logger.info(f"Costo & ROI: estructura guardada ciclo={ciclo_id} linea={datos.linea_id} ({len(datos.productos)} prod)")
-    return calcular_full(db, ciclo_id, datos.linea_id)
+    logger.info(f"Costo & ROI: estructura guardada (BORRADOR) ciclo={ciclo_id} linea={datos.linea_id} ({len(datos.productos)} prod)")
+    return {**calcular_full(db, ciclo_id, datos.linea_id), **estado_estructura(db, ciclo_id, datos.linea_id)}
+
+
+def estado_estructura(db: Session, ciclo_id, linea_id) -> dict:
+    """Estado de aprobación de la estructura (ciclo, línea). Default BORRADOR si no existe."""
+    e = db.query(CostoEstructura).filter(
+        CostoEstructura.ciclo_id == ciclo_id, CostoEstructura.linea_id == linea_id).first()
+    return {
+        "estado": e.estado if e else "BORRADOR",
+        "aprobado_por": e.aprobado_por if e else None,
+        "aprobado_en": e.aprobado_en.isoformat() if (e and e.aprobado_en) else None,
+    }
+
+
+def aprobar_estructura(db: Session, ciclo_id, linea_id, usuario_id) -> dict:
+    """Director aprueba la estructura (BORRADOR → APROBADO). Idempotente. Guard de ciclo abierto."""
+    ciclo_id = ciclo_id or ciclo_por_defecto(db)
+    if ciclo_id is None:
+        raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
+    e = db.query(CostoEstructura).filter(
+        CostoEstructura.ciclo_id == ciclo_id, CostoEstructura.linea_id == linea_id).first()
+    if not e:
+        raise ValueError("No hay estructura de Costo/ROI para aprobar en este ciclo/línea.")
+    if e.estado != "APROBADO":
+        e.estado = "APROBADO"
+        e.aprobado_por = usuario_id
+        e.aprobado_en = _dt.now(_tz.utc)
+        db.commit()
+        logger.info(f"Costo & ROI: estructura APROBADA ciclo={ciclo_id} linea={linea_id} por={usuario_id}")
+    return {**calcular_full(db, ciclo_id, linea_id), **estado_estructura(db, ciclo_id, linea_id)}
+
+
+def reabrir_estructura(db: Session, ciclo_id, linea_id, usuario_id) -> dict:
+    """Reabre una estructura APROBADA (→ BORRADOR). Solo ADMIN (excepción de dato cerrado)."""
+    ciclo_id = ciclo_id or ciclo_por_defecto(db)
+    if ciclo_id is None:
+        raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
+    e = db.query(CostoEstructura).filter(
+        CostoEstructura.ciclo_id == ciclo_id, CostoEstructura.linea_id == linea_id).first()
+    if not e:
+        raise ValueError("No hay estructura de Costo/ROI para reabrir en este ciclo/línea.")
+    e.estado = "BORRADOR"
+    e.aprobado_por = None
+    e.aprobado_en = None
+    db.commit()
+    logger.info(f"Costo & ROI: estructura REABIERTA ciclo={ciclo_id} linea={linea_id} por={usuario_id}")
+    return {**calcular_full(db, ciclo_id, linea_id), **estado_estructura(db, ciclo_id, linea_id)}
 
 
 def _med_sin_visitar_por_cat(db: Session, ciclo_id, linea_id) -> dict:

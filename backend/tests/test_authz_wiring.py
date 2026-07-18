@@ -90,3 +90,23 @@ def test_visita_planeacion_registrar_solo_rm():
     # RM sí registra (pasa el guard)
     assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).post(
         "/api/v1/visita/planeacion/publicar").status_code != 403
+
+
+def test_costoroi_segregacion_finanzas_configura_director_aprueba():
+    from app.api.v1.routers.visita import router
+    # Aprobar: FINANZAS no puede (solo configura) → 403; el Director sí pasa el guard
+    assert _client(router, U(Rol.FINANZAS)).post(
+        "/api/v1/visita/costo/estructura/aprobar").status_code == 403
+    assert _client(router, U(Rol.PRESIDENCIA)).post(
+        "/api/v1/visita/costo/estructura/aprobar").status_code != 403
+    # Configurar (guardar parámetros): el Director NO configura → 403; FINANZAS sí pasa el guard
+    assert _client(router, U(Rol.PRESIDENCIA)).post(
+        "/api/v1/visita/costo/parametros", json={}).status_code == 403
+    # Firewall Médico: GERENTE_MEDICO sin costoroi.configurar → aprobar 403
+    assert _client(router, U(Rol.GERENTE_MEDICO)).post(
+        "/api/v1/visita/costo/estructura/aprobar").status_code == 403
+    # Reabrir: solo ADMIN; el Director no → 403
+    assert _client(router, U(Rol.PRESIDENCIA)).post(
+        "/api/v1/visita/costo/estructura/reabrir").status_code == 403
+    assert _client(router, U(Rol.ADMIN)).post(
+        "/api/v1/visita/costo/estructura/reabrir").status_code != 403
