@@ -1016,8 +1016,9 @@ migración `0018`; UI en `CostoRoiVisita.tsx`. Tests `tests/test_authz_wiring.py
   + ADMIN (decisión del cliente). Matriz fila 9 ajustada (GERENTE_MARCA=configure, GD=solo consulta);
   `POST /visita/parrilla` y `/parrilla/publicar` con `require(CONFIGURE, parrilla.configurar)`; frontend
   `ParrillaVisita` edita solo ADMIN/GERENTE_MARCA.
-- **`categorizacion.detalle`** (config de pesos): la matriz da `configure` al Gerente de Producto; hoy es
-  ADMIN-only en `admin.py`. Sin cablear (0 usuarios `GERENTE_MARCA`).
+- ~~`categorizacion.detalle`~~ **RESUELTO (jul-2026)**: las escrituras del motor (criterios+pesos+categorías)
+  en `admin.py` → `require(CONFIGURE, categorizacion.detalle)` = Gerente de Producto (GERENTE_MARCA) + ADMIN.
+  Lecturas amplias (datos de referencia de la vista básica).
 - **Módulos fuera de la matriz del prompt** (`reconocimiento`, `lsii`, `etl`, la megapantalla Admin de
   Configuración): sin recurso en la matriz → siguen gateados por `require_roles`/`allowedRoles`. Extender
   la matriz o dejarlos así es decisión de negocio.

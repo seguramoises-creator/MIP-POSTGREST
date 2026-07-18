@@ -92,6 +92,16 @@ def test_visita_planeacion_registrar_solo_rm():
         "/api/v1/visita/planeacion/publicar").status_code != 403
 
 
+def test_categorizacion_detalle_config_gerente_producto():
+    from app.api.v1.routers.admin import router
+    # categorizacion.detalle configure: GD NO configura criterios → delete 403
+    assert _client(router, U(Rol.GERENTE_DISTRITO)).delete(
+        "/api/v1/admin/criterios-categoria/1").status_code == 403
+    # GERENTE_MARCA (Gerente de Producto) sí → pasa el guard
+    assert _client(router, U(Rol.GERENTE_MARCA)).delete(
+        "/api/v1/admin/criterios-categoria/1").status_code != 403
+
+
 def test_parrilla_configura_gerente_producto_no_gd():
     from app.api.v1.routers.visita import router
     # parrilla.configurar: GD NO configura (solo consulta) → publicar 403

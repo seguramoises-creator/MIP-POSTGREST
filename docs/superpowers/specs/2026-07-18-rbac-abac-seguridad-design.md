@@ -283,9 +283,11 @@ frontend (`usePuede`/`ProtectedRoute`/`Sidebar`). Pendientes que quedaron **flag
    (GERENTE_MARCA=configure, GD=sin acceso→solo consulta vía `parrilla.consulta`); endpoints `POST /visita/parrilla`
    y `/parrilla/publicar` cableados a `require(CONFIGURE, parrilla.configurar)`; frontend `ParrillaVisita`
    configura solo ADMIN/GERENTE_MARCA.
-2. **`categorizacion.detalle`** (config de pesos de la categorización): la matriz da `configure` al Gerente
-   de Producto; hoy el CRUD de criterios es ADMIN-only en `admin.py`. No se cableó (0 usuarios
-   `GERENTE_MARCA` reales). Cablear si se activa ese rol.
+2. **`categorizacion.detalle`** — **RESUELTO (jul-2026)**: las ESCRITURAS del motor de categorización
+   (criterios + pesos + categorías A/B/C/D en `admin.py`) se cablearon a
+   `require(CONFIGURE, categorizacion.detalle)` = **Gerente de Producto (GERENTE_MARCA) + ADMIN**. Las
+   LECTURAS se dejaron amplias a propósito (son datos de referencia que consumen las pantallas de
+   categorización; restringirlas rompería la vista básica A/B/C de RM/GD).
 3. **Módulos fuera de la matriz del prompt** (`reconocimiento`, `lsii`, `etl`, la megapantalla Admin de
    Configuración): no tienen recurso en los 28. Siguen gateados por `require_roles`/`allowedRoles`.
    **Decisión:** extender la matriz con recursos para estos módulos, o dejarlos por rol.

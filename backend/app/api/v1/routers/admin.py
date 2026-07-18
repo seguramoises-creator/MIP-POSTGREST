@@ -11,6 +11,8 @@ from sqlalchemy import func
 
 from app.core.deps import get_db, get_current_active_user, require_roles
 from app.core.authz.audit import registrar_evento_seguridad
+from app.core.authz.deps import require as _require_authz
+from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
 from app.models.usuario import Usuario, Rol
 from app.models.dimensiones import (
     Pais, Linea, Gerente, RepresentanteMedico, Producto,
@@ -38,6 +40,10 @@ from app.core.security import hash_password
 
 router = APIRouter(prefix="/admin", tags=["Administración"])
 AdminOnly = Depends(require_roles(Rol.ADMIN))
+# RBAC Fase 2 (deuda #2): la configuración del motor de categorización (criterios + pesos +
+# categorías A/B/C/D) = categorizacion.detalle → Gerente de Producto (GERENTE_MARCA) + ADMIN.
+# Las LECTURAS quedan amplias (datos de referencia que consumen las pantallas de categorización).
+ConfigCategorizacion = Depends(_require_authz(_Acc.CONFIGURE, _Rec.CATEGORIZACION_DETALLE))
 AdminOrGerProd = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
 AnyAuth = Depends(get_current_active_user)
 # Lectura de catálogos (países/líneas/gerentes/RMs/ciclos) para poblar
@@ -310,7 +316,7 @@ def get_tabla_puntuacion(id: int, db: Session = Depends(get_db), _=AdminOrGerPro
 
 @router.put("/indicadores/{id}/tabla/{tabla_id}", response_model=IndicadorTablaResponse)
 def update_tabla_puntuacion(id: int, tabla_id: int, data: IndicadorTablaCreate,
-                             db: Session = Depends(get_db), _=AdminOnly):
+                             db: Session = Depends(get_db), _=ConfigCategorizacion):
     obj = db.query(IndicadorTabla).filter(IndicadorTabla.id == tabla_id, IndicadorTabla.indicador_id == id).first()
     if not obj:
         from fastapi import HTTPException
@@ -343,7 +349,7 @@ def list_categorias_medicas(db: Session = Depends(get_db), _=AnyAuth):
     return db.query(CategoriaMedica).filter(CategoriaMedica.activo == True).order_by(CategoriaMedica.orden).all()
 
 @router.post("/categorias-medicas", response_model=CategoriaMedicaResponse, status_code=201, summary="Crear categoría médica")
-def create_categoria_medica(data: CategoriaMedicaCreate, db: Session = Depends(get_db), _=AdminOnly):
+def create_categoria_medica(data: CategoriaMedicaCreate, db: Session = Depends(get_db), _=ConfigCategorizacion):
     if db.query(CategoriaMedica).filter(CategoriaMedica.codigo == data.codigo).first():
         raise HTTPException(400, "Código de categoría ya existe")
     obj = CategoriaMedica(**data.model_dump())
@@ -351,7 +357,7 @@ def create_categoria_medica(data: CategoriaMedicaCreate, db: Session = Depends(g
     return obj
 
 @router.put("/categorias-medicas/{id}", response_model=CategoriaMedicaResponse, summary="Actualizar categoría médica")
-def update_categoria_medica(id: int, data: CategoriaMedicaCreate, db: Session = Depends(get_db), _=AdminOnly):
+def update_categoria_medica(id: int, data: CategoriaMedicaCreate, db: Session = Depends(get_db), _=ConfigCategorizacion):
     obj = db.query(CategoriaMedica).filter(CategoriaMedica.id == id).first()
     if not obj: raise HTTPException(404, "Categoría no encontrada")
     for k, v in data.model_dump().items():
@@ -360,7 +366,7 @@ def update_categoria_medica(id: int, data: CategoriaMedicaCreate, db: Session = 
     return obj
 
 @router.delete("/categorias-medicas/{id}", response_model=Msg, summary="Desactivar categoría médica")
-def delete_categoria_medica(id: int, db: Session = Depends(get_db), _=AdminOnly):
+def delete_categoria_medica(id: int, db: Session = Depends(get_db), _=ConfigCategorizacion):
     obj = db.query(CategoriaMedica).filter(CategoriaMedica.id == id).first()
     if not obj: raise HTTPException(404, "Categoría no encontrada")
     obj.activo = False
@@ -373,7 +379,7 @@ def list_criterios_categoria(db: Session = Depends(get_db), _=AnyAuth):
     return db.query(CriterioCategoria).filter(CriterioCategoria.activo == True).order_by(CriterioCategoria.orden).all()
 
 @router.post("/criterios-categoria", response_model=CriterioCategoriaResponse, status_code=201, summary="Crear criterio")
-def create_criterio_categoria(data: CriterioCategoriaCreate, db: Session = Depends(get_db), _=AdminOnly):
+def create_criterio_categoria(data: CriterioCategoriaCreate, db: Session = Depends(get_db), _=ConfigCategorizacion):
     if db.query(CriterioCategoria).filter(CriterioCategoria.codigo == data.codigo).first():
         raise HTTPException(400, "Código de criterio ya existe")
     obj = CriterioCategoria(**data.model_dump())
@@ -381,7 +387,7 @@ def create_criterio_categoria(data: CriterioCategoriaCreate, db: Session = Depen
     return obj
 
 @router.put("/criterios-categoria/{id}", response_model=CriterioCategoriaResponse, summary="Actualizar criterio")
-def update_criterio_categoria(id: int, data: CriterioCategoriaCreate, db: Session = Depends(get_db), _=AdminOnly):
+def update_criterio_categoria(id: int, data: CriterioCategoriaCreate, db: Session = Depends(get_db), _=ConfigCategorizacion):
     obj = db.query(CriterioCategoria).filter(CriterioCategoria.id == id).first()
     if not obj: raise HTTPException(404, "Criterio no encontrado")
     for k, v in data.model_dump().items():
@@ -390,7 +396,7 @@ def update_criterio_categoria(id: int, data: CriterioCategoriaCreate, db: Sessio
     return obj
 
 @router.delete("/criterios-categoria/{id}", response_model=Msg, summary="Desactivar criterio")
-def delete_criterio_categoria(id: int, db: Session = Depends(get_db), _=AdminOnly):
+def delete_criterio_categoria(id: int, db: Session = Depends(get_db), _=ConfigCategorizacion):
     obj = db.query(CriterioCategoria).filter(CriterioCategoria.id == id).first()
     if not obj: raise HTTPException(404, "Criterio no encontrado")
     obj.activo = False
@@ -398,7 +404,7 @@ def delete_criterio_categoria(id: int, db: Session = Depends(get_db), _=AdminOnl
     return Msg(message="Criterio desactivado")
 
 @router.post("/criterios-categoria/{id}/tabla", response_model=CriterioCategoriaTablaResponse, status_code=201, summary="Agregar nivel a la tabla del criterio")
-def add_tabla_criterio(id: int, data: CriterioCategoriaTablaCreate, db: Session = Depends(get_db), _=AdminOnly):
+def add_tabla_criterio(id: int, data: CriterioCategoriaTablaCreate, db: Session = Depends(get_db), _=ConfigCategorizacion):
     data.criterio_id = id
     obj = CriterioCategoriaTabla(**data.model_dump())
     db.add(obj); db.commit(); db.refresh(obj)
@@ -428,7 +434,7 @@ def update_tabla_criterio(id: int, tabla_id: int, data: CriterioCategoriaTablaCr
     return obj
 
 @router.delete("/criterios-categoria/{id}/tabla/{tabla_id}", response_model=Msg)
-def delete_tabla_criterio(id: int, tabla_id: int, db: Session = Depends(get_db), _=AdminOnly):
+def delete_tabla_criterio(id: int, tabla_id: int, db: Session = Depends(get_db), _=ConfigCategorizacion):
     obj = db.query(CriterioCategoriaTabla).filter(
         CriterioCategoriaTabla.id == tabla_id, CriterioCategoriaTabla.criterio_id == id
     ).first()
