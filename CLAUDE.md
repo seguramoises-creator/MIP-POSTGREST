@@ -972,18 +972,22 @@ independiente** que falla si `matrix.py` y el spec divergen.
   implican `read` al mismo alcance; `export` es independiente. `alcance_export_modulo(user, recurso)`
   capa el export por la lectura del módulo (nunca la amplía).
 - `scope.rm_ids_visibles(db, user, alcance)` / `scope.assert_ve_rm(...)` — filtros `own/team/all` +
-  guard anti-IDOR (reemplazan/generalizan `scope_gd.py`, aún no cableados).
+  guard anti-IDOR. `app/core/authz/deps.py`: `require(accion,recurso)` / `autorizar(accion,recurso)` /
+  `autorizar_export(recurso)` (dependencies FastAPI que reemplazan a `require_roles`).
 - `seed.sembrar_todo(db)` — siembra idempotente de la matriz a `Security.DIM_Recurso`/`FACT_RolPermiso`
   (`scripts/seed_authz.py`). `audit.registrar_evento_seguridad(...)` → `Security.FACT_AuditoriaSeguridad`
   (append-only, acciones sensibles).
 
 **Roles** (enum `Rol`, +4 nuevos jul-2026): `GERENTE_MARKETING`, `GERENTE_MEDICO`, `ANALISTA_DATOS`,
 `FINANZAS`. Mapeo canónico: `GERENTE_MARCA`=Gerente de Producto, `GERENTE_PRODUCTIVIDAD`=Capacitación y
-Productividad, `PRESIDENCIA`=Director General, `ADMIN`=Superadmin. `DIR_COMERCIAL/CONSULTA/CAPACITACION`
-quedan fuera de esta matriz (sin permisos nuevos).
+Productividad, `PRESIDENCIA`=Director General, `ADMIN`=Superadmin. **La matriz cubre los 13 roles del enum**:
+los 3 legacy se derivan por regla en `matrix.py` (Fase 2, para no romper usuarios existentes):
+`CAPACITACION`=fila de `GERENTE_PRODUCTIVIDAD`, `DIR_COMERCIAL`=fila de `ANALISTA_DATOS`, `CONSULTA`=igual sin export.
 
-**Contrato frontend**: `GET /authz/me/permisos` (capacidades efectivas del usuario) — el frontend debe
-derivar navegación/rutas/controles de aquí (Fase 2). `GET /authz/matriz` (solo ADMIN) = inspección.
+**Contrato frontend**: `GET /authz/me/permisos` (capacidades efectivas del usuario). El frontend deriva
+navegación/rutas/controles de aquí vía el hook `usePuede()` (store `permisos.store.ts`, suscribe a `permisos`
+para re-render al cargar) + `ProtectedRoute recurso=/accion=` + ítems de `Sidebar` con `recurso`.
+`GET /authz/matriz` (solo ADMIN) = inspección.
 
 **Revocación por cambio de rol**: `create_access_token` emite `iat`; `deps.get_current_user` rechaza
 tokens con `iat < Usuario.roles_actualizado_en` (que `PUT /admin/usuarios/{id}` fija al cambiar el rol,
@@ -994,11 +998,30 @@ viejo nunca acarrea permisos obsoletos; la revocación por `iat` es defensa adic
 oráculo del spec (el test lo obliga). NO dispersar condicionales `if rol == ...` por el código.
 
 **FASE 1 (implementada, NO destructiva)**: motor + matriz + seed + auditoría + revocación + endpoint +
-pruebas (`tests/test_authz_*.py`, incl. parametrizada 28×10). **No rewirea ningún endpoint existente**
-→ el acceso efectivo actual no cambió. Migración `0017_rbac_fase1`.
+pruebas (`tests/test_authz_*.py`, incl. parametrizada 28×10). Migración `0017_rbac_fase1`.
 
-**FASE 2 (PENDIENTE)**: reemplazar los `require_roles` dispersos por `require(accion, recurso)`, aplicar
-`scope.rm_ids_visibles` en queries/KPIs/export, derivar el frontend del contrato, workflow atómico de
-Costo/ROI (Finanzas configura → Director aprueba) y el **flip** de la matriz. Deuda declarada en el spec §9:
-`team` para roles no-GD, módulos aún inexistentes (Farmacias, Inteligencia/Encuestas), y separación de
-`medical_contact.read`.
+**FASE 2 (implementada, jul-2026)** — flip de la matriz, módulo por módulo. Endpoints cableados con
+`require/autorizar` + scope (criterio: agregar el guard de matriz CONSERVANDO el scope existente —GD ve el
+agregado de empresa con nombres solo de su equipo vía `scope_gd`, regla del cliente— y SIN regresar
+escrituras que el cliente amplió deliberadamente). Cierres reales: firewall Médico-Comercial en
+`productividad`/`ranking`/`costoroi`; `FINANZAS` fuera de `cobertura.predictiva`. Módulos:
+`productividad`, `ranking`, `cobertura_predictiva`, `coaching`/`coaching_more`, `visita` (registrar +
+planeación + parrilla-read), `exportacion` (capada por lectura + **filtrada por scope** en el servicio +
+auditada). **Workflow Costo/ROI** (Finanzas CONFIGURE → Director APPROVE): `Visita.CostoEstructura` con
+`estado` (BORRADOR/APROBADO), guard `_guard`+`CostoAprobadoError`(409), reabrir solo ADMIN (auditado);
+migración `0018`; UI en `CostoRoiVisita.tsx`. Tests `tests/test_authz_wiring.py`.
+
+**DEUDA / decisiones pendientes (Fase 2):**
+- **`parrilla.configurar`**: la matriz la asigna al **GD**, la app al **Gerente de Producto**
+  (`RequireGerenteProducto` en `visita.py`) — **conflicto sin resolver**; se conservó el comportamiento
+  actual (solo se cableó `parrilla.consulta` read). Decidir cuál gobierna.
+- **`categorizacion.detalle`** (config de pesos): la matriz da `configure` al Gerente de Producto; hoy es
+  ADMIN-only en `admin.py`. Sin cablear (0 usuarios `GERENTE_MARCA`).
+- **Módulos fuera de la matriz del prompt** (`reconocimiento`, `lsii`, `etl`, la megapantalla Admin de
+  Configuración): sin recurso en la matriz → siguen gateados por `require_roles`/`allowedRoles`. Extender
+  la matriz o dejarlos así es decisión de negocio.
+- **Export scope**: `exportacion` ya filtra por `rm_ids` (GD exporta su equipo). Otros módulos con export
+  aún no tienen endpoint de export dedicado.
+- Del spec §9 (Fase 1): `team` para roles no-GD (`GERENTE_PRODUCTIVIDAD` en coaching/examen — alcance
+  literal, sin resolución de equipo); módulos inexistentes (Farmacias, Inteligencia/Encuestas); separación
+  de `medical_contact.read` de `medico.panel`.

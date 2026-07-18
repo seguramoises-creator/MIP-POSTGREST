@@ -267,8 +267,31 @@ Costo/ROI; **flip** de la matriz. Se planifica aparte.
 3. **Datos de contacto médico** (teléfono/dirección): permiso centralizado en `medico.panel` para poder
    separar luego `medical_contact.read` de la categorización. No se cambia la matriz hoy; no duplicar el
    dato sensible en logs/tokens/URLs/exports temporales.
-4. **`DIR_COMERCIAL`, `CONSULTA`, `CAPACITACION`:** fuera de la matriz del prompt; sin permisos nuevos en
-   Fase 1.
+4. **`DIR_COMERCIAL`, `CONSULTA`, `CAPACITACION`:** fuera de la matriz del prompt en Fase 1. **Resuelto en
+   Fase 2** — se derivan por regla en `matrix.py` para no romper usuarios existentes: `CAPACITACION`=fila de
+   `GERENTE_PRODUCTIVIDAD`, `DIR_COMERCIAL`=fila de `ANALISTA_DATOS`, `CONSULTA`=igual sin export.
+
+---
+
+## 9-bis. Deuda de Fase 2 (flip de la matriz, jul-2026)
+
+La Fase 2 cableó los endpoints de los módulos cubiertos por la matriz (`require/autorizar` + scope) y el
+frontend (`usePuede`/`ProtectedRoute`/`Sidebar`). Pendientes que quedaron **flagged sin resolver**:
+
+1. **`parrilla.configurar` — conflicto matriz vs app.** La matriz (§5, fila 9) asigna la configuración de
+   la parrilla al **GD**; la app la asigna al **Gerente de Producto** (`RequireGerenteProducto` en
+   `visita.py`). Se conservó el comportamiento actual (solo se cableó `parrilla.consulta` read). **Decisión
+   de negocio pendiente:** ¿quién configura la parrilla, el GD (matriz) o el Gerente de Producto (app)?
+2. **`categorizacion.detalle`** (config de pesos de la categorización): la matriz da `configure` al Gerente
+   de Producto; hoy el CRUD de criterios es ADMIN-only en `admin.py`. No se cableó (0 usuarios
+   `GERENTE_MARCA` reales). Cablear si se activa ese rol.
+3. **Módulos fuera de la matriz del prompt** (`reconocimiento`, `lsii`, `etl`, la megapantalla Admin de
+   Configuración): no tienen recurso en los 28. Siguen gateados por `require_roles`/`allowedRoles`.
+   **Decisión:** extender la matriz con recursos para estos módulos, o dejarlos por rol.
+4. **Export por scope:** `exportacion` ya filtra por `rm_ids` (GD exporta su equipo, no toda la empresa).
+   Si a futuro se agregan endpoints de export por módulo, aplicar el mismo `alcance_export_modulo` + filtro.
+5. **UI Costo/ROI:** implementada (badge estado + Aprobar/Reabrir). El workflow no incluye notificación al
+   Director cuando Finanzas deja algo en BORRADOR (posible mejora).
 
 ## 10. Compatibilidad
 
