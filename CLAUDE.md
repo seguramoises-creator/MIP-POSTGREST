@@ -951,3 +951,54 @@ Para pedir mejoras, referencia sección y archivo. Ejemplos:
 
 **Agregar dimensión LSII**:
 > "En MSM (sección 12 - LSII), agrega una nueva dimensión de Receptividad vía `POST /lsii/admin/dimensiones`. Recuerda que `score_oculto`/`peso_dimension` nunca deben exponerse en `GET /lsii/catalogo`."
+
+---
+
+## 25. Módulo de Seguridad RBAC/ABAC (jul-2026)
+
+**Spec/plan**: `docs/superpowers/specs/2026-07-18-rbac-abac-seguridad-design.md` +
+`docs/superpowers/plans/2026-07-18-rbac-abac-fase1.md`.
+
+Control de acceso con **RBAC** (permisos a roles) + **alcance ABAC** (`own/team/all`), **denegación
+por defecto**. Modelo de tres ejes: **recurso** (28 funcionalidades) × **acción**
+(`read/register/configure/approve/export/admin`) × **alcance**.
+
+**Fuente de verdad = código**: `app/core/authz/matrix.py` (`MATRIZ[recurso][rol] = (accion, alcance)|None`).
+Es una transcripción de la matriz del spec §5. `tests/test_authz_matriz.py` tiene un **oráculo
+independiente** que falla si `matrix.py` y el spec divergen.
+
+**Motor** (`app/core/authz/`):
+- `engine.can(user, accion, recurso) -> Alcance | None` — `admin` concede todo; `configure/approve/register`
+  implican `read` al mismo alcance; `export` es independiente. `alcance_export_modulo(user, recurso)`
+  capa el export por la lectura del módulo (nunca la amplía).
+- `scope.rm_ids_visibles(db, user, alcance)` / `scope.assert_ve_rm(...)` — filtros `own/team/all` +
+  guard anti-IDOR (reemplazan/generalizan `scope_gd.py`, aún no cableados).
+- `seed.sembrar_todo(db)` — siembra idempotente de la matriz a `Security.DIM_Recurso`/`FACT_RolPermiso`
+  (`scripts/seed_authz.py`). `audit.registrar_evento_seguridad(...)` → `Security.FACT_AuditoriaSeguridad`
+  (append-only, acciones sensibles).
+
+**Roles** (enum `Rol`, +4 nuevos jul-2026): `GERENTE_MARKETING`, `GERENTE_MEDICO`, `ANALISTA_DATOS`,
+`FINANZAS`. Mapeo canónico: `GERENTE_MARCA`=Gerente de Producto, `GERENTE_PRODUCTIVIDAD`=Capacitación y
+Productividad, `PRESIDENCIA`=Director General, `ADMIN`=Superadmin. `DIR_COMERCIAL/CONSULTA/CAPACITACION`
+quedan fuera de esta matriz (sin permisos nuevos).
+
+**Contrato frontend**: `GET /authz/me/permisos` (capacidades efectivas del usuario) — el frontend debe
+derivar navegación/rutas/controles de aquí (Fase 2). `GET /authz/matriz` (solo ADMIN) = inspección.
+
+**Revocación por cambio de rol**: `create_access_token` emite `iat`; `deps.get_current_user` rechaza
+tokens con `iat < Usuario.roles_actualizado_en` (que `PUT /admin/usuarios/{id}` fija al cambiar el rol,
++ auditoría `ROL_ASIGNADO`). La autorización siempre lee `user.rol` **fresco de la BD**, así que un token
+viejo nunca acarrea permisos obsoletos; la revocación por `iat` es defensa adicional.
+
+**Cómo cambiar un permiso**: editar `matrix.py` → correr `python scripts/seed_authz.py` → actualizar el
+oráculo del spec (el test lo obliga). NO dispersar condicionales `if rol == ...` por el código.
+
+**FASE 1 (implementada, NO destructiva)**: motor + matriz + seed + auditoría + revocación + endpoint +
+pruebas (`tests/test_authz_*.py`, incl. parametrizada 28×10). **No rewirea ningún endpoint existente**
+→ el acceso efectivo actual no cambió. Migración `0017_rbac_fase1`.
+
+**FASE 2 (PENDIENTE)**: reemplazar los `require_roles` dispersos por `require(accion, recurso)`, aplicar
+`scope.rm_ids_visibles` en queries/KPIs/export, derivar el frontend del contrato, workflow atómico de
+Costo/ROI (Finanzas configura → Director aprueba) y el **flip** de la matriz. Deuda declarada en el spec §9:
+`team` para roles no-GD, módulos aún inexistentes (Farmacias, Inteligencia/Encuestas), y separación de
+`medical_contact.read`.
