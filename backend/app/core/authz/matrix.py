@@ -1,0 +1,70 @@
+"""RBAC — matriz canónica (fuente de verdad). Transcripción exacta del spec §5.
+
+MATRIZ[recurso][rol] = celda `(Accion, Alcance)` o `None` (sin acceso).
+Columnas en el orden de `_ROLES` (= columnas de la tabla del spec).
+
+Para cambiar un permiso: editar aquí → correr `scripts/seed_authz.py` → el test-oráculo
+(`tests/test_authz_matriz.py`) obliga a mantener el spec §5 sincronizado.
+"""
+from app.models.usuario import Rol
+from app.core.authz.constantes import Accion, Alcance, Recurso
+
+# Celdas (una acción + su alcance)
+R_OWN = (Accion.READ, Alcance.OWN)
+R_TEAM = (Accion.READ, Alcance.TEAM)
+R_ALL = (Accion.READ, Alcance.ALL)
+REG_OWN = (Accion.REGISTER, Alcance.OWN)
+REG_TEAM = (Accion.REGISTER, Alcance.TEAM)
+CFG = (Accion.CONFIGURE, Alcance.ALL)
+APR = (Accion.APPROVE, Alcance.ALL)
+EXP_TEAM = (Accion.EXPORT, Alcance.TEAM)
+EXP_ALL = (Accion.EXPORT, Alcance.ALL)
+ADMIN_CELL = (Accion.ADMIN, Alcance.ALL)
+
+# Orden de roles = columnas del spec §5
+_ROLES = [
+    Rol.REPRESENTANTE_MEDICO, Rol.GERENTE_DISTRITO, Rol.GERENTE_MARCA, Rol.GERENTE_MARKETING,
+    Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_MEDICO, Rol.PRESIDENCIA, Rol.ANALISTA_DATOS,
+    Rol.FINANZAS, Rol.ADMIN,
+]
+
+_N = None  # sin acceso
+
+
+def _fila(*celdas):
+    assert len(celdas) == len(_ROLES), f"la fila debe tener {len(_ROLES)} celdas, trae {len(celdas)}"
+    return {rol: c for rol, c in zip(_ROLES, celdas)}
+
+
+# MATRIZ[recurso][rol] = (accion, alcance) | None
+#                                   RM       GD        MARCA    MKT      PROD     MED      PRES     ANAL     FIN      ADMIN
+MATRIZ: dict[str, dict] = {
+    Recurso.DASHBOARD_EJECUTIVO:     _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
+    Recurso.VISITA_REGISTRAR:        _fila(REG_OWN, _N,       _N,      _N,      _N,      _N,      _N,      _N,      _N,      ADMIN_CELL),
+    Recurso.MEDICO_PANEL:            _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.CATEGORIZACION_BASICA:   _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.CATEGORIZACION_DETALLE:  _fila(_N,      _N,       CFG,     R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.PLANEACION_CICLO:        _fila(REG_OWN, R_TEAM,   _N,      _N,      _N,      _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.COBERTURA_DIARIA:        _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
+    Recurso.COBERTURA_PREDICTIVA:    _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.PARRILLA_CONFIGURAR:     _fila(_N,      CFG,      _N,      _N,      _N,      _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.PARRILLA_CONSULTA:       _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
+    Recurso.PRODUCTIVIDAD_COMERCIAL: _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
+    Recurso.RANKING_RKT:             _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
+    Recurso.FARMACIA_CONFIGURACION:  _fila(_N,      CFG,      _N,      R_ALL,   _N,      _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.FARMACIA_VISITA:         _fila(REG_OWN, _N,       _N,      _N,      _N,      _N,      _N,      _N,      _N,      ADMIN_CELL),
+    Recurso.FARMACIA_COBERTURA:      _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.COACHING_HOJA:           _fila(R_OWN,   REG_TEAM, _N,      _N,      R_TEAM,  R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.COACHING_KPI:            _fila(_N,      R_TEAM,   _N,      _N,      R_ALL,   R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.EXAMEN_RENDIR:           _fila(REG_OWN, _N,       _N,      _N,      R_TEAM,  R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.EXAMEN_CONFIGURAR:       _fila(_N,      R_TEAM,   _N,      _N,      CFG,     CFG,     R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.INTELIGENCIA_MATRIZ:     _fila(R_OWN,   R_TEAM,   CFG,     CFG,     _N,      R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.ENCUESTA_CONFIGURAR:     _fila(_N,      _N,       CFG,     CFG,     _N,      R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.ENCUESTA_APLICAR:        _fila(REG_OWN, _N,       R_ALL,   R_ALL,   _N,      _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.COSTOROI_VER:            _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   _N,      _N,      R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
+    Recurso.COSTOROI_CONFIGURAR:     _fila(_N,      _N,       _N,      _N,      _N,      _N,      APR,     _N,      CFG,     ADMIN_CELL),
+    Recurso.CONFIG_PRODUCTOS:        _fila(_N,      _N,       R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
+    Recurso.CONFIG_USUARIOS:         _fila(_N,      _N,       _N,      _N,      _N,      _N,      _N,      _N,      _N,      ADMIN_CELL),
+    Recurso.CONFIG_PARAMETROS:       _fila(_N,      _N,       _N,      _N,      _N,      _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.EXPORTACION:             _fila(_N,      EXP_TEAM, EXP_ALL, EXP_ALL, EXP_ALL, EXP_ALL, EXP_ALL, EXP_ALL, EXP_ALL, ADMIN_CELL),
+}
