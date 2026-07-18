@@ -116,6 +116,24 @@ def test_plan_accion_obligatorio():
     assert any("¿Qué harás?" in e for e in errs)
 
 
+# ── Inmutabilidad total: no se corrige/modifica una hoja guardada ─────────────
+
+def test_crear_hoja_rechaza_cualquier_correccion():
+    """Regla del cliente (jul-2026): una hoja guardada NO se modifica ni se corrige BAJO NINGÚN
+    concepto. `crear_hoja` rechaza cualquier `corrige_a_id` — la barrera del servicio, no solo
+    del endpoint retirado."""
+    d = _datos_validos(); d.corrige_a_id = 4
+    with pytest.raises(ValueError, match="inmutables"):
+        svc.crear_hoja(MagicMock(), SimpleNamespace(rol=None, id=1), d)
+
+
+def test_el_endpoint_de_correccion_esta_retirado():
+    import inspect
+    from app.api.v1.routers import coaching_more
+    fuente = inspect.getsource(coaching_more.corregir)
+    assert "410" in fuente and "inmutables" in fuente
+
+
 # ── Ciclo de la hoja: lo define la FECHA, no cuál ciclo esté abierto ───────────
 
 def test_ciclo_de_la_hoja_es_el_que_contiene_la_fecha():

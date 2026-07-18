@@ -121,11 +121,17 @@ def crear(datos: HojaIn, db: Session = Depends(get_db), current_user: Usuario = 
     return _guardar(db, current_user, datos)
 
 
-@router.post("/{sesion_id}/correccion", summary="Crear hoja de corrección (enmienda a otra)")
+@router.post("/{sesion_id}/correccion", summary="RETIRADO — la hoja de coaching es inmutable")
 def corregir(sesion_id: int, datos: HojaIn, db: Session = Depends(get_db),
              current_user: Usuario = RequireCrear):
-    datos.corrige_a_id = sesion_id
-    return _guardar(db, current_user, datos)
+    """Retirado (jul-2026, decisión del cliente): una hoja de coaching guardada NO se modifica
+    ni se enmienda BAJO NINGÚN CONCEPTO. La corrección (que abría la hoja como editable) se
+    eliminó para todos los roles. Se conserva la ruta solo para responder con un error claro
+    a cualquier cliente viejo que aún la invoque."""
+    raise HTTPException(
+        410,
+        "Las hojas de coaching son inmutables: no se pueden corregir ni modificar. "
+        "Si hubo un error, registra una hoja nueva.")
 
 
 @router.get("", summary="Listar hojas (según rol)")

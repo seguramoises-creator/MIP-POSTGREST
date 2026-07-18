@@ -4,11 +4,11 @@ import {
   Divider, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, Radio,
   FormControlLabel, IconButton, Tooltip,
 } from '@mui/material';
-import { RateReview, Save, CheckCircle, Lock, Visibility, Edit } from '@mui/icons-material';
+import { RateReview, Save, CheckCircle, Lock, Visibility, Search } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
-  cmCatalogo, cmVms, cmCrear, cmCorregir, cmListar, cmDetalle, cmKpi, cmConsolidar, cmAcompanadasHoy,
+  cmCatalogo, cmVms, cmCrear, cmListar, cmDetalle, cmKpi, cmConsolidar, cmAcompanadasHoy,
   type CatalogoItem, type VMItem, type HojaResumen, type HojaDetalle, type CoachingKpi, type ItemCalif,
   type AcompanadasHoy,
 } from '../../services/coachingMore.service';
@@ -78,39 +78,91 @@ function FirmaCanvas({ valor, onConfirmar, onLimpiar }:
   );
 }
 
+// Chip de calificación D/P/A/E (solo lectura) — mismo código de color que el formulario.
+function CalifChip({ cal }: { cal: number }) {
+  const e = ESCALA.find((x) => x.v === cal);
+  if (!e) return <Chip size="small" label="—" variant="outlined" />;
+  return <Chip size="small" label={`${e.v} · ${e.l}`} sx={{ bgcolor: e.color, color: '#fff', fontWeight: 800 }} />;
+}
+
 // ── Detalle solo-lectura (reusado por GD y RM) ──────────────────────────────────
+// Muestra la hoja COMPLETA tal como se llenó (secciones con cada ítem y su D/P/A/E, plan,
+// firma), en solo lectura. Una hoja guardada NUNCA se modifica ni se corrige.
 function DetalleHoja({ id, onClose }: { id: number; onClose: () => void }) {
   const [d, setD] = useState<HojaDetalle | null>(null);
   useEffect(() => { cmDetalle(id).then(setD).catch(() => setD(null)); }, [id]);
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Hoja de Coaching {d ? `— ${d.fecha_coaching}` : ''}</DialogTitle>
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Lock fontSize="small" sx={{ color: '#00A86B' }} />
+        Hoja de Coaching {d ? `— ${d.fecha_coaching}` : ''}
+        <Chip size="small" label="Solo lectura" variant="outlined" sx={{ ml: 'auto' }} />
+      </DialogTitle>
       <DialogContent dividers>
         {!d ? <Box sx={{ textAlign: 'center', py: 3 }}><CircularProgress /></Box> : (
-          <Stack spacing={0.5}>
-            {d.es_correccion && <Alert severity="warning">Hoja de corrección de la #{d.corrige_a_id}. Motivo: {d.motivo_correccion}</Alert>}
-            {d.tiene_correccion && <Alert severity="info">Esta hoja fue enmendada por una hoja de corrección posterior.</Alert>}
-            <Row k="Representante" v={d.rm_nombre ?? '—'} />
-            <Row k="Gerente de Distrito" v={d.gd_nombre ?? '—'} />
-            <Row k="Médicos vistos" v={String(d.medicos_vistos)} />
-            <Divider sx={{ my: 1 }} />
+          <Stack spacing={1.5}>
+            {/* Encabezado */}
+            <Card variant="outlined"><CardContent sx={{ py: 1.5 }}>
+              <Row k="Representante" v={d.rm_nombre ?? '—'} />
+              <Row k="Gerente de Distrito" v={d.gd_nombre ?? '—'} />
+              <Row k="Médicos vistos ese día" v={String(d.medicos_vistos)} />
+            </CardContent></Card>
+
+            {/* Escala */}
+            <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+              {ESCALA.map((e) => (
+                <Chip key={e.v} size="small" label={`${e.v} · ${e.l} — ${e.label}`}
+                      sx={{ bgcolor: e.color, color: '#fff', fontWeight: 700 }} />
+              ))}
+            </Stack>
+
+            {/* Secciones con cada ítem y su calificación */}
             {d.secciones.map((s) => (
-              <Row key={s.seccion} k={s.seccion} v={s.promedio != null ? s.promedio.toFixed(2) : '—'} />
+              <Card key={s.seccion} variant="outlined"><CardContent sx={{ py: 1.5 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
+                  <Typography variant="subtitle1" fontWeight={700}>{s.seccion}</Typography>
+                  <Chip size="small" label={s.promedio != null ? s.promedio.toFixed(2) : '—'}
+                        sx={{ bgcolor: s.promedio != null ? colorProm(s.promedio) : '#f3f4f6',
+                              color: s.promedio != null ? '#fff' : '#6b7280', fontWeight: 800 }} />
+                </Stack>
+                {s.items.map((it, i) => (
+                  <Stack key={i} direction="row" alignItems="center" spacing={1}
+                         sx={{ py: 0.6, borderBottom: '1px solid #f3f4f6' }}>
+                    <Typography variant="body2" sx={{ flex: 1 }}>{it.texto}</Typography>
+                    <CalifChip cal={it.calificacion} />
+                  </Stack>
+                ))}
+              </CardContent></Card>
             ))}
-            <Row k="Evaluación promedio general" v={d.evaluacion_promedio.toFixed(2)} bold />
-            <Divider sx={{ my: 1 }} />
-            <Row k="Fortalezas" v={d.fortalezas} />
-            <Row k="Áreas a perfeccionar" v={d.areas_perfeccionar} />
-            <Row k="¿Qué harás?" v={d.plan_que_haras} />
-            <Row k="Fecha de seguimiento" v={d.plan_fecha_seguimiento} />
-            <Row k="Acuerdo" v={d.rm_acuerdo === 'de_acuerdo' ? 'De acuerdo' : 'No de acuerdo'} />
-            {d.rm_justificacion_desacuerdo && (
-              <Box sx={{ bgcolor: '#fdecea', borderLeft: '4px solid #e53935', borderRadius: 1, p: 1.2, mt: 0.5 }}>
-                <Typography variant="body2"><b>Justificación:</b> {d.rm_justificacion_desacuerdo}</Typography>
-              </Box>
-            )}
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>Firma capturada:</Typography>
-            {d.rm_firma_imagen && <Box component="img" src={d.rm_firma_imagen} alt="firma" sx={{ maxWidth: '100%', border: '1px solid #e5e7eb', borderRadius: 1, bgcolor: '#fff' }} />}
+
+            <Card variant="outlined" sx={{ bgcolor: '#f5f8ff' }}><CardContent sx={{ py: 1.5 }}>
+              <Row k="Evaluación promedio general" v={d.evaluacion_promedio.toFixed(2)} bold />
+            </CardContent></Card>
+
+            {/* Plan de desarrollo y acción */}
+            <Card variant="outlined"><CardContent sx={{ py: 1.5 }}>
+              <Row k="Fortalezas" v={d.fortalezas} />
+              <Row k="Áreas a perfeccionar" v={d.areas_perfeccionar} />
+              <Row k="¿Qué harás?" v={d.plan_que_haras} />
+              <Row k="¿Cómo lo harás?" v={d.plan_como_haras} />
+              <Row k="¿Cómo te darás cuenta?" v={d.plan_como_veras} />
+              <Row k="Fecha de seguimiento" v={d.plan_fecha_seguimiento} />
+              <Row k="Acuerdo del representante" v={d.rm_acuerdo === 'de_acuerdo' ? 'De acuerdo' : 'No de acuerdo'} />
+              {d.rm_justificacion_desacuerdo && (
+                <Box sx={{ bgcolor: '#fdecea', borderLeft: '4px solid #e53935', borderRadius: 1, p: 1.2, mt: 0.5 }}>
+                  <Typography variant="body2"><b>Justificación:</b> {d.rm_justificacion_desacuerdo}</Typography>
+                </Box>
+              )}
+            </CardContent></Card>
+
+            {/* Firma */}
+            <Box>
+              <Typography variant="caption" color="text.secondary">Firma del representante:</Typography>
+              {d.rm_firma_imagen
+                ? <Box component="img" src={d.rm_firma_imagen} alt="firma"
+                       sx={{ display: 'block', maxWidth: 320, border: '1px solid #e5e7eb', borderRadius: 1, bgcolor: '#fff', mt: 0.5 }} />
+                : <Typography variant="body2" color="text.secondary">— sin firma —</Typography>}
+            </Box>
           </Stack>
         )}
       </DialogContent>
@@ -161,21 +213,16 @@ export default function CoachingMore() {
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
   const [okDialog, setOkDialog] = useState(false);
-  // Corrección: id de la hoja que se está enmendando + motivo.
-  const [corrigiendoId, setCorrigiendoId] = useState<number | null>(null);
-  const [motivoCorreccion, setMotivoCorreccion] = useState('');
 
-  // Al elegir un RM (hoja NUEVA): trae la suma de visitas ACOMPAÑADAS de hoy. "Médicos vistos
-  // ese día" pasa a ser esa suma (solo lectura); la hoja se habilita si suma >= el mínimo del RM.
-  // En modo corrección no se recalcula (se conserva lo de la hoja original).
+  // Al elegir un RM: trae la suma de visitas ACOMPAÑADAS de hoy. "Médicos vistos ese día" pasa
+  // a ser esa suma (solo lectura); la hoja se habilita si suma >= el mínimo del RM.
   useEffect(() => {
-    if (corrigiendoId) return;
     if (!rmId) { setAcompHoy(null); setMedicos(''); return; }
     cmAcompanadasHoy(Number(rmId))
       .then((r) => { setAcompHoy(r); setMedicos(String(r.acompanadas)); })
       .catch(() => { setAcompHoy(null); });
-  }, [rmId, corrigiendoId]);
-  const hojaHabilitada = corrigiendoId ? true : !!acompHoy?.habilitado;
+  }, [rmId]);
+  const hojaHabilitada = !!acompHoy?.habilitado;
 
   const recargar = useCallback(() => {
     cmListar().then(setHojas).catch(() => setHojas([]));
@@ -212,41 +259,12 @@ export default function CoachingMore() {
     setRmId(''); setMedicos(''); setRatings({}); setFortalezas(''); setAreas('');
     setPlanQue(''); setPlanComo(''); setPlanVeras(''); setFechaSeg('');
     setAcuerdo(''); setJustif(''); setFirma('');
-    setCorrigiendoId(null); setMotivoCorreccion('');
   };
 
-  // Corregir: precarga la hoja original en el formulario (la firma se recaptura).
-  const iniciarCorreccion = async (id: number) => {
-    setMsg(null);
-    try {
-      const d = await cmDetalle(id);
-      setRmId(d.rm_id); setMedicos(String(d.medicos_vistos));
-      const textoAId = new Map(catalogo.map((c) => [c.texto, c.id]));
-      const nuevos: Record<number, number> = {};
-      d.secciones.forEach((s) => s.items.forEach((it) => {
-        const cid = textoAId.get(it.texto);
-        if (cid != null) nuevos[cid] = it.calificacion;
-      }));
-      setRatings(nuevos);
-      setFortalezas(d.fortalezas); setAreas(d.areas_perfeccionar);
-      setPlanQue(d.plan_que_haras); setPlanComo(d.plan_como_haras); setPlanVeras(d.plan_como_veras);
-      setFechaSeg(d.plan_fecha_seguimiento);
-      setAcuerdo(d.rm_acuerdo === 'no_de_acuerdo' ? 'no_de_acuerdo' : 'de_acuerdo');
-      setJustif(d.rm_justificacion_desacuerdo || '');
-      setFirma('');  // el RM debe volver a firmar la hoja corregida
-      setCorrigiendoId(id); setMotivoCorreccion('');
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch {
-      setMsg({ tipo: 'error', texto: 'No se pudo cargar la hoja a corregir.' });
-    }
-  };
 
   const guardar = async () => {
     setMsg(null);
     if (!rmId) { setMsg({ tipo: 'error', texto: 'Selecciona el representante (RM).' }); return; }
-    if (corrigiendoId && !motivoCorreccion.trim()) {
-      setMsg({ tipo: 'error', texto: 'Indica el motivo de la corrección.' }); return;
-    }
     const items: ItemCalif[] = catalogo.filter((i) => ratings[i.id] != null)
       .map((i) => ({ item_catalogo_id: i.id, seccion: i.seccion, item_texto: i.texto, calificacion: ratings[i.id] }));
     const payload = {
@@ -259,8 +277,7 @@ export default function CoachingMore() {
     };
     setGuardando(true);
     try {
-      if (corrigiendoId) await cmCorregir(corrigiendoId, { ...payload, motivo_correccion: motivoCorreccion });
-      else await cmCrear(payload);
+      await cmCrear(payload);
       setOkDialog(true); resetForm(); recargar();
     } catch (e) {
       setMsg({ tipo: 'error', texto: errMsg(e, 'No se pudo guardar la hoja.') });
@@ -335,18 +352,6 @@ export default function CoachingMore() {
 
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
 
-      {corrigiendoId && (
-        <>
-          <Alert severity="warning" sx={{ mb: 1.5 }}
-                 action={<Button color="inherit" size="small" onClick={resetForm}>Cancelar corrección</Button>}>
-            Corrigiendo la hoja <b>#{corrigiendoId}</b>. Se creará una <b>hoja de corrección</b> nueva
-            (la original queda intacta e inmutable). El representante debe <b>volver a firmar</b>.
-          </Alert>
-          <TextField fullWidth size="small" label="Motivo de la corrección *" value={motivoCorreccion}
-                     onChange={(e) => setMotivoCorreccion(e.target.value)} sx={{ mb: 2 }}
-                     placeholder="Ej: se seleccionó el representante equivocado" />
-        </>
-      )}
 
       {/* Encabezado */}
       <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
@@ -391,7 +396,7 @@ export default function CoachingMore() {
           activará al alcanzar el mínimo.
         </Alert>
       )}
-      {rmId !== '' && hojaHabilitada && !corrigiendoId && (
+      {rmId !== '' && hojaHabilitada && (
         <Alert severity="success" sx={{ mb: 2 }}>
           Hoja habilitada — {acompHoy?.acompanadas} visitas acompañadas hoy (mínimo {acompHoy?.minimo}).
         </Alert>
@@ -487,16 +492,14 @@ export default function CoachingMore() {
         <FirmaCanvas valor={firma} onConfirmar={setFirma} onLimpiar={() => setFirma('')} />
       </CardContent></Card>
 
-      <Button fullWidth size="large" variant="contained" color={corrigiendoId ? 'warning' : 'primary'}
+      <Button fullWidth size="large" variant="contained" color="primary"
               startIcon={<Save />} disabled={guardando || !rmId || !hojaHabilitada} onClick={guardar} sx={{ py: 1.5 }}>
-        {guardando ? 'Guardando…'
-          : corrigiendoId ? `Guardar corrección de la hoja #${corrigiendoId}`
-          : 'Guardar Hoja de Coaching (bloquea la edición para siempre)'}
+        {guardando ? 'Guardando…' : 'Guardar Hoja de Coaching (queda inmutable — no se puede modificar)'}
       </Button>
 
       {/* Historial del equipo */}
       <Typography variant="subtitle1" fontWeight={700} sx={{ mt: 4, mb: 1 }}>Historial de mi equipo</Typography>
-      <ListaHojas hojas={hojas} onVer={setVerId} onCorregir={iniciarCorreccion} />
+      <ListaHojas hojas={hojas} onVer={setVerId} filtrable />
 
       {verId != null && <DetalleHoja id={verId} onClose={() => setVerId(null)} />}
 
@@ -589,7 +592,7 @@ function VistaRM({ hojas, onVer }: { hojas: HojaResumen[]; onVer: (id: number) =
           </Stack>
         </Grid>
       </Grid>
-      <ListaHojas hojas={delCiclo} onVer={onVer} />
+      <ListaHojas hojas={delCiclo} onVer={onVer} filtrable />
     </>
   );
 }
@@ -605,12 +608,26 @@ function KpiCard({ label, valor, color }: { label: string; valor: string; color?
   );
 }
 
-function ListaHojas({ hojas, onVer, onCorregir }:
-  { hojas: HojaResumen[]; onVer: (id: number) => void; onCorregir?: (id: number) => void }) {
+// Lista de hojas SOLO-LECTURA. No hay corrección/edición: una hoja guardada es inmutable.
+// `filtrable` añade un buscador por nombre del representante (para el GD, sobre su equipo).
+function ListaHojas({ hojas, onVer, filtrable }:
+  { hojas: HojaResumen[]; onVer: (id: number) => void; filtrable?: boolean }) {
+  const [q, setQ] = useState('');
+  const visibles = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    return t ? hojas.filter((h) => (h.rm_nombre ?? '').toLowerCase().includes(t)) : hojas;
+  }, [hojas, q]);
+
   if (!hojas.length) return <Alert severity="info">No hay hojas de coaching todavía.</Alert>;
   return (
     <Stack spacing={1}>
-      {hojas.map((h) => (
+      {filtrable && (
+        <TextField size="small" fullWidth placeholder="Buscar representante por nombre…"
+                   value={q} onChange={(e) => setQ(e.target.value)}
+                   InputProps={{ startAdornment: <Search fontSize="small" sx={{ color: 'text.disabled', mr: 1 }} /> }} />
+      )}
+      {!visibles.length && <Alert severity="info">Ningún representante coincide con «{q}».</Alert>}
+      {visibles.map((h) => (
         <Card key={h.id} variant="outlined"><CardContent sx={{ py: 1.25, '&:last-child': { pb: 1.25 } }}>
           <Stack direction="row" alignItems="center" spacing={1.5} flexWrap="wrap">
             <Lock fontSize="small" sx={{ color: '#00A86B' }} />
@@ -620,18 +637,11 @@ function ListaHojas({ hojas, onVer, onCorregir }:
               </Typography>
               <Typography variant="caption" color="text.secondary">Promedio {h.evaluacion_promedio.toFixed(2)}</Typography>
             </Box>
-            {h.es_correccion && <Chip size="small" color="warning" label="Corrección" />}
-            {h.tiene_correccion && <Chip size="small" variant="outlined" label="Enmendada" />}
             <Chip size="small" label={h.rm_acuerdo === 'de_acuerdo' ? 'De acuerdo' : 'No de acuerdo'}
                   color={h.rm_acuerdo === 'de_acuerdo' ? 'success' : 'error'} variant="outlined" />
-            <Tooltip title="Ver hoja">
+            <Tooltip title="Ver hoja (solo lectura)">
               <IconButton size="small" color="primary" onClick={() => onVer(h.id)}><Visibility fontSize="small" /></IconButton>
             </Tooltip>
-            {onCorregir && !h.tiene_correccion && (
-              <Tooltip title="Crear hoja de corrección">
-                <IconButton size="small" color="warning" onClick={() => onCorregir(h.id)}><Edit fontSize="small" /></IconButton>
-              </Tooltip>
-            )}
           </Stack>
         </CardContent></Card>
       ))}

@@ -43,7 +43,7 @@ export const cmVms = () => api.get<VMItem[]>('/coaching-more/vms').then(r => r.d
 export const cmAcompanadasHoy = (rmId: number) =>
   api.get<AcompanadasHoy>('/coaching-more/acompanadas-hoy', { params: { rm_id: rmId } }).then(r => r.data);
 export const cmCrear = (p: HojaPayload) => api.post('/coaching-more', p).then(r => r.data);
-export const cmCorregir = (id: number, p: HojaPayload) => api.post(`/coaching-more/${id}/correccion`, p).then(r => r.data);
+// La corrección se retiró (jul-2026): una hoja guardada es inmutable. El endpoint responde 410.
 export const cmListar = (params: { rm_id?: number; ciclo_id?: number } = {}) =>
   api.get<HojaResumen[]>('/coaching-more', { params }).then(r => r.data);
 export const cmDetalle = (id: number) => api.get<HojaDetalle>(`/coaching-more/${id}`).then(r => r.data);

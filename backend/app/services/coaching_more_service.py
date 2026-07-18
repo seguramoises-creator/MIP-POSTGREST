@@ -126,9 +126,14 @@ def _ciclo_pais_de_rm(db: Session, rm: RepresentanteMedico, fecha: date):
 
 
 def crear_hoja(db: Session, gd_user: Usuario, datos) -> CoachingSesion:
-    """Crea una hoja de coaching tras validar. Lanza ValueError con el detalle si falta algo.
-    La hoja queda INMUTABLE (trigger de BD). Si `datos.corrige_a_id` viene, es una hoja de
-    corrección que enmienda a otra (no la edita)."""
+    """Crea una hoja de coaching NUEVA tras validar. Lanza ValueError con el detalle si falta
+    algo. La hoja queda INMUTABLE (trigger de BD).
+
+    La corrección/enmienda se retiró (jul-2026): una hoja guardada no se modifica bajo ningún
+    concepto. Este guard rechaza cualquier `corrige_a_id` que llegue por una vía vieja — la
+    barrera real, no solo el endpoint."""
+    if getattr(datos, "corrige_a_id", None):
+        raise ValueError("Las hojas de coaching son inmutables: no se pueden corregir.")
     rm = (db.query(RepresentanteMedico).filter(RepresentanteMedico.id == datos.rm_id).first()
           if datos.rm_id else None)
     # La fecha la fija el SERVIDOR (nunca el cliente) y en hora LOCAL del país del RM:
