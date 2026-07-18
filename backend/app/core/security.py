@@ -30,11 +30,15 @@ def create_access_token(
     expires_delta: Optional[timedelta] = None,
     extra_claims: Optional[dict] = None,
 ) -> str:
-    expire = datetime.now(timezone.utc) + (
+    now = datetime.now(timezone.utc)
+    expire = now + (
         expires_delta or timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     # jti: identificador único del token (permite revocación precisa por token)
-    payload = {"sub": str(subject), "exp": expire, "type": "access", "jti": uuid.uuid4().hex}
+    # iat: instante de emisión — se compara contra Usuario.roles_actualizado_en para revocar
+    #      permisos tras un cambio de rol (ver deps.get_current_user).
+    payload = {"sub": str(subject), "exp": expire, "iat": int(now.timestamp()),
+               "type": "access", "jti": uuid.uuid4().hex}
     if extra_claims:
         payload.update(extra_claims)
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)

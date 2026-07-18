@@ -2,6 +2,7 @@
 SCGCPR — Dependencies de FastAPI
 Inyección de usuario autenticado y control RBAC.
 """
+from datetime import timezone
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
@@ -36,6 +37,17 @@ def get_current_user(
     user = db.query(Usuario).filter(Usuario.id == int(user_id), Usuario.activo == True).first()
     if not user:
         raise credentials_exc
+
+    # RBAC Fase 1 — revocación por cambio de rol: un access token emitido ANTES de
+    # roles_actualizado_en ya no es válido (sus permisos podrían haber cambiado).
+    ra = getattr(user, "roles_actualizado_en", None)
+    if ra is not None:
+        if ra.tzinfo is None:
+            ra = ra.replace(tzinfo=timezone.utc)
+        iat = payload.get("iat")
+        if iat is None or iat < int(ra.timestamp()):
+            raise credentials_exc
+
     return user
 
 

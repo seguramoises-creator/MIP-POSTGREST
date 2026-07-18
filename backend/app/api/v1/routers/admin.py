@@ -3,13 +3,14 @@ SCGCPR — Router: Administración
 Gestión de catálogos: Países, Líneas, Gerentes, RMs,
 Indicadores, Tablas de puntuación, Ciclos, Reglas de Elegibilidad, Usuarios.
 """
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Annotated, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.core.deps import get_db, get_current_active_user, require_roles
+from app.core.authz.audit import registrar_evento_seguridad
 from app.models.usuario import Usuario, Rol
 from app.models.dimensiones import (
     Pais, Linea, Gerente, RepresentanteMedico, Producto,
@@ -863,10 +864,11 @@ def create_usuario(data: UsuarioCreate, db: Session = Depends(get_db), _=AdminOn
     return obj
 
 @router.put("/usuarios/{id}", response_model=UsuarioResponse, summary="Actualizar usuario")
-def update_usuario(id: int, data: UsuarioUpdate, db: Session = Depends(get_db), _=AdminOnly):
+def update_usuario(id: int, data: UsuarioUpdate, db: Session = Depends(get_db), current_user=AdminOnly):
     obj = db.query(Usuario).filter(Usuario.id == id).first()
     if not obj: raise HTTPException(404, "Usuario no encontrado")
     cambios = data.model_dump(exclude_none=True)
+    rol_anterior = obj.rol
     # El país no puede perderse al editar: se valida el resultado FINAL (lo que llega o,
     # si no llega, lo que ya tiene), contra el rol final.
     _validar_pais_usuario(db,
@@ -881,7 +883,17 @@ def update_usuario(id: int, data: UsuarioUpdate, db: Session = Depends(get_db), 
     if cambios.get("activo") is True:
         obj.intentos_fallidos = 0
         obj.bloqueado_hasta = None
+    # RBAC Fase 1 — si cambió el rol: marcar roles_actualizado_en (revoca los access tokens
+    # emitidos antes; ver deps.get_current_user) y auditar la asignación de rol.
+    rol_cambio = "rol" in cambios and obj.rol != rol_anterior
+    if rol_cambio:
+        obj.roles_actualizado_en = datetime.now(timezone.utc)
     db.commit(); db.refresh(obj)
+    if rol_cambio:
+        _ra = getattr(rol_anterior, "value", str(rol_anterior))
+        _rn = getattr(obj.rol, "value", str(obj.rol))
+        registrar_evento_seguridad(db, current_user, "ROL_ASIGNADO", objetivo=f"user:{obj.id}",
+                                   detalle=f"rol_anterior={_ra} rol_nuevo={_rn}")
     return obj
 
 @router.delete("/usuarios/{id}", response_model=Msg, summary="Desactivar usuario")
