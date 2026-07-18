@@ -18,6 +18,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.core.deps import get_db, get_current_active_user, require_roles
+from app.core.authz.deps import require
+from app.core.authz.constantes import Accion, Recurso
 from app.core.pagination import PaginationParams, paginate_list
 from app.models.usuario import Rol
 from app.models.hechos import ResultadoIndicador
@@ -26,6 +28,10 @@ from app.schemas.schemas import KPIProductividadResponse
 
 router = APIRouter(prefix="/productividad", tags=["Productividad"])
 AnyAuth = Depends(get_current_active_user)
+# RBAC Fase 2: guard por matriz. productividad.comercial DENIEGA a GERENTE_MEDICO (firewall
+# Médico-Comercial) y a cualquiera sin lectura. El detalle por rol (RM=propio, GD=agregado de
+# empresa con nombres solo de su equipo vía scope_gd — regla del cliente) se mantiene en el cuerpo.
+ReadProductividad = Depends(require(Accion.READ, Recurso.PRODUCTIVIDAD_COMERCIAL))
 
 
 @router.get("", response_model=dict, summary="KPIs generales de productividad (paginado)")
@@ -35,7 +41,7 @@ def get_productividad(
     linea_id: Optional[int] = Query(None),
     params: PaginationParams = Depends(),
     db: Session = Depends(get_db),
-    current_user=AnyAuth,
+    current_user=ReadProductividad,
 ):
     """
     Retorna KPIs de productividad agregados.
@@ -119,7 +125,7 @@ def get_productividad_rm(
     rm_id: int,
     ciclo_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user=AnyAuth,
+    current_user=ReadProductividad,
 ):
     """KPIs completos de productividad para un RM: F1, F2, Farmacias, Promedio Diario."""
     # RMs solo pueden ver su propia data
@@ -253,10 +259,7 @@ def get_productividad_pais(
     pais_codigo: str,
     ciclo_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(
-        Rol.ADMIN, Rol.PRESIDENCIA, Rol.DIR_COMERCIAL,
-        Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO, Rol.GERENTE_MARCA
-    )),
+    current_user=ReadProductividad,
 ):
     """KPIs de productividad consolidados por país — todos los RMs."""
     q = db.query(
@@ -297,9 +300,7 @@ def get_resumen_productividad(
     pais_codigo: Optional[str] = None,
     ciclo_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(
-        Rol.ADMIN, Rol.PRESIDENCIA, Rol.DIR_COMERCIAL, Rol.GERENTE_PRODUCTIVIDAD
-    )),
+    current_user=ReadProductividad,
 ):
     """Resumen estadístico de productividad para dashboards ejecutivos."""
     q = db.query(
