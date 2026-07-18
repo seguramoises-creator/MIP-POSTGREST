@@ -1022,8 +1022,10 @@ migración `0018`; UI en `CostoRoiVisita.tsx`. Tests `tests/test_authz_wiring.py
 - ~~Módulos fuera de la matriz~~ **RESUELTO (jul-2026, extender)**: +4 recursos (matriz 28→**32**):
   `reconocimiento`, `lsii.evaluar`, `lsii.admin`, `etl.cargar` (wireados en sus routers + nav/rutas). Solo
   `/admin` (megapantalla de catálogos = administración de sistema) queda por rol (ADMIN+GERPROD).
-- **Export scope**: `exportacion` ya filtra por `rm_ids` (GD exporta su equipo). Otros módulos con export
-  aún no tienen endpoint de export dedicado.
+- ~~Export scope~~ **RESUELTO**: `exportacion` filtra por `rm_ids` (GD exporta su equipo), capado por lectura + auditado.
+- ~~Notificación Costo/ROI~~ **RESUELTO (jul-2026)**: al guardar Finanzas un BORRADOR se avisa por correo al
+  Director (`notification_service.notificar_costo_pendiente_aprobacion`, best-effort).
+- **Los 5 puntos de deuda de Fase 2 quedaron RESUELTOS (jul-2026).**
 - Del spec §9 (Fase 1): `team` para roles no-GD (`GERENTE_PRODUCTIVIDAD` en coaching/examen — alcance
   literal, sin resolución de equipo); módulos inexistentes (Farmacias, Inteligencia/Encuestas); separación
   de `medical_contact.read` de `medico.panel`.

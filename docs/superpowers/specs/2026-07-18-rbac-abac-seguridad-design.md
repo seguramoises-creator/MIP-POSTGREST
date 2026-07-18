@@ -296,10 +296,20 @@ frontend (`usePuede`/`ProtectedRoute`/`Sidebar`). Pendientes que quedaron **flag
    automáticamente. **`/admin`** (megapantalla de catálogos país/línea/ciclos/reglas) se dejó como
    **administración de sistema** por rol (ADMIN+GERPROD) — es un superconjunto que no corresponde a una de
    las "funcionalidades" de negocio (análogo a `config.usuarios`, ADMIN-only).
-4. **Export por scope:** `exportacion` ya filtra por `rm_ids` (GD exporta su equipo, no toda la empresa).
-   Si a futuro se agregan endpoints de export por módulo, aplicar el mismo `alcance_export_modulo` + filtro.
-5. **UI Costo/ROI:** implementada (badge estado + Aprobar/Reabrir). El workflow no incluye notificación al
-   Director cuando Finanzas deja algo en BORRADOR (posible mejora).
+4. **Export por scope** — **RESUELTO**: `exportacion` filtra por `rm_ids` (GD exporta solo su equipo, nunca
+   toda la empresa) vía `alcance_export_modulo` + `scope.rm_ids_visibles`, capado por la lectura del módulo,
+   y auditado. Único pendiente teórico: si a futuro se agregan endpoints de export por otro módulo, aplicar
+   el mismo patrón.
+5. **Notificación Costo/ROI** — **RESUELTO (jul-2026)**: al guardar Finanzas un BORRADOR (no ADMIN), se
+   avisa por correo a los Directores (rol PRESIDENCIA) que hay una config pendiente de aprobación
+   (`notification_service.notificar_costo_pendiente_aprobacion`, best-effort en BackgroundTask, no-op si el
+   correo está deshabilitado). El estado (badge Borrador/Aprobado) ya era visible en la UI.
+
+---
+
+**TODOS LOS 5 PUNTOS DE DEUDA DE FASE 2 RESUELTOS (jul-2026).** Quedan solo los del spec §9 (Fase 1):
+`team` para roles no-GD, módulos inexistentes (Farmacias, Inteligencia/Encuestas), separación de
+`medical_contact.read` — que dependen de features que aún no existen en la app.
 
 ## 10. Compatibilidad
 

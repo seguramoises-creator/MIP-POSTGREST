@@ -140,6 +140,35 @@ def _pie_pagina() -> str:
     )
 
 
+def notificar_costo_pendiente_aprobacion(db: Session, ciclo_id: Optional[int],
+                                         linea_id: Optional[int], actor_nombre: str = "") -> int:
+    """RBAC Fase 2 (deuda #5): avisa a los Directores (rol PRESIDENCIA) que hay una configuración de
+    Costo/ROI en BORRADOR pendiente de su aprobación. Best-effort: no-op si el correo está
+    deshabilitado o no hay Directores con email. Devuelve cuántos avisos se enviaron."""
+    if not _habilitado():
+        return 0
+    from app.models.usuario import Usuario, Rol
+    directores = (db.query(Usuario)
+                  .filter(Usuario.rol == Rol.PRESIDENCIA, Usuario.activo == True, Usuario.email.isnot(None))
+                  .all())
+    if not directores:
+        return 0
+    ciclo = _nombre_ciclo(db, ciclo_id)
+    linea_txt = f"línea #{linea_id}" if linea_id else "todas las líneas"
+    asunto = "Costo/ROI pendiente de aprobación"
+    cuerpo = (
+        f"<h3>Costo/ROI pendiente de tu aprobación</h3>"
+        f"<p>Finanzas{f' ({actor_nombre})' if actor_nombre else ''} guardó una configuración de "
+        f"<b>Costo por Visita y ROI</b> ({ciclo}, {linea_txt}) que quedó en <b>BORRADOR</b> y espera "
+        f"tu revisión y aprobación en la pantalla de Costo &amp; ROI.</p>" + _pie_pagina()
+    )
+    enviados = 0
+    for d in directores:
+        if _enviar(d.email, asunto, cuerpo):
+            enviados += 1
+    return enviados
+
+
 def notificar_ranking_generado(
     db: Session,
     pais_codigo: str,

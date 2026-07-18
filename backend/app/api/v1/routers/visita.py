@@ -4,7 +4,7 @@ Prefijo: /visita.  Reutiliza Config.DIM_RM (VM), Config.DIM_Especialidad.
 RBAC: el VM (REPRESENTANTE_MEDICO) gestiona su propio panel (auto-filtro por rm_id);
 ADMIN/GERENTE ven/gestionan el de cualquier VM.
 """
-from fastapi import APIRouter, Body, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles, get_current_active_user
@@ -706,10 +706,10 @@ def costo_mi_linea(ciclo_id: int | None = None, db: Session = Depends(get_db),
 
 
 @router.post("/costo/estructura", response_model=dict, status_code=status.HTTP_201_CREATED)
-def guardar_costo_estructura(datos: CostoEstructuraGuardar, db: Session = Depends(get_db),
-                             current_user=ConfigurarCosto):
+def guardar_costo_estructura(datos: CostoEstructuraGuardar, background_tasks: BackgroundTasks,
+                             db: Session = Depends(get_db), current_user=ConfigurarCosto):
     """Guarda la estructura (Finanzas configura → estado BORRADOR). Una config ya APROBADA solo
-    la edita ADMIN (debe reabrirse primero)."""
+    la edita ADMIN (debe reabrirse primero). Si guarda Finanzas (no ADMIN), avisa al Director."""
     from app.services import visita_costo_service
     from app.core.authz.audit import registrar_evento_seguridad
     es_admin = _rol(current_user) == "ADMIN"
@@ -722,6 +722,20 @@ def guardar_costo_estructura(datos: CostoEstructuraGuardar, db: Session = Depend
     registrar_evento_seguridad(db, current_user, "CONFIG_COSTO_ROI",
                                recurso=_Rec.COSTOROI_CONFIGURAR, accion="configure",
                                objetivo=f"ciclo={datos.ciclo_id} linea={datos.linea_id}", resultado="OK")
+    # Deuda #5: si guarda Finanzas (no un ADMIN que puede autoaprobar), avisar al Director que hay
+    # un BORRADOR pendiente. Best-effort en background (crea su propia sesión).
+    if not es_admin:
+        cid, lid = datos.ciclo_id, datos.linea_id
+        def _avisar():
+            from app.db.database import SessionLocal
+            from app.services import notification_service
+            _db = SessionLocal()
+            try:
+                notification_service.notificar_costo_pendiente_aprobacion(
+                    _db, cid, lid, getattr(current_user, "nombre_completo", "") or "")
+            finally:
+                _db.close()
+        background_tasks.add_task(_avisar)
     return r
 
 
