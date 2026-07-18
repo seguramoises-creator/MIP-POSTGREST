@@ -9,6 +9,8 @@ from sqlalchemy import func
 from decimal import Decimal
 
 from app.core.deps import get_db, get_current_active_user, require_roles
+from app.core.authz.deps import require
+from app.core.authz.constantes import Accion, Recurso
 from app.models.usuario import Rol
 from app.models.hechos import Coaching
 from app.models.dimensiones import RepresentanteMedico, Gerente
@@ -16,6 +18,10 @@ from app.schemas.schemas import CoachingCreate, CoachingResponse
 
 router = APIRouter(prefix="/coaching", tags=["Coaching"])
 AnyAuth = Depends(get_current_active_user)
+# RBAC Fase 2: "Indicadores Desempeño" (coaching legacy) → coaching.kpi. Lectura por matriz
+# (DENIEGA a RM/GERENTE_MARCA/MARKETING/FINANZAS). Alta/edición de FACT_Coaching = ops, se
+# conservan en require_roles.
+ReadKpi = Depends(require(Accion.READ, Recurso.COACHING_KPI))
 
 
 def _calcular_resultado_coaching(programado: int, ejecutado: int,
@@ -32,7 +38,7 @@ def list_coaching(
     gerente_id: Optional[int] = None,
     ciclo_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user=AnyAuth,
+    current_user=ReadKpi,
 ):
     q = db.query(
         Coaching,
@@ -127,9 +133,7 @@ def get_resumen_coaching(
     pais_codigo: Optional[str] = None,
     ciclo_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(
-        Rol.ADMIN, Rol.PRESIDENCIA, Rol.DIR_COMERCIAL, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO
-    )),
+    current_user=ReadKpi,  # RBAC Fase 2: coaching.kpi
 ):
     q = db.query(
         func.count(Coaching.id).label("total"),

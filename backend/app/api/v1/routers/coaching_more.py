@@ -13,6 +13,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_active_user, require_roles
+from app.core.authz.deps import require
+from app.core.authz.constantes import Accion, Recurso
 from app.models.usuario import Usuario, Rol
 from app.models.dimensiones import RepresentanteMedico
 from app.models.coaching_more_models import CoachingItemCatalogo
@@ -24,8 +26,11 @@ router = APIRouter(prefix="/coaching-more", tags=["Coaching (MORE)"])
 RequireAuth = Depends(get_current_active_user)
 # Crear/llenar: GD (spec). Se amplía a ADMIN/GERENTE_PRODUCTIVIDAD para supervisión/carga.
 RequireCrear = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO))
-RequireKpi = Depends(require_roles(
-    Rol.ADMIN, Rol.PRESIDENCIA, Rol.DIR_COMERCIAL, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO))
+# RBAC Fase 2: lectura de hojas por matriz (coaching.hoja) — DENIEGA a GERENTE_MARCA/MARKETING/
+# FINANZAS. El scope RM=propio / GD=equipo lo resuelve el servicio (listar_hojas/obtener_hoja).
+# La CREACIÓN se conserva en RequireCrear (decisión previa del cliente, no se regresa aquí).
+ReadHoja = Depends(require(Accion.READ, Recurso.COACHING_HOJA))
+ReadKpi = Depends(require(Accion.READ, Recurso.COACHING_KPI))
 
 
 class ItemIn(BaseModel):
@@ -56,7 +61,7 @@ class HojaIn(BaseModel):
 
 
 @router.get("/catalogo", summary="Ítems MORE (para llenar la hoja)")
-def catalogo(db: Session = Depends(get_db), _u: Usuario = RequireAuth):
+def catalogo(db: Session = Depends(get_db), _u: Usuario = ReadHoja):
     filas = (db.query(CoachingItemCatalogo)
              .filter(CoachingItemCatalogo.activo == True)  # noqa: E712
              .order_by(CoachingItemCatalogo.orden_seccion, CoachingItemCatalogo.orden_item).all())
@@ -136,13 +141,13 @@ def corregir(sesion_id: int, datos: HojaIn, db: Session = Depends(get_db),
 
 @router.get("", summary="Listar hojas (según rol)")
 def listar(rm_id: Optional[int] = None, ciclo_id: Optional[int] = None,
-           db: Session = Depends(get_db), current_user: Usuario = RequireAuth):
+           db: Session = Depends(get_db), current_user: Usuario = ReadHoja):
     return svc.listar_hojas(db, current_user, rm_id=rm_id, ciclo_id=ciclo_id)
 
 
 @router.get("/kpi", summary="KPI Coaching (por ciclo, equipo y GD)")
 def kpi(ciclo_id: Optional[int] = None, pais_codigo: Optional[str] = None,
-        db: Session = Depends(get_db), _u: Usuario = RequireKpi):
+        db: Session = Depends(get_db), _u: Usuario = ReadKpi):
     return svc.kpi_coaching(db, ciclo_id, pais_codigo)
 
 
@@ -172,7 +177,7 @@ def consolidar(
 
 
 @router.get("/{sesion_id}", summary="Detalle de una hoja")
-def detalle(sesion_id: int, db: Session = Depends(get_db), current_user: Usuario = RequireAuth):
+def detalle(sesion_id: int, db: Session = Depends(get_db), current_user: Usuario = ReadHoja):
     try:
         h = svc.obtener_hoja(db, sesion_id, current_user)
     except PermissionError as e:

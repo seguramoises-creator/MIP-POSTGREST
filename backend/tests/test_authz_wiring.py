@@ -49,3 +49,20 @@ def test_cobertura_predictiva_finanzas_403():
     # RM sí pasa el guard (el scope propio lo resuelve el cuerpo)
     assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).get(
         "/api/v1/cobertura-predictiva/vivo/ciclos").status_code != 403
+
+
+def test_coaching_more_hoja_lectura():
+    from app.api.v1.routers.coaching_more import router
+    # coaching.hoja: GERENTE_MARCA/FINANZAS sin lectura → 403 en listar
+    assert _client(router, U(Rol.GERENTE_MARCA)).get("/api/v1/coaching-more").status_code == 403
+    assert _client(router, U(Rol.FINANZAS)).get("/api/v1/coaching-more").status_code == 403
+    # RM sí (lee sus propias hojas; el servicio filtra)
+    assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).get("/api/v1/coaching-more").status_code != 403
+
+
+def test_coaching_kpi_lectura():
+    from app.api.v1.routers.coaching import router
+    # coaching.kpi: RM sin acceso (matriz) → 403 en la lista legacy
+    assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).get("/api/v1/coaching").status_code == 403
+    # GERENTE_DISTRITO sí (read team)
+    assert _client(router, U(Rol.GERENTE_DISTRITO, gerente_id=1)).get("/api/v1/coaching").status_code != 403
