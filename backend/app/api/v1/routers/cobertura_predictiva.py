@@ -47,6 +47,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, get_current_active_user, require_roles
+from app.core.authz.deps import require
+from app.core.authz.constantes import Accion, Recurso
 from app.models.usuario import Rol, Usuario
 from app.models.dimensiones import (
     RepresentanteMedico, Ciclo, TargetMedico, Feriado, ParametroCobertura, Gerente,
@@ -62,6 +64,9 @@ router = APIRouter(prefix="/cobertura-predictiva", tags=["Cobertura Predictiva (
 
 AnyAuth = Depends(get_current_active_user)
 AdminOGerProd = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
+# RBAC Fase 2: cobertura.predictiva DENIEGA a FINANZAS (matriz). RM=propio/GD=equipo se resuelven
+# en el cuerpo (_aplicar_alcance_equipo/_verificar_acceso_rm). Config/carga siguen en AdminOGerProd.
+ReadCobertura = Depends(require(Accion.READ, Recurso.COBERTURA_PREDICTIVA))
 
 EXTENSIONES_PERMITIDAS = {".xlsx", ".xls"}
 
@@ -129,7 +134,7 @@ def resumen_cobertura(
     linea_id: Optional[int] = None,
     fecha_corte: Optional[date] = Query(None, description="Por defecto: hoy"),
     db: Session = Depends(get_db),
-    current_user: Usuario = AnyAuth,
+    current_user: Usuario = ReadCobertura,
 ):
     """
     Sustituye a GET /dashboard/comercial: en vez de ventas/EVO IR/cuota (lag
@@ -154,7 +159,7 @@ def detalle_cobertura_rm(
     ciclo_id: int = Query(..., description="Ciclo a evaluar"),
     fecha_corte: Optional[date] = Query(None, description="Por defecto: hoy"),
     db: Session = Depends(get_db),
-    current_user: Usuario = AnyAuth,
+    current_user: Usuario = ReadCobertura,
 ):
     _verificar_acceso_rm(db, current_user, rm_id)
     try:
@@ -171,7 +176,7 @@ def detalle_cobertura_rm(
 def vivo_ciclos(
     pais_codigo: Optional[str] = Query(None, description="Código de país, ej. DO"),
     db: Session = Depends(get_db),
-    _current_user: Usuario = AnyAuth,
+    _current_user: Usuario = ReadCobertura,
 ):
     return ciclos_vivo(db, pais_codigo=pais_codigo)
 
@@ -184,7 +189,7 @@ def vivo_dashboard(
     linea: Optional[str] = Query(None, description="Filtrar por nombre de línea"),
     gd: Optional[str] = Query(None, description="Filtrar por nombre de Gerente de Distrito"),
     db: Session = Depends(get_db),
-    current_user: Usuario = AnyAuth,
+    current_user: Usuario = ReadCobertura,
 ):
     """Cobertura y ritmo calculados en vivo: programado = médicos planeados en
     Planeación del Ciclo; realizado = visitas ejecutadas; días hábiles del ciclo
@@ -202,7 +207,7 @@ def vivo_categorias(
     linea: Optional[str] = Query(None, description="Filtrar por nombre de línea"),
     rep: Optional[str] = Query(None, description="Filtrar por código de representante"),
     db: Session = Depends(get_db),
-    current_user: Usuario = AnyAuth,
+    current_user: Usuario = ReadCobertura,
 ):
     gd = _scope_gd_nombre(db, current_user, gd)  # el GD se limita a su equipo
     return categorias_vivo(db, ciclo_codigo=ciclo_codigo, pais_codigo=pais_codigo,
@@ -705,7 +710,7 @@ from app.services.cobertura_predictiva_service import (
 @router.get("/cat/ciclos", summary="Ciclos disponibles en cat.DimCiclo")
 def listar_ciclos_cat(
     pais_codigo: Optional[str] = Query(None, description="Filtrar por código de país, ej. DO"),
-    _current_user: Usuario = AnyAuth,
+    _current_user: Usuario = ReadCobertura,
     db: Session = Depends(get_db),
 ):
     """Lista los ciclos promocionales cargados en cat.DimCiclo para poblar selectores."""
@@ -721,7 +726,7 @@ def dashboard_4dx(
     linea: Optional[str] = Query(None, description="Filtrar por línea"),
     gd: Optional[str] = Query(None, description="Filtrar por GD"),
     representante: Optional[str] = Query(None, description="Filtrar por nombre o código de VM"),
-    _current_user: Usuario = AnyAuth,
+    _current_user: Usuario = ReadCobertura,
     db: Session = Depends(get_db),
 ):
     """
@@ -766,7 +771,7 @@ def cobertura_por_categoria(
     pais_codigo: str   = Query(..., description="Código de país, ej. DO"),
     representante: Optional[str] = Query(None, description="Filtrar por código de VM"),
     gd: Optional[str]  = Query(None, description="Filtrar por nombre de GD (EquipoTexto)"),
-    _current_user: Usuario = AnyAuth,
+    _current_user: Usuario = ReadCobertura,
     db: Session = Depends(get_db),
 ):
     """

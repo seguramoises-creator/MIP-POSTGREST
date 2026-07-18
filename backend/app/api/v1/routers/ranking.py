@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from app.core.deps import get_db, get_current_active_user, require_roles
+from app.core.authz.deps import require
+from app.core.authz.constantes import Accion, Recurso
 from app.core.pagination import PaginationParams
 from app.models.usuario import Rol
 from app.models.hechos import RankingRM
@@ -17,11 +19,14 @@ from app.schemas.schemas import RankingResponse, RankingRequest
 
 router = APIRouter(prefix="/ranking", tags=["Ranking"])
 AnyAuth = Depends(get_current_active_user)
+# RBAC Fase 2: ranking.rkt DENIEGA a GERENTE_MEDICO (firewall). RM=propia fila (fail-closed en
+# el cuerpo); managers ven el ranking con scope_gd. /generar (ops) queda en ADMIN+GERPROD.
+ReadRanking = Depends(require(Accion.READ, Recurso.RANKING_RKT))
 
 
 @router.get("/mi-posicion", response_model=dict, summary="Mi posición en el ranking (sin ver a nadie más)")
 def get_mi_posicion(ciclo_id: Optional[int] = Query(None), db: Session = Depends(get_db),
-                    current_user=AnyAuth):
+                    current_user=ReadRanking):
     """Dónde está el representante y contra cuántos compite — nunca QUIÉN es quién.
 
     Decisión del cliente (jul-2026): el representante ve su posición ("estás 12 de 45"), no el
@@ -118,7 +123,7 @@ def get_ranking(
     top: Optional[int] = None,
     params: PaginationParams = Depends(),
     db: Session = Depends(get_db),
-    current_user=AnyAuth,
+    current_user=ReadRanking,
 ):
     ciclo_efectivo = ciclo_id or _ultimo_ciclo(db, pais_codigo, tipo)
     if not ciclo_efectivo:
@@ -265,9 +270,7 @@ def get_ranking_regional(
     ciclo_id: Optional[int] = None,
     top: int = 10,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(
-        Rol.ADMIN, Rol.PRESIDENCIA, Rol.DIR_COMERCIAL, Rol.GERENTE_PRODUCTIVIDAD
-    )),
+    current_user=ReadRanking,
 ):
     q = (
         db.query(
@@ -307,7 +310,7 @@ def get_ranking_regional(
 def get_ranking_anual(
     pais_codigo: Optional[str] = None,
     db: Session = Depends(get_db),
-    current_user=AnyAuth,
+    current_user=ReadRanking,
 ):
     q = (
         db.query(

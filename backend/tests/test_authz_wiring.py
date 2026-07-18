@@ -34,3 +34,18 @@ def test_productividad_resumen_firewall_medico_403():
     from app.api.v1.routers.productividad import router
     r = _client(router, U(Rol.GERENTE_MEDICO)).get("/api/v1/productividad/resumen")
     assert r.status_code == 403
+
+
+def test_ranking_firewall_medico_403():
+    from app.api.v1.routers.ranking import router
+    assert _client(router, U(Rol.GERENTE_MEDICO)).get("/api/v1/ranking").status_code == 403
+    assert _client(router, U(Rol.GERENTE_MEDICO)).get("/api/v1/ranking/mi-posicion").status_code == 403
+
+
+def test_cobertura_predictiva_finanzas_403():
+    from app.api.v1.routers.cobertura_predictiva import router
+    # cobertura.predictiva: FINANZAS sin acceso (matriz)
+    assert _client(router, U(Rol.FINANZAS)).get("/api/v1/cobertura-predictiva/vivo/dashboard").status_code == 403
+    # RM sí pasa el guard (el scope propio lo resuelve el cuerpo)
+    assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).get(
+        "/api/v1/cobertura-predictiva/vivo/ciclos").status_code != 403
