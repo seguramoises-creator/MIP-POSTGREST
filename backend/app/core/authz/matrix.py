@@ -77,14 +77,18 @@ MATRIZ: dict[str, dict] = {
 }
 
 # ── Roles legacy fuera de la matriz canónica de 10 columnas (Fase 2) ──────────────────────────
-# Se derivan por REGLA de las columnas canónicas para no romper a los usuarios existentes al
-# activar la denegación por defecto (decisión jul-2026 — ver spec §2):
-#   - CAPACITACION  := misma fila que GERENTE_PRODUCTIVIDAD (en este despliegue CAPACITACION ES
-#                      el "Gerente de Capacitación y Productividad": conserva Exámenes + lectura).
+# Decisión jul-2026 (spec §2 + ajuste de deuda):
+#   - CAPACITACION  := FILA PROPIA mínima (coordinador de exámenes): configura/publica/consolida
+#                      exámenes y ve sus resultados; NADA gerencial. NO hereda de
+#                      GERENTE_PRODUCTIVIDAD (evita que gane LSII/ETL/reconocimiento/ranking, etc.).
 #   - DIR_COMERCIAL := misma fila que ANALISTA_DATOS (lectura total + export, sin escritura).
 #   - CONSULTA      := igual que ANALISTA_DATOS pero SIN capacidad de export (solo lectura total).
+_CAPACITACION_ROW = {
+    Recurso.EXAMEN_CONFIGURAR: CFG,   # su función central (Exámenes)
+    Recurso.EXAMEN_RENDIR: R_ALL,     # ve los resultados rendidos para consolidar
+}
 for _recurso, _fila_dict in MATRIZ.items():
-    _fila_dict[Rol.CAPACITACION] = _fila_dict[Rol.GERENTE_PRODUCTIVIDAD]
+    _fila_dict[Rol.CAPACITACION] = _CAPACITACION_ROW.get(_recurso)  # None por defecto (denegado)
     _fila_dict[Rol.DIR_COMERCIAL] = _fila_dict[Rol.ANALISTA_DATOS]
     _fila_dict[Rol.CONSULTA] = (None if _recurso == Recurso.EXPORTACION
                                 else _fila_dict[Rol.ANALISTA_DATOS])

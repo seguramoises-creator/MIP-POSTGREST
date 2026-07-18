@@ -268,8 +268,10 @@ Costo/ROI; **flip** de la matriz. Se planifica aparte.
    separar luego `medical_contact.read` de la categorización. No se cambia la matriz hoy; no duplicar el
    dato sensible en logs/tokens/URLs/exports temporales.
 4. **`DIR_COMERCIAL`, `CONSULTA`, `CAPACITACION`:** fuera de la matriz del prompt en Fase 1. **Resuelto en
-   Fase 2** — se derivan por regla en `matrix.py` para no romper usuarios existentes: `CAPACITACION`=fila de
-   `GERENTE_PRODUCTIVIDAD`, `DIR_COMERCIAL`=fila de `ANALISTA_DATOS`, `CONSULTA`=igual sin export.
+   Fase 2**: `DIR_COMERCIAL`=fila de `ANALISTA_DATOS` y `CONSULTA`=igual sin export (derivados en `matrix.py`).
+   `CAPACITACION` = **fila PROPIA mínima** (`examen.configurar` CFG + `examen.rendir` read all; ajuste
+   jul-2026 — antes derivaba de `GERENTE_PRODUCTIVIDAD` pero eso le daba LSII/ETL/reconocimiento/ranking, no
+   deseado para un coordinador de exámenes). Su acceso al módulo Exámenes no cambia (`RequireCapacitacion`).
 
 ---
 

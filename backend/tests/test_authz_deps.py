@@ -42,7 +42,7 @@ def test_autorizar_devuelve_alcance():
 
 
 def test_capacitacion_conserva_examenes():
-    # CAPACITACION heredó la fila de GERENTE_PRODUCTIVIDAD → configura exámenes
+    # CAPACITACION (fila propia) conserva la configuración de exámenes
     dep = require(Accion.CONFIGURE, Recurso.EXAMEN_CONFIGURAR)
     assert _client(U(Rol.CAPACITACION), dep).get("/probe").status_code == 200
 

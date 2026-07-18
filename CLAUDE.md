@@ -981,8 +981,10 @@ independiente** que falla si `matrix.py` y el spec divergen.
 **Roles** (enum `Rol`, +4 nuevos jul-2026): `GERENTE_MARKETING`, `GERENTE_MEDICO`, `ANALISTA_DATOS`,
 `FINANZAS`. Mapeo canónico: `GERENTE_MARCA`=Gerente de Producto, `GERENTE_PRODUCTIVIDAD`=Capacitación y
 Productividad, `PRESIDENCIA`=Director General, `ADMIN`=Superadmin. **La matriz cubre los 13 roles del enum**:
-los 3 legacy se derivan por regla en `matrix.py` (Fase 2, para no romper usuarios existentes):
-`CAPACITACION`=fila de `GERENTE_PRODUCTIVIDAD`, `DIR_COMERCIAL`=fila de `ANALISTA_DATOS`, `CONSULTA`=igual sin export.
+`DIR_COMERCIAL`=fila de `ANALISTA_DATOS`, `CONSULTA`=igual sin export (derivados en `matrix.py`);
+**`CAPACITACION`=fila PROPIA mínima** (coordinador de exámenes: solo `examen.configurar` CFG + `examen.rendir`
+read all; NO hereda de GERENTE_PRODUCTIVIDAD — ajuste jul-2026 para que no gane LSII/ETL/reconocimiento/ranking).
+Nota: el acceso real de CAPACITACION al módulo Exámenes no cambia (`examenes.py` usa `RequireCapacitacion`, no la matriz).
 
 **Contrato frontend**: `GET /authz/me/permisos` (capacidades efectivas del usuario). El frontend deriva
 navegación/rutas/controles de aquí vía el hook `usePuede()` (store `permisos.store.ts`, suscribe a `permisos`

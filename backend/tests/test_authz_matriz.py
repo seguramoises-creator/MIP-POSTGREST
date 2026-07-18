@@ -82,10 +82,15 @@ def test_matriz_coincide_con_oraculo_del_spec():
 
 
 def test_roles_legacy_derivados_por_regla():
-    """Fase 2: CAPACITACION/DIR_COMERCIAL/CONSULTA se derivan de columnas canónicas."""
+    """Fase 2: DIR_COMERCIAL/CONSULTA derivados; CAPACITACION = fila propia (solo exámenes)."""
     for recurso, fila in MATRIZ.items():
-        # CAPACITACION == GERENTE_PRODUCTIVIDAD
-        assert fila[Rol.CAPACITACION] == fila[Rol.GERENTE_PRODUCTIVIDAD]
+        # CAPACITACION = fila propia estricta: solo examen.configurar (CFG) + examen.rendir (read all).
+        if recurso == Recurso.EXAMEN_CONFIGURAR:
+            assert fila[Rol.CAPACITACION] == (Accion.CONFIGURE, Alcance.ALL)
+        elif recurso == Recurso.EXAMEN_RENDIR:
+            assert fila[Rol.CAPACITACION] == (Accion.READ, Alcance.ALL)
+        else:
+            assert fila[Rol.CAPACITACION] is None
         # DIR_COMERCIAL == ANALISTA_DATOS
         assert fila[Rol.DIR_COMERCIAL] == fila[Rol.ANALISTA_DATOS]
         # CONSULTA == ANALISTA_DATOS salvo en EXPORTACION (sin export)
