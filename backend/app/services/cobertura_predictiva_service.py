@@ -217,18 +217,13 @@ def obtener_dias_habiles_ciclo(db: Session, ciclo: Ciclo) -> int:
 # ─────────────────────────────────────────────────────────────────────────
 
 def _generar_lectura_gd(Y: int, V: Decimal, X: Decimal, P: int, U: int, aceleracion: int) -> str:
-    """
-    Replica la fórmula de texto concatenado de la columna AD del
-    Motor_Formulas (hoja Dashboard GD, columna "Lectura GD" según la hoja
-    Diccionario). Convierte el KPI numérico en una instrucción operativa
-    para el GD/VM.
-    """
+    """Instrucción operativa para el GD/VM. Solo el número requerido diario para lograr la
+    cobertura — sin la fórmula base de cálculo (decisión del cliente, jul-2026). Los parámetros
+    V/X/P/aceleración se conservan en la firma por compatibilidad con los llamadores, pero ya
+    no se muestran."""
     return (
-        f"Su número de contactos diario requerido es {Y}. Este número es la suma del "
-        f"objetivo diario base ({float(V):.1f}) + los contactos dejados de hacer "
-        f"({float(X):.1f}) repartidos en {P} días hábiles restantes. Para cobertura "
-        f"debe ver {U} médicos diarios; aceleración requerida: +{aceleracion} "
-        f"médicos adicionales/día."
+        f"Su número de contactos diario requerido es {Y}. "
+        f"Para lograr la cobertura debe ver {U} médicos diarios."
     )
 
 
