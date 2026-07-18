@@ -38,16 +38,22 @@ function generarPassword(): string {
 
 const ROLES = [
   'ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD',
-  'GERENTE_DISTRITO', 'GERENTE_MARCA', 'REPRESENTANTE_MEDICO', 'CONSULTA',
+  'GERENTE_DISTRITO', 'GERENTE_MARCA', 'CAPACITACION', 'REPRESENTANTE_MEDICO', 'CONSULTA',
 ];
 
-const ROL_COLORS: Record<string, 'error' | 'warning' | 'info' | 'success' | 'default'> = {
+// Etiqueta legible del rol en el selector (el value guardado sigue siendo el código del enum).
+const ROL_LABEL: Record<string, string> = {
+  CAPACITACION: 'CAPACITACION (Coordinador de Capacitación)',
+};
+
+const ROL_COLORS: Record<string, 'error' | 'warning' | 'info' | 'success' | 'default' | 'secondary'> = {
   ADMIN: 'error',
   PRESIDENCIA: 'warning',
   DIR_COMERCIAL: 'warning',
   GERENTE_PRODUCTIVIDAD: 'info',
   GERENTE_DISTRITO: 'info',
   GERENTE_MARCA: 'info',
+  CAPACITACION: 'secondary',
   REPRESENTANTE_MEDICO: 'success',
   CONSULTA: 'default',
 };
@@ -393,7 +399,7 @@ export default function Usuarios() {
                 value={form.rol || ''}
                 onChange={(e) => setForm({ ...form, rol: e.target.value, rm_id: null, gerente_id: null })}
               >
-                {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+                {ROLES.map((r) => <MenuItem key={r} value={r}>{ROL_LABEL[r] ?? r}</MenuItem>)}
               </Select>
             </FormControl>
             {renderRelacion()}
@@ -433,7 +439,7 @@ export default function Usuarios() {
                 value={form.rol || ''}
                 onChange={(e) => setForm({ ...form, rol: e.target.value, rm_id: null, gerente_id: null })}
               >
-                {ROLES.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+                {ROLES.map((r) => <MenuItem key={r} value={r}>{ROL_LABEL[r] ?? r}</MenuItem>)}
               </Select>
             </FormControl>
             {renderRelacion()}
