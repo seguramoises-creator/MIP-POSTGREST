@@ -66,3 +66,16 @@ def test_coaching_kpi_lectura():
     assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).get("/api/v1/coaching").status_code == 403
     # GERENTE_DISTRITO sí (read team)
     assert _client(router, U(Rol.GERENTE_DISTRITO, gerente_id=1)).get("/api/v1/coaching").status_code != 403
+
+
+def test_visita_planeacion_registrar_solo_rm():
+    from app.api.v1.routers.visita import router
+    # planeacion.ciclo: GD NO registra (solo lee equipo) → publicar 403
+    assert _client(router, U(Rol.GERENTE_DISTRITO, gerente_id=1)).post(
+        "/api/v1/visita/planeacion/publicar").status_code == 403
+    # GERENTE_MARCA no lee planeacion → estado 403
+    assert _client(router, U(Rol.GERENTE_MARCA)).get(
+        "/api/v1/visita/planeacion/estado").status_code == 403
+    # RM sí registra (pasa el guard)
+    assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).post(
+        "/api/v1/visita/planeacion/publicar").status_code != 403

@@ -35,6 +35,16 @@ RequireDesbloqueo = Depends(require_roles(Rol.ADMIN))
 RequireFinanciero = Depends(require_roles(
     Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO, Rol.GERENTE_MARCA))
 RequireAnyAuth = Depends(get_current_active_user)
+# RBAC Fase 2: captura por matriz. Registrar visita = RM (register) + ADMIN; planeación = RM
+# register / GD read (equipo). Parrilla consulta = lectura amplia. La CONFIG de parrilla
+# (RequireGerenteProducto) NO se toca: la matriz la asigna al GD pero la app la asigna al
+# Gerente de Producto — conflicto pendiente de decisión, se conserva el comportamiento actual.
+from app.core.authz.deps import require as _require_authz
+from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
+RegistrarVisitaGuard = Depends(_require_authz(_Acc.REGISTER, _Rec.VISITA_REGISTRAR))
+ReadPlaneacion = Depends(_require_authz(_Acc.READ, _Rec.PLANEACION_CICLO))
+RegistrarPlaneacion = Depends(_require_authz(_Acc.REGISTER, _Rec.PLANEACION_CICLO))
+ReadParrilla = Depends(_require_authz(_Acc.READ, _Rec.PARRILLA_CONSULTA))
 
 
 def _rol(u) -> str:
@@ -354,7 +364,7 @@ def agenda_hoy(vm_id: int | None = None, db: Session = Depends(get_db), current_
 
 @router.post("/registrar", response_model=dict, status_code=status.HTTP_201_CREATED)
 def registrar_visita(datos: VisitaRegistrar, vm_id: int | None = None,
-                     db: Session = Depends(get_db), current_user=RequireVisita):
+                     db: Session = Depends(get_db), current_user=RegistrarVisitaGuard):
     """Registra una visita ejecutada. Usa la hora del servidor (ventana 60 min)."""
     from app.services import visita_registro_service
     try:
@@ -366,7 +376,7 @@ def registrar_visita(datos: VisitaRegistrar, vm_id: int | None = None,
 
 @router.post("/no-visita", response_model=dict, status_code=status.HTTP_201_CREATED)
 def registrar_no_visita(datos: VisitaNoVisita, vm_id: int | None = None,
-                        db: Session = Depends(get_db), current_user=RequireVisita):
+                        db: Session = Depends(get_db), current_user=RegistrarVisitaGuard):
     """Registra una no-visita con su causa (no cuenta como visita, no penaliza cobertura)."""
     from app.services import visita_registro_service
     try:
@@ -379,7 +389,7 @@ def registrar_no_visita(datos: VisitaNoVisita, vm_id: int | None = None,
 @router.post("/{visita_id}/foto", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def subir_foto_visita(
     visita_id: int, archivo: UploadFile = File(...),
-    db: Session = Depends(get_db), current_user=RequireVisita,
+    db: Session = Depends(get_db), current_user=RegistrarVisitaGuard,
 ):
     """Sube la foto del centro para una visita (JPEG/PNG, ≤ 15 MB). Se guarda como BLOB.
     El frontend convierte/comprime a JPEG antes de subir (incl. HEIC de iPhone)."""
@@ -410,7 +420,7 @@ def obtener_foto_visita_endpoint(
 # ── Planeación del ciclo (Parte 3) ────────────────────────────────────────────
 @router.get("/planeacion", response_model=list[dict])
 def obtener_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
-                       db: Session = Depends(get_db), current_user=RequireVisita):
+                       db: Session = Depends(get_db), current_user=ReadPlaneacion):
     """Planeación del ciclo del VM (ítems Vista/Revisita por médico). El VM ve la suya."""
     from app.services import visita_planeacion_service
     return visita_planeacion_service.listar_planeacion(db, _vm_registro(current_user, vm_id), ciclo_id)
@@ -418,7 +428,7 @@ def obtener_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
 
 @router.post("/planeacion", response_model=dict, status_code=status.HTTP_201_CREATED)
 def guardar_planeacion(datos: PlaneacionGuardar, vm_id: int | None = None, ciclo_id: int | None = None,
-                       db: Session = Depends(get_db), current_user=RequireVisita):
+                       db: Session = Depends(get_db), current_user=RegistrarPlaneacion):
     """Guarda (reemplaza) la planeación del ciclo. Valida reglas P01/P02/P03.
     Rechaza con 409 si la planeación ya fue publicada (congelada)."""
     from app.services import visita_planeacion_service
@@ -436,7 +446,7 @@ def guardar_planeacion(datos: PlaneacionGuardar, vm_id: int | None = None, ciclo
 
 @router.get("/planeacion/estado", response_model=dict)
 def estado_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
-                      db: Session = Depends(get_db), current_user=RequireVisita):
+                      db: Session = Depends(get_db), current_user=ReadPlaneacion):
     """Si la planeación del ciclo está publicada (congelada) + su historial de eventos."""
     from app.services import visita_planeacion_service
     return visita_planeacion_service.estado_planeacion(db, _vm_registro(current_user, vm_id), ciclo_id)
@@ -444,7 +454,7 @@ def estado_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
 
 @router.post("/planeacion/publicar", response_model=dict)
 def publicar_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
-                        db: Session = Depends(get_db), current_user=RequireVisita):
+                        db: Session = Depends(get_db), current_user=RegistrarPlaneacion):
     """Publica (CONGELA) la planeación del ciclo. Irreversible salvo desbloqueo del ADMIN:
     es el denominador con el que se calcula la cobertura."""
     from app.services import visita_planeacion_service
@@ -474,7 +484,7 @@ def desbloquear_planeacion(vm_id: int, motivo: str = Body(..., embed=True),
 
 @router.get("/planeacion/resumen", response_model=dict)
 def resumen_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
-                       db: Session = Depends(get_db), current_user=RequireVisita):
+                       db: Session = Depends(get_db), current_user=ReadPlaneacion):
     """Resumen de la planeación: cobertura planeada, carga por día y aviso de Cat A sin Revisita."""
     from app.services import visita_planeacion_service
     return visita_planeacion_service.resumen_planeacion(db, _vm_registro(current_user, vm_id), ciclo_id)
@@ -535,7 +545,7 @@ def listar_lineas(db: Session = Depends(get_db), current_user=RequireVisita):
 @router.get("/parrilla", response_model=list[dict])
 def obtener_parrilla(linea_id: int | None = None, ciclo_id: int | None = None,
                      vm_id: int | None = None,
-                     db: Session = Depends(get_db), current_user=RequireVisita):
+                     db: Session = Depends(get_db), current_user=ReadParrilla):
     """Parrilla del ciclo para una línea. Sin `linea_id` se usa la línea del VM
     (el RM usa la suya propia; gestión puede indicar `vm_id`). El VM SOLO ve
     parrillas publicadas; el Gerente de Producto ve también los borradores."""
