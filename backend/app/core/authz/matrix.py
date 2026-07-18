@@ -68,3 +68,17 @@ MATRIZ: dict[str, dict] = {
     Recurso.CONFIG_PARAMETROS:       _fila(_N,      _N,       _N,      _N,      _N,      _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.EXPORTACION:             _fila(_N,      EXP_TEAM, EXP_ALL, EXP_ALL, EXP_ALL, EXP_ALL, EXP_ALL, EXP_ALL, EXP_ALL, ADMIN_CELL),
 }
+
+# ── Roles legacy fuera de la matriz canónica de 10 columnas (Fase 2) ──────────────────────────
+# Se derivan por REGLA de las columnas canónicas para no romper a los usuarios existentes al
+# activar la denegación por defecto (decisión jul-2026 — ver spec §2):
+#   - CAPACITACION  := misma fila que GERENTE_PRODUCTIVIDAD (en este despliegue CAPACITACION ES
+#                      el "Gerente de Capacitación y Productividad": conserva Exámenes + lectura).
+#   - DIR_COMERCIAL := misma fila que ANALISTA_DATOS (lectura total + export, sin escritura).
+#   - CONSULTA      := igual que ANALISTA_DATOS pero SIN capacidad de export (solo lectura total).
+for _recurso, _fila_dict in MATRIZ.items():
+    _fila_dict[Rol.CAPACITACION] = _fila_dict[Rol.GERENTE_PRODUCTIVIDAD]
+    _fila_dict[Rol.DIR_COMERCIAL] = _fila_dict[Rol.ANALISTA_DATOS]
+    _fila_dict[Rol.CONSULTA] = (None if _recurso == Recurso.EXPORTACION
+                                else _fila_dict[Rol.ANALISTA_DATOS])
+

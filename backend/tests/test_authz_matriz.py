@@ -63,9 +63,9 @@ def test_matriz_tiene_28_recursos():
     assert set(ORACULO) == set(RECURSOS)
 
 
-def test_cada_fila_tiene_los_10_roles():
+def test_cada_fila_incluye_los_10_roles_canonicos():
     for recurso, fila in MATRIZ.items():
-        assert set(fila) == set(COLS), f"{recurso}: columnas != los 10 roles"
+        assert set(COLS) <= set(fila), f"{recurso}: faltan roles canónicos"
 
 
 def test_matriz_coincide_con_oraculo_del_spec():
@@ -73,3 +73,22 @@ def test_matriz_coincide_con_oraculo_del_spec():
         for rol, esperado in zip(COLS, fila):
             actual = MATRIZ[recurso][rol]
             assert actual == esperado, f"{recurso} / {rol.value}: matriz={actual} != spec={esperado}"
+
+
+def test_roles_legacy_derivados_por_regla():
+    """Fase 2: CAPACITACION/DIR_COMERCIAL/CONSULTA se derivan de columnas canónicas."""
+    for recurso, fila in MATRIZ.items():
+        # CAPACITACION == GERENTE_PRODUCTIVIDAD
+        assert fila[Rol.CAPACITACION] == fila[Rol.GERENTE_PRODUCTIVIDAD]
+        # DIR_COMERCIAL == ANALISTA_DATOS
+        assert fila[Rol.DIR_COMERCIAL] == fila[Rol.ANALISTA_DATOS]
+        # CONSULTA == ANALISTA_DATOS salvo en EXPORTACION (sin export)
+        if recurso == Recurso.EXPORTACION:
+            assert fila[Rol.CONSULTA] is None
+        else:
+            assert fila[Rol.CONSULTA] == fila[Rol.ANALISTA_DATOS]
+
+
+def test_matriz_cubre_los_13_roles_del_enum():
+    for recurso, fila in MATRIZ.items():
+        assert set(fila) == set(Rol), f"{recurso}: la fila no cubre los 13 roles del enum"
