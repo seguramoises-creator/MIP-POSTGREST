@@ -80,7 +80,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Formación',
     items: [
-      { label: 'Exámenes',          path: '/examenes',        icon: <Quiz />,               roles: ['ADMIN', 'CAPACITACION', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO'] },
+      { label: 'Exámenes',          path: '/examenes',        icon: <Quiz />,               roles: ['ADMIN', 'CAPACITACION'] },
       { label: 'Mis Exámenes',      path: '/mis-examenes',    icon: <AssignmentTurnedIn />, roles: ['GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
       { label: 'Exámenes — Equipo', path: '/examenes-equipo', icon: <Groups />,             roles: ['GERENTE_DISTRITO'] },
     ],

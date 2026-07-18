@@ -131,7 +131,10 @@ function AppRoutes() {
         <Route path="reconocimiento" element={<Reconocimiento />} />
         <Route path="lsii" element={<ProtectedRoute allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','GERENTE_MARCA','CONSULTA']}><Lsii /></ProtectedRoute>} />
         <Route path="mis-examenes" element={<ProtectedRoute allowedRoles={['GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><MisExamenes /></ProtectedRoute>} />
-        <Route path="examenes" element={<ProtectedRoute allowedRoles={['ADMIN','CAPACITACION','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO']}><Examenes /></ProtectedRoute>} />
+        {/* Gestión de exámenes (crear/asignar/consolidar): SOLO ADMIN y el coordinador de
+            Capacitación. Coincide con el backend (RequireCapacitacion = ADMIN + CAPACITACION);
+            un GD/Gerente de Productividad recibía 403 y solo veía errores. */}
+        <Route path="examenes" element={<ProtectedRoute allowedRoles={['ADMIN','CAPACITACION']}><Examenes /></ProtectedRoute>} />
         <Route path="examenes-equipo" element={<ProtectedRoute allowedRoles={['GERENTE_DISTRITO']}><EquipoExamenes /></ProtectedRoute>} />
         <Route path="visita/panel-medico" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><PanelMedico /></ProtectedRoute>} />
         <Route path="visita/cobertura" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><CoberturaDashboard /></ProtectedRoute>} />
