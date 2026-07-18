@@ -108,6 +108,9 @@ def get_productividad(
         }
         for r in results
     ]
+    # GERENTE_DISTRITO: agregado de empresa, pero solo identifica por nombre a su equipo.
+    from app.core.scope_gd import anonimizar_para_gd
+    anonimizar_para_gd(all_items, current_user, db)
     return paginate_list(all_items, params)  # FIX W-03
 
 
@@ -275,7 +278,7 @@ def get_productividad_pais(
 
     rows = q.group_by(RepresentanteMedico.id, RepresentanteMedico.nombre).all()
 
-    return [
+    items = [
         {
             "rm_id": r.rm_id,
             "rm_nombre": r.rm_nombre,
@@ -284,6 +287,9 @@ def get_productividad_pais(
         }
         for r in rows
     ]
+    # GD: agregado de empresa, nombres solo de su equipo (ver scope_gd).
+    from app.core.scope_gd import anonimizar_para_gd
+    return anonimizar_para_gd(items, current_user, db)
 
 
 @router.get("/resumen", response_model=dict, summary="Resumen ejecutivo de productividad")

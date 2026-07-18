@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import {
   Box, Typography, Card, CardContent, Grid, Chip, CircularProgress,
-  TextField, MenuItem, Alert, Divider,
+  TextField, MenuItem, Alert, Divider, Stack,
 } from '@mui/material';
+import { ExpandMore, ExpandLess } from '@mui/icons-material';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Cell, LabelList, ReferenceLine,
@@ -78,10 +79,13 @@ const ChartTooltip = ({ active, payload }: any) => {
 };
 
 // ── dist card ─────────────────────────────────────────────────────────────────
-function DistCard({ label, count, total, rangoLabel, color, bg }: {
+function DistCard({ label, count, total, rangoLabel, color, bg, miembros }: {
   label: string; count: number; total: number; rangoLabel: string; color: string; bg: string;
+  miembros?: { nombre: string; pts: number }[];
 }) {
+  const [abierto, setAbierto] = useState(false);
   const pct = total ? ((count / total) * 100).toFixed(1) : '0.0';
+  const n = miembros?.length ?? 0;
   return (
     <Box sx={{ mb: 2, p: 1.5, borderRadius: 2, bgcolor: bg, border: `1px solid ${color}22` }}>
       <Typography variant="caption"
@@ -95,6 +99,29 @@ function DistCard({ label, count, total, rangoLabel, color, bg }: {
       <Typography fontSize="0.72rem" color="text.secondary" mt={0.3}>
         {pct}% del equipo · {rangoLabel}
       </Typography>
+      {/* Ver los nombres de MI equipo en esta banda (los ajenos no se listan). */}
+      {n > 0 && (
+        <>
+          <Box onClick={() => setAbierto((v) => !v)}
+               sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75, cursor: 'pointer', color }}>
+            {abierto ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+            <Typography fontSize="0.72rem" fontWeight={700}>
+              {abierto ? 'Ocultar' : `Ver ${n} de mi equipo`}
+            </Typography>
+          </Box>
+          {abierto && (
+            <Stack spacing={0.25} sx={{ mt: 0.5 }}>
+              {miembros!.map((m) => (
+                <Box key={m.nombre} sx={{ display: 'flex', justifyContent: 'space-between',
+                     bgcolor: '#ffffffaa', borderRadius: 1, px: 1, py: 0.25 }}>
+                  <Typography fontSize="0.72rem" noWrap sx={{ maxWidth: '70%' }}>{m.nombre}</Typography>
+                  <Typography fontSize="0.72rem" fontWeight={800} sx={{ color }}>{m.pts}</Typography>
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </>
+      )}
     </Box>
   );
 }
@@ -199,11 +226,17 @@ export default function Coaching() {
     if (!items.length) return null;
     // score_ciclo_actual = puntos del ciclo seleccionado (no el acumulado)
     // Redondeamos a 1 decimal para que 89.95 → 90.0 (igual que toFixed en pantalla)
-    const pts = items.map(r =>
-      Math.round(Number(r.score_ciclo_actual ?? r.score_total ?? 0) * 10) / 10
-    );
+    const ptsDe = (r: any) => Math.round(Number(r.score_ciclo_actual ?? r.score_total ?? 0) * 10) / 10;
+    const pts = items.map(ptsDe);
     const avg = pts.reduce((a, b) => a + b, 0) / pts.length;
     const max = Math.max(...pts);
+    // Nombres por banda SOLO del equipo del GD: las filas ajenas vienen anonimizadas del
+    // backend ("Otro distrito"). Los CONTEOS de arriba son de empresa (todas las filas); estos
+    // nombres, solo los identificables. ADMIN/gerencia ven todos (nada viene anónimo).
+    const enBanda = (lo: number, hi: number) =>
+      items.filter((r) => { const p = ptsDe(r); return p >= lo && p < hi && r.rm_nombre && r.rm_nombre !== 'Otro distrito'; })
+           .map((r) => ({ nombre: r.rm_nombre as string, pts: ptsDe(r) }))
+           .sort((a, b) => b.pts - a.pts);
     return {
       total:       items.length,
       elegibles:   pts.filter(p => p >= 90).length,
@@ -212,6 +245,12 @@ export default function Coaching() {
       enDesarrollo:pts.filter(p => p >= 60 && p < 80).length,
       criticos:    pts.filter(p => p <  60).length,
       avgPts: avg, maxPts: max,
+      miembros: {
+        excelente:    enBanda(90, Infinity),
+        bueno:        enBanda(80, 90),
+        enDesarrollo: enBanda(60, 80),
+        critico:      enBanda(-Infinity, 60),
+      },
     };
   }, [rankData]);
 
@@ -441,13 +480,13 @@ export default function Coaching() {
                     <Typography variant="subtitle1" fontWeight={700}>Distribución del Equipo</Typography>
                   </Box>
                   <DistCard label="Excelente"    count={dist.excelentes}   total={dist.total}
-                    rangoLabel="≥ 90 puntos MIP"  color="#2e7d32" bg="#e8f5e9" />
+                    rangoLabel="≥ 90 puntos MIP"  color="#2e7d32" bg="#e8f5e9" miembros={dist.miembros.excelente} />
                   <DistCard label="Bueno"         count={dist.buenos}       total={dist.total}
-                    rangoLabel="80–89 puntos MIP" color="#1565c0" bg="#e3f2fd" />
+                    rangoLabel="80–89 puntos MIP" color="#1565c0" bg="#e3f2fd" miembros={dist.miembros.bueno} />
                   <DistCard label="En Desarrollo" count={dist.enDesarrollo} total={dist.total}
-                    rangoLabel="60–79 puntos MIP" color="#e65100" bg="#fff3e0" />
+                    rangoLabel="60–79 puntos MIP" color="#e65100" bg="#fff3e0" miembros={dist.miembros.enDesarrollo} />
                   <DistCard label="Crítico"       count={dist.criticos}  total={dist.total}
-                    rangoLabel="menor a 60 pts"   color="#c62828" bg="#ffebee" />
+                    rangoLabel="menor a 60 pts"   color="#c62828" bg="#ffebee" miembros={dist.miembros.critico} />
                   <Divider sx={{ my: 1.5 }} />
                   <Box sx={{ p: 1.5, bgcolor: '#f8f9fa', borderRadius: 1.5, border: '1px solid #e8eaf6' }}>
                     <Typography variant="caption"

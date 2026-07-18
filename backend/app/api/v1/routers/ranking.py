@@ -244,6 +244,11 @@ def get_ranking(
             **ciclo_scores,
         })
 
+    # GERENTE_DISTRITO: ve el ranking completo (posiciones globales de empresa) pero solo
+    # identifica por nombre a su equipo; el resto queda como "Otro distrito".
+    from app.core.scope_gd import anonimizar_para_gd
+    anonimizar_para_gd(items, current_user, db)
+
     return {
         "items":           items,
         "total":           total,
