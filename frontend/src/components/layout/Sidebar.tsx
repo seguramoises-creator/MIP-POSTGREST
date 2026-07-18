@@ -12,6 +12,7 @@ import {
   ChevronLeft, ChevronRight, Add, Remove, RateReview,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import { usePermisosStore } from '../../store/permisos.store';
 import { Rol } from '../../types';
 import logoImg from '../../assets/vista-logo.svg';
 
@@ -31,7 +32,9 @@ interface NavItem {
   label: string;
   path: string;
   icon: React.ReactNode;
-  roles: Rol[];
+  roles: Rol[];          // fallback mientras cargan los permisos (y para módulos fuera de la matriz)
+  recurso?: string;      // recurso de la matriz RBAC; si existe, la visibilidad la decide /authz/me/permisos
+  accion?: string;       // acción a evaluar sobre el recurso (default 'read')
 }
 
 interface NavSection {
@@ -44,43 +47,43 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: null,
     items: [
-      { label: 'Dashboard Ejecutivo', path: '/dashboard', icon: <Dashboard />, roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD'] },
+      { label: 'Dashboard Ejecutivo', path: '/dashboard', icon: <Dashboard />, recurso: 'dashboard.ejecutivo', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD'] },
     ],
   },
   {
     title: 'Operación diaria',
     items: [
-      { label: 'Registrar Visita',    path: '/visita/registrar', icon: <EditNote />,      roles: ['ADMIN', 'REPRESENTANTE_MEDICO'] },
-      { label: 'Cobertura Visita',    path: '/visita/cobertura', icon: <TrackChanges />,  roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
-      { label: 'Ruptura / Cierre',    path: '/visita/ruptura',   icon: <ReportProblem />, roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
-      { label: 'Parrilla & Muestras', path: '/visita/parrilla',  icon: <Campaign />,      roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
-      { label: 'Coaching (MORE)',     path: '/coaching-more',    icon: <RateReview />,    roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Registrar Visita',    path: '/visita/registrar', icon: <EditNote />,      recurso: 'visita.registrar', roles: ['ADMIN', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Cobertura Visita',    path: '/visita/cobertura', icon: <TrackChanges />,  recurso: 'cobertura.diaria', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Ruptura / Cierre',    path: '/visita/ruptura',   icon: <ReportProblem />, recurso: 'cobertura.diaria', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Parrilla & Muestras', path: '/visita/parrilla',  icon: <Campaign />,      recurso: 'parrilla.consulta', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Coaching (MORE)',     path: '/coaching-more',    icon: <RateReview />,    recurso: 'coaching.hoja', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
     ],
   },
   {
     title: 'Maestros y planeación',
     items: [
-      { label: 'Panel Médico',          path: '/visita/panel-medico', icon: <MedicalServices />, roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
-      { label: 'Médicos',               path: '/medicos',             icon: <LocalHospital />,   roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_MARCA', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
-      { label: 'Planeación Ciclo',      path: '/visita/planeacion',   icon: <EventNote />,       roles: ['ADMIN', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Panel Médico',          path: '/visita/panel-medico', icon: <MedicalServices />, recurso: 'medico.panel', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Médicos',               path: '/medicos',             icon: <LocalHospital />,   recurso: 'medico.panel', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_MARCA', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
+      { label: 'Planeación Ciclo',      path: '/visita/planeacion',   icon: <EventNote />,       recurso: 'planeacion.ciclo', roles: ['ADMIN', 'REPRESENTANTE_MEDICO'] },
     ],
   },
   {
     title: 'Desempeño y análisis',
     items: [
-      { label: 'Indicadores Desempeño', path: '/coaching',             icon: <Leaderboard />,  roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO'] },
-      { label: 'Productividad',         path: '/productividad',        icon: <TrendingUp />,   roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'REPRESENTANTE_MEDICO'] },
-      { label: 'Ranking',               path: '/ranking',              icon: <SportsScore />,  roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
+      { label: 'Indicadores Desempeño', path: '/coaching',             icon: <Leaderboard />,  recurso: 'coaching.kpi', roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO'] },
+      { label: 'Productividad',         path: '/productividad',        icon: <TrendingUp />,   recurso: 'productividad.comercial', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Ranking',               path: '/ranking',              icon: <SportsScore />,  recurso: 'ranking.rkt', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
       { label: 'Reconocimiento',        path: '/reconocimiento',       icon: <EmojiEvents />,  roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },
       { label: 'Matriz LSII',           path: '/lsii',                 icon: <ScatterPlot />,  roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'CONSULTA'] },
-      { label: 'Cobertura Predictiva',  path: '/cobertura-predictiva', icon: <TrackChanges />, roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA'] },
-      { label: 'Costo & ROI',           path: '/visita/costo-roi',     icon: <Paid />,         roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Cobertura Predictiva',  path: '/cobertura-predictiva', icon: <TrackChanges />, recurso: 'cobertura.predictiva', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA'] },
+      { label: 'Costo & ROI',           path: '/visita/costo-roi',     icon: <Paid />,         recurso: 'costoroi.ver', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
     ],
   },
   {
     title: 'Formación',
     items: [
-      { label: 'Exámenes',          path: '/examenes',        icon: <Quiz />,               roles: ['ADMIN', 'CAPACITACION'] },
+      { label: 'Exámenes',          path: '/examenes',        icon: <Quiz />,               recurso: 'examen.configurar', accion: 'configure', roles: ['ADMIN', 'CAPACITACION'] },
       { label: 'Mis Exámenes',      path: '/mis-examenes',    icon: <AssignmentTurnedIn />, roles: ['GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
       { label: 'Exámenes — Equipo', path: '/examenes-equipo', icon: <Groups />,             roles: ['GERENTE_DISTRITO'] },
     ],
@@ -89,14 +92,14 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Datos',
     items: [
       { label: 'Carga Excel (ETL)', path: '/etl',      icon: <CloudUpload />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
-      { label: 'Reportes',          path: '/reportes', icon: <Assessment />,  roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },
+      { label: 'Reportes',          path: '/reportes', icon: <Assessment />,  recurso: 'exportacion', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },
     ],
   },
   {
     title: 'Sistema',
     items: [
       { label: 'Configuración',   path: '/admin',    icon: <Settings />,           roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
-      { label: 'Administración',  path: '/usuarios', icon: <AdminPanelSettings />, roles: ['ADMIN'] },
+      { label: 'Administración',  path: '/usuarios', icon: <AdminPanelSettings />, recurso: 'config.usuarios', roles: ['ADMIN'] },
     ],
   },
 ];
@@ -109,6 +112,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }:
   const navigate = useNavigate();
   const location = useLocation();
   const { rol }  = useAuthStore();
+  const puedePerm = usePermisosStore((s) => s.puede);
   const theme = useTheme();
   const isNarrow = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -123,7 +127,16 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }:
     if (localStorage.getItem(LS_KEY) === null && isNarrow) setCollapsed(true);
   }, [isNarrow]);
 
-  const puedeVer = (item: NavItem) => !!rol && item.roles.includes(rol);
+  // Visibilidad: si el ítem tiene `recurso`, la decide la matriz (/authz/me/permisos).
+  // Mientras los permisos no cargan (puedePerm devuelve null) o si el ítem no está en la
+  // matriz, se cae al gate por rol.
+  const puedeVer = (item: NavItem) => {
+    if (item.recurso) {
+      const p = puedePerm(item.recurso, item.accion ?? 'read');
+      if (p !== null) return p;
+    }
+    return !!rol && item.roles.includes(rol);
+  };
 
   // Acordeón: qué secciones (con título) están expandidas. Ocultas por defecto;
   // se abre automáticamente la sección de la ruta activa.

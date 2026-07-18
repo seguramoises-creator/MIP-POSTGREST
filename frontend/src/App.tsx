@@ -120,33 +120,35 @@ function AppRoutes() {
       <Route path="/sin-acceso" element={<SinAcceso />} />
       <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
         <Route index element={<Navigate to={inicio} />} />
-        <Route path="dashboard" element={<ProtectedRoute allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD']}><DashboardEjecutivo /></ProtectedRoute>} />
-        <Route path="productividad" element={<Productividad />} />
-        <Route path="cobertura-predictiva" element={<CoberturaPredictiva />} />
-        <Route path="coaching" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO']}><Coaching /></ProtectedRoute>} />
-        <Route path="coaching-more" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><CoachingMore /></ProtectedRoute>} />
-        <Route path="categorizacion" element={<ProtectedRoute allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_MARCA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO','CONSULTA']}><Categorizacion /></ProtectedRoute>} />
-        <Route path="medicos" element={<ProtectedRoute allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_MARCA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO','CONSULTA']}><Medicos /></ProtectedRoute>} />
-        <Route path="ranking" element={<Ranking />} />
+        {/* RBAC Fase 2: las rutas mapeadas gatean por la matriz (recurso=...), con fallback por rol.
+            Reconocimiento/LSII/ETL/Admin quedan por rol (aún fuera de la matriz — deuda §9). */}
+        <Route path="dashboard" element={<ProtectedRoute recurso="dashboard.ejecutivo" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD']}><DashboardEjecutivo /></ProtectedRoute>} />
+        <Route path="productividad" element={<ProtectedRoute recurso="productividad.comercial"><Productividad /></ProtectedRoute>} />
+        <Route path="cobertura-predictiva" element={<ProtectedRoute recurso="cobertura.predictiva"><CoberturaPredictiva /></ProtectedRoute>} />
+        <Route path="coaching" element={<ProtectedRoute recurso="coaching.kpi" allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO']}><Coaching /></ProtectedRoute>} />
+        <Route path="coaching-more" element={<ProtectedRoute recurso="coaching.hoja" allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><CoachingMore /></ProtectedRoute>} />
+        <Route path="categorizacion" element={<ProtectedRoute recurso="categorizacion.basica" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_MARCA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO','CONSULTA']}><Categorizacion /></ProtectedRoute>} />
+        <Route path="medicos" element={<ProtectedRoute recurso="medico.panel" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_MARCA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO','CONSULTA']}><Medicos /></ProtectedRoute>} />
+        <Route path="ranking" element={<ProtectedRoute recurso="ranking.rkt"><Ranking /></ProtectedRoute>} />
         <Route path="reconocimiento" element={<Reconocimiento />} />
         <Route path="lsii" element={<ProtectedRoute allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','GERENTE_MARCA','CONSULTA']}><Lsii /></ProtectedRoute>} />
         <Route path="mis-examenes" element={<ProtectedRoute allowedRoles={['GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><MisExamenes /></ProtectedRoute>} />
         {/* Gestión de exámenes (crear/asignar/consolidar): SOLO ADMIN y el coordinador de
             Capacitación. Coincide con el backend (RequireCapacitacion = ADMIN + CAPACITACION);
             un GD/Gerente de Productividad recibía 403 y solo veía errores. */}
-        <Route path="examenes" element={<ProtectedRoute allowedRoles={['ADMIN','CAPACITACION']}><Examenes /></ProtectedRoute>} />
+        <Route path="examenes" element={<ProtectedRoute recurso="examen.configurar" accion="configure" allowedRoles={['ADMIN','CAPACITACION']}><Examenes /></ProtectedRoute>} />
         <Route path="examenes-equipo" element={<ProtectedRoute allowedRoles={['GERENTE_DISTRITO']}><EquipoExamenes /></ProtectedRoute>} />
-        <Route path="visita/panel-medico" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><PanelMedico /></ProtectedRoute>} />
-        <Route path="visita/cobertura" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><CoberturaDashboard /></ProtectedRoute>} />
-        <Route path="visita/registrar" element={<ProtectedRoute allowedRoles={['ADMIN','REPRESENTANTE_MEDICO']}><RegistrarVisita /></ProtectedRoute>} />
-        <Route path="visita/planeacion" element={<ProtectedRoute allowedRoles={['ADMIN','REPRESENTANTE_MEDICO']}><PlaneacionVisita /></ProtectedRoute>} />
-        <Route path="visita/ruptura" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><RupturaVisita /></ProtectedRoute>} />
-        <Route path="visita/parrilla" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><ParrillaVisita /></ProtectedRoute>} />
-        <Route path="visita/costo-roi" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><CostoRoiVisita /></ProtectedRoute>} />
+        <Route path="visita/panel-medico" element={<ProtectedRoute recurso="medico.panel" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><PanelMedico /></ProtectedRoute>} />
+        <Route path="visita/cobertura" element={<ProtectedRoute recurso="cobertura.diaria" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><CoberturaDashboard /></ProtectedRoute>} />
+        <Route path="visita/registrar" element={<ProtectedRoute recurso="visita.registrar" accion="register" allowedRoles={['ADMIN','REPRESENTANTE_MEDICO']}><RegistrarVisita /></ProtectedRoute>} />
+        <Route path="visita/planeacion" element={<ProtectedRoute recurso="planeacion.ciclo" allowedRoles={['ADMIN','REPRESENTANTE_MEDICO']}><PlaneacionVisita /></ProtectedRoute>} />
+        <Route path="visita/ruptura" element={<ProtectedRoute recurso="cobertura.diaria" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><RupturaVisita /></ProtectedRoute>} />
+        <Route path="visita/parrilla" element={<ProtectedRoute recurso="parrilla.consulta" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><ParrillaVisita /></ProtectedRoute>} />
+        <Route path="visita/costo-roi" element={<ProtectedRoute recurso="costoroi.ver" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><CostoRoiVisita /></ProtectedRoute>} />
         <Route path="etl" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><ETL /></ProtectedRoute>} />
         <Route path="admin" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><Admin /></ProtectedRoute>} />
-        <Route path="usuarios" element={<ProtectedRoute allowedRoles={['ADMIN']}><Administracion /></ProtectedRoute>} />
-        <Route path="reportes" element={<Reportes />} />
+        <Route path="usuarios" element={<ProtectedRoute recurso="config.usuarios" allowedRoles={['ADMIN']}><Administracion /></ProtectedRoute>} />
+        <Route path="reportes" element={<ProtectedRoute recurso="exportacion" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','CONSULTA']}><Reportes /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to={inicio} />} />
     </Routes>

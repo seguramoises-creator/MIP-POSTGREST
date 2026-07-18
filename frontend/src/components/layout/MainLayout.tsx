@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import Sidebar, { DRAWER_WIDTH } from './Sidebar';
 import InstalarAppDialog from '../InstalarAppDialog';
 import { useAuthStore } from '../../store/auth.store';
+import { usePermisosStore } from '../../store/permisos.store';
 import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
 import { miGerente, type MiGerente } from '../../services/visita.service';
@@ -56,6 +57,11 @@ export default function MainLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);   // menú lateral en móvil (overlay)
   const [instalarOpen, setInstalarOpen] = useState(false); // modal "Instalar app" (PWA)
 
+  // RBAC Fase 2: carga las capacidades del usuario (/authz/me/permisos) una vez, al entrar
+  // al layout autenticado. La navegación y las rutas derivan de aquí (con fallback por rol).
+  const cargarPermisos = usePermisosStore((s) => s.cargar);
+  useEffect(() => { if (accessToken) cargarPermisos(); }, [accessToken, cargarPermisos]);
+
   // Red de seguridad: cerrar el menú lateral móvil en CADA cambio de ruta. Evita que
   // el Drawer (o su backdrop) quede abierto/atascado tras navegar — causa del velo gris
   // congelado en Safari iOS. Complementa el onMobileClose del click en cada ítem.
@@ -73,8 +79,10 @@ export default function MainLayout() {
   const [pwMsg, setPwMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
   const [pwSaving, setPwSaving] = useState(false);
 
+  const resetPermisos = usePermisosStore((s) => s.reset);
   const handleLogout = async () => {
     await authService.logout(accessToken || '');
+    resetPermisos();
     logout();
     navigate('/login');
   };
