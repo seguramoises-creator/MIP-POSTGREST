@@ -98,28 +98,38 @@ def generar_pdf(db, sesion: CoachingSesion, prom: dict, rm: RepresentanteMedico)
 
 
 def _enviar_pdf(destinatario: str, asunto: str, cuerpo_html: str, pdf: bytes, nombre: str) -> bool:
-    """SMTP con adjunto PDF. No-op si MAIL_SERVER está vacío (mismo criterio que notification_service)."""
-    if not settings.MAIL_SERVER:
-        logger.debug(f"Coaching PDF: correo omitido (MAIL_SERVER vacío) — {destinatario!r}")
+    """SMTP con adjunto PDF.
+
+    FIX jul-2026: usa `notification_service.mail_config()` — la MISMA fuente que el resto
+    de los correos (config guardada por el ADMIN en BD, con fallback al `.env`). Antes leía
+    `settings.MAIL_*` directo, así que si el SMTP se había configurado desde
+    Admin → Servidor de Correo (BD) y el `.env` estaba vacío, esta función salía por el
+    no-op y la hoja de coaching NUNCA se enviaba, mientras todos los demás correos sí
+    llegaban. Divergencia silenciosa: no dejaba error, solo un log en debug.
+    """
+    from app.services.notification_service import mail_config
+    cfg = mail_config()
+    if not cfg["server"]:
+        logger.debug(f"Coaching PDF: correo omitido (sin servidor SMTP configurado) — {destinatario!r}")
         return False
     msg = MIMEMultipart("mixed")
     msg["Subject"] = asunto
-    msg["From"] = f"{settings.MAIL_FROM_NAME} <{settings.MAIL_FROM}>"
+    msg["From"] = f"{cfg['from_name']} <{cfg['from']}>"
     msg["To"] = destinatario
     msg.attach(MIMEText(cuerpo_html, "html", "utf-8"))
     adj = MIMEApplication(pdf, _subtype="pdf")
     adj.add_header("Content-Disposition", "attachment", filename=nombre)
     msg.attach(adj)
     try:
-        if settings.MAIL_SSL:
-            srv = smtplib.SMTP_SSL(settings.MAIL_SERVER, settings.MAIL_PORT, timeout=15)
+        if cfg["ssl"]:
+            srv = smtplib.SMTP_SSL(cfg["server"], cfg["port"], timeout=15)
         else:
-            srv = smtplib.SMTP(settings.MAIL_SERVER, settings.MAIL_PORT, timeout=15)
-            if settings.MAIL_TLS:
+            srv = smtplib.SMTP(cfg["server"], cfg["port"], timeout=15)
+            if cfg["tls"]:
                 srv.starttls()
-        if settings.MAIL_USERNAME:
-            srv.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
-        srv.sendmail(settings.MAIL_FROM, [destinatario], msg.as_string())
+        if cfg["username"]:
+            srv.login(cfg["username"], cfg["password"])
+        srv.sendmail(cfg["from"], [destinatario], msg.as_string())
         srv.quit()
         logger.info(f"Coaching PDF enviado a {destinatario}")
         return True
@@ -128,12 +138,28 @@ def _enviar_pdf(destinatario: str, asunto: str, cuerpo_html: str, pdf: bytes, no
         return False
 
 
-def generar_y_enviar(db, sesion: CoachingSesion, prom: dict, rm: RepresentanteMedico) -> None:
-    """Genera el PDF y lo envía al correo corporativo del RM (best-effort)."""
-    pdf = generar_pdf(db, sesion, prom, rm)
+def _correo_del_rm(db, rm: RepresentanteMedico) -> str:
+    """Correo del representante: primero el del catálogo (DIM_RM), y si está vacío el del
+    USUARIO vinculado — ese sí se mantiene real (se usa para login y recuperación de
+    contraseña), mientras que el del catálogo suele venir del Excel y quedar vacío."""
     correo = (rm.email or "").strip() if rm else ""
+    if correo:
+        return correo
+    try:
+        from app.models.usuario import Usuario
+        u = db.query(Usuario).filter(Usuario.rm_id == rm.id).first()
+        return (u.email or "").strip() if u else ""
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def generar_y_enviar(db, sesion: CoachingSesion, prom: dict, rm: RepresentanteMedico) -> None:
+    """Genera el PDF y lo envía al correo del RM (best-effort)."""
+    pdf = generar_pdf(db, sesion, prom, rm)
+    correo = _correo_del_rm(db, rm)
     if not correo:
-        logger.warning(f"Coaching MORE: RM {getattr(rm, 'id', '?')} sin correo — no se envió PDF.")
+        logger.warning(f"Coaching MORE: RM {getattr(rm, 'id', '?')} sin correo "
+                       f"(ni en DIM_RM ni en su usuario) — no se envió PDF.")
         return
     cuerpo = (
         f"<p>Hola {rm.nombre},</p>"
