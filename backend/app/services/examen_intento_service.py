@@ -462,12 +462,13 @@ def calificar_respuesta(db: Session, intento_id: int, respuesta_id: int, puntos:
 
 
 def _notificar_resultado_examen(db, intento, examen, correctas: int, total: int) -> None:
-    """Avisa al evaluado que su feedback está disponible EN LA PLATAFORMA.
+    """Envía al evaluado su NOTA de examen por correo (decisión del cliente jul-2026).
 
-    Cambio jul-2026: antes enviaba el reporte completo por correo (score/correctas/estado).
-    Ahora el correo es solo un AVISO — el resultado se ve únicamente in-app, y solo durante
-    `FEEDBACK_HORAS` (ver generar_reporte). Así el detalle de respuestas no viaja por correo
-    y no puede reusarse de guía si se reasigna el examen."""
+    El correo incluye la nota (score/aprobado/correctas/total), NO el detalle de respuestas —
+    ese detalle sigue solo in-app durante `FEEDBACK_HORAS` (ver generar_reporte), para que las
+    respuestas correctas no viajen por correo ni se reusen de guía si se reasigna el examen.
+    No envía si el usuario del evaluado no tiene correo (los correos @example.com de prueba no
+    llegan: hay que registrar el correo real del representante)."""
     from app.models.usuario import Usuario
     from app.services import notification_service
 
@@ -478,11 +479,20 @@ def _notificar_resultado_examen(db, intento, examen, correctas: int, total: int)
         usuario = q.filter(Usuario.gerente_id == intento.evaluado_gerente_id).first()
     if usuario is None or not usuario.email:
         return
-    notification_service.notificar_feedback_disponible(
+    score = (float(intento.score) if intento.score is not None
+             else (round(correctas / total * 100, 2) if total else 0.0))
+    aprobado = (bool(intento.aprobado) if intento.aprobado is not None
+                else score >= (examen.nota_minima or 70))
+    notification_service.notificar_resultado_examen(
         destinatario=usuario.email,
-        nombre=usuario.nombre_completo or usuario.username,
+        nombre_visitador=usuario.nombre_completo or usuario.username,
         examen_nombre=examen.nombre,
-        horas=FEEDBACK_HORAS,
+        producto=examen.producto,
+        score=score,
+        aprobado=aprobado,
+        correctas=correctas,
+        total=total,
+        fecha_fin=(intento.fecha_fin.isoformat() if getattr(intento, "fecha_fin", None) else None),
         link="/mis-examenes",
     )
 
