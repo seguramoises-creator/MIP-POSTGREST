@@ -78,6 +78,9 @@ export default function PanelMedico() {
   const rol = useAuthStore((s) => s.rol);
   const esVM = rol === 'REPRESENTANTE_MEDICO';
   const esAprobador = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD' || rol === 'GERENTE_DISTRITO';
+  // Quién puede GESTIONAR el panel (agregar/editar/baja). Los roles de solo lectura (CONSULTA,
+  // Analista, Dirección, etc.) ven el panel pero sin controles de escritura.
+  const puedeGestionar = esVM || esAprobador;
 
   const [medicos, setMedicos] = useState<MedicoVisita[]>([]);
   const [especialidades, setEspecialidades] = useState<Catalogo[]>([]);
@@ -434,8 +437,10 @@ export default function PanelMedico() {
             {importando ? 'Importando…' : 'Importar desde Categorización'}
           </Button>
         )}
+        {puedeGestionar && (
         <Button variant="contained" startIcon={<PersonAddAlt1 />}
                 onClick={(e) => setMenuAnchor(e.currentTarget)}>Agregar Médico</Button>
+        )}
         <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)}>
           <MenuItem onClick={abrirNuevo}>
             <PersonAddAlt1 fontSize="small" style={{ marginRight: 8 }} /> Médico nuevo
@@ -539,14 +544,18 @@ export default function PanelMedico() {
                         {est.label}
                       </Typography>
                       <Typography variant="caption" color="text.disabled" sx={{ ml: 1 }}>#{m.id}</Typography>
-                      <Tooltip title="Editar médico">
-                        <IconButton size="small" color="primary" onClick={() => abrirEditar(m)}><Edit fontSize="small" /></IconButton>
-                      </Tooltip>
-                      <Tooltip title={m.activo ? 'Solicitar baja (requiere aprobación)' : 'Solicitar alta (requiere aprobación)'}>
-                        <IconButton size="small" color={m.activo ? 'error' : 'success'} onClick={() => toggleActivo(m)}>
-                          {m.activo ? <Block fontSize="small" /> : <Restore fontSize="small" />}
-                        </IconButton>
-                      </Tooltip>
+                      {puedeGestionar && (
+                        <>
+                          <Tooltip title="Editar médico">
+                            <IconButton size="small" color="primary" onClick={() => abrirEditar(m)}><Edit fontSize="small" /></IconButton>
+                          </Tooltip>
+                          <Tooltip title={m.activo ? 'Solicitar baja (requiere aprobación)' : 'Solicitar alta (requiere aprobación)'}>
+                            <IconButton size="small" color={m.activo ? 'error' : 'success'} onClick={() => toggleActivo(m)}>
+                              {m.activo ? <Block fontSize="small" /> : <Restore fontSize="small" />}
+                            </IconButton>
+                          </Tooltip>
+                        </>
+                      )}
                     </Stack>
                   </Stack>
                 </Box>

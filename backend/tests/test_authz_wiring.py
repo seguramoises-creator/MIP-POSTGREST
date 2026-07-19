@@ -191,3 +191,15 @@ def test_consulta_lee_cobertura_y_costo_full_por_matriz():
     assert _client(router, U(Rol.ANALISTA_DATOS)).get("/api/v1/visita/costo/estructura").status_code != 403
     # GERENTE_MEDICO no tiene costoroi.ver → 403 en el modelo completo (muro médico-comercial).
     assert _client(router, U(Rol.GERENTE_MEDICO)).get("/api/v1/visita/costo/estructura").status_code == 403
+
+
+def test_consulta_lee_panel_medico_y_ruptura_pero_no_escribe():
+    from app.api.v1.routers.visita import router
+    c = _client(router, U(Rol.CONSULTA))
+    # LEE panel médico (medico.panel=todo), ruptura (cobertura.diaria=todo) y catálogos.
+    assert c.get("/api/v1/visita/medicos").status_code != 403
+    assert c.get("/api/v1/visita/ruptura").status_code != 403
+    assert c.get("/api/v1/visita/especialidades").status_code != 403
+    assert c.get("/api/v1/visita/vms").status_code != 403
+    # NO escribe: dar de baja un médico sigue restringido → 403.
+    assert c.post("/api/v1/visita/medicos/1/baja").status_code == 403

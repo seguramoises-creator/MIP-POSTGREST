@@ -47,9 +47,12 @@ ReadPlaneacion = Depends(_require_authz(_Acc.READ, _Rec.PLANEACION_CICLO))
 RegistrarPlaneacion = Depends(_require_authz(_Acc.REGISTER, _Rec.PLANEACION_CICLO))
 ReadParrilla = Depends(_require_authz(_Acc.READ, _Rec.PARRILLA_CONSULTA))
 ConfigurarParrilla = Depends(_require_authz(_Acc.CONFIGURE, _Rec.PARRILLA_CONFIGURAR))
-# Cobertura de Visita (gauges/ranking): lectura por matriz (cobertura.diaria). La ven todos los
-# roles con lectura de cobertura (incl. CONSULTA/Analista/Dirección = todo; RM/GD acotados por scope).
+# Cobertura de Visita (gauges/ranking) y Ruptura: lectura por matriz (cobertura.diaria). La ven
+# todos los roles con lectura de cobertura (incl. CONSULTA/Analista/Dirección = todo; RM acotado).
 ReadCobertura = Depends(_require_authz(_Acc.READ, _Rec.COBERTURA_DIARIA))
+# Panel Médico (lista/ficha de médicos): lectura por matriz (medico.panel). CONSULTA/Analista/
+# Dirección/Gerentes leen; el RM ve su panel (scope propio). Las ESCRITURAS siguen restringidas aparte.
+ReadMedicoPanel = Depends(_require_authz(_Acc.READ, _Rec.MEDICO_PANEL))
 # Costo/ROI: Finanzas CONFIGURA (BORRADOR), Director APRUEBA. Segregación estructural (quien
 # configura no aprueba: FINANZAS≠PRESIDENCIA). ADMIN puede ambas + reabrir (dato cerrado).
 ConfigurarCosto = Depends(_require_authz(_Acc.CONFIGURE, _Rec.COSTOROI_CONFIGURAR))
@@ -96,7 +99,7 @@ def _raise_captura_error(e: ValueError) -> None:
 
 
 @router.get("/especialidades", response_model=list[dict])
-def listar_especialidades(db: Session = Depends(get_db), current_user=RequireVisita):
+def listar_especialidades(db: Session = Depends(get_db), current_user=RequireAnyAuth):
     """Catálogo de especialidades (para el selector al registrar médicos)."""
     from app.services import geo_catalogo_service
     return geo_catalogo_service.listar_especialidades(db)
@@ -104,7 +107,7 @@ def listar_especialidades(db: Session = Depends(get_db), current_user=RequireVis
 
 @router.get("/provincias", response_model=list[dict])
 def listar_provincias(pais_codigo: str | None = None, db: Session = Depends(get_db),
-                      current_user=RequireVisita):
+                      current_user=RequireAnyAuth):
     """Provincias (dropdown del maestro de médicos). Filtra por país si se indica."""
     from app.services import geo_catalogo_service
     return geo_catalogo_service.listar_provincias(db, pais_codigo)
@@ -112,7 +115,7 @@ def listar_provincias(pais_codigo: str | None = None, db: Session = Depends(get_
 
 @router.get("/municipios", response_model=list[dict])
 def listar_municipios(provincia_id: int | None = None, db: Session = Depends(get_db),
-                      current_user=RequireVisita):
+                      current_user=RequireAnyAuth):
     """Municipios de una provincia (dropdown en cascada)."""
     from app.services import geo_catalogo_service
     return geo_catalogo_service.listar_municipios(db, provincia_id)
@@ -120,7 +123,7 @@ def listar_municipios(provincia_id: int | None = None, db: Session = Depends(get
 
 @router.get("/centros", response_model=list[dict])
 def listar_centros(pais_codigo: str | None = None, db: Session = Depends(get_db),
-                   current_user=RequireVisita):
+                   current_user=RequireAnyAuth):
     """Centros médicos (dropdown del maestro de médicos). Filtra por país si se indica."""
     from app.services import geo_catalogo_service
     return geo_catalogo_service.listar_centros(db, pais_codigo)
@@ -150,7 +153,7 @@ def mi_gerente(vm_id: int | None = None, db: Session = Depends(get_db), current_
 
 
 @router.get("/vms", response_model=list[dict])
-def listar_vms(db: Session = Depends(get_db), current_user=RequireVisita):
+def listar_vms(db: Session = Depends(get_db), current_user=RequireAnyAuth):
     """Visitadores médicos (DIM_RM) — para que ADMIN/GERENTE elijan el panel a ver."""
     from app.models.dimensiones import RepresentanteMedico
     return [{"id": r.id, "nombre": r.nombre}
@@ -161,7 +164,7 @@ def listar_vms(db: Session = Depends(get_db), current_user=RequireVisita):
 @router.get("/medicos", response_model=list[dict])
 def listar_medicos(vm_id: int | None = None, incluir_inactivos: bool = False,
                    lite: bool = False,
-                   db: Session = Depends(get_db), current_user=RequireVisita):
+                   db: Session = Depends(get_db), current_user=ReadMedicoPanel):
     """Panel médico. El VM ve solo el suyo; ADMIN/GERENTE pueden filtrar por ?vm_id=.
     `incluir_inactivos=true` incluye los médicos desactivados (para reactivarlos).
     `lite=true` devuelve solo los campos de LISTA (rendimiento; la ficha completa se
@@ -172,7 +175,7 @@ def listar_medicos(vm_id: int | None = None, incluir_inactivos: bool = False,
 
 @router.get("/medicos/existentes", response_model=list[dict])
 def listar_medicos_existentes(vm_id: int | None = None, db: Session = Depends(get_db),
-                              current_user=RequireVisita):
+                              current_user=ReadMedicoPanel):
     """Médicos ya registrados en otros paneles del mismo país, para COPIAR al panel del
     VM (evita reescribir la ficha). El VM se fuerza a su propio rm_id; ADMIN/GERENTE
     deben indicar el visitador destino con ?vm_id=."""
@@ -183,7 +186,7 @@ def listar_medicos_existentes(vm_id: int | None = None, db: Session = Depends(ge
 
 
 @router.get("/medicos/{medico_id}", response_model=dict)
-def obtener_medico(medico_id: int, db: Session = Depends(get_db), current_user=RequireVisita):
+def obtener_medico(medico_id: int, db: Session = Depends(get_db), current_user=ReadMedicoPanel):
     """Ficha COMPLETA de un médico (para editar). El VM solo ve los de su panel.
     Declarado DESPUÉS de /medicos/existentes para no interceptar esa ruta literal."""
     m = visita_service.obtener_ficha_medico(db, medico_id)
@@ -317,7 +320,7 @@ def importar_medicos_categorizacion(db: Session = Depends(get_db), current_user=
 
 
 @router.get("/gerentes", response_model=list[dict])
-def listar_gerentes(db: Session = Depends(get_db), current_user=RequireVisita):
+def listar_gerentes(db: Session = Depends(get_db), current_user=RequireAnyAuth):
     """Gerentes de Distrito (para el filtro de cobertura)."""
     from app.models.dimensiones import Gerente
     return [{"id": g.id, "nombre": g.nombre}
@@ -357,7 +360,7 @@ def _vm_registro(current_user, vm_id: int | None) -> int:
 
 
 @router.get("/causas", response_model=list[str])
-def causas_no_visita(current_user=RequireVisita):
+def causas_no_visita(current_user=RequireAnyAuth):
     """Catálogo de causas de no-visita (para el selector)."""
     return sorted(_CAUSAS_NO_VISITA)
 
@@ -518,7 +521,7 @@ def resumen_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
 @router.get("/ruptura", response_model=dict)
 def estado_ruptura(vm_id: int | None = None, gerente_id: int | None = None,
                    linea_id: int | None = None, db: Session = Depends(get_db),
-                   current_user=RequireVisita):
+                   current_user=ReadCobertura):
     """Médicos en ruptura por severidad (1 / 2 / ≥3 ciclos sin visita). El VM ve el suyo;
     gestión puede filtrar por Gerente de Distrito (?gerente_id=) y Línea (?linea_id=)."""
     from app.services import visita_cierre_service
@@ -560,7 +563,7 @@ def historial_cierres(db: Session = Depends(get_db), current_user=RequireCierre)
 
 # ── Parrilla promocional / Muestras (Parte 6) ─────────────────────────────────
 @router.get("/lineas", response_model=list[dict])
-def listar_lineas(db: Session = Depends(get_db), current_user=RequireVisita):
+def listar_lineas(db: Session = Depends(get_db), current_user=RequireAnyAuth):
     """Líneas de producto (para el selector de la parrilla)."""
     from app.services import visita_parrilla_service
     return visita_parrilla_service.listar_lineas(db)
@@ -584,7 +587,7 @@ def obtener_parrilla(linea_id: int | None = None, ciclo_id: int | None = None,
 
 
 @router.get("/productos", response_model=list[dict])
-def listar_productos(linea_id: int | None = None, db: Session = Depends(get_db), current_user=RequireVisita):
+def listar_productos(linea_id: int | None = None, db: Session = Depends(get_db), current_user=RequireAnyAuth):
     """Catálogo DIM_Producto (para llenar la parrilla)."""
     from app.services import visita_parrilla_service
     return visita_parrilla_service.listar_productos(db, linea_id)
