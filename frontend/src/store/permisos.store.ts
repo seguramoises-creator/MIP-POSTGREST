@@ -16,6 +16,9 @@ type Permisos = Record<string, Record<string, string>>;  // recurso -> {accion: 
 interface PermisosState {
   permisos: Permisos | null;
   cargando: boolean;
+  /** true una vez que se INTENTÓ cargar (con éxito o error). Distingue "aún no cargó" de
+   *  "cargó y falló" — evita el falso /sin-acceso al refrescar y el spinner infinito si el backend cae. */
+  intentado: boolean;
   cargar: () => Promise<void>;
   /** true/false si ya cargó; null si todavía no (para fallback por rol). */
   puede: (recurso: string, accion?: string) => boolean | null;
@@ -38,15 +41,17 @@ export function usePuede() {
 export const usePermisosStore = create<PermisosState>((set, get) => ({
   permisos: null,
   cargando: false,
+  intentado: false,
   cargar: async () => {
     if (get().cargando) return;
     set({ cargando: true });
     try {
       const { data } = await api.get('/authz/me/permisos');
-      set({ permisos: data.permisos ?? {}, cargando: false });
+      set({ permisos: data.permisos ?? {}, cargando: false, intentado: true });
     } catch {
-      // Ante fallo, dejamos permisos=null → los consumidores caen a fallback por rol.
-      set({ cargando: false });
+      // Ante fallo, dejamos permisos=null pero marcamos intentado → los consumidores caen a
+      // fallback por rol (no quedan esperando para siempre).
+      set({ cargando: false, intentado: true });
     }
   },
   puede: (recurso, accion = 'read') => {
@@ -59,5 +64,5 @@ export const usePermisosStore = create<PermisosState>((set, get) => ({
     if (p === null) return null;
     return (p[recurso] && p[recurso][accion]) || null;
   },
-  reset: () => set({ permisos: null, cargando: false }),
+  reset: () => set({ permisos: null, cargando: false, intentado: false }),
 }));
