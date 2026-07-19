@@ -9,9 +9,17 @@ export type Ciclo = {
   vencido?: boolean;   // abierto pero con fecha fin ya pasada
 };
 
-const ROLES_MULTIPAIS = ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD'];
+// Roles con visión de todos los países (incluye los de LECTURA TOTAL, que si no tienen país
+// propio se quedaban en blanco). Arrancan en el país con operación (pais-defecto).
+const ROLES_MULTIPAIS = ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD',
+  'ANALISTA_DATOS', 'CONSULTA'];
+// Roles de solo lectura/observación: arrancan en el ÚLTIMO ciclo CON DATOS (no en el abierto,
+// que puede estar vacío) para no mostrar páginas en blanco.
+const ROLES_VER_ULTIMO_DATO = ['CONSULTA', 'ANALISTA_DATOS', 'DIR_COMERCIAL', 'PRESIDENCIA',
+  'GERENTE_MARKETING', 'GERENTE_MEDICO'];
 
 interface CicloState {
+  rol: string | null;
   paisCodigo: string | null;
   cicloId: number | null;          // ciclo EN CONSULTA (default = abierto)
   ciclo: Ciclo | null;
@@ -27,6 +35,7 @@ interface CicloState {
 }
 
 export const useCicloStore = create<CicloState>((set, get) => ({
+  rol: null,
   paisCodigo: null, cicloId: null, ciclo: null,
   cicloAbiertoId: null, cicloAbierto: null,
   paisesDisponibles: [], ciclosDisponibles: [], puedeCambiarPais: false,
@@ -34,6 +43,7 @@ export const useCicloStore = create<CicloState>((set, get) => ({
 
   init: async () => {
     const me = (await api.get('/auth/me')).data as { pais_codigo?: string; rol: string };
+    set({ rol: me.rol });
     const multipais = ROLES_MULTIPAIS.includes(me.rol);
     let paises: string[];
     if (multipais) {
@@ -58,7 +68,15 @@ export const useCicloStore = create<CicloState>((set, get) => ({
     const actual = (await api.get(`/admin/ciclos/actual?pais_codigo=${codigo}`)).data as Ciclo | null;
     const abierto = actual || null;
     // El ciclo EN CONSULTA arranca en el abierto; si no hay abierto, en el último de la lista.
-    const verInicial = abierto || ciclos[ciclos.length - 1] || null;
+    let verInicial = abierto || ciclos[ciclos.length - 1] || null;
+    // Roles de solo lectura: arrancan en el ÚLTIMO ciclo CON DATOS (aunque esté cerrado), para no
+    // caer en un ciclo abierto todavía vacío. Si el abierto ya tiene datos, ese es el más reciente.
+    if (ROLES_VER_ULTIMO_DATO.includes(get().rol || '')) {
+      try {
+        const ult = (await api.get(`/admin/ciclos/ultimo-con-datos?pais_codigo=${codigo}`)).data as Ciclo | null;
+        if (ult) verInicial = ciclos.find((c) => c.id === ult.id) || ult;
+      } catch { /* sin dato → queda el default */ }
+    }
     set({
       paisCodigo: codigo,
       ciclosDisponibles: ciclos,

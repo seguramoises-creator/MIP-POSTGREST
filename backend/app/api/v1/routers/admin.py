@@ -540,6 +540,24 @@ def ciclo_actual(pais_codigo: str, db: Session = Depends(get_db), _=AnyAuth):
               .all())
     return _ciclo_actual_de(ciclos)
 
+@router.get("/ciclos/ultimo-con-datos", response_model=Optional[CicloResponse],
+            summary="Último ciclo de un país que tiene datos operativos")
+def ciclo_ultimo_con_datos(pais_codigo: str, db: Session = Depends(get_db), _=AnyAuth):
+    """El ciclo MÁS RECIENTE (año/número desc) con datos operativos (visitas, planeación u hojas
+    de Costo/ROI). Sirve para que los roles de consulta arranquen sobre información real y no en
+    un ciclo abierto todavía vacío. None si ningún ciclo del país tiene datos."""
+    from app.models.visita import VisitaRegistro, PlaneacionCiclo, CostoEstructura
+    ciclos = (db.query(Ciclo).filter(Ciclo.pais_codigo == pais_codigo)
+              .order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).all())
+    for c in ciclos:
+        tiene = (db.query(VisitaRegistro.id).filter(VisitaRegistro.ciclo_id == c.id).first()
+                 or db.query(PlaneacionCiclo.id).filter(PlaneacionCiclo.ciclo_id == c.id).first()
+                 or db.query(CostoEstructura.id).filter(CostoEstructura.ciclo_id == c.id).first())
+        if tiene:
+            return c
+    return None
+
+
 @router.get("/pais-defecto", response_model=Optional[str],
             summary="País por defecto del contexto (el que tiene operación/datos)")
 def pais_defecto(db: Session = Depends(get_db), _=AnyAuth):
