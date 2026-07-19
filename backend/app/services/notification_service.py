@@ -68,6 +68,18 @@ def mail_config() -> dict:
             db.close()
     except Exception as e:  # BD no disponible → usar .env
         logger.debug(f"mail_config: usando .env (BD no disponible): {e}")
+
+    # SALVAGUARDA (jul-2026): `MAIL_FROM` debe ser una DIRECCIÓN. Si el ADMIN escribió ahí
+    # el NOMBRE del sistema (confusión frecuente con "Nombre del remitente"), el remitente
+    # de sobre queda inválido y el servidor RECHAZA TODOS los correos — falla global y muda.
+    # Se detecta por la ausencia de '@': el texto se reaprovecha como nombre y se envía con
+    # la cuenta autenticada, que siempre es una dirección válida.
+    if "@" not in (cfg["from"] or ""):
+        if (cfg["from"] or "").strip():
+            cfg["from_name"] = (cfg["from_name"] or "").strip() or cfg["from"].strip()
+            logger.warning("mail_config: MAIL_FROM no es una dirección "
+                           f"({cfg['from']!r}); se usa la cuenta autenticada como remitente.")
+        cfg["from"] = (cfg["username"] or settings.MAIL_FROM or "").strip()
     return cfg
 
 
