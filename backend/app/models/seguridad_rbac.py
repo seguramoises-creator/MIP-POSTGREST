@@ -36,6 +36,10 @@ class RolPermiso(Base):
     recurso: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     accion: Mapped[str] = mapped_column(String(20), nullable=False)
     alcance: Mapped[str] = mapped_column(String(10), nullable=False)
+    # Sello de versión del caché de runtime: el motor recarga la matriz cuando cambia MAX(actualizado_en).
+    actualizado_en: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc), nullable=True)
 
 
 class AuditoriaSeguridad(Base):

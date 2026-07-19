@@ -963,9 +963,22 @@ Control de acceso con **RBAC** (permisos a roles) + **alcance ABAC** (`own/team/
 por defecto**. Modelo de tres ejes: **recurso** (28 funcionalidades) × **acción**
 (`read/register/configure/approve/export/admin`) × **alcance**.
 
-**Fuente de verdad = código**: `app/core/authz/matrix.py` (`MATRIZ[recurso][rol] = (accion, alcance)|None`).
-Es una transcripción de la matriz del spec §5. `tests/test_authz_matriz.py` tiene un **oráculo
-independiente** que falla si `matrix.py` y el spec divergen.
+**Fuente de verdad = BD (editable desde la UI), con el código como valores de fábrica** (jul-2026):
+- **Runtime**: el motor lee la matriz de `Security.FACT_RolPermiso` vía un **caché en memoria**
+  (`app/core/authz/runtime.py`), que se recarga cuando cambia `MAX(actualizado_en)` (migración
+  `0019`). Los guards (`deps.require/autorizar/autorizar_export`) llaman `runtime.refrescar_si_cambio(db)`
+  antes de evaluar. **Anti-bloqueo**: si el caché no cargó o la tabla está vacía, `runtime.celda` cae a
+  `matrix.MATRIZ` (fábrica).
+- **Edición**: `app/core/authz/edicion.py` (`aplicar_cambios`, `restablecer`, `matriz_actual`) +
+  endpoints **`PUT /authz/matriz`** (guardar, en caliente) y **`POST /authz/matriz/restablecer`**
+  (volver a fábrica), solo ADMIN, **auditados** (`PERMISO_MODIFICADO` / `PERMISOS_RESTABLECIDOS`).
+  Salvaguarda: la **columna ADMIN es inmutable** (400 si se intenta) y la acción `admin` no es
+  asignable. Frontend: pestaña **"Roles y Permisos"** (en `Administracion.tsx`, tras Usuarios) con
+  modo Editar → selects Acción/Alcance por celda + Guardar/Descartar/Restablecer (`MatrizRoles.tsx`).
+- **`matrix.py` = valores de fábrica** (`MATRIZ[recurso][rol] = (accion, alcance)|None`): siembra
+  inicial (`scripts/seed_authz.py`) y destino del botón "Restablecer". `tests/test_authz_matriz.py`
+  (oráculo del spec §5) sigue validando la fábrica. Spec:
+  `docs/superpowers/specs/2026-07-18-matriz-permisos-editable-design.md`.
 
 **Motor** (`app/core/authz/`):
 - `engine.can(user, accion, recurso) -> Alcance | None` — `admin` concede todo; `configure/approve/register`
@@ -1002,8 +1015,11 @@ tokens con `iat < Usuario.roles_actualizado_en` (que `PUT /admin/usuarios/{id}` 
 + auditoría `ROL_ASIGNADO`). La autorización siempre lee `user.rol` **fresco de la BD**, así que un token
 viejo nunca acarrea permisos obsoletos; la revocación por `iat` es defensa adicional.
 
-**Cómo cambiar un permiso**: editar `matrix.py` → correr `python scripts/seed_authz.py` → actualizar el
-oráculo del spec (el test lo obliga). NO dispersar condicionales `if rol == ...` por el código.
+**Cómo cambiar un permiso**: normalmente **desde la UI** (pestaña "Roles y Permisos" → Editar →
+Guardar) — se aplica en caliente, sin redeploy. Para cambiar los **valores de fábrica** (nuevo default
+del sistema): editar `matrix.py` → actualizar el oráculo del spec (el test lo obliga) → desplegar;
+"Restablecer a fábrica" o `scripts/seed_authz.py` los aplican. NO dispersar condicionales
+`if rol == ...` por el código.
 
 **FASE 1 (implementada, NO destructiva)**: motor + matriz + seed + auditoría + revocación + endpoint +
 pruebas (`tests/test_authz_*.py`, incl. parametrizada 28×10). Migración `0017_rbac_fase1`.

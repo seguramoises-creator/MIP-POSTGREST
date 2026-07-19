@@ -12,13 +12,29 @@ from fastapi.testclient import TestClient
 
 from app.models.usuario import Rol
 from app.core.deps import get_current_active_user
+from app.db.database import get_db
+from app.core.authz import runtime
 from app.api.v1.routers.authz import router as authz_router
 
 
+class _FakeQ:
+    def all(self): return []
+    def scalar(self): return None
+
+
+class _FakeDB:
+    """Sesión vacía: sin filas de permisos → la matriz cae a los valores de fábrica."""
+    def query(self, *a, **k): return _FakeQ()
+    def close(self): pass
+
+
 def _app(user):
+    # La matriz editable lee de BD; con la sesión vacía el runtime cae a fábrica (matrix.py).
+    runtime.invalidar()
     app = FastAPI()
     app.include_router(authz_router, prefix="/api/v1")
     app.dependency_overrides[get_current_active_user] = lambda: user
+    app.dependency_overrides[get_db] = lambda: _FakeDB()
     return TestClient(app)
 
 

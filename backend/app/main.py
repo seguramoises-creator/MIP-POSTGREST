@@ -40,6 +40,19 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("Base de datos: NO disponible — verificar configuración")
 
+    # Cargar la matriz RBAC (editable) al caché de runtime. Si falla, el motor cae a fábrica.
+    try:
+        from app.db.database import SessionLocal
+        from app.core.authz import runtime as _authz_runtime
+        _db = SessionLocal()
+        try:
+            _authz_runtime.cargar(_db)
+            logger.info("Matriz RBAC: caché cargado desde BD")
+        finally:
+            _db.close()
+    except Exception as e:  # noqa: BLE001
+        logger.warning(f"No se pudo cargar la matriz RBAC al arranque (se usará fábrica): {e}")
+
     # Scheduler de tareas (correo de correcciones de exámenes, etc.)
     try:
         from app.core import scheduler

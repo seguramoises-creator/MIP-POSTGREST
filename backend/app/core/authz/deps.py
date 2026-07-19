@@ -11,10 +11,12 @@ defecto: si `can()` devuelve None → 403.
 from typing import NamedTuple
 
 from fastapi import Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_active_user
 from app.core.authz.constantes import Accion, Alcance
-from app.core.authz import engine
+from app.core.authz import engine, runtime
+from app.db.database import get_db
 from app.models.usuario import Usuario
 
 
@@ -32,7 +34,9 @@ def _denegado(accion: Accion, recurso: str) -> HTTPException:
 
 def require(accion: Accion, recurso: str):
     """Dependency de guard: 403 si el rol no tiene `accion` sobre `recurso`. Devuelve el Usuario."""
-    def _dep(user: Usuario = Depends(get_current_active_user)) -> Usuario:
+    def _dep(user: Usuario = Depends(get_current_active_user),
+             db: Session = Depends(get_db)) -> Usuario:
+        runtime.refrescar_si_cambio(db)
         if engine.can(user, accion, recurso) is None:
             raise _denegado(accion, recurso)
         return user
@@ -41,7 +45,9 @@ def require(accion: Accion, recurso: str):
 
 def autorizar(accion: Accion, recurso: str):
     """Dependency que además expone el alcance concedido (para filtrar datos en el endpoint)."""
-    def _dep(user: Usuario = Depends(get_current_active_user)) -> Autorizacion:
+    def _dep(user: Usuario = Depends(get_current_active_user),
+             db: Session = Depends(get_db)) -> Autorizacion:
+        runtime.refrescar_si_cambio(db)
         alcance = engine.can(user, accion, recurso)
         if alcance is None:
             raise _denegado(accion, recurso)
@@ -53,7 +59,9 @@ def autorizar_export(recurso_modulo: str):
     """Dependency de exportación: 403 si el usuario no puede exportar `recurso_modulo`. El alcance
     devuelto es el EFECTIVO (capado por su lectura del módulo) — el endpoint lo usa para filtrar
     los datos exportados y así el export nunca excede el alcance de lectura."""
-    def _dep(user: Usuario = Depends(get_current_active_user)) -> Autorizacion:
+    def _dep(user: Usuario = Depends(get_current_active_user),
+             db: Session = Depends(get_db)) -> Autorizacion:
+        runtime.refrescar_si_cambio(db)
         alcance = engine.alcance_export_modulo(user, recurso_modulo)
         if alcance is None:
             raise _denegado(Accion.EXPORT, recurso_modulo)

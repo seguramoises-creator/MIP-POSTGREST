@@ -9,14 +9,15 @@ Reglas (spec §4.3):
 - `export` es independiente de `read`; su alcance efectivo por módulo se capa por la lectura.
 """
 from app.core.authz.constantes import Accion, Alcance, Recurso, alcance_min
-from app.core.authz.matrix import MATRIZ
+from app.core.authz import runtime
 
 # Acciones cuya concesión implica READ al mismo alcance (export NO: es independiente)
 _IMPLICAN_READ = (Accion.CONFIGURE, Accion.APPROVE, Accion.REGISTER)
 
 
 def _celda(rol, recurso: str):
-    return MATRIZ.get(recurso, {}).get(rol)
+    # La matriz vive en la BD (editable) con caché en runtime; fallback a fábrica si no cargó.
+    return runtime.celda(rol, recurso)
 
 
 def can(user, accion: Accion, recurso: str):
