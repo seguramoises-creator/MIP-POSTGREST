@@ -28,9 +28,23 @@ def ordenes_ciclo(db: Session) -> dict[int, int]:
     return {c.id: c.anio * 1000 + c.numero for c in db.query(Ciclo).all()}
 
 
-def ciclo_actual_id(db: Session) -> int | None:
-    """Ciclo 'actual' = el más reciente por (anio, numero). Es el ciclo durante el
-    que se registra la solicitud; el cambio surtirá efecto en el siguiente."""
+def ciclo_actual_id(db: Session, vm_id: int | None = None) -> int | None:
+    """Ciclo de trabajo durante el que se registra el alta/baja de un médico.
+
+    CON `vm_id`: el ciclo ABIERTO del país del VM que corresponde a HOY (vía
+    `ciclo_por_defecto`). Es lo correcto: sella `ciclo_alta_id`/`ciclo_baja_id` con el
+    ciclo de trabajo, no con "el de número más alto".
+
+    Bug histórico (jul-2026): sin `vm_id` devolvía el ciclo de mayor (anio, numero). Si
+    existía un ciclo futuro (p.ej. C12) los médicos nuevos quedaban con `alta=C12` y
+    `cuenta_en_ciclo` los excluía del panel del ciclo de trabajo (C07) → **panel efectivo
+    0** aunque hubiera visitas. Mismo antipatrón "el más reciente ≠ el que corresponde a HOY".
+    """
+    if vm_id is not None:
+        from app.services.visita_cobertura_service import ciclo_por_defecto
+        cid = ciclo_por_defecto(db, vm_id)
+        if cid:
+            return cid
     c = db.query(Ciclo).order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first()
     return c.id if c else None
 
@@ -79,7 +93,7 @@ def solicitar_baja(db: Session, m: MedicoVisita, usuario) -> MedicoVisita:
         m.activo = False
     else:
         m.estado_aprobacion = "PENDIENTE_BAJA"
-        m.ciclo_baja_id = ciclo_actual_id(db)
+        m.ciclo_baja_id = ciclo_actual_id(db, m.vm_id)
     m.solicitado_por = getattr(usuario, "id", None)
     m.fecha_solicitud = datetime.now(timezone.utc)
     db.commit(); db.refresh(m)

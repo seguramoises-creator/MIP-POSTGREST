@@ -250,7 +250,7 @@ def reactivar_medico(medico_id: int, db: Session = Depends(get_db), current_user
     _medico_de_mi_panel(current_user, m)
     m.activo = True
     m.estado_aprobacion = "PENDIENTE_ALTA"
-    m.ciclo_alta_id = ciclo_actual_id(db)
+    m.ciclo_alta_id = ciclo_actual_id(db, m.vm_id)
     m.ciclo_baja_id = None
     m.solicitado_por = getattr(current_user, "id", None)
     m.fecha_solicitud = _dt.now(_tz.utc)

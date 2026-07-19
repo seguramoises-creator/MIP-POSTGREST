@@ -125,7 +125,7 @@ def crear_medico(db: Session, datos: MedicoVisitaCrear, usuario_id: int | None) 
         activo=True,
         # Alta sujeta a aprobación del Gerente de Distrito; efectiva el próximo ciclo.
         estado_aprobacion="PENDIENTE_ALTA",
-        ciclo_alta_id=ciclo_actual_id(db),
+        ciclo_alta_id=ciclo_actual_id(db, datos.vm_id),
         solicitado_por=usuario_id,
         fecha_solicitud=_dt.now(_tz.utc),
         registrado_por=usuario_id,
@@ -372,7 +372,14 @@ def importar_desde_categorizacion(db: Session, usuario_id: int | None = None) ->
 
     ahora = _dt.now(_tz.utc)
     filas = db.execute(text(_SQL_MEDICOS_CAT)).mappings().all()
-    ciclo_id = ciclo_actual_id(db)
+    # Alta por VM = ciclo de trabajo del PAÍS del VM (no el de número más alto). Cacheado por VM
+    # para no re-consultar. Sellar con el ciclo futuro dejaba el panel efectivo en 0 (ver
+    # ciclo_actual_id / cuenta_en_ciclo).
+    _ciclo_cache: dict[int, int | None] = {}
+    def _ciclo_de_vm(vm: int) -> int | None:
+        if vm not in _ciclo_cache:
+            _ciclo_cache[vm] = ciclo_actual_id(db, vm)
+        return _ciclo_cache[vm]
     # Médicos ya existentes en el panel (vm_id + nombre en MAYÚSCULAS) para no duplicar.
     existentes = {(m.vm_id, (m.nombre_completo or "").upper())
                   for m in db.query(MedicoVisita.vm_id, MedicoVisita.nombre_completo).all()}
@@ -399,7 +406,7 @@ def importar_desde_categorizacion(db: Session, usuario_id: int | None = None) ->
             # Carga masiva autoritativa (admin/gerente): quedan APROBADOS directamente,
             # sin requerir aprobación uno-por-uno del GD. El alta individual por un RM
             # sí queda PENDIENTE_ALTA (ver crear_medico).
-            estado_aprobacion="APROBADO", ciclo_alta_id=ciclo_id,
+            estado_aprobacion="APROBADO", ciclo_alta_id=_ciclo_de_vm(f["vm_id"]),
             fecha_alta=_date.today(), solicitado_por=usuario_id,
             fecha_solicitud=ahora, aprobado_por=usuario_id, fecha_aprobacion=ahora,
             registrado_por=usuario_id))
