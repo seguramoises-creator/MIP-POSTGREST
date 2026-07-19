@@ -36,23 +36,42 @@ function generarPassword(): string {
   return base.join('');
 }
 
+// Los 13 roles de la matriz RBAC, en el mismo orden que las columnas de "Roles y Permisos".
 const ROLES = [
-  'ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD',
-  'GERENTE_DISTRITO', 'GERENTE_MARCA', 'CAPACITACION', 'REPRESENTANTE_MEDICO', 'CONSULTA',
+  'REPRESENTANTE_MEDICO', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'GERENTE_MARKETING',
+  'GERENTE_PRODUCTIVIDAD', 'GERENTE_MEDICO', 'PRESIDENCIA', 'ANALISTA_DATOS',
+  'FINANZAS', 'ADMIN', 'CAPACITACION', 'DIR_COMERCIAL', 'CONSULTA',
 ];
 
-// Etiqueta legible del rol en el selector (el value guardado sigue siendo el código del enum).
+// Etiqueta legible del rol (el value guardado sigue siendo el código del enum). Coincide con
+// los nombres de columna de la matriz de Roles y Permisos.
 const ROL_LABEL: Record<string, string> = {
-  CAPACITACION: 'CAPACITACION (Coordinador de Capacitación)',
+  REPRESENTANTE_MEDICO: 'Representante',
+  GERENTE_DISTRITO: 'Ger. Distrito',
+  GERENTE_MARCA: 'Ger. Producto',
+  GERENTE_MARKETING: 'Ger. Marketing',
+  GERENTE_PRODUCTIVIDAD: 'Capac./Product.',
+  GERENTE_MEDICO: 'Ger. Médico',
+  PRESIDENCIA: 'Dir. General',
+  ANALISTA_DATOS: 'Analista Datos',
+  FINANZAS: 'Finanzas',
+  ADMIN: 'Superadmin',
+  CAPACITACION: 'Capacitación',
+  DIR_COMERCIAL: 'Dir. Comercial',
+  CONSULTA: 'Consulta',
 };
 
-const ROL_COLORS: Record<string, 'error' | 'warning' | 'info' | 'success' | 'default' | 'secondary'> = {
+const ROL_COLORS: Record<string, 'error' | 'warning' | 'info' | 'success' | 'default' | 'secondary' | 'primary'> = {
   ADMIN: 'error',
   PRESIDENCIA: 'warning',
   DIR_COMERCIAL: 'warning',
   GERENTE_PRODUCTIVIDAD: 'info',
   GERENTE_DISTRITO: 'info',
   GERENTE_MARCA: 'info',
+  GERENTE_MARKETING: 'primary',
+  GERENTE_MEDICO: 'primary',
+  ANALISTA_DATOS: 'secondary',
+  FINANZAS: 'warning',
   CAPACITACION: 'secondary',
   REPRESENTANTE_MEDICO: 'success',
   CONSULTA: 'default',
@@ -289,7 +308,7 @@ export default function Usuarios() {
                         <TableCell sx={{ fontSize: 12, color: 'text.secondary' }}>{row.email}</TableCell>
                         <TableCell>
                           <Chip
-                            label={row.rol}
+                            label={ROL_LABEL[row.rol] ?? row.rol}
                             size="small"
                             color={ROL_COLORS[row.rol] ?? 'default'}
                           />
