@@ -525,6 +525,91 @@ def calcular_categorias_py(db: Session, load_batch_key: int) -> None:
     logger.info(f"[CAT] calcular_categorias_py batch={load_batch_key}: {len(snap_params)} snapshots")
 
 
+# ---------------------------------------------------------------------------
+# Categorización de UN médico (alta desde el Panel) — Bloque B
+# ---------------------------------------------------------------------------
+# El alta de un médico en el Panel captura los mismos 5 criterios que el Excel, pero
+# de a un médico. Para que un médico dé LA MISMA categoría venga del Excel o del Panel,
+# aquí se reutilizan las MISMAS reglas (cat.DimReglaCategoriaMedica) y los MISMOS
+# helpers de matcheo (_regla_aplica / _mejor_regla) que usa calcular_categorias_py.
+# `_puntuar` es pura (sin BD) para poder probarla directamente.
+
+# Los 5 criterios, con el nombre de campo que espera _COMP_NUM/_COMP_TXT.
+CAMPOS_CRITERIOS = ("PacientesSemana", "CostoConsulta", "RecetasSemana",
+                    "UbicacionTerritorialCM", "KOL")
+
+
+def _puntuar(comps, reglas_idx, clases, valores: dict) -> dict:
+    """Suma PuntajePct de la mejor regla por componente requerido y ubica la clase.
+    Misma lógica que el bucle de calcular_categorias_py, sin tocar la BD."""
+    total = 0
+    calculados = 0
+    n_req = sum(1 for c in comps if c["Requerido"])
+    detalle = []
+    for c in comps:
+        cod = c["CodigoComponente"]
+        if cod in _COMP_NUM:
+            vnum, vtxt = valores.get(_COMP_NUM[cod]), None
+        elif cod in _COMP_TXT:
+            v = valores.get(_COMP_TXT[cod])
+            vnum, vtxt = None, (None if v is None else str(v))
+        else:
+            vnum = vtxt = None
+        candidatas = [g for g in reglas_idx.get(c["ComponenteKey"], []) if _regla_aplica(g, vnum, vtxt)]
+        mejor = _mejor_regla(candidatas)
+        if c["Requerido"] and mejor is not None:
+            total += mejor["PuntajePct"]
+            calculados += 1
+        detalle.append({"componente": cod, "valor_num": vnum, "valor_txt": vtxt,
+                        "puntaje_pct": mejor["PuntajePct"] if mejor else None,
+                        "estado": "OK" if mejor else "SIN_REGLA"})
+    clase = next((cl for cl in clases if cl["PuntajeMinPct"] <= total <= cl["PuntajeMaxPct"]), None)
+    return {
+        "puntaje_pct": total,
+        "categoria": (clase["Clase"] if clase else None),
+        "clasificacion_key": (clase["ClasificacionKey"] if clase else None),
+        # PENDIENTE = falta alguna regla para un componente requerido (config incompleta),
+        # NO se inventa categoría: el GD lo verá como no clasificable.
+        "estado": "CALCULADO" if calculados == n_req else "PENDIENTE",
+        "detalle": detalle,
+    }
+
+
+def calcular_categoria_de_valores(db: Session, pais_codigo: str, valores: dict) -> dict:
+    """Categoría A/B/C/D de UN médico a partir de sus 5 valores crudos.
+
+    `valores` usa las claves de CAMPOS_CRITERIOS. Devuelve
+    {puntaje_pct, categoria, clasificacion_key, estado, detalle}. `categoria` es None
+    si la configuración del país no cubre el caso (estado PENDIENTE)."""
+    from collections import defaultdict
+    from datetime import datetime, timezone
+
+    fila = db.execute(text('SELECT "PaisKey" FROM "cat"."DimPais" WHERE "CodigoPais"=:p'),
+                      {"p": pais_codigo}).first()
+    if not fila:
+        return {"puntaje_pct": 0, "categoria": None, "clasificacion_key": None,
+                "estado": "PENDIENTE", "detalle": [], "motivo": f"País {pais_codigo} sin configuración de categorización"}
+    pais_key = fila[0]
+    fc = {"fc": datetime.now(timezone.utc).date(), "pk": pais_key}
+
+    comps = db.execute(text('SELECT "ComponenteKey", "CodigoComponente", "Requerido" '
+                            'FROM "cat"."DimComponenteCategoria" WHERE "Activo"=TRUE')).mappings().all()
+    reglas = db.execute(text("""SELECT "ReglaKey", "ComponenteKey", "ValorMinimo", "ValorMaximo", "ValorTexto",
+                                       "Criterio", "PuntajePct"
+        FROM "cat"."DimReglaCategoriaMedica"
+        WHERE "Activo"=TRUE AND "PaisKey"=:pk AND "VigenteDesde"<=:fc
+          AND ("VigenteHasta" IS NULL OR "VigenteHasta">=:fc)"""), fc).mappings().all()
+    clases = db.execute(text("""SELECT "ClasificacionKey", "Clase", "PuntajeMinPct", "PuntajeMaxPct"
+        FROM "cat"."DimClasificacionMedica"
+        WHERE "Activo"=TRUE AND "PaisKey"=:pk AND "VigenteDesde"<=:fc
+          AND ("VigenteHasta" IS NULL OR "VigenteHasta">=:fc)"""), fc).mappings().all()
+
+    reglas_idx = defaultdict(list)
+    for r in reglas:
+        reglas_idx[r["ComponenteKey"]].append(r)
+    return _puntuar(comps, reglas_idx, clases, valores)
+
+
 def cargar_excel_categorizacion(db: Session, excel_bytes: bytes, nombre_archivo: str, periodo: str, usuario: str) -> dict:
     logger.info(f"[CAT] Iniciando carga '{nombre_archivo}' periodo={periodo}")
     wb = load_workbook(io.BytesIO(excel_bytes), data_only=True, read_only=False)
