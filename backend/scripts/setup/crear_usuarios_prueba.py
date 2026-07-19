@@ -23,11 +23,12 @@ import app.models.visita  # noqa: F401
 import app.models.exam_models  # noqa: F401
 import app.models.cat_models  # noqa: F401
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.db.database import SessionLocal
 from app.core.security import hash_password
 from app.models.usuario import Usuario, Rol
+from app.models.dimensiones import Gerente, RepresentanteMedico
 
 PASSWORD = "PruebaVista2026!"
 
@@ -74,6 +75,23 @@ def main() -> None:
                 ))
                 creados += 1
                 print(f"  [OK] {username:16} creado       ({rol.value})")
+
+        db.flush()
+        # Vincular qa_gerprod a un distrito real con RMs para poder probar el alcance de EQUIPO
+        # (sus celdas de coaching/exámenes son "equipo"). Se resuelve al gerente con más RMs
+        # (INNER JOIN → solo gerentes con equipo; los MARCA quedan fuera). Agnóstico de IDs.
+        # qa_producto (GERENTE_MARCA) NO se vincula: no tiene celdas de alcance "equipo".
+        gd = (db.query(Gerente.id, func.count(RepresentanteMedico.id).label("n"))
+                .join(RepresentanteMedico, RepresentanteMedico.gerente_id == Gerente.id)
+                .group_by(Gerente.id)
+                .order_by(func.count(RepresentanteMedico.id).desc()).first())
+        u = db.execute(select(Usuario).where(Usuario.username == "qa_gerprod")).scalar_one_or_none()
+        if u and gd:
+            u.gerente_id = gd.id
+            print(f"  [OK] qa_gerprod       vinculado a gerente id={gd.id} ({gd.n} RMs) — prueba de equipo")
+        elif u:
+            print("  [!]  qa_gerprod       sin gerente con RMs para vincular (no se probará equipo)")
+
         db.commit()
     finally:
         db.close()
