@@ -360,6 +360,29 @@ def notificar_asignacion_examen(destinatario: str, nombre: str, examen_nombre: s
     return _enviar(destinatario, f"Nuevo examen asignado - {examen_nombre}", cuerpo)
 
 
+def notificar_asignacion_examen_gerente(destinatario: str, nombre_gerente: str,
+                                        examen_nombre: str, representantes: list[str],
+                                        fecha_limite: Optional[str] = None) -> bool:
+    """Avisa al Gerente de Distrito que se asignó un examen a representantes de su equipo.
+    Best-effort. `representantes` = nombres de los RM de su equipo que recibieron el examen."""
+    if not _habilitado() or not destinatario:
+        return False
+    fecha = f"<li>Fecha límite: <strong>{fecha_limite}</strong></li>" if fecha_limite else ""
+    lista = "".join(f"<li>{r}</li>" for r in representantes) or "<li>(su equipo)</li>"
+    cuerpo = f"""<html><body style="font-family:Arial,sans-serif;color:#333;">
+  <h2 style="color:{_COLOR_TITULO};">Examen asignado a su equipo</h2>
+  <p>Hola <strong>{nombre_gerente}</strong>, se asignó un examen a representantes de su equipo:</p>
+  <ul>
+    <li>Examen: <strong>{examen_nombre}</strong></li>
+    {fecha}
+  </ul>
+  <p>Representantes asignados:</p>
+  <ul>{lista}</ul>
+  {_pie_pagina()}
+</body></html>"""
+    return _enviar(destinatario, f"Examen asignado a su equipo - {examen_nombre}", cuerpo)
+
+
 def notificar_feedback_disponible(destinatario: str, nombre: str, examen_nombre: str,
                                   horas: int = 48, link: Optional[str] = None) -> bool:
     """Avisa que el feedback de un examen entregado ya está disponible EN LA PLATAFORMA.

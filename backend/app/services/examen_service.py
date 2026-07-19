@@ -205,10 +205,14 @@ def asignar_examen(
 
 
 def _notificar_asignaciones(db: Session, examen, asignaciones, fecha_limite) -> None:
-    """Correo de asignación a cada evaluado con email (best-effort — un fallo de correo no
+    """Correo de asignación a cada evaluado con email + un aviso agrupado a cada Gerente de
+    Distrito cuyos representantes fueron asignados (best-effort — un fallo de correo no
     revierte la asignación, que ya está commiteada)."""
     from app.models.usuario import Usuario
+    from app.models.dimensiones import RepresentanteMedico, Gerente
     from app.services import notification_service
+    fl = str(fecha_limite) if fecha_limite else None
+    # 1) Aviso a cada evaluado (RM o gerente evaluado).
     for a in asignaciones:
         try:
             q = db.query(Usuario)
@@ -217,11 +221,30 @@ def _notificar_asignaciones(db: Session, examen, asignaciones, fecha_limite) -> 
             if u and u.email:
                 notification_service.notificar_asignacion_examen(
                     destinatario=u.email, nombre=u.nombre_completo or u.username,
-                    examen_nombre=examen.nombre,
-                    fecha_limite=str(fecha_limite) if fecha_limite else None,
-                    link="/mis-examenes")
+                    examen_nombre=examen.nombre, fecha_limite=fl, link="/mis-examenes")
         except Exception as e:  # noqa: BLE001
             logger.error(f"Correo de asignación falló (no bloquea) evaluado={a.id}: {e}")
+    # 2) Aviso agrupado al Gerente de Distrito de los RM asignados (uno por gerente).
+    try:
+        rm_ids = [a.evaluado_rm_id for a in asignaciones if a.evaluado_tipo == "RM" and a.evaluado_rm_id]
+        if rm_ids:
+            rms = db.query(RepresentanteMedico).filter(RepresentanteMedico.id.in_(rm_ids)).all()
+            por_gerente: dict[int, list[str]] = {}
+            for rm in rms:
+                if rm.gerente_id:
+                    por_gerente.setdefault(rm.gerente_id, []).append(rm.nombre)
+            for gid, reps in por_gerente.items():
+                ger = db.query(Gerente).filter(Gerente.id == gid).first()
+                correo = (ger.email if ger and ger.email else None)
+                if not correo:  # sin email en DIM_Gerente, prueba el usuario vinculado
+                    ug = db.query(Usuario).filter(Usuario.gerente_id == gid).first()
+                    correo = ug.email if ug else None
+                if correo:
+                    notification_service.notificar_asignacion_examen_gerente(
+                        destinatario=correo, nombre_gerente=(ger.nombre if ger else "Gerente"),
+                        examen_nombre=examen.nombre, representantes=sorted(reps), fecha_limite=fl)
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Aviso de asignación al Gerente de Distrito falló (no bloquea): {e}")
 
 
 def publicar_examen(db: Session, examen_id: int) -> Examen:
