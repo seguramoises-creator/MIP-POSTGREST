@@ -11,9 +11,9 @@ import {
   listarMedicos, obtenerMedico, listarMedicosExistentes, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
   solicitarBajaMedico, reactivarMedico, listarAprobaciones, aprobarMedico, rechazarMedico,
   listarProvincias, listarMunicipios, listarCentros, importarMedicosCategorizacion, miGerente,
-  plantillaCategorizacion,
+  plantillaCategorizacion, obtenerClasificacion, actualizarClasificacion,
   type MedicoVisita, type MedicoExistente, type Catalogo, type PosibleDuplicado, type MedicoCrear, type AprobacionPendiente,
-  type Provincia, type Municipio, type MiGerente, type CriterioPlantilla,
+  type Provincia, type Municipio, type MiGerente, type CriterioPlantilla, type ClasificacionCrear,
 } from '../../services/visita.service';
 import { useCicloStore } from '../../store/ciclo.store';
 
@@ -138,6 +138,47 @@ export default function PanelMedico() {
   const clasificacionCompleta = (['pacientes_semana', 'costo_consulta', 'potencial_prescripcion',
     'ubicacion_territorial', 'kol_nivel'] as const)
     .every((k) => form.clasificacion?.[k] !== '' && form.clasificacion?.[k] !== undefined);
+
+  // ── Revisión de la clasificación por el Gerente de Distrito (antes de aprobar) ──
+  const [revisar, setRevisar] = useState<AprobacionPendiente | null>(null);
+  const [revClas, setRevClas] = useState<ClasificacionCrear | null>(null);
+  const [revCargando, setRevCargando] = useState(false);
+  const [revError, setRevError] = useState('');
+
+  async function abrirRevision(p: AprobacionPendiente) {
+    setRevisar(p); setRevClas(null); setRevError(''); setRevCargando(true);
+    try {
+      setRevClas(await obtenerClasificacion(p.id));
+    } catch (e: unknown) {
+      // Altas anteriores al Bloque B no tienen plantilla: se puede aprobar igual.
+      const st = (e as { response?: { status?: number } })?.response?.status;
+      setRevError(st === 404
+        ? 'Este médico se dio de alta antes de la plantilla de clasificación; puedes aprobarlo, pero quedará sin categoría.'
+        : 'No se pudo cargar la clasificación.');
+    } finally { setRevCargando(false); }
+  }
+
+  const setRev = (campo: string, valor: string | number) =>
+    setRevClas((c) => (c ? { ...c, [campo]: valor } as ClasificacionCrear : c));
+  const valRev = (campo: string): string | number =>
+    (revClas as unknown as Record<string, string | number>)?.[campo] ?? '';
+  const revCompleta = !!revClas && (['pacientes_semana', 'costo_consulta', 'potencial_prescripcion',
+    'ubicacion_territorial', 'kol_nivel'] as const)
+    .every((k) => revClas[k] !== '' && revClas[k] !== null && revClas[k] !== undefined);
+
+  /** Guarda las correcciones del GD (si las hubo) y aprueba: ahí se revela la categoría. */
+  async function aprobarDesdeRevision() {
+    if (!revisar) return;
+    setRevCargando(true);
+    try {
+      if (revClas && revCompleta) await actualizarClasificacion(revisar.id, revClas);
+      await aprobarMedico(revisar.id);
+      setMsg({ tipo: 'success', texto: 'Médico aprobado. El sistema calculó su categoría.' });
+      setRevisar(null); cargar(); cargarPendientes();
+    } catch (err: unknown) {
+      setMsg({ tipo: 'error', texto: mensajeError(err) });
+    } finally { setRevCargando(false); }
+  }
   const [errCampos, setErrCampos] = useState<Record<string, string>>({});  // validación por campo
   const [abierto, setAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -515,12 +556,22 @@ export default function PanelMedico() {
                 <Stack key={p.id} direction="row" alignItems="center" spacing={1.5} sx={{ py: 1 }}>
                   <Chip size="small" color={p.tipo_solicitud === 'ALTA' ? 'success' : 'error'} label={p.tipo_solicitud} />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={700} noWrap>{p.nombre_completo} · Cat. {p.categoria}</Typography>
+                    <Typography variant="body2" fontWeight={700} noWrap>
+                      {p.nombre_completo}{p.categoria ? ` · Cat. ${p.categoria}` : ' · sin clasificar'}
+                    </Typography>
                     <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
                       {[p.especialidad_nombre, p.linea_nombre, `VM: ${p.vm_nombre}`].filter(Boolean).join(' · ')}
                     </Typography>
                   </Box>
-                  <Button size="small" variant="contained" color="success" startIcon={<ThumbUp />} onClick={() => resolver(p.id, 'aprobar')}>Aprobar</Button>
+                  {/* En un ALTA se revisa la clasificación antes de aprobar (la categoría se
+                      calcula al aprobar). Una BAJA no tiene plantilla: se aprueba directo. */}
+                  {p.tipo_solicitud === 'ALTA' ? (
+                    <Button size="small" variant="contained" color="success" startIcon={<ThumbUp />}
+                            onClick={() => abrirRevision(p)}>Revisar y aprobar</Button>
+                  ) : (
+                    <Button size="small" variant="contained" color="success" startIcon={<ThumbUp />}
+                            onClick={() => resolver(p.id, 'aprobar')}>Aprobar</Button>
+                  )}
                   <Button size="small" variant="outlined" color="error" startIcon={<ThumbDown />} onClick={() => resolver(p.id, 'rechazar')}>Rechazar</Button>
                 </Stack>
               ))}
@@ -890,6 +941,58 @@ export default function PanelMedico() {
               {guardando ? 'Guardando…' : 'Guardar'}
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Revisión de la clasificación por el Gerente de Distrito antes de aprobar.
+          El GD puede corregir lo que capturó el representante; la categoría A/B/C/D se
+          calcula al aprobar (nunca se muestra ni se elige aquí). */}
+      <Dialog open={!!revisar} onClose={() => setRevisar(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          Revisar clasificación
+          <Typography variant="body2" color="text.secondary">{revisar?.nombre_completo}</Typography>
+        </DialogTitle>
+        <DialogContent dividers>
+          {revError && <Alert severity="warning" sx={{ mb: 2 }}>{revError}</Alert>}
+          {revCargando && !revClas && <Box sx={{ textAlign: 'center', py: 3 }}><CircularProgress size={24} /></Box>}
+          {revClas && (
+            <>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Verifica los datos que capturó el representante. Puedes corregirlos antes de
+                aprobar. <b>La categoría (A/B/C/D) la calcula el sistema al aprobar.</b>
+              </Alert>
+              <Grid container spacing={2}>
+                {plantilla.map((c) => (
+                  <Grid item xs={12} sm={6} key={c.codigo}>
+                    {c.tipo === 'TEXTO' ? (
+                      <TextField select fullWidth size="small" label={c.etiqueta}
+                                 value={valRev(c.campo)} error={!valRev(c.campo)}
+                                 onChange={(e) => setRev(c.campo, e.target.value)}>
+                        {c.opciones.map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                      </TextField>
+                    ) : (
+                      <TextField fullWidth size="small" type="number" label={c.etiqueta}
+                                 value={valRev(c.campo)} error={valRev(c.campo) === ''}
+                                 helperText={c.minimo != null ? `Entre ${c.minimo} y ${c.maximo}` : ' '}
+                                 inputProps={{ min: c.minimo ?? 0, max: c.maximo ?? undefined }}
+                                 onChange={(e) => setRev(c.campo, e.target.value === '' ? '' : Number(e.target.value))} />
+                    )}
+                  </Grid>
+                ))}
+              </Grid>
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRevisar(null)} disabled={revCargando}>Cancelar</Button>
+          <Button color="error" disabled={revCargando}
+                  onClick={() => { const id = revisar!.id; setRevisar(null); resolver(id, 'rechazar'); }}>
+            Rechazar
+          </Button>
+          <Button variant="contained" color="success" onClick={aprobarDesdeRevision}
+                  disabled={revCargando || (!!revClas && !revCompleta)}>
+            {revCargando ? 'Procesando…' : 'Aprobar'}
+          </Button>
         </DialogActions>
       </Dialog>
 

@@ -75,6 +75,16 @@ export const plantillaCategorizacion = (paisCodigo: string) =>
   api.get<CriterioPlantilla[]>('/categorizacion/plantilla', { params: { pais_codigo: paisCodigo } })
     .then(r => r.data);
 
+/** Plantilla capturada por el representante. La lee el Gerente de Distrito para
+ *  revisarla antes de aprobar. No trae categoría: se revela al aprobar. */
+export const obtenerClasificacion = (medicoId: number) =>
+  api.get<ClasificacionCrear & { medico_visita_id: number }>(`/visita/medicos/${medicoId}/clasificacion`)
+    .then(r => r.data);
+
+/** El GD corrige la plantilla antes de aprobar (409 si el alta ya no está pendiente). */
+export const actualizarClasificacion = (medicoId: number, datos: ClasificacionCrear) =>
+  api.put<{ actualizado: boolean }>(`/visita/medicos/${medicoId}/clasificacion`, datos).then(r => r.data);
+
 export interface MedicoCrear {
   vm_id: number;
   codigo?: string | null;
