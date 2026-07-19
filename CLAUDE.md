@@ -226,7 +226,7 @@ PostgreSQL, base de datos `scgcpr`, múltiples esquemas.
 | `DIM_Municipio` | `Municipio` | Municipios por provincia |
 | `DIM_CentroMedico` | `CentroMedico` | Centros/instituciones médicas |
 | `DIM_CategoriaMedica` | `CategoriaMedica` | Categorías resultantes A/B/C/D |
-| `DIM_CriterioCategoria` | `CriterioCategoria` | Los 5 criterios ponderados del motor (ver §14) |
+| `DIM_CriterioCategoria` | `CriterioCategoria` | Catálogo de los 5 criterios. ⚠️ **Ningún cálculo lo usa** — el motor real vive en `cat.*` (ver aviso en §14) |
 | `DIM_CriterioCategoriaTabla` | `CriterioCategoriaTabla` | Rangos/niveles por criterio (análogo a `DIM_IndicadorTabla`) |
 | `DIM_Medico` | `Medico` | Médicos, deduplicados por `(pais_id, nombre)` — el Excel fuente no trae código estable |
 
@@ -528,7 +528,7 @@ Los `cargar/*` y `feriados` quedan como legacy no expuestos en la UI.
 
 **Sustituye** a Capacitación (`capacitacion.py` permanece en disco, no registrado). A diferencia del motor IUP/Ranking, **el motor de cálculo es 100% Python — explícitamente no usa stored procedures**.
 
-**5 criterios ponderados** (`DIM_CriterioCategoria`):
+**5 criterios ponderados**:
 
 | Criterio | Peso |
 |----------|------|
@@ -539,6 +539,30 @@ Los `cargar/*` y `feriados` quedan como legacy no expuestos en la UI.
 | KOL (Key Opinion Leader) | 10% |
 
 Resultado: categoría **A/B/C/D** por médico/ciclo (`DIM_CategoriaMedica` + `FACT_CategorizacionMedica`).
+
+> ⚠️ **DÓNDE VIVE REALMENTE EL MOTOR (verificado jul-2026).** Pese a lo que sugieren su
+> nombre y su CRUD en Admin, **`Config.DIM_CriterioCategoria` / `DIM_CriterioCategoriaTabla`
+> NO los usa ningún cálculo**: son un catálogo paralelo sin consumidores. El motor real
+> puntúa con el esquema **`cat.*`**:
+> - `cat.DimComponenteCategoria` — los 5 componentes (`Requerido` marca los que exige el cálculo).
+> - `cat.DimReglaCategoriaMedica` — reglas por país: rango numérico o `ValorTexto`, cada una
+>   con su aporte `PuntajePct`.
+> - `cat.DimClasificacionMedica` — bandas `PuntajeMinPct..PuntajeMaxPct` → Clase A/B/C/D.
+>
+> **La fórmula es una SUMA directa de `PuntajePct`**, no un promedio ponderado: cada regla ya
+> trae su aporte. Y **pese al sufijo `Pct`, la escala es una FRACCIÓN 0–1** (0.30 = 30%); el
+> tope suma 1.00 con los pesos 30/20/10/30/10. Las bandas usan la misma escala (DO:
+> A=0.86–1.00, B=0.66–0.85, C=0.46–0.65, D=0.00–0.45). Para mostrar al usuario: ×100.
+>
+> **Cada criterio tiene vocabulario CERRADO y no intuitivo** — p. ej. Potencial de
+> Prescripción es `"1" / "2 a 3" / "4 a 6" / "6 a 9" / "10 o Mas"`, y KOL es
+> `"Ninguno" / "Profesor Universitario" / … / "Presidente de Sociedad, Charlista"` (**no** es
+> un sí/no). Cualquier formulario debe usar desplegables servidos por
+> `GET /categorizacion/plantilla`: un valor escrito a mano no matchea ninguna regla y el
+> médico queda **sin clasificar**.
+>
+> **Solo DO tiene reglas cargadas** (27 reglas + 4 bandas). CR/GT/HN/PA/VE están vacíos:
+> ahí no se puede clasificar. Diagnóstico: `scripts/diagnostico_config_categorizacion.py`.
 
 Reutiliza `DIM_Gerente` (`tipo=DISTRITO`) y `DIM_RM` en lugar de crear dimensiones nuevas "Distrito"/"Representante". `DIM_Medico` se deduplica por `(pais_id, nombre)` porque el Excel fuente no trae un código de médico estable.
 
@@ -586,6 +610,58 @@ Mantenimiento de catálogos (`DIM_CategoriaMedica`, `DIM_CriterioCategoria` + `D
 | PUT | `/medicos/maestro/{id}` | Actualizar |
 
 > **No ciclo-dependiente**: el Maestro es país-level, el guard de ciclo abierto no aplica (sí a la asignación del Panel). El esquema `cat.*` no se toca.
+
+---
+
+## 14c. Alta de Médico con Clasificación y Aprobación (Bloque B, jul-2026)
+
+Rediseño del alta de un médico en el Panel: el representante ya **no elige** la categoría —
+captura los 5 criterios y la letra **la revela el sistema al aprobar el Gerente de Distrito**.
+
+**Principio rector**: la categoría **no es elegible por nadie**. Ni el rep al capturar ni el GD
+al revisar la ven o la eligen; ambos manipulan solo los valores crudos. Así la clasificación es
+auditable (siempre recalculable desde los valores) y no negociable. Mismo criterio que el
+`score_oculto` de LSII (§12): `GET /categorizacion/plantilla` **nunca devuelve los puntajes**,
+porque conocerlos permitiría capturar apuntando a la categoría deseada.
+
+**Flujo:**
+
+1. **Alta (rep)** — `POST /visita/medicos` exige `clasificacion` (los 5 criterios; 422 si falta
+   alguno). El médico queda `PENDIENTE_ALTA` y **sin categoría** (`categoria = NULL`). Los valores
+   se guardan en `Visita.MedicoClasificacion` (staging 1:1, migración `0021`).
+2. **Aviso** — correo al Gerente de Distrito del VM
+   (`notification_service.notificar_medico_pendiente_aprobacion`, best-effort).
+3. **Revisión (GD)** — `GET/PUT /visita/medicos/{id}/clasificacion`: ve la plantilla y **puede
+   corregirla**. El PUT da 409 si el alta ya no está pendiente (tras aprobar, editarla a mano
+   rompería la trazabilidad del cálculo).
+4. **Aprobación** — `POST /visita/medicos/{id}/aprobar` dispara
+   `visita_aprobacion_service._clasificar_al_aprobar`: el motor puntúa y **sella
+   `MedicoVisita.categoria`**. Una BAJA no recalcula nada.
+5. **Destino del dato** — la clasificación queda en el **Panel** (plano de asignación, por RM/línea);
+   el **Maestro de Médicos (`DIM_Medico`) queda SIN clasificación** a propósito: un mismo médico
+   puede tener categorías distintas según la línea que lo visita.
+
+**Motor de un médico**: `categorizacion_service.calcular_categoria_de_valores(db, pais, valores)`,
+con `_puntuar()` pura (testeable sin BD). Reutiliza los helpers `_regla_aplica`/`_mejor_regla` del
+motor batch de Excel — **a propósito**: garantiza que un médico dé la MISMA categoría venga del
+Excel o del Panel. Si falta regla de un componente requerido → `estado=PENDIENTE` y `categoria=None`:
+**no se inventa una letra**, y la aprobación no se bloquea (el médico queda sin clasificar).
+
+**Blindaje anti-duplicados (estricto)**: `maestro_medico_service.detectar_duplicados` bloquea
+(`DuplicadoDuroError`) por **exequátur, cédula, O mismo nombre normalizado en el MISMO centro**.
+Mismo nombre en la misma **provincia** pero en **otro centro** sigue siendo blando (advierte):
+dos homónimos en centros distintos pueden ser médicos reales diferentes. **`confirmar_duplicado`
+ya no puede saltarse la regla dura** — tampoco la importación por Excel, que reporta la fila con
+el médico existente (`preview_excel` expone `bloqueados_duplicado` para verlo antes de importar).
+
+**Cambios de esquema (migración `0021_medico_clasificacion`)**: `Visita.MedicoClasificacion`
+(nueva) y `Visita.DIM_MedicoVisita.categoria` → **NULLABLE** (NULL = capturado, aún sin clasificar).
+Escrita a mano: el autogenerate arrastraba ~40 renombrados de índices ajenos al cambio.
+
+**Frontend**: `PanelMedico.tsx` — sección "Clasificación del médico (obligatoria)" en el alta
+(campos **renderizados desde la plantilla del país**, no hardcodeados; Guardar bloqueado hasta
+completarlos) y diálogo **"Revisar y aprobar"** para el GD. Al **editar** un médico la clasificación
+no se muestra ni se envía (la ajusta el GD al aprobar).
 
 ---
 
@@ -889,7 +965,7 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 | Capturar screenshots reales de la app MSM | Pendiente / en curso | Para materiales comerciales |
 | Módulo de Exámenes v2.0 | **Resuelto** | Esquema `exam` (autocontenido). **Gate de integración al KPI**: la entrega de un examen ya NO alimenta `DW.FACT_ResultadoIndicador`; la nota EVAL_CONOCIMIENTOS de los RM entra **solo** cuando Capacitación consolida el (ciclo, país) vía `examen_consolidacion_service.consolidar_ciclo` (tabla `exam.FactConsolidacionCiclo`, migración `c1e7a2f4b9d0`; guard de ciclo abierto; re-ejecutable; 1 recálculo). Endpoints `GET/POST /examenes/consolidacion`; panel `ConsolidacionPanel.tsx`. **4 mejoras**: (1) nota real + banner Aprobado/No Aprobado/Provisional + flag `provisional` en el reporte; (2) correo de correcciones a `fecha_limite+30min` (`notification_service.notificar_correcciones_examen` + `app/core/scheduler.py` APScheduler + botón demo `POST /examenes/{id}/correcciones/enviar`); (3) `analisis_preguntas` con `acierto_pct`/`fallan`/`aciertan`/`etiqueta` + tooltip de nombres + recomendaciones ≥40%; (4) tipo de pregunta `objecion` (Objeción de Producto, reusa `Pregunta.escenario`, banner naranja). |
 | Notificaciones email | **Resuelto** | `notification_service.py` (smtplib, best-effort, no-op si `MAIL_SERVER=""`) cableado a: `ranking_service` (`notificar_ranking_generado`), `reconocimiento_service` (`notificar_reconocimiento_otorgado`), `examen_intento_service` (`notificar_resultado_examen`) y `notificar_correcciones_examen` (correcciones de examen, T+30min vía APScheduler). Gmail SMTP configurado en `.env`; envío real verificado. |
-| Tests unitarios | **Resuelto (en curso)** | Suite `pytest` con **187 tests** (`backend/tests/test_*.py`): IUP, puntaje, elegibilidad, token_store, módulo Exámenes (incl. `test_examen_consolidacion_service.py`) y módulo Visita (`test_visita_service.py`, incl. guards de ciclo cerrado y foto/GPS). CI de GitHub Actions corre pytest+build. Cobertura ampliable a routers/ETL. |
+| Tests unitarios | **Resuelto (en curso)** | Suite `pytest` con **756 tests** (`backend/tests/test_*.py`): IUP, puntaje, elegibilidad, token_store, RBAC/authz, módulo Exámenes (incl. `test_examen_consolidacion_service.py`), módulo Visita (`test_visita_service.py`, incl. guards de ciclo cerrado, foto/GPS y el flujo de alta+aprobación del Bloque B) y el motor de categorización de un médico (`test_categorizacion_un_medico.py`). CI de GitHub Actions corre pytest+build. Cobertura ampliable a routers/ETL. |
 | Refresh token en BD | **Resuelto** (FIX W-04 v2) | La blacklist vive en la base de datos (`Security.FACT_TokenRevocado`, modelo `TokenRevocado`). `token_store.revocar_token`/`token_esta_revocado` reciben `db`; revocación consistente entre workers y duradera tras reinicio. Purga oportuna de expirados con `purgar_expirados`. |
 | Dashboard Power BI | **DESCARTADO** | Decisión del cliente (jul-2026): *"nunca voy a trabajar con Dashboard Power BI"*. No proponerlo ni retomarlo. Los dashboards del sistema (ejecutivo, cobertura, LSII, categorización) se construyen dentro de la app con recharts — esa es la vía definitiva, no un paso intermedio. |
 
