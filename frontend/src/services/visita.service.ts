@@ -48,6 +48,33 @@ export interface AprobacionPendiente {
   tipo_solicitud: 'ALTA' | 'BAJA'; fecha_solicitud: string | null;
 }
 
+/** Plantilla de clasificación (5 criterios). OBLIGATORIA al dar de alta un médico:
+ *  la categoría A/B/C/D no se elige — la calcula el sistema al aprobar el Gerente. */
+export interface ClasificacionCrear {
+  pacientes_semana: number | '';
+  costo_consulta: number | '';
+  potencial_prescripcion: string;
+  ubicacion_territorial: string;
+  kol_nivel: string;
+}
+
+/** Un criterio del formulario, servido por GET /categorizacion/plantilla.
+ *  `opciones` trae el vocabulario válido del país (sin puntajes). */
+export interface CriterioPlantilla {
+  codigo: string;
+  campo: string;
+  etiqueta: string;
+  tipo: 'NUMERICO' | 'TEXTO';
+  requerido: boolean;
+  opciones: string[];
+  minimo: number | null;
+  maximo: number | null;
+}
+
+export const plantillaCategorizacion = (paisCodigo: string) =>
+  api.get<CriterioPlantilla[]>('/categorizacion/plantilla', { params: { pais_codigo: paisCodigo } })
+    .then(r => r.data);
+
 export interface MedicoCrear {
   vm_id: number;
   codigo?: string | null;
@@ -56,7 +83,9 @@ export interface MedicoCrear {
   apellidos?: string | null;
   especialidad_id?: number | null;
   subespecialidad?: string | null;
-  categoria: string;
+  /** Ya no la elige el representante: la asigna el sistema al aprobarse el alta. */
+  categoria?: string | null;
+  clasificacion: ClasificacionCrear;
   centro_trabajo?: string | null;
   institucion_tipo?: string | null;
   tipo_consultorio?: string | null;

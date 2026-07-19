@@ -11,9 +11,11 @@ import {
   listarMedicos, obtenerMedico, listarMedicosExistentes, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
   solicitarBajaMedico, reactivarMedico, listarAprobaciones, aprobarMedico, rechazarMedico,
   listarProvincias, listarMunicipios, listarCentros, importarMedicosCategorizacion, miGerente,
+  plantillaCategorizacion,
   type MedicoVisita, type MedicoExistente, type Catalogo, type PosibleDuplicado, type MedicoCrear, type AprobacionPendiente,
-  type Provincia, type Municipio, type MiGerente,
+  type Provincia, type Municipio, type MiGerente, type CriterioPlantilla,
 } from '../../services/visita.service';
+import { useCicloStore } from '../../store/ciclo.store';
 
 // Tipos de consultorio válidos en RD (sin "Hospital privado", que no aplica).
 const TIPOS = ['Clínica privada', 'Hospital público', 'Consultorio independiente'];
@@ -28,9 +30,15 @@ const parseDias = (s?: string | null): string[] =>
   (s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
 const POTENCIAL = ['Alto', 'Medio', 'Bajo'];
 const INSTITUCION = ['Pública', 'Privada'];
+// Plantilla de clasificación vacía: los 5 criterios son OBLIGATORIOS para dar de alta.
+const clasificacionVacia = {
+  pacientes_semana: '' as number | '', costo_consulta: '' as number | '',
+  potencial_prescripcion: '', ubicacion_territorial: '', kol_nivel: '',
+};
 const vacio: MedicoCrear = {
-  vm_id: 0, nombre_completo: '', especialidad_id: null, categoria: 'A',
+  vm_id: 0, nombre_completo: '', especialidad_id: null,
   tipo_consultorio: '', direccion: '', telefono: '', acepta_visita: true, kol: false,
+  clasificacion: { ...clasificacionVacia },
 };
 
 // Avatar de categoría (círculo) — A dorado, B azul, C gris (como el prototipo).
@@ -104,6 +112,32 @@ export default function PanelMedico() {
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
   const [form, setForm] = useState<MedicoCrear>(vacio);
+  // Plantilla de clasificación: los vocabularios válidos los define el país (cada criterio
+  // tiene opciones cerradas y NO intuitivas). Sin ella no se puede clasificar el médico.
+  const paisCodigo = useCicloStore((s) => s.paisCodigo);
+  const [plantilla, setPlantilla] = useState<CriterioPlantilla[]>([]);
+  const [plantillaError, setPlantillaError] = useState('');
+  useEffect(() => {
+    if (!paisCodigo) return;
+    plantillaCategorizacion(paisCodigo)
+      .then((cs) => { setPlantilla(cs); setPlantillaError(''); })
+      .catch((e) => {
+        setPlantilla([]);
+        setPlantillaError(e?.response?.data?.detail
+          || 'No se pudieron cargar los criterios de clasificación de este país.');
+      });
+  }, [paisCodigo]);
+
+  const setClas = (campo: string, valor: string | number) =>
+    setForm((f) => ({ ...f, clasificacion: { ...f.clasificacion, [campo]: valor } }));
+  // Acceso por nombre de campo: la plantilla es dinámica (la define el país), así que
+  // los criterios se leen por clave en vez de por propiedad fija.
+  const valClas = (campo: string): string | number =>
+    (form.clasificacion as unknown as Record<string, string | number>)?.[campo] ?? '';
+  // Los 5 criterios son obligatorios: sin ellos el backend rechaza el alta (422).
+  const clasificacionCompleta = (['pacientes_semana', 'costo_consulta', 'potencial_prescripcion',
+    'ubicacion_territorial', 'kol_nivel'] as const)
+    .every((k) => form.clasificacion?.[k] !== '' && form.clasificacion?.[k] !== undefined);
   const [errCampos, setErrCampos] = useState<Record<string, string>>({});  // validación por campo
   const [abierto, setAbierto] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -233,6 +267,9 @@ export default function PanelMedico() {
     let m = mLite;
     try { m = await obtenerMedico(mLite.id); } catch { /* fallback: usa lo que trae la lista */ }
     setForm({
+      // Al EDITAR no se toca la clasificación (la ajusta el GD al aprobar); va vacía
+      // y se descarta del payload en guardar().
+      clasificacion: { ...clasificacionVacia },
       vm_id: m.vm_id, codigo: m.codigo, nombre_completo: m.nombre_completo, nombre: m.nombre,
       apellidos: m.apellidos, especialidad_id: m.especialidad_id, subespecialidad: m.subespecialidad,
       categoria: m.categoria, centro_trabajo: m.centro_trabajo, institucion_tipo: m.institucion_tipo,
@@ -323,7 +360,9 @@ export default function PanelMedico() {
     setGuardando(true); setDuplicados(null);
     try {
       if (editId !== null) {
-        const { confirmar_duplicado: _c, vm_id: _v, ...cambios } = form;
+        // La clasificación NO se edita aquí: se captura al dar de alta y el Gerente de
+        // Distrito la ajusta en la pantalla de aprobación.
+        const { confirmar_duplicado: _c, vm_id: _v, clasificacion: _cl, ...cambios } = form;
         await actualizarMedico(editId, cambios);
         setMsg({ tipo: 'success', texto: 'Médico actualizado.' });
       } else {
@@ -649,12 +688,37 @@ export default function PanelMedico() {
                 <Grid item xs={12} sm={4}>
                   <TextField fullWidth size="small" label="Subespecialidad" value={form.subespecialidad ?? ''} onChange={(e) => set('subespecialidad', e.target.value)} />
                 </Grid>
-                <Grid item xs={12} sm={4}>
-                  <TextField select fullWidth size="small" label="Categoría" value={form.categoria}
-                             onChange={(e) => set('categoria', e.target.value)}>
-                    {['A', 'B', 'C', 'D'].map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-                  </TextField>
+                {/* Clasificación: el representante captura los 5 criterios; la categoría
+                    A/B/C/D la calcula el sistema cuando el Gerente de Distrito aprueba.
+                    Solo al DAR DE ALTA — al editar, la ajusta el GD en su pantalla. */}
+                {editId === null && seccion('Clasificación del médico (obligatoria)')}
+                {editId === null && (
+                <Grid item xs={12}>
+                  <Alert severity={plantillaError ? 'error' : 'info'} sx={{ mb: 1 }}>
+                    {plantillaError || 'Completa los 5 criterios. La categoría (A/B/C/D) la asigna '
+                      + 'el sistema cuando tu Gerente de Distrito apruebe el alta.'}
+                  </Alert>
                 </Grid>
+                )}
+                {editId === null && plantilla.map((c) => (
+                  <Grid item xs={12} sm={4} key={c.codigo}>
+                    {c.tipo === 'TEXTO' ? (
+                      <TextField select fullWidth size="small" required label={c.etiqueta}
+                                 value={valClas(c.campo)}
+                                 error={!valClas(c.campo)}
+                                 onChange={(e) => setClas(c.campo, e.target.value)}>
+                        {c.opciones.map((o) => <MenuItem key={o} value={o}>{o}</MenuItem>)}
+                      </TextField>
+                    ) : (
+                      <TextField fullWidth size="small" required type="number" label={c.etiqueta}
+                                 value={valClas(c.campo)}
+                                 error={valClas(c.campo) === ''}
+                                 helperText={c.minimo != null ? `Entre ${c.minimo} y ${c.maximo}` : ' '}
+                                 inputProps={{ min: c.minimo ?? 0, max: c.maximo ?? undefined }}
+                                 onChange={(e) => setClas(c.campo, e.target.value === '' ? '' : Number(e.target.value))} />
+                    )}
+                  </Grid>
+                ))}
 
                 {seccion('Ubicación / Zonificación')}
                 <Grid item xs={12} sm={6}>
@@ -820,7 +884,9 @@ export default function PanelMedico() {
               Registrar de todos modos
             </Button>
           ) : (
-            <Button variant="contained" disabled={guardando || !form.nombre_completo} onClick={() => guardar(false)}>
+            <Button variant="contained" onClick={() => guardar(false)}
+                    disabled={guardando || !form.nombre_completo
+                              || (editId === null && !clasificacionCompleta)}>
               {guardando ? 'Guardando…' : 'Guardar'}
             </Button>
           )}
