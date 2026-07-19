@@ -76,8 +76,10 @@ export default function MainLayout() {
   const [pwOpen, setPwOpen] = useState(false);
   const [pwActual, setPwActual] = useState('');
   const [pwNueva, setPwNueva] = useState('');
+  const [pwConfirmar, setPwConfirmar] = useState('');
   const [pwMsg, setPwMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
   const [pwSaving, setPwSaving] = useState(false);
+  const pwCoincide = pwNueva.length > 0 && pwNueva === pwConfirmar;
 
   const resetPermisos = usePermisosStore((s) => s.reset);
   const handleLogout = async () => {
@@ -87,14 +89,15 @@ export default function MainLayout() {
     navigate('/login');
   };
 
-  const abrirCambioPassword = () => { setAnchorEl(null); setPwMsg(null); setPwActual(''); setPwNueva(''); setPwOpen(true); };
+  const abrirCambioPassword = () => { setAnchorEl(null); setPwMsg(null); setPwActual(''); setPwNueva(''); setPwConfirmar(''); setPwOpen(true); };
 
   const handleCambiarPassword = async () => {
+    if (!pwCoincide) { setPwMsg({ tipo: 'error', texto: 'La nueva contraseña y su confirmación no coinciden.' }); return; }
     setPwSaving(true); setPwMsg(null);
     try {
       await api.post('/auth/change-password', { password_actual: pwActual, password_nuevo: pwNueva });
       setPwMsg({ tipo: 'success', texto: 'Contraseña actualizada correctamente.' });
-      setPwActual(''); setPwNueva('');
+      setPwActual(''); setPwNueva(''); setPwConfirmar('');
     } catch (e: unknown) {
       const detalle = (e as { response?: { data?: { detail?: string | { msg?: string }[] } } })?.response?.data?.detail;
       const texto = Array.isArray(detalle) ? (detalle[0]?.msg || 'Datos inválidos') : (detalle || 'No se pudo cambiar la contraseña.');
@@ -202,13 +205,17 @@ export default function MainLayout() {
                          onChange={(e) => setPwActual(e.target.value)} fullWidth autoComplete="current-password" />
               <TextField label="Contraseña nueva" type="password" value={pwNueva}
                          onChange={(e) => setPwNueva(e.target.value)} fullWidth autoComplete="new-password"
-                         helperText="Mín. 12 caracteres, con mayúscula, minúscula y número." />
+                         helperText="Mín. 8 (12 para ADMIN), con mayúscula, minúscula, número y carácter especial." />
+              <TextField label="Confirmar contraseña nueva" type="password" value={pwConfirmar}
+                         onChange={(e) => setPwConfirmar(e.target.value)} fullWidth autoComplete="new-password"
+                         error={pwConfirmar.length > 0 && !pwCoincide}
+                         helperText={pwConfirmar.length > 0 && !pwCoincide ? 'No coinciden' : ' '} />
             </Stack>
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setPwOpen(false)}>Cerrar</Button>
             <Button variant="contained" onClick={handleCambiarPassword}
-                    disabled={pwSaving || !pwActual || !pwNueva}>
+                    disabled={pwSaving || !pwActual || !pwNueva || !pwCoincide}>
               {pwSaving ? 'Guardando…' : 'Cambiar'}
             </Button>
           </DialogActions>

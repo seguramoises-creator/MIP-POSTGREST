@@ -26,12 +26,14 @@ export default function Login() {
   const [fpEmail, setFpEmail] = useState('');
   const [fpCodigo, setFpCodigo] = useState('');
   const [fpPass, setFpPass] = useState('');
+  const [fpConfirm, setFpConfirm] = useState('');
   const [fpMsg, setFpMsg] = useState('');
   const [fpErr, setFpErr] = useState('');
   const [fpLoading, setFpLoading] = useState(false);
+  const fpCoincide = fpPass.length > 0 && fpPass === fpConfirm;
 
   const abrirFp = () => {
-    setFpOpen(true); setFpStep(1); setFpEmail(''); setFpCodigo(''); setFpPass('');
+    setFpOpen(true); setFpStep(1); setFpEmail(''); setFpCodigo(''); setFpPass(''); setFpConfirm('');
     setFpMsg(''); setFpErr('');
   };
 
@@ -209,7 +211,15 @@ export default function Login() {
                 <TextField
                   fullWidth size="small" label="Nueva contraseña" type="password"
                   value={fpPass} onChange={(e) => setFpPass(e.target.value)}
+                  autoComplete="new-password"
                   helperText="Mín. 12 · mayúscula, minúscula, número y carácter especial"
+                />
+                <TextField
+                  fullWidth size="small" label="Confirmar nueva contraseña" type="password"
+                  value={fpConfirm} onChange={(e) => setFpConfirm(e.target.value)}
+                  autoComplete="new-password"
+                  error={fpConfirm.length > 0 && !fpCoincide}
+                  helperText={fpConfirm.length > 0 && !fpCoincide ? 'No coinciden' : ' '}
                 />
               </>
             )}
@@ -223,7 +233,7 @@ export default function Login() {
             </Button>
           ) : (
             <Button variant="contained"
-                    disabled={fpLoading || fpCodigo.trim().length < 6 || fpPass.trim().length < 12}
+                    disabled={fpLoading || fpCodigo.trim().length < 6 || fpPass.trim().length < 12 || !fpCoincide}
                     onClick={fpRestablecer}>
               {fpLoading ? <CircularProgress size={18} /> : 'Cambiar contraseña'}
             </Button>
