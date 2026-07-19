@@ -99,7 +99,7 @@ export default function Examenes() {
   }
 
   // Crear con IA
-  const [ia, setIa] = useState({ nombre: '', producto: '', n_multi: 5, n_casos: 0, n_vf: 0, texto_pegado: '' });
+  const [ia, setIa] = useState({ nombre: '', producto: '', n_multi: 5, n_casos: 0, n_vf: 0, n_objeciones: 0, texto_pegado: '' });
   const [iaArchivo, setIaArchivo] = useState<File | null>(null);
   const [iaJob, setIaJob] = useState<{ estado: string; mensaje?: string | null; total?: number } | null>(null);
 
@@ -128,12 +128,13 @@ export default function Examenes() {
       const resp = await generarExamenIA({
         nombre: ia.nombre, producto: ia.producto || undefined,
         n_multi: Number(ia.n_multi), n_casos: Number(ia.n_casos), n_vf: Number(ia.n_vf),
+        n_objeciones: Number(ia.n_objeciones),
         texto_pegado: ia.texto_pegado || undefined, archivo: iaArchivo,
       });
       setIaJob({ estado: 'procesando' });
       setMsg({ tipo: 'success', texto: 'Documento recibido. La IA está generando las preguntas…' });
       pollIA(resp.job_id, resp.examen_id);
-      setIa({ nombre: '', producto: '', n_multi: 5, n_casos: 0, n_vf: 0, texto_pegado: '' });
+      setIa({ nombre: '', producto: '', n_multi: 5, n_casos: 0, n_vf: 0, n_objeciones: 0, texto_pegado: '' });
       setIaArchivo(null);
     } catch (e: unknown) {
       const detalle = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
@@ -338,6 +339,9 @@ export default function Examenes() {
                   <TextField label="Casos clínicos" type="number" size="small" inputProps={{ min: 0 }}
                              InputProps={{ endAdornment: <InputAdornment position="end">preg.</InputAdornment> }}
                              value={ia.n_casos} onChange={(e) => setIa({ ...ia, n_casos: Number(e.target.value) })} />
+                  <TextField label="🛡️ Objeción de Producto" type="number" size="small" inputProps={{ min: 0 }}
+                             InputProps={{ endAdornment: <InputAdornment position="end">preg.</InputAdornment> }}
+                             value={ia.n_objeciones} onChange={(e) => setIa({ ...ia, n_objeciones: Number(e.target.value) })} />
                 </Stack>
                 <Button component="label" variant="outlined" startIcon={<UploadFile />} size="small">
                   {iaArchivo ? iaArchivo.name : 'Subir documento (PDF/Word/PPT)'}

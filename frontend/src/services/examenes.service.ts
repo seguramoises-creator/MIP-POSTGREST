@@ -136,7 +136,7 @@ export const listarEvaluados = () =>
 
 // ── Generación con IA ─────────────────────────────────────────────────
 export interface GenerarIAParams {
-  nombre: string; producto?: string; n_multi: number; n_casos: number; n_vf?: number;
+  nombre: string; producto?: string; n_multi: number; n_casos: number; n_vf?: number; n_objeciones?: number;
   texto_pegado?: string; archivo?: File | null;
 }
 export const generarExamenIA = (p: GenerarIAParams) => {
@@ -146,6 +146,7 @@ export const generarExamenIA = (p: GenerarIAParams) => {
   fd.append('n_multi', String(p.n_multi));
   fd.append('n_casos', String(p.n_casos));
   fd.append('n_vf', String(p.n_vf ?? 0));
+  fd.append('n_objeciones', String(p.n_objeciones ?? 0));
   if (p.texto_pegado) fd.append('texto_pegado', p.texto_pegado);
   if (p.archivo) fd.append('archivo', p.archivo);
   return api.post<GenerarIAResp>('/examenes/generar-ia', fd, {

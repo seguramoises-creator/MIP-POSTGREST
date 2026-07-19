@@ -43,7 +43,8 @@ def extraer_texto_fuente(ruta: str, tipo_archivo: str) -> str:
     raise ValueError(f"Tipo de archivo no soportado: {tipo_archivo}")
 
 
-def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | None = None, n_vf: int = 0) -> str:
+def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | None = None,
+                     n_vf: int = 0, n_objeciones: int = 0) -> str:
     """Construye el prompt base para la generación de preguntas con Claude.
 
     El texto de entrada se trunca a _TEXTO_MAX_CHARS para acotar el tamaño del
@@ -54,7 +55,7 @@ def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | Non
     como ficha técnica o estudio clínico, y las preguntas deben sostenerse solas.
     """
     texto_acotado = texto[:_TEXTO_MAX_CHARS]
-    total = n_multi + n_casos + n_vf
+    total = n_multi + n_casos + n_vf + n_objeciones
     tema = (f" El material se relaciona con: {producto} (úsalo solo como tema/contexto; "
             "NO exijas que el material lo nombre explícitamente)." if producto else "")
     return (
@@ -65,7 +66,11 @@ def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | Non
         f"- {n_multi} de opción múltiple (tipo 'multi', EXACTAMENTE 5 opciones a–e, 1 correcta)\n"
         f"- {n_casos} casos clínicos (tipo 'caso', con 'escenario', EXACTAMENTE 5 opciones a–e, 1 correcta)\n"
         f"- {n_vf} de Verdadero/Falso (tipo 'vf', EXACTAMENTE 2 opciones [\"Verdadero\",\"Falso\"] en ese orden; "
-        "'correcta'=0 si la afirmación es verdadera, 1 si es falsa)\n\n"
+        "'correcta'=0 si la afirmación es verdadera, 1 si es falsa)\n"
+        f"- {n_objeciones} de Objeción de Producto (tipo 'objecion'): en 'escenario' pon la OBJECIÓN "
+        "que un médico plantea al visitador (una duda, efecto adverso, limitación o comparación con "
+        "la competencia sobre el producto/tema); en 'texto' la pregunta '¿cuál es la mejor respuesta "
+        "técnica?'; EXACTAMENTE 5 opciones a–e con 1 correcta (la mejor respuesta profesional)\n\n"
         "REGLAS DE REDACCIÓN (obligatorias):\n"
         "- Genera SIEMPRE las preguntas a partir del CONTENIDO real del material "
         "(conceptos, principios, indicaciones, dosis, contraindicaciones, efectos, datos, etc.). "
@@ -80,7 +85,7 @@ def construir_prompt(texto: str, n_multi: int, n_casos: int, producto: str | Non
         "la relativices ('según el documento', 'el texto indica', etc. están prohibidos).\n\n"
         "Devuelve SOLO el arreglo JSON, sin envolverlo en bloques de código markdown "
         "(nada de ```), sin texto antes ni después. Cada pregunta con este esquema:\n"
-        "tipo: 'multi'|'caso'|'vf'; escenario: string (solo caso); texto: string; "
+        "tipo: 'multi'|'caso'|'vf'|'objecion'; escenario: string (obligatorio en caso y objecion); texto: string; "
         "opciones: array de strings (5 para multi/caso, 2 para vf); correcta: índice 0-based de la opción correcta; "
         "explicacion: string.\n\nMATERIAL DE REFERENCIA:\n" + texto_acotado)
 
@@ -140,7 +145,8 @@ def _extraer_json(texto_respuesta: str):
         raise ValueError(f"La IA no devolvió JSON válido: {e}")
 
 
-def _generar_demo(texto: str, n_multi: int, n_casos: int, producto: str | None = None, n_vf: int = 0) -> list[dict]:
+def _generar_demo(texto: str, n_multi: int, n_casos: int, producto: str | None = None,
+                  n_vf: int = 0, n_objeciones: int = 0) -> list[dict]:
     """Genera preguntas localmente (MODO DEMO), sin llamar a Claude ni gastar API.
 
     Las preguntas se formulan SOBRE el producto / la información (tratada como
@@ -201,13 +207,30 @@ def _generar_demo(texto: str, n_multi: int, n_casos: int, producto: str | None =
             "correcta": 0,
             "explicacion": f"La respuesta correcta refleja la evidencia clínica de {prod}. (Generada en MODO DEMO, sin IA real.)",
         })
+    for i in range(max(0, n_objeciones)):
+        frase = frases[(n_multi + n_vf + n_casos + i) % len(frases)][:150]
+        preguntas.append({
+            "tipo": "objecion",
+            "escenario": (f"[DEMO] Un médico objeta sobre {prod}: \"He escuchado dudas al respecto y "
+                          f"prefiero no cambiar mi conducta\"."),
+            "texto": f"¿Cuál es la mejor respuesta técnica del representante ante esta objeción sobre {prod}?",
+            "opciones": [
+                frase,
+                distractores[i % len(distractores)],
+                distractores[(i + 1) % len(distractores)],
+                distractores[(i + 2) % len(distractores)],
+                distractores[(i + 3) % len(distractores)],
+            ],
+            "correcta": 0,
+            "explicacion": f"La mejor respuesta rebate la objeción con la evidencia clínica de {prod}. (Generada en MODO DEMO, sin IA real.)",
+        })
     return validar_preguntas_generadas(preguntas)
 
 
 def generar_preguntas_ia(texto: str, n_multi: int, n_casos: int,
                          client=None, model: str | None = None,
                          producto: str | None = None, n_vf: int = 0,
-                         demo: bool | None = None) -> list[dict]:
+                         demo: bool | None = None, n_objeciones: int = 0) -> list[dict]:
     """Genera preguntas llamando a Claude. El cliente se inyecta para testing.
 
     `producto` ancla las preguntas al producto/tema (en vez de a "el documento").
@@ -218,16 +241,16 @@ def generar_preguntas_ia(texto: str, n_multi: int, n_casos: int,
     usar_demo = settings.EXAMEN_IA_DEMO if demo is None else demo
     if client is None and usar_demo:
         logger.info("generar_preguntas_ia: MODO DEMO activo — generación local sin Claude")
-        return _generar_demo(texto, n_multi, n_casos, producto, n_vf)
+        return _generar_demo(texto, n_multi, n_casos, producto, n_vf, n_objeciones)
     if client is None:
         import anthropic
         client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
     model = model or settings.EXAM_AI_MODEL
-    prompt = construir_prompt(texto, n_multi, n_casos, producto, n_vf)
+    prompt = construir_prompt(texto, n_multi, n_casos, producto, n_vf, n_objeciones)
     # max_tokens proporcional a la cantidad pedida: cada pregunta en JSON ocupa
     # ~600-800 tokens. Con un tope fijo bajo (4096) los exámenes grandes se truncaban
     # y devolvían JSON inválido. Escalamos con un techo de seguridad.
-    total = max(1, n_multi + n_casos + n_vf)
+    total = max(1, n_multi + n_casos + n_vf + n_objeciones)
     max_tokens = min(16000, 2000 + total * 800)
     respuesta = client.messages.create(
         model=model, max_tokens=max_tokens,
@@ -263,7 +286,7 @@ def validar_preguntas_generadas(data: list) -> list[dict]:
         if not isinstance(q, dict):
             raise ValueError(f"Pregunta {i}: formato inválido")
         tipo = q.get("tipo")
-        if tipo not in ("multi", "caso", "vf"):
+        if tipo not in ("multi", "caso", "vf", "objecion"):
             raise ValueError(f"Pregunta {i}: tipo inválido {tipo!r}")
         if not (q.get("texto") or "").strip():
             raise ValueError(f"Pregunta {i}: texto vacío")
@@ -276,6 +299,8 @@ def validar_preguntas_generadas(data: list) -> list[dict]:
             raise ValueError(f"Pregunta {i}: 'correcta' debe ser 0..{n_ops - 1}")
         if tipo == "caso" and not (q.get("escenario") or "").strip():
             raise ValueError(f"Pregunta {i}: caso clínico requiere 'escenario'")
+        if tipo == "objecion" and not (q.get("escenario") or "").strip():
+            raise ValueError(f"Pregunta {i}: la objeción requiere 'escenario' (el texto de la objeción)")
         out.append({
             "tipo": tipo, "texto": q["texto"].strip(),
             "escenario": (q.get("escenario") or None),
@@ -356,6 +381,7 @@ def procesar_generacion_ia(fuente_id: int) -> None:
             n_multi: int = int(params.get("n_multi", 5))
             n_casos: int = int(params.get("n_casos", 0))
             n_vf: int = int(params.get("n_vf", 0))
+            n_objeciones: int = int(params.get("n_objeciones", 0))
             texto_pegado: str | None = params.get("texto_pegado") or None
 
             # Extract text: from file on disk, or from the pasted text
@@ -371,7 +397,8 @@ def procesar_generacion_ia(fuente_id: int) -> None:
             # Flag DEMO en runtime (Config.DIM_Parametro), con fallback al .env.
             from app.services import config_service
             demo = config_service.obtener_bool(db, "EXAMEN_IA_DEMO", settings.EXAMEN_IA_DEMO)
-            preguntas = generar_preguntas_ia(texto, n_multi, n_casos, producto=producto, n_vf=n_vf, demo=demo)
+            preguntas = generar_preguntas_ia(texto, n_multi, n_casos, producto=producto, n_vf=n_vf,
+                                              demo=demo, n_objeciones=n_objeciones)
             persistir_preguntas(db, fuente.examen_id, preguntas)
 
             fuente.estado_generacion = "exitoso"
