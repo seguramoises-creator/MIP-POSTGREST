@@ -128,7 +128,7 @@ class Settings(BaseSettings):
     MAIL_USERNAME: str = ""
     MAIL_PASSWORD: str = ""
     MAIL_FROM: str = "noreply@empresa.com"
-    MAIL_FROM_NAME: str = "Sistema MIP — SCGCPR"
+    MAIL_FROM_NAME: str = "VISTA — Inteligencia Comercial"
     MAIL_TLS: bool = True
     MAIL_SSL: bool = False
 

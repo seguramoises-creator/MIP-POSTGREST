@@ -135,7 +135,7 @@ def _nombre_ciclo(db: Session, ciclo_id: Optional[int]) -> str:
 def _pie_pagina() -> str:
     return (
         f"<p style='color:{_COLOR_TEXTO_PIE};font-size:12px;margin-top:24px;'>"
-        "Mensaje automático del Sistema MIP (SCGCPR) — por favor no responder "
+        "Mensaje automático de <b>VISTA — Inteligencia Comercial</b> — por favor no responder "
         "a este correo.</p>"
     )
 
@@ -458,6 +458,6 @@ def notificar_codigo_recuperacion(destinatario: str, nombre: str, codigo: str, m
   <p style="font-size:28px;font-weight:bold;letter-spacing:6px;color:#1a237e;margin:16px 0;">{codigo}</p>
   <p>Este código vence en <strong>{minutos} minutos</strong> y solo puede usarse una vez.</p>
   <p style="color:#888;font-size:13px;">Si no solicitaste este cambio, ignora este correo; tu contraseña no cambiará.</p>
-  <hr><p style="color:#aaa;font-size:12px;">Sistema MIP — SCGCPR</p>
+  <hr><p style="color:#aaa;font-size:12px;">VISTA — Inteligencia Comercial</p>
 </body></html>"""
     return _enviar(destinatario, "Código de recuperación de contraseña", cuerpo)
