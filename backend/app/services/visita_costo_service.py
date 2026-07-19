@@ -285,6 +285,21 @@ def guardar_estructura(db: Session, datos, usuario_id, es_admin: bool = False) -
     return {**calcular_full(db, ciclo_id, datos.linea_id), **estado_estructura(db, ciclo_id, datos.linea_id)}
 
 
+def listar_hojas(db: Session, ciclo_id) -> list[dict]:
+    """Hojas de Costo/ROI creadas en el ciclo (una por línea), la ÚLTIMA creada primero
+    (por id descendente). Cada hoja: {linea_id, linea_nombre, estado}. Para el selector de
+    los roles de solo lectura que navegan entre las hojas de los distintos visitadores/distritos."""
+    if not ciclo_id:
+        return []
+    from app.models.dimensiones import Linea
+    filas = (db.query(CostoEstructura.linea_id, CostoEstructura.estado, Linea.nombre)
+               .join(Linea, Linea.id == CostoEstructura.linea_id)
+               .filter(CostoEstructura.ciclo_id == ciclo_id)
+               .order_by(CostoEstructura.id.desc()).all())
+    return [{"linea_id": lid, "linea_nombre": nom, "estado": est or "BORRADOR"}
+            for lid, est, nom in filas]
+
+
 def estado_estructura(db: Session, ciclo_id, linea_id) -> dict:
     """Estado de aprobación de la estructura (ciclo, línea). Default BORRADOR si no existe."""
     e = db.query(CostoEstructura).filter(

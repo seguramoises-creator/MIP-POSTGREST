@@ -43,14 +43,17 @@ def test_require_financiero_no_incluye_al_representante():
 # ── La vista del representante es un recorte, no el modelo completo ───────────
 
 def test_mi_linea_recorte_para_representante_y_gerente():
-    """#15 (jul-2026): la vista ACOTADA (sin salarios/costos) la usan el REPRESENTANTE (su línea)
-    y el GERENTE DE DISTRITO (la línea de su equipo). Cualquier otro rol → 403."""
+    """#15 (jul-2026): la vista ACOTADA (sin salarios/costos) la usan el REPRESENTANTE (su línea),
+    el GERENTE DE DISTRITO (la de su equipo) y los roles de CONSULTA/observación (visión total →
+    eligen la hoja/línea). El guard lee RESULTADOS (costoroi.ver), no el modelo financiero completo."""
     fuente = _fuente(router_vis.costo_mi_linea)
     assert 'rol == "REPRESENTANTE_MEDICO"' in fuente
     assert 'rol == "GERENTE_DISTRITO"' in fuente
     assert "_linea_del_gerente" in fuente
-    # el guard es de lectura de RESULTADOS (costoroi.ver), no del modelo financiero completo
-    assert "current_user=LeerCostoVer" in fuente
+    # guard de lectura de RESULTADOS (costoroi.ver) — no el modelo financiero completo
+    assert "COSTOROI_VER" in fuente
+    # el observador con visión total (alcance = todo) elige la línea de la hoja a ver
+    assert "_Alc.ALL" in fuente
 
 
 def _salida_representante(monkeypatch):

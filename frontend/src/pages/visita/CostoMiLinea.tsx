@@ -9,27 +9,69 @@
  * NO ve salarios, costos, ROI de la fuerza de venta, presupuesto total ni headcount.
  * Consume GET /visita/costo/mi-linea (auto-scoped a su línea en el backend).
  */
+import { useState, useEffect } from 'react';
 import {
   Box, Card, CardContent, Grid, Typography, Alert, LinearProgress, Stack,
   Table, TableHead, TableBody, TableRow, TableCell, Paper, Chip,
+  FormControl, InputLabel, Select, MenuItem,
 } from '@mui/material';
 import { Inventory2, Warning } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
-import { costoMiLinea } from '../../services/visita.service';
+import { costoMiLinea, costoHojas } from '../../services/visita.service';
 import { useCicloStore } from '../../store/ciclo.store';
 
 const nf = (n: number) => n.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const cumplColor = (p: number) => (p >= 100 ? '#2e7d32' : p >= 80 ? '#f57c00' : '#c62828');
 
-export default function CostoMiLinea() {
+/**
+ * @param observador  Rol de solo lectura (CONSULTA/Analista/Dirección): en vez de su propia
+ *   línea, ve las HOJAS de ROI creadas y puede filtrar/moverse entre las de los distintos
+ *   visitadores/distritos (por línea), con la última creada por defecto. Sin edición.
+ */
+export default function CostoMiLinea({ observador = false }: { observador?: boolean }) {
   const cicloId = useCicloStore((s) => s.cicloId);
+  const [lineaSel, setLineaSel] = useState<number | ''>('');
+
+  // Modo observador: lista de hojas creadas (para el selector).
+  const { data: hojas } = useQuery({
+    queryKey: ['costo-hojas', cicloId],
+    queryFn: () => costoHojas(cicloId || undefined),
+    enabled: observador,
+  });
+  // Por defecto, la última hoja creada (primera de la lista, orden desc).
+  useEffect(() => {
+    if (observador && hojas && hojas.length && lineaSel === '') setLineaSel(hojas[0].linea_id);
+  }, [observador, hojas, lineaSel]);
+
   const { data, isLoading } = useQuery({
-    queryKey: ['costo-mi-linea', cicloId],
-    queryFn: () => costoMiLinea(cicloId || undefined),
+    queryKey: ['costo-mi-linea', cicloId, observador ? lineaSel : 'own'],
+    queryFn: () => costoMiLinea(cicloId || undefined, observador ? (lineaSel || undefined) : undefined),
+    enabled: !observador || lineaSel !== '',
   });
 
-  if (isLoading) return <LinearProgress />;
-  if (!data) return <Alert severity="error">No se pudo cargar tu meta de línea.</Alert>;
+  // Selector de hoja (solo observador). Se muestra arriba en cualquier estado.
+  const selectorHoja = observador && (
+    <FormControl size="small" sx={{ minWidth: 260, mb: 2 }}>
+      <InputLabel>Hoja de ROI (línea)</InputLabel>
+      <Select label="Hoja de ROI (línea)" value={lineaSel}
+              onChange={(e) => setLineaSel(Number(e.target.value))}>
+        {(hojas || []).map((h) => (
+          <MenuItem key={h.linea_id} value={h.linea_id}>
+            {h.linea_nombre} · {h.estado === 'APROBADO' ? 'Aprobada' : 'Borrador'}
+          </MenuItem>
+        ))}
+      </Select>
+    </FormControl>
+  );
+
+  if (observador && hojas && hojas.length === 0)
+    return (
+      <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
+        <Alert severity="info">Aún no se ha creado ninguna hoja de Costo & ROI en este ciclo.</Alert>
+      </Box>
+    );
+  if (isLoading || (observador && lineaSel === '')) return <LinearProgress />;
+  if (!data) return <Alert severity="error">No se pudo cargar la hoja de Costo & ROI.</Alert>;
 
   const mon = data.moneda || 'RD$';
 
@@ -37,12 +79,17 @@ export default function CostoMiLinea() {
     <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
         <Inventory2 color="primary" />
-        <Typography variant="h5" fontWeight={700}>Mi Meta de Línea</Typography>
+        <Typography variant="h5" fontWeight={700}>
+          {observador ? 'Hojas de Costo & ROI' : 'Mi Meta de Línea'}
+        </Typography>
       </Stack>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Lo que hay que producir por contacto para llegar al 100% del presupuesto, y el
-        impacto que la cobertura está teniendo en el presupuesto de la línea.
+        {observador
+          ? 'Resultados de cada hoja creada (por línea/visitador): unidades a producir por contacto e impacto de la cobertura. Solo lectura — elige la hoja para navegar entre ellas.'
+          : 'Lo que hay que producir por contacto para llegar al 100% del presupuesto, y el impacto que la cobertura está teniendo en el presupuesto de la línea.'}
       </Typography>
+
+      {selectorHoja}
 
       {!data.configurado && (
         <Alert severity="info" sx={{ mb: 2 }}>

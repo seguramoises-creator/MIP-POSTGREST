@@ -70,10 +70,15 @@ function productosDe(full: CostoFull): CostoProdInput[] {
  *  gerencial. Wrapper por rol: los hooks no admiten un return temprano. */
 export default function CostoRoiVisita() {
   const rolActual = useAuthStore((s) => s.rol);
-  // #15 (jul-2026): el RM y el GERENTE DE DISTRITO ven el RECORTE (resultados de su línea/equipo,
-  // sin salarios/costos). El modelo financiero completo queda para Finanzas/Director/ADMIN.
-  const soloRecorte = rolActual === 'REPRESENTANTE_MEDICO' || rolActual === 'GERENTE_DISTRITO';
-  return soloRecorte ? <CostoMiLinea /> : <CostoRoiGerencia />;
+  const puede = usePuede();
+  // #15 (jul-2026): el RM y el GERENTE DE DISTRITO ven el RECORTE de su línea/equipo (sin salarios).
+  if (rolActual === 'REPRESENTANTE_MEDICO' || rolActual === 'GERENTE_DISTRITO') return <CostoMiLinea />;
+  // Finanzas/Director/ADMIN CONFIGURAN/aprueban el modelo financiero completo (salarios, estructura).
+  const esConfigurador = rolActual === 'ADMIN' || puede('costoroi.configurar', 'read') === true;
+  if (esConfigurador) return <CostoRoiGerencia />;
+  // Roles de solo lectura (CONSULTA/Analista/Dirección/Producto/Marketing): OBSERVAN las hojas de
+  // ROI creadas — filtran y se mueven entre las de cada visitador/distrito, sin la vista de crear.
+  return <CostoMiLinea observador />;
 }
 
 function CostoRoiGerencia() {

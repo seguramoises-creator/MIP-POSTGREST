@@ -725,23 +725,37 @@ def costo_estructura(linea_id: int | None = None, ciclo_id: int | None = None,
     return {**full, **visita_costo_service.estado_estructura(db, ciclo_id, linea_id)}
 
 
+@router.get("/costo/hojas", response_model=list[dict])
+def costo_hojas(ciclo_id: int | None = None, db: Session = Depends(get_db), current_user=LeerCostoVer):
+    """Hojas de Costo/ROI creadas en el ciclo (una por línea), la ÚLTIMA creada primero. Sirve
+    para que un rol de solo lectura navegue/filtre entre las hojas de los distintos visitadores/
+    distritos sin entrar a la vista de configuración."""
+    from app.services import visita_costo_service
+    return visita_costo_service.listar_hojas(db, ciclo_id)
+
+
 @router.get("/costo/mi-linea", response_model=dict)
-def costo_mi_linea(ciclo_id: int | None = None, db: Session = Depends(get_db),
-                   current_user=LeerCostoVer):
+def costo_mi_linea(ciclo_id: int | None = None, linea_id: int | None = None,
+                   db: Session = Depends(get_db),
+                   _auth=Depends(_autorizar_authz(_Acc.READ, _Rec.COSTOROI_VER))):
     """Vista ACOTADA de Costo & ROI (sin salarios/costos): unidades a producir por contacto para
     el 100% del presupuesto + impacto de la cobertura en el presupuesto de la línea. La usan el
-    REPRESENTANTE (su línea) y el GERENTE DE DISTRITO (la línea de su equipo — #15)."""
+    REPRESENTANTE (su línea), el GERENTE DE DISTRITO (la de su equipo — #15) y los roles de
+    CONSULTA/observación (visión total → eligen la hoja/línea que quieren ver, solo lectura)."""
     from app.services import visita_costo_service
+    current_user = _auth.usuario
     rol = _rol(current_user)
     if rol == "REPRESENTANTE_MEDICO":
-        linea_id = _linea_del_representante(db, current_user)
+        linea = _linea_del_representante(db, current_user)
     elif rol == "GERENTE_DISTRITO":
-        linea_id = _linea_del_gerente(db, current_user)
+        linea = _linea_del_gerente(db, current_user)
+    elif _auth.alcance == _Alc.ALL:
+        linea = linea_id  # observador con visión total: ve la hoja de la línea elegida
     else:
-        raise HTTPException(403, "Esta vista acotada es para el representante o el gerente de distrito.")
-    if not linea_id:
-        raise HTTPException(403, "No hay una línea asignada para esta vista (representante o equipo).")
-    return visita_costo_service.vista_representante(db, ciclo_id, linea_id)
+        raise HTTPException(403, "Esta vista es para el representante, el gerente de distrito o un rol de consulta.")
+    if not linea:
+        raise HTTPException(400, "Elige una hoja (línea) para ver.")
+    return visita_costo_service.vista_representante(db, ciclo_id, linea)
 
 
 @router.post("/costo/estructura", response_model=dict, status_code=status.HTTP_201_CREATED)

@@ -392,8 +392,15 @@ export interface CostoMiLinea {
     venta_riesgo_bajo: number; venta_riesgo_alto: number; total_medicos_sin_visitar: number;
   };
 }
-export const costoMiLinea = (cicloId?: number) =>
-  api.get<CostoMiLinea>('/visita/costo/mi-linea', { params: cicloId ? { ciclo_id: cicloId } : {} }).then(r => r.data);
+export const costoMiLinea = (cicloId?: number, lineaId?: number) =>
+  api.get<CostoMiLinea>('/visita/costo/mi-linea',
+    { params: { ...(cicloId && { ciclo_id: cicloId }), ...(lineaId && { linea_id: lineaId }) } }).then(r => r.data);
+
+// Hojas de Costo/ROI creadas en el ciclo (una por línea, la última primero). Para el selector
+// de los roles de solo lectura que navegan entre las hojas de los visitadores/distritos.
+export interface HojaRoi { linea_id: number; linea_nombre: string; estado: 'BORRADOR' | 'APROBADO'; }
+export const costoHojas = (cicloId?: number) =>
+  api.get<HojaRoi[]>('/visita/costo/hojas', { params: cicloId ? { ciclo_id: cicloId } : {} }).then(r => r.data);
 export const guardarCostoEstructura = (datos: CostoEstructuraInput & { productos: CostoProdInput[] }) =>
   api.post<CostoFull>('/visita/costo/estructura', datos).then(r => r.data);
 // RBAC Fase 2 — workflow: el Director aprueba (BORRADOR→APROBADO); ADMIN reabre (APROBADO→BORRADOR).
