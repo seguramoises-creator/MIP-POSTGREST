@@ -5,8 +5,9 @@
  */
 import { useState } from 'react';
 import { Box, Card, Tabs, Tab } from '@mui/material';
-import { People, Lock, MarkEmailRead } from '@mui/icons-material';
+import { People, Security, Lock, MarkEmailRead } from '@mui/icons-material';
 import Usuarios from './Usuarios';
+import MatrizRoles from './MatrizRoles';
 import PasswordPolicyTab from './PasswordPolicyTab';
 import CorreoAdmin from './CorreoAdmin';
 
@@ -31,13 +32,17 @@ export default function Administracion() {
             }}
           >
             <Tab icon={<People fontSize="small" />} iconPosition="start" label="Usuarios" />
+            <Tab icon={<Security fontSize="small" />} iconPosition="start" label="Roles y Permisos" />
             <Tab icon={<Lock fontSize="small" />} iconPosition="start" label="Política de contraseñas" />
             <Tab icon={<MarkEmailRead fontSize="small" />} iconPosition="start" label="Servidor de Correo (SMTP)" />
           </Tabs>
         </Box>
 
         <Box sx={{ p: { xs: 1, sm: 2 } }}>
-          {tab === 0 ? <Usuarios /> : tab === 1 ? <PasswordPolicyTab /> : <CorreoAdmin />}
+          {tab === 0 ? <Usuarios />
+            : tab === 1 ? <MatrizRoles />
+            : tab === 2 ? <PasswordPolicyTab />
+            : <CorreoAdmin />}
         </Box>
       </Card>
     </Box>
