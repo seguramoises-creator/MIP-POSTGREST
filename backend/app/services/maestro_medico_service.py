@@ -94,8 +94,11 @@ def crear_maestro(db: Session, pais_codigo: str, datos: dict, *, origen="MANUAL"
     if dups["blandos"] and not confirmar_duplicado:
         raise PosibleDuplicadoError(dups["blandos"])
 
-    m = Medico(pais_codigo=pais_codigo, origen=origen, estado_validacion=estado,
-               activo=True, **{k: v for k, v in datos.items() if hasattr(Medico, k)})
+    # `activo` puede venir en `datos` (el formulario trae "Estado: Activo/Inactivo"); no se pasa
+    # explícito aquí para no chocar con ese keyword. Si no viene, el modelo usa default=True.
+    campos = {k: v for k, v in datos.items() if hasattr(Medico, k)}
+    campos.setdefault("activo", True)
+    m = Medico(pais_codigo=pais_codigo, origen=origen, estado_validacion=estado, **campos)
     db.add(m); db.flush()
     _auditar(db, usuario_id, m.id, "CREATE", f"Alta (origen={origen}, estado={estado})")
     db.commit(); db.refresh(m)
