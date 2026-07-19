@@ -210,19 +210,20 @@ export default function PanelMedico() {
     const m = existentes.find((x) => x.id === id);
     if (!m) return;
     setForm({
-      // Requerimiento Mallén (ajustado 11-jul-2026): copia TODA la ficha del médico EXCEPTO
-      // el nombre — incluida la ubicación (centro, provincia, municipio, sector, dirección,
-      // GPS). El VM solo captura/confirma el nombre; el resto queda precargado y editable.
+      // Copia TODA la ficha del médico (incluido el NOMBRE) EXCEPTO la ubicación específica:
+      // centro de trabajo, dirección y GPS — que pueden ser distintos en el panel del nuevo VM y
+      // los captura el representante. El resto queda precargado y editable.
       ...vacio,
       vm_id: esVM ? 0 : (vmFiltro || 0),
+      nombre_completo: m.nombre_completo, nombre: m.nombre, apellidos: m.apellidos,
       especialidad_id: m.especialidad_id, subespecialidad: m.subespecialidad, categoria: m.categoria,
-      centro_trabajo: m.centro_trabajo, institucion_tipo: m.institucion_tipo, tipo_consultorio: m.tipo_consultorio,
-      provincia: m.provincia, municipio: m.municipio, sector: m.sector, direccion: m.direccion,
-      latitud: m.latitud, longitud: m.longitud,
+      institucion_tipo: m.institucion_tipo, tipo_consultorio: m.tipo_consultorio,
+      provincia: m.provincia, municipio: m.municipio, sector: m.sector,
       telefono: m.telefono, email: m.email, exequatur: m.exequatur,
       dias_consulta: m.dias_consulta, horario_consulta: m.horario_consulta, frecuencia_visita: m.frecuencia_visita,
       acepta_visita: m.acepta_visita ?? true, potencial_prescripcion: m.potencial_prescripcion, kol: m.kol ?? false,
       segmento: m.segmento, observaciones: m.observaciones,
+      // NO se copian: centro_trabajo, direccion, latitud, longitud (ubicación específica del médico).
     });
   };
   const abrirEditar = async (mLite: MedicoVisita) => {
