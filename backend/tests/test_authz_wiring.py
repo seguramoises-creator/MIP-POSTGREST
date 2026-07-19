@@ -180,3 +180,14 @@ def test_costoroi_segregacion_finanzas_configura_director_aprueba():
         "/api/v1/visita/costo/estructura/reabrir").status_code == 403
     assert _client(router, U(Rol.ADMIN)).post(
         "/api/v1/visita/costo/estructura/reabrir").status_code != 403
+
+
+def test_consulta_lee_cobertura_y_costo_full_por_matriz():
+    from app.api.v1.routers.visita import router
+    # CONSULTA (lectura total) VE Cobertura de Visita y el modelo financiero completo (solo lectura).
+    assert _client(router, U(Rol.CONSULTA)).get("/api/v1/visita/cobertura/resumen").status_code != 403
+    assert _client(router, U(Rol.CONSULTA)).get("/api/v1/visita/costo/estructura").status_code != 403
+    # ANALISTA también (costoroi.ver = todo).
+    assert _client(router, U(Rol.ANALISTA_DATOS)).get("/api/v1/visita/costo/estructura").status_code != 403
+    # GERENTE_MEDICO no tiene costoroi.ver → 403 en el modelo completo (muro médico-comercial).
+    assert _client(router, U(Rol.GERENTE_MEDICO)).get("/api/v1/visita/costo/estructura").status_code == 403

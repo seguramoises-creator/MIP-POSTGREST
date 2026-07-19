@@ -40,21 +40,34 @@ RequireAnyAuth = Depends(get_current_active_user)
 # Producto (GERENTE_MARCA) + ADMIN — DECISIÓN jul-2026: se resolvió el conflicto matriz-vs-app a
 # favor del Gerente de Producto (inversión de marca); la matriz se ajustó (parrilla.configurar →
 # GERENTE_MARCA configure, GD solo consulta).
-from app.core.authz.deps import require as _require_authz
-from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
+from app.core.authz.deps import require as _require_authz, autorizar as _autorizar_authz
+from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec, Alcance as _Alc
 RegistrarVisitaGuard = Depends(_require_authz(_Acc.REGISTER, _Rec.VISITA_REGISTRAR))
 ReadPlaneacion = Depends(_require_authz(_Acc.READ, _Rec.PLANEACION_CICLO))
 RegistrarPlaneacion = Depends(_require_authz(_Acc.REGISTER, _Rec.PLANEACION_CICLO))
 ReadParrilla = Depends(_require_authz(_Acc.READ, _Rec.PARRILLA_CONSULTA))
 ConfigurarParrilla = Depends(_require_authz(_Acc.CONFIGURE, _Rec.PARRILLA_CONFIGURAR))
+# Cobertura de Visita (gauges/ranking): lectura por matriz (cobertura.diaria). La ven todos los
+# roles con lectura de cobertura (incl. CONSULTA/Analista/Dirección = todo; RM/GD acotados por scope).
+ReadCobertura = Depends(_require_authz(_Acc.READ, _Rec.COBERTURA_DIARIA))
 # Costo/ROI: Finanzas CONFIGURA (BORRADOR), Director APRUEBA. Segregación estructural (quien
 # configura no aprueba: FINANZAS≠PRESIDENCIA). ADMIN puede ambas + reabrir (dato cerrado).
 ConfigurarCosto = Depends(_require_authz(_Acc.CONFIGURE, _Rec.COSTOROI_CONFIGURAR))
 AprobarCosto = Depends(_require_authz(_Acc.APPROVE, _Rec.COSTOROI_CONFIGURAR))
-# #15 (jul-2026): el MODELO FINANCIERO completo (salarios, costos, pool) es costoroi.configurar
-# (lo ven FINANZAS/Director/ADMIN). El GD y el RM NO ven salarios/costos: solo el RECORTE de
-# resultados (unidades/contacto + impacto de cobertura) de su equipo/línea vía /costo/mi-linea.
-LeerCostoFull = Depends(_require_authz(_Acc.READ, _Rec.COSTOROI_CONFIGURAR))
+# #15 (jul-2026): el MODELO FINANCIERO completo (salarios, costos, pool) lo LEEN quienes tienen
+# visión TOTAL de Costo/ROI (costoroi.ver = todo): FINANZAS, Director, Analista, Gerentes de
+# Producto/Marketing, CONSULTA, ADMIN. El GD y el RM tienen alcance propio/equipo → NO ven
+# salarios/costos: usan el RECORTE (/costo/mi-linea). CONFIGURAR/APROBAR siguen restringidos aparte.
+def _leer_costo_full(_a=Depends(_autorizar_authz(_Acc.READ, _Rec.COSTOROI_VER))):
+    if _a.alcance != _Alc.ALL:
+        raise HTTPException(
+            status_code=403,
+            detail="El modelo financiero completo requiere visión total de Costo/ROI. "
+                   "Tu vista acotada está en Costo & ROI de tu línea.")
+    return _a.usuario
+
+
+LeerCostoFull = Depends(_leer_costo_full)
 LeerCostoVer = Depends(_require_authz(_Acc.READ, _Rec.COSTOROI_VER))
 
 
@@ -316,7 +329,7 @@ def listar_gerentes(db: Session = Depends(get_db), current_user=RequireVisita):
 def cobertura_resumen(ciclo_id: int | None = None, vm_id: int | None = None,
                       gerente_id: int | None = None, linea_id: int | None = None,
                       solo_ruptura: bool = False,
-                      db: Session = Depends(get_db), current_user=RequireVisita):
+                      db: Session = Depends(get_db), current_user=ReadCobertura):
     """Dashboard de Cobertura: gauges (cobertura/V+R/gap), desglose A/B/C, listas y ruptura.
     El VM ve su propia cobertura; ADMIN/GERENTE ven el equipo o filtran por visitador
     (?vm_id=), Gerente de Distrito (?gerente_id=), Línea (?linea_id=) y ruptura (?solo_ruptura=)."""
@@ -328,7 +341,7 @@ def cobertura_resumen(ciclo_id: int | None = None, vm_id: int | None = None,
 
 @router.get("/cobertura/ranking", response_model=dict)
 def cobertura_ranking(metrica: str = "cobertura", ciclo_id: int | None = None,
-                      db: Session = Depends(get_db), current_user=RequireVisita):
+                      db: Session = Depends(get_db), current_user=ReadCobertura):
     """Detalle desplegable por visitador: ranking de quién cumple/no el indicador.
     metrica: 'cobertura' | 'completa' | 'sin_visitar'."""
     from app.services import visita_cobertura_service
