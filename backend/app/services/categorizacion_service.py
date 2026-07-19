@@ -541,7 +541,12 @@ CAMPOS_CRITERIOS = ("PacientesSemana", "CostoConsulta", "RecetasSemana",
 
 def _puntuar(comps, reglas_idx, clases, valores: dict) -> dict:
     """Suma PuntajePct de la mejor regla por componente requerido y ubica la clase.
-    Misma lógica que el bucle de calcular_categorias_py, sin tocar la BD."""
+    Misma lógica que el bucle de calcular_categorias_py, sin tocar la BD.
+
+    OJO CON LA ESCALA: pese al nombre `PuntajePct`, los valores son una FRACCIÓN 0-1
+    (0.30 = 30%), y las bandas de DimClasificacionMedica están en la misma escala
+    (p. ej. DO: A=0.86-1.00, B=0.66-0.85, C=0.46-0.65, D=0.00-0.45). El tope suma
+    1.00 con los pesos 30/20/10/30/10. Para mostrarlo al usuario: multiplicar por 100."""
     total = 0
     calculados = 0
     n_req = sum(1 for c in comps if c["Requerido"])
