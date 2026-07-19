@@ -109,12 +109,22 @@ def test_detectar_duro_por_exequatur():
     assert res["blandos"] == []
 
 
-def test_detectar_blando_matchea_pese_a_acentos():
+def test_detectar_duro_mismo_nombre_mismo_centro_pese_a_acentos():
+    """BLINDAJE ESTRICTO (jul-2026): mismo nombre normalizado + MISMO centro BLOQUEA."""
     db = MagicMock()
-    # Sin exequátur/cédula → no hay query de duros; solo la de blandos.
+    # Sin exequátur/cédula → no hay query de duros; solo la de ubicación.
     db.query.side_effect = [_Q([_cand(id=9, nombre="JOSÉ PEÑA", centro_medico_id=5)])]
     res = svc.detectar_duplicados(db, "DO", nombre="Jose Pena", centro_medico_id=5)
-    assert [d["id"] for d in res["blandos"]] == [9]   # "JOSÉ PEÑA" == "JOSE PENA" normalizado
+    assert [d["id"] for d in res["duros"]] == [9]   # "JOSÉ PEÑA" == "JOSE PENA" normalizado
+    assert res["blandos"] == []
+
+
+def test_detectar_blando_mismo_nombre_otro_centro():
+    """Mismo nombre en la misma provincia pero en OTRO centro → solo advierte."""
+    db = MagicMock()
+    db.query.side_effect = [_Q([_cand(id=9, nombre="JOSÉ PEÑA", centro_medico_id=7)])]
+    res = svc.detectar_duplicados(db, "DO", nombre="Jose Pena", centro_medico_id=5, provincia_id=3)
+    assert [d["id"] for d in res["blandos"]] == [9]
     assert res["duros"] == []
 
 
