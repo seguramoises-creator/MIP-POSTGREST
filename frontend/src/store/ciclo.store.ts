@@ -47,8 +47,12 @@ export const useCicloStore = create<CicloState>((set, get) => ({
     const multipais = ROLES_MULTIPAIS.includes(me.rol);
     let paises: string[];
     if (multipais) {
-      const rows = (await api.get('/admin/paises')).data as { codigo: string }[];
-      paises = rows.map((p) => p.codigo);
+      // Defensa: si por RBAC no pudiera listar países, no abortar el init — el fallback de
+      // país-defecto de más abajo igual resuelve un país para no dejar todo en blanco.
+      try {
+        const rows = (await api.get('/admin/paises')).data as { codigo: string }[];
+        paises = rows.map((p) => p.codigo);
+      } catch { paises = []; }
     } else {
       paises = me.pais_codigo ? [me.pais_codigo] : [];
     }

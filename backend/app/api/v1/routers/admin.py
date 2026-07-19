@@ -54,9 +54,13 @@ AnyAuth = Depends(get_current_active_user)
 # administran catálogos pero sí necesitan listarlos (ej: formulario de
 # evaluación LSII, filtros de Coaching). Los POST/PUT/DELETE de este
 # router siguen restringidos a AdminOnly/AdminOrGerProd.
-LecturaCatalogos = Depends(require_roles(
-    Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO, Rol.GERENTE_MARCA
-))
+# Catálogos de REFERENCIA (países, líneas, gerentes, RMs, productos): son datos no sensibles
+# que necesita el selector/contexto de prácticamente TODA pantalla, incluidos los roles de solo
+# lectura (CONSULTA, PRESIDENCIA, DIR_COMERCIAL, ANALISTA_DATOS, GERENTE_MARKETING/MEDICO,
+# FINANZAS, REPRESENTANTE_MEDICO). Restringirlos a 4 roles rompía el contexto global País+Ciclo
+# para todos los demás (init del store daba 403 → país nulo → pantallas en blanco). La LECTURA
+# se abre a cualquier autenticado; la ESCRITURA de catálogos sigue restringida (AdminOnly).
+LecturaCatalogos = AnyAuth
 
 
 # ── Países ────────────────────────────────────────────────────────────────────
