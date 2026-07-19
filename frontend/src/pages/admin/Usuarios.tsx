@@ -8,7 +8,7 @@ import {
   Box, Typography, Card, CardContent, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Button, Chip, Dialog,
   DialogTitle, DialogContent, DialogActions, TextField, Alert,
-  CircularProgress, MenuItem, Select, FormControl, InputLabel,
+  CircularProgress, MenuItem, Select, FormControl, InputLabel, FormHelperText,
   IconButton, Tooltip, Stack, Divider, InputAdornment, Checkbox, FormControlLabel,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
@@ -127,16 +127,21 @@ export default function Usuarios() {
   const renderRelacion = () => {
     const rol = form.rol;
     if (rol === 'REPRESENTANTE_MEDICO') {
+      // OBLIGATORIO: sin vínculo a un DIM_RM el usuario recibe 403 y no ve su cobertura ni
+      // puede registrar visitas. El backend también lo valida (422).
+      const falta = !form.rm_id;
       return (
-        <FormControl fullWidth size="small">
-          <InputLabel>Representante médico (DIM_RM)</InputLabel>
-          <Select label="Representante médico (DIM_RM)" value={form.rm_id ?? ''}
+        <FormControl fullWidth size="small" required error={falta}>
+          <InputLabel>Representante médico (DIM_RM) *</InputLabel>
+          <Select label="Representante médico (DIM_RM) *" value={form.rm_id ?? ''}
                   onChange={(e) => setForm({ ...form, rm_id: e.target.value, gerente_id: null })}>
-            <MenuItem value=""><em>— Sin vincular —</em></MenuItem>
             {(Array.isArray(rms) ? rms : []).map((r: any) => (
               <MenuItem key={r.id} value={r.id}>{r.codigo} — {r.nombre}</MenuItem>
             ))}
           </Select>
+          <FormHelperText>
+            {falta ? 'Obligatorio: sin vincular, el representante no puede ver su cobertura.' : ' '}
+          </FormHelperText>
         </FormControl>
       );
     }
@@ -449,7 +454,7 @@ export default function Usuarios() {
           <Button
             variant="contained"
             onClick={submitCreate}
-            disabled={createMut.isPending}
+            disabled={createMut.isPending || (form.rol === 'REPRESENTANTE_MEDICO' && !form.rm_id)}
           >
             {createMut.isPending ? <CircularProgress size={18} /> : 'Guardar'}
           </Button>
@@ -542,7 +547,7 @@ export default function Usuarios() {
           <Button
             variant="contained"
             onClick={submitUpdate}
-            disabled={updateMut.isPending}
+            disabled={updateMut.isPending || (form.rol === 'REPRESENTANTE_MEDICO' && !form.rm_id)}
           >
             {updateMut.isPending ? <CircularProgress size={18} /> : 'Actualizar'}
           </Button>

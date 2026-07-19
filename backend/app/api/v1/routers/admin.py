@@ -873,9 +873,26 @@ def _validar_pais_usuario(db: Session, rol, pais_codigo):
         raise HTTPException(422, f"El país '{pais_codigo}' no existe.")
 
 
+def _validar_rm_usuario(db: Session, rol, rm_id):
+    """El REPRESENTANTE_MEDICO debe vincularse a un registro DIM_RM (rm_id). Sin ese vínculo
+    el auto-scope por rm_id falla con 403 en TODAS sus pantallas (Cobertura, Registrar Visita,
+    Productividad, LSII…): el usuario "no puede ver su cobertura". Se detectó con RMs nuevos
+    creados sin vincular (jul-2026)."""
+    r = getattr(rol, "value", str(rol)).upper()
+    if r != "REPRESENTANTE_MEDICO":
+        return
+    if not rm_id:
+        raise HTTPException(422, "El representante médico debe vincularse a un registro DIM_RM "
+                                 "(campo 'Representante médico'): sin ese vínculo el usuario no "
+                                 "puede ver su cobertura ni registrar visitas.")
+    if not db.query(RepresentanteMedico.id).filter(RepresentanteMedico.id == rm_id).first():
+        raise HTTPException(422, f"El representante (rm_id={rm_id}) no existe.")
+
+
 @router.post("/usuarios", response_model=UsuarioResponse, status_code=201, summary="Crear usuario")
 def create_usuario(data: UsuarioCreate, db: Session = Depends(get_db), _=AdminOnly):
     _validar_pais_usuario(db, data.rol, data.pais_codigo)
+    _validar_rm_usuario(db, data.rol, data.rm_id)
     if db.query(Usuario).filter(Usuario.username == data.username).first():
         raise HTTPException(400, "El nombre de usuario ya existe. Elige otro.")
     if data.email and db.query(Usuario).filter(Usuario.email == data.email).first():
@@ -905,6 +922,9 @@ def update_usuario(id: int, data: UsuarioUpdate, db: Session = Depends(get_db), 
     _validar_pais_usuario(db,
                           cambios.get("rol", obj.rol),
                           cambios.get("pais_codigo", obj.pais_codigo))
+    _validar_rm_usuario(db,
+                        cambios.get("rol", obj.rol),
+                        cambios.get("rm_id", obj.rm_id))
     if cambios.get("email") and db.query(Usuario).filter(
             Usuario.email == cambios["email"], Usuario.id != id).first():
         raise HTTPException(400, f"El correo '{cambios['email']}' ya está registrado con otro usuario.")
