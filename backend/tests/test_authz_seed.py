@@ -72,7 +72,7 @@ def test_seed_recupera_alcance_cambiado():
     seed.sembrar_todo(db)
     # simulamos deriva: alteramos el alcance de una fila y re-sembramos
     fila = next(p for p in db._store[RolPermiso]
-                if p.recurso == "dashboard.ejecutivo" and p.rol == "REPRESENTANTE_MEDICO")
+                if p.recurso == "cobertura.diaria" and p.rol == "REPRESENTANTE_MEDICO")
     fila.alcance = "all"  # estaba en "own"
     r = seed.sembrar_todo(db)
     assert r["permisos_cambios"] == 1

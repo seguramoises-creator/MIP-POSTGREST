@@ -24,6 +24,14 @@ def U(rol, rm_id=None, gerente_id=None):
     return SimpleNamespace(rol=rol, rm_id=rm_id, gerente_id=gerente_id, id=1)
 
 
+def test_dashboard_ejecutivo_gd_si_rm_no():
+    from app.api.v1.routers.dashboard import router
+    # fix diapositiva 9: el GD SÍ entra al Dashboard Ejecutivo (agregado + su equipo)
+    assert _client(router, U(Rol.GERENTE_DISTRITO, gerente_id=1)).get("/api/v1/dashboard/ejecutivo").status_code != 403
+    # el RM NO (tiene sus propias pantallas)
+    assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).get("/api/v1/dashboard/ejecutivo").status_code == 403
+
+
 def test_productividad_firewall_medico_403():
     from app.api.v1.routers.productividad import router
     r = _client(router, U(Rol.GERENTE_MEDICO)).get("/api/v1/productividad")

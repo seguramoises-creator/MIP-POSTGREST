@@ -40,7 +40,7 @@ def _fila(*celdas):
 # MATRIZ[recurso][rol] = (accion, alcance) | None
 #                                   RM       GD        MARCA    MKT      PROD     MED      PRES     ANAL     FIN      ADMIN
 MATRIZ: dict[str, dict] = {
-    Recurso.DASHBOARD_EJECUTIVO:     _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
+    Recurso.DASHBOARD_EJECUTIVO:     _fila(_N,      R_TEAM,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),  # el RM NO entra al ejecutivo (tiene sus propias pantallas); GD=agregado empresa + su equipo (scope_gd)
     Recurso.VISITA_REGISTRAR:        _fila(REG_OWN, _N,       _N,      _N,      _N,      _N,      _N,      _N,      _N,      ADMIN_CELL),
     Recurso.MEDICO_PANEL:            _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.CATEGORIZACION_BASICA:   _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),

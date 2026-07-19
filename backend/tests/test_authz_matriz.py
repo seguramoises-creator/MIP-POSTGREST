@@ -27,7 +27,7 @@ _ = None
 
 # Transcripción independiente del spec §5 (una lista de 10 por recurso, en orden COLS)
 ORACULO = {
-    Recurso.DASHBOARD_EJECUTIVO:     [RO, RT, RA, RA, RA, RA, RA, RA, RA, AD],
+    Recurso.DASHBOARD_EJECUTIVO:     [_,  RT, RA, RA, RA, RA, RA, RA, RA, AD],
     Recurso.VISITA_REGISTRAR:        [GO, _,  _,  _,  _,  _,  _,  _,  _,  AD],
     Recurso.MEDICO_PANEL:            [RO, RT, RA, RA, _,  RA, RA, RA, _,  AD],
     Recurso.CATEGORIZACION_BASICA:   [RO, RT, RA, RA, _,  RA, RA, RA, _,  AD],

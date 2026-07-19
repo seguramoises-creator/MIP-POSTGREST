@@ -24,6 +24,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, case
 
 from app.core.deps import get_db, get_current_active_user, require_roles
+from app.core.authz.deps import require as _require_authz
+from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
+from app.core.scope_gd import anonimizar_para_gd
 from app.models.usuario import Rol
 from app.models.hechos import (
     RankingRM, ReconocimientoRM, CapacitacionFact,
@@ -106,9 +109,10 @@ def dashboard_ejecutivo(
     linea_id: Optional[int] = None,
     gerente_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user=Depends(require_roles(
-        Rol.ADMIN, Rol.PRESIDENCIA, Rol.DIR_COMERCIAL, Rol.GERENTE_PRODUCTIVIDAD
-    )),
+    # RBAC Fase 2 (fix diapositiva 9): el GD también accede al Dashboard Ejecutivo (macro), pero
+    # ve el AGREGADO de empresa e identifica por nombre SOLO a los RM de su equipo (scope_gd,
+    # diapositiva 13). El RM no entra (tiene sus propias pantallas). require(READ, dashboard.ejecutivo).
+    current_user=Depends(_require_authz(_Acc.READ, _Rec.DASHBOARD_EJECUTIVO)),
 ):
     """
     Dashboard Ejecutivo completo:
@@ -296,6 +300,10 @@ def dashboard_ejecutivo(
     bottom_rows = [r for r in reversed(_ranked) if _score(r) < 80][:5]   # a mejorar: peores primero
     top5    = [_fmt_rm(r) for r in top_rows]
     bottom5 = [_fmt_rm(r) for r in reversed(bottom_rows)]
+    # GERENTE_DISTRITO: ve el agregado/score de todos, pero solo identifica por nombre a su equipo
+    # (los RM ajenos quedan como "Otro distrito"). Diapositivas 9 y 13. No afecta a otros roles.
+    anonimizar_para_gd(top5, current_user, db)
+    anonimizar_para_gd(bottom5, current_user, db)
 
     # ── 4. Top Gerentes de Distrito ──────────────────────────────────────────
     top_gerentes = [
