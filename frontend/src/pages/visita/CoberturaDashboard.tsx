@@ -131,8 +131,42 @@ export default function CoberturaDashboard() {
         )}
       </Typography>
 
-      {/* Panel de salud/completitud del ciclo (Feature 4) */}
-      <SaludCiclo />
+      {/* RM: KPIs de SU programación + cómo va su LÍNEA total (no el agregado de la empresa).
+          Gerencia/Admin: salud/completitud global del ciclo. */}
+      {esVM ? (
+        <Grid container spacing={1.5} sx={{ mb: 2 }}>
+          <Grid item xs={12} sm={4}>
+            <Card variant="outlined"><CardContent sx={{ py: 1.5 }}>
+              <Typography variant="caption" color="text.secondary" fontWeight={700}>SIN VISITAR · MI PROGRAMACIÓN</Typography>
+              <Typography variant="h4" fontWeight={800} color="#c62828">{data.sin_visitar}</Typography>
+              <Typography variant="caption" color="text.secondary">de {data.panel} médicos de mi panel</Typography>
+            </CardContent></Card>
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <Card variant="outlined"><CardContent sx={{ py: 1.5 }}>
+              <Typography variant="caption" color="text.secondary" fontWeight={700}>MI COBERTURA</Typography>
+              <Typography variant="h4" fontWeight={800} color="#00897b">{data.pct_cobertura}%</Typography>
+              <LinearProgress variant="determinate" value={Math.min(100, data.pct_cobertura)}
+                sx={{ height: 6, borderRadius: 3, mt: 0.75 }} />
+            </CardContent></Card>
+          </Grid>
+          {data.linea_total && (
+            <Grid item xs={12} sm={4}>
+              <Card variant="outlined"><CardContent sx={{ py: 1.5 }}>
+                <Typography variant="caption" color="text.secondary" fontWeight={700}>
+                  MI LÍNEA · {data.linea_total.linea_nombre.toUpperCase()}
+                </Typography>
+                <Typography variant="h4" fontWeight={800} color="#1a237e">{data.linea_total.pct_cobertura}%</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {data.linea_total.visitados}/{data.linea_total.panel} médicos · {data.linea_total.sin_visitar} sin visitar
+                </Typography>
+              </CardContent></Card>
+            </Grid>
+          )}
+        </Grid>
+      ) : (
+        <SaludCiclo />
+      )}
 
       {/* Filtros (solo ADMIN/GERENTE) */}
       {!esVM && (

@@ -206,6 +206,21 @@ def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | Non
     base["ciclo_id"] = ciclo_id
     base["objetivo_cobertura"] = OBJ_COBERTURA
     base["objetivo_completa"] = OBJ_COMPLETA
+    # Cuando se consulta un solo visitador (RM), se agrega cómo va SU LÍNEA COMPLETA — para que el
+    # RM compare su programación (panel propio) contra el total de su línea, sin ver el agregado
+    # de toda la empresa. Solo cifras agregadas de la línea (sin nombres de médicos de otros VM).
+    if vm_id:
+        from app.models.dimensiones import RepresentanteMedico, Linea
+        rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
+        if rm and rm.linea_id:
+            lb = _cobertura_base(db, ciclo_id, None, None, rm.linea_id, False)
+            ln = db.query(Linea.nombre).filter(Linea.id == rm.linea_id).scalar()
+            base["linea_total"] = {
+                "linea_id": rm.linea_id, "linea_nombre": ln or f"Línea #{rm.linea_id}",
+                "panel": lb["panel"], "visitados": lb["visitados"],
+                "sin_visitar": lb["sin_visitar"],
+                "pct_cobertura": lb["pct_cobertura"], "pct_completa": lb["pct_completa"],
+            }
     return base
 
 

@@ -162,6 +162,12 @@ export interface CoberturaResumen {
   sin_visita: { id: number; nombre: string; categoria: string }[];
   falta_revisita: { id: number; nombre: string; categoria: string }[];
   ruptura: { id: number; nombre: string; categoria: string; ciclos_sin_visita: number }[];
+  // Cómo va la LÍNEA COMPLETA del RM (solo cuando se consulta un visitador). Cifras agregadas.
+  linea_total?: {
+    linea_id: number; linea_nombre: string;
+    panel: number; visitados: number; sin_visitar: number;
+    pct_cobertura: number; pct_completa: number;
+  };
 }
 export interface RankingVM {
   metrica: string; objetivo: number | null; no_cumplen: number; total: number;
