@@ -35,6 +35,18 @@ const opcionesVacias = (): OpcionCrear[] =>
   [0, 1, 2, 3, 4].map(() => ({ texto_opcion: '', es_correcta: false }));
 const LETRAS = ['a', 'b', 'c', 'd', 'e'];
 
+// Motivo real de un error de axios: 422 de FastAPI (detail = [{loc,msg}]) o detail string.
+// Sin esto los catch mostraban un texto genérico y el usuario no sabía por qué falló.
+function detalleError(e: unknown, fallback: string): string {
+  const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  if (typeof d === 'string' && d.trim()) return d;
+  if (Array.isArray(d) && d[0]) {
+    const m = (d[0] as { msg?: string }).msg;
+    if (m) return m.replace('Value error, ', '');
+  }
+  return fallback;
+}
+
 // Detección para advertencias de redacción (sección 5.3 del spec).
 const RE_NEGACION = /\b(no|nunca|jam[aá]s|tampoco|excepto|incorrecto|falso|falsa)\b/i;
 const RE_TODAS_NINGUNA = /\b(todas|ninguna)\b.*\banteriores\b/i;
@@ -199,12 +211,21 @@ export default function Examenes() {
       setPreg({ tipo: preg.tipo, texto: '', escenario: '', explicacion: '', peso: '', opciones: opcionesVacias(), vfCorrecta: 'V' });
       setMsg({ tipo: 'success', texto: 'Pregunta agregada.' });
       cargarPreguntas(sel.id);
-    } catch { setMsg({ tipo: 'error', texto: 'Revisa que haya exactamente 1 opción correcta y el examen esté en borrador.' }); }
+    } catch (e) {
+      // Mostrar el motivo REAL del backend (p. ej. falta el texto de la objeción, el examen ya
+      // no está en borrador, o no hay exactamente 1 correcta). Antes se tragaba y el usuario
+      // creía que la pregunta se había agregado.
+      setMsg({ tipo: 'error', texto: detalleError(e, 'Revisa que haya exactamente 1 opción correcta y el examen esté en borrador.') });
+    }
   }
   async function handlePublicar() {
     if (!sel) return;
     try { const ex = await publicarExamen(sel.id); setSel(ex); setMsg({ tipo: 'success', texto: 'Examen publicado. Ya puedes asignarlo.' }); cargar(); }
-    catch { setMsg({ tipo: 'error', texto: 'No se pudo publicar (¿tiene al menos 1 pregunta?).' }); }
+    catch (e) {
+      // El motivo real suele ser la regla de pesos (o todas las preguntas con peso sumando 100,
+      // o todas en automático) — antes quedaba oculto tras un mensaje genérico.
+      setMsg({ tipo: 'error', texto: detalleError(e, 'No se pudo publicar (¿tiene al menos 1 pregunta?).') });
+    }
   }
 
   // Asignar
