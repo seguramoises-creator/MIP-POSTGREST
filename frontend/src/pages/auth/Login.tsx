@@ -212,7 +212,7 @@ export default function Login() {
                   fullWidth size="small" label="Nueva contraseña" type="password"
                   value={fpPass} onChange={(e) => setFpPass(e.target.value)}
                   autoComplete="new-password"
-                  helperText="Mín. 12 · mayúscula, minúscula, número y carácter especial"
+                  helperText="Mín. 8 (12 para administradores) · mayúscula, minúscula, número y carácter especial"
                 />
                 <TextField
                   fullWidth size="small" label="Confirmar nueva contraseña" type="password"
@@ -233,7 +233,7 @@ export default function Login() {
             </Button>
           ) : (
             <Button variant="contained"
-                    disabled={fpLoading || fpCodigo.trim().length < 6 || fpPass.trim().length < 12 || !fpCoincide}
+                    disabled={fpLoading || fpCodigo.trim().length < 6 || fpPass.trim().length < 8 || !fpCoincide}
                     onClick={fpRestablecer}>
               {fpLoading ? <CircularProgress size={18} /> : 'Cambiar contraseña'}
             </Button>
