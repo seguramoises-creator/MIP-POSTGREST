@@ -193,13 +193,22 @@ def test_consulta_lee_cobertura_y_costo_full_por_matriz():
     assert _client(router, U(Rol.GERENTE_MEDICO)).get("/api/v1/visita/costo/estructura").status_code == 403
 
 
-def test_consulta_lee_panel_medico_y_ruptura_pero_no_escribe():
+def test_consulta_lee_todo_el_modulo_visita_pero_no_escribe():
     from app.api.v1.routers.visita import router
     c = _client(router, U(Rol.CONSULTA))
-    # LEE panel médico (medico.panel=todo), ruptura (cobertura.diaria=todo) y catálogos.
-    assert c.get("/api/v1/visita/medicos").status_code != 403
-    assert c.get("/api/v1/visita/ruptura").status_code != 403
-    assert c.get("/api/v1/visita/especialidades").status_code != 403
-    assert c.get("/api/v1/visita/vms").status_code != 403
-    # NO escribe: dar de baja un médico sigue restringido → 403.
+    # LEE todas las pantallas viewer-facing del módulo Visita (por matriz):
+    for ruta in [
+        "/api/v1/visita/medicos",              # Panel Médico (medico.panel)
+        "/api/v1/visita/ruptura",              # Ruptura (cobertura.diaria)
+        "/api/v1/visita/cobertura/resumen",    # Cobertura (cobertura.diaria)
+        "/api/v1/visita/planeacion/resumen",   # Planeación (planeacion.ciclo)
+        "/api/v1/visita/parrilla",             # Parrilla (parrilla.consulta)
+        "/api/v1/visita/parrilla/penetracion", # Penetración (parrilla.consulta)
+        "/api/v1/visita/muestras/resumen",     # Muestras (parrilla.consulta)
+        "/api/v1/visita/costo/estructura",     # Costo & ROI (costoroi.ver=todo)
+        "/api/v1/visita/especialidades", "/api/v1/visita/vms", "/api/v1/visita/lineas",
+    ]:
+        assert c.get(ruta).status_code != 403, ruta
+    # NO escribe: dar de baja / crear / publicar parrilla siguen restringidos → 403.
     assert c.post("/api/v1/visita/medicos/1/baja").status_code == 403
+    assert c.post("/api/v1/visita/parrilla/publicar", params={"linea_id": 1}).status_code == 403

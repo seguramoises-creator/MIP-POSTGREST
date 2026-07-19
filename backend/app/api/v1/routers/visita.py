@@ -595,7 +595,7 @@ def listar_productos(linea_id: int | None = None, db: Session = Depends(get_db),
 
 @router.get("/parrilla/penetracion", response_model=dict)
 def parrilla_penetracion(linea_id: int | None = None, ciclo_id: int | None = None,
-                         db: Session = Depends(get_db), current_user=RequireVisita):
+                         db: Session = Depends(get_db), current_user=ReadParrilla):
     """Penetración del ciclo por producto (médicos alcanzados, muestras, promedio/visita)."""
     from app.services import visita_parrilla_service
     if linea_id is None:
@@ -647,7 +647,7 @@ def registrar_muestras(datos: MuestrasRegistrar, vm_id: int | None = None,
 
 @router.get("/muestras/resumen", response_model=dict)
 def resumen_muestras(vm_id: int | None = None, ciclo_id: int | None = None,
-                     db: Session = Depends(get_db), current_user=RequireVisita):
+                     db: Session = Depends(get_db), current_user=ReadParrilla):
     """Resumen de muestras por producto: entregadas, médicos alcanzados, meta y cobertura."""
     from app.services import visita_parrilla_service
     return visita_parrilla_service.resumen_muestras(db, ciclo_id, _scope_vm(current_user, vm_id))
