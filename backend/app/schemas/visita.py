@@ -1,6 +1,7 @@
 """Schemas del Módulo de Visita Médica — Fase 1 (Panel Médico)."""
 import re
 from datetime import date
+from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Formato estándar de contacto para el maestro de médicos (República Dominicana).
@@ -51,6 +52,20 @@ def _validar_telefono(v: str | None) -> str | None:
     return f"{digitos[:3]}-{digitos[3:6]}-{digitos[6:]}"
 
 
+class ClasificacionCrear(BaseModel):
+    """Plantilla de clasificación (5 criterios del motor de categorización).
+
+    Los valores de texto deben venir del vocabulario del país (GET /categorizacion/plantilla):
+    escribirlos libre haría que no matcheen ninguna regla y el médico quedaría sin
+    clasificar. La CATEGORÍA resultante no se pide ni se devuelve aquí: la calcula el
+    sistema cuando el Gerente de Distrito aprueba el alta."""
+    pacientes_semana: Decimal = Field(ge=0)
+    costo_consulta: Decimal = Field(ge=0)
+    potencial_prescripcion: str = Field(min_length=1, max_length=50)
+    ubicacion_territorial: str = Field(min_length=1, max_length=50)
+    kol_nivel: str = Field(min_length=1, max_length=100)
+
+
 class MedicoVisitaCrear(BaseModel):
     vm_id: int
     codigo: str | None = None
@@ -59,7 +74,12 @@ class MedicoVisitaCrear(BaseModel):
     apellidos: str | None = None
     especialidad_id: int | None = None
     subespecialidad: str | None = None
-    categoria: str = Field(min_length=1, max_length=1)
+    # La categoría YA NO la elige el representante: la asigna el sistema al aprobarse el
+    # alta, a partir de `clasificacion`. Se conserva opcional por compatibilidad con
+    # cargas administrativas que sí traen la letra.
+    categoria: str | None = Field(default=None, min_length=1, max_length=1)
+    # OBLIGATORIA (Bloque B): sin la plantilla completa no se puede dar de alta el médico.
+    clasificacion: ClasificacionCrear
     # Ubicación / zonificación
     centro_trabajo: str | None = None
     institucion_tipo: str | None = None          # Pública / Privada

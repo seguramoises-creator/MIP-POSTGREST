@@ -615,6 +615,66 @@ def calcular_categoria_de_valores(db: Session, pais_codigo: str, valores: dict) 
     return _puntuar(comps, reglas_idx, clases, valores)
 
 
+# Etiquetas legibles de los 5 criterios (el código es el de cat.DimComponenteCategoria).
+_ETIQUETAS_CRITERIO = {
+    "PACIENTES_SEMANA": "Pacientes por semana",
+    "PODER_ADQUISITIVO": "Poder adquisitivo (costo de consulta)",
+    "POTENCIAL_PRESCRIPCION": "Potencial de prescripción (recetas/semana)",
+    "UBICACION_TERRITORIAL_CM": "Ubicación territorial",
+    "KOL": "KOL (líder de opinión)",
+}
+
+
+def opciones_plantilla(db: Session, pais_codigo: str) -> list[dict]:
+    """Opciones válidas de cada criterio para el formulario de alta de un médico.
+
+    Se derivan de las REGLAS del país, porque cada criterio tiene un vocabulario cerrado
+    y NO intuitivo (p. ej. POTENCIAL_PRESCRIPCION usa '10 o Mas'/'6 a 9'/…, KOL usa
+    'Charlista Internacional'/'Ninguno'/…). Si el formulario dejara escribir libre, el
+    valor no matchearía ninguna regla y el médico quedaría sin clasificar.
+
+    NUNCA se devuelve el puntaje de cada opción: la categoría debe permanecer oculta
+    hasta que el Gerente de Distrito aprueba (mismo criterio que `score_oculto` en LSII;
+    si el rep viera los puntos podría capturar apuntando a la categoría que quiere)."""
+    from datetime import datetime, timezone
+
+    fila = db.execute(text('SELECT "PaisKey" FROM "cat"."DimPais" WHERE "CodigoPais"=:p'),
+                      {"p": pais_codigo}).first()
+    if not fila:
+        return []
+    fc = {"pk": fila[0], "fc": datetime.now(timezone.utc).date()}
+
+    filas = db.execute(text("""
+        SELECT c."CodigoComponente", c."Requerido", r."ValorMinimo", r."ValorMaximo",
+               r."ValorTexto", r."PuntajePct"
+        FROM "cat"."DimReglaCategoriaMedica" r
+        JOIN "cat"."DimComponenteCategoria" c ON c."ComponenteKey" = r."ComponenteKey"
+        WHERE r."Activo" = TRUE AND c."Activo" = TRUE AND r."PaisKey" = :pk
+          AND r."VigenteDesde" <= :fc AND (r."VigenteHasta" IS NULL OR r."VigenteHasta" >= :fc)
+        ORDER BY c."CodigoComponente", r."PuntajePct\""""), fc).all()
+
+    por_codigo: dict[str, dict] = {}
+    for codigo, requerido, vmin, vmax, vtxt, _pct in filas:
+        campo = _COMP_NUM.get(codigo) or _COMP_TXT.get(codigo)
+        if not campo:
+            continue
+        d = por_codigo.setdefault(codigo, {
+            "codigo": codigo, "campo": campo,
+            "etiqueta": _ETIQUETAS_CRITERIO.get(codigo, codigo),
+            "tipo": "NUMERICO" if codigo in _COMP_NUM else "TEXTO",
+            "requerido": bool(requerido), "opciones": [], "minimo": None, "maximo": None,
+        })
+        if d["tipo"] == "TEXTO":
+            if vtxt and vtxt not in d["opciones"]:
+                d["opciones"].append(vtxt)          # sin puntaje: solo el vocabulario válido
+        else:
+            if vmin is not None:
+                d["minimo"] = vmin if d["minimo"] is None else min(d["minimo"], vmin)
+            if vmax is not None:
+                d["maximo"] = vmax if d["maximo"] is None else max(d["maximo"], vmax)
+    return list(por_codigo.values())
+
+
 def cargar_excel_categorizacion(db: Session, excel_bytes: bytes, nombre_archivo: str, periodo: str, usuario: str) -> dict:
     logger.info(f"[CAT] Iniciando carga '{nombre_archivo}' periodo={periodo}")
     wb = load_workbook(io.BytesIO(excel_bytes), data_only=True, read_only=False)

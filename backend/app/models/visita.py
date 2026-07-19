@@ -7,6 +7,7 @@ Config.DIM_Ciclo y Config.DIM_Especialidad en lugar de crear catálogos nuevos.
 Fase 1: Panel Médico (catálogo de médicos del universo de visita).
 """
 from datetime import datetime, timezone, date
+from decimal import Decimal
 
 from sqlalchemy import (
     String, Boolean, Integer, DateTime, Date, ForeignKey, CHAR, Index, Numeric, LargeBinary,
@@ -47,7 +48,10 @@ class MedicoVisita(Base):
     especialidad_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("Config.DIM_Especialidad.id"), nullable=True)
     subespecialidad: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    categoria: Mapped[str] = mapped_column(CHAR(1), nullable=False)            # A / B / C / D
+    # A / B / C / D. NULLABLE desde jul-2026 (Bloque B): un médico dado de alta por el
+    # representante NO tiene categoría hasta que el Gerente de Distrito aprueba y el motor
+    # la calcula. NULL = capturado, aún sin clasificar.
+    categoria: Mapped[str | None] = mapped_column(CHAR(1), nullable=True)
     # Ubicación / zonificación
     centro_trabajo: Mapped[str | None] = mapped_column(String(200), nullable=True)   # clínica u hospital
     institucion_tipo: Mapped[str | None] = mapped_column(String(20), nullable=True)  # Pública / Privada
@@ -361,3 +365,36 @@ class CostoProducto(Base):
     # Plan anual
     presupuesto_anual: Mapped[float] = mapped_column(Numeric(16, 2), nullable=False, default=0)
     precio_prom: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False, default=0)
+
+
+class MedicoClasificacion(Base):
+    """Plantilla de clasificación capturada al dar de alta un médico (Bloque B, jul-2026).
+
+    El representante captura los 5 criterios del motor de categorización; la CATEGORÍA
+    (A/B/C/D) NO se calcula ni se muestra aquí — se revela solo cuando el Gerente de
+    Distrito aprueba el alta, momento en que el motor puntúa y el resultado se persiste
+    en DW.FACT_CategorizacionMedica (grano medico/rm/ciclo = una clasificación por línea).
+
+    Es tabla de STAGING 1:1 con el médico del panel: guarda los valores crudos mientras
+    el alta está PENDIENTE y permite que el GD los corrija antes de aprobar. No se
+    reutilizan `MedicoVisita.kol` (Boolean) ni `potencial_prescripcion` (Alto/Medio/Bajo)
+    porque el motor usa vocabularios de texto distintos y mezclarlos corrompería el dato.
+    """
+    __tablename__ = "MedicoClasificacion"
+    __table_args__ = {"schema": "Visita"}
+
+    medico_visita_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Visita.DIM_MedicoVisita.id", ondelete="CASCADE"), primary_key=True)
+
+    # Los 5 criterios, con el vocabulario/rango que exige cat.DimReglaCategoriaMedica.
+    pacientes_semana: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    costo_consulta: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    potencial_prescripcion: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    ubicacion_territorial: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    kol_nivel: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    capturado_por: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fecha_captura: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+    # Quién la ajustó al aprobar (el Gerente de Distrito puede corregir antes de aprobar).
+    actualizado_por: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fecha_actualizacion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

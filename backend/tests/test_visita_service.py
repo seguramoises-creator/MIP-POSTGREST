@@ -7,6 +7,17 @@ from app.services import visita_service
 from app.schemas.visita import MedicoVisitaCrear
 
 
+# Plantilla de clasificación válida (Bloque B): `clasificacion` es OBLIGATORIA al crear
+# un médico, así que los tests la incluyen. Usa el vocabulario real de las reglas.
+def _clasif(**over):
+    base = {"pacientes_semana": 25, "costo_consulta": 2000,
+            "potencial_prescripcion": "6 a 9", "ubicacion_territorial": "Alta",
+            "kol_nivel": "Ninguno"}
+    base.update(over)
+    return base
+
+
+
 def _db_con(medicos):
     db = MagicMock()
     db.query.return_value.filter.return_value.all.return_value = medicos
@@ -29,33 +40,33 @@ def test_duplicado_no_dispara_con_1_palabra():
 
 def test_crear_sin_confirmar_levanta_duplicado(monkeypatch):
     db = _db_con([SimpleNamespace(id=1, nombre_completo="PEREZ VALDEZ MANUEL", direccion=None)])
-    datos = MedicoVisitaCrear(vm_id=1, nombre_completo="PEREZ VALDEZ JUAN", categoria="A")
+    datos = MedicoVisitaCrear(vm_id=1, nombre_completo="PEREZ VALDEZ JUAN", categoria="A", clasificacion=_clasif())
     with pytest.raises(visita_service.DuplicadoMedicoError):
         visita_service.crear_medico(db, datos, usuario_id=1)
 
 
 def test_nombre_se_normaliza_a_mayusculas():
-    m = MedicoVisitaCrear(vm_id=1, nombre_completo="manuel  perez garcia", categoria="a")
+    m = MedicoVisitaCrear(vm_id=1, nombre_completo="manuel  perez garcia", categoria="a", clasificacion=_clasif())
     assert m.nombre_completo == "MANUEL PEREZ GARCIA" and m.categoria == "A"
 
 
 def test_nombre_1_palabra_falla():
     with pytest.raises(ValueError):
-        MedicoVisitaCrear(vm_id=1, nombre_completo="PEREZ", categoria="A")
+        MedicoVisitaCrear(vm_id=1, nombre_completo="PEREZ", categoria="A", clasificacion=_clasif())
 
 
 def test_nombre_con_punto_falla():
     with pytest.raises(ValueError):
-        MedicoVisitaCrear(vm_id=1, nombre_completo="DR. PEREZ GARCIA", categoria="A")
+        MedicoVisitaCrear(vm_id=1, nombre_completo="DR. PEREZ GARCIA", categoria="A", clasificacion=_clasif())
 
 
 def test_categoria_invalida_falla():
     with pytest.raises(ValueError):
-        MedicoVisitaCrear(vm_id=1, nombre_completo="MANUEL PEREZ", categoria="Z")
+        MedicoVisitaCrear(vm_id=1, nombre_completo="MANUEL PEREZ", categoria="Z", clasificacion=_clasif())
 
 
 def test_categoria_d_es_valida():
-    m = MedicoVisitaCrear(vm_id=1, nombre_completo="MANUEL PEREZ", categoria="d")
+    m = MedicoVisitaCrear(vm_id=1, nombre_completo="MANUEL PEREZ", categoria="d", clasificacion=_clasif())
     assert m.categoria == "D"
 
 
@@ -472,7 +483,7 @@ def test_resolver_o_crear_maestro_crea_pendiente(monkeypatch):
     capt = {}
     monkeypatch.setattr(_mm, "crear_maestro",
         lambda db, pais, campos, **k: (capt.update(campos=campos, k=k) or SimpleNamespace(id=55)))
-    datos = MedicoVisitaCrear(vm_id=1, nombre_completo="MARIA LOPEZ SANTOS", categoria="A", telefono="8095551234")
+    datos = MedicoVisitaCrear(vm_id=1, nombre_completo="MARIA LOPEZ SANTOS", categoria="A", telefono="8095551234", clasificacion=_clasif())
     assert visita_service._resolver_o_crear_maestro(MagicMock(), datos, 1) == 55
     assert capt["k"].get("origen") == "PANEL" and capt["k"].get("estado") == "PENDIENTE"
     assert capt["campos"].get("nombre") == "MARIA LOPEZ SANTOS"   # nombre_completo → nombre
@@ -482,7 +493,7 @@ def test_resolver_o_crear_maestro_crea_pendiente(monkeypatch):
 def test_resolver_o_crear_maestro_linkea_si_existe(monkeypatch):
     monkeypatch.setattr(visita_service, "_pais_de_vm", lambda db, vm: "DO")
     monkeypatch.setattr(_mm, "_resolver_por_llave_dura", lambda *a, **k: SimpleNamespace(id=99))
-    datos = MedicoVisitaCrear(vm_id=1, nombre_completo="JUAN X PEREZ", categoria="A", exequatur="E1")
+    datos = MedicoVisitaCrear(vm_id=1, nombre_completo="JUAN X PEREZ", categoria="A", exequatur="E1", clasificacion=_clasif())
     assert visita_service._resolver_o_crear_maestro(MagicMock(), datos, 1) == 99   # linkeó, no creó
 
 
@@ -536,3 +547,27 @@ def test_aviso_gd_no_falla_si_el_rm_no_tiene_gerente(monkeypatch):
                              especialidad_id=None, centro_trabajo=None)
     visita_service._avisar_gerente_medico_pendiente(db, medico)   # no debe lanzar
     assert enviados == []
+
+
+# ── B1: la plantilla de clasificación es OBLIGATORIA al dar de alta ────────────
+def test_alta_sin_plantilla_de_clasificacion_es_rechazada():
+    """Sin los 5 criterios el representante NO puede crear el médico (regla del Bloque B)."""
+    import pydantic
+    with pytest.raises(pydantic.ValidationError):
+        MedicoVisitaCrear(vm_id=1, nombre_completo="PEREZ VALDEZ JUAN")
+
+
+def test_alta_no_exige_categoria_la_asigna_el_sistema():
+    """El rep ya NO elige la letra: queda None hasta que el GD aprueba y el motor puntúa."""
+    m = MedicoVisitaCrear(vm_id=1, nombre_completo="PEREZ VALDEZ JUAN", clasificacion=_clasif())
+    assert m.categoria is None
+    assert m.clasificacion.potencial_prescripcion == "6 a 9"
+
+
+def test_plantilla_incompleta_es_rechazada():
+    """Faltando UN criterio tampoco pasa: la plantilla se completa entera o no hay alta."""
+    import pydantic
+    incompleta = _clasif()
+    del incompleta["kol_nivel"]
+    with pytest.raises(pydantic.ValidationError):
+        MedicoVisitaCrear(vm_id=1, nombre_completo="PEREZ VALDEZ JUAN", clasificacion=incompleta)

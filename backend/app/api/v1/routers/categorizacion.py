@@ -94,6 +94,28 @@ async def cargar_excel(
         raise HTTPException(status_code=500, detail=f"Error al procesar el archivo: {str(e)}")
 
 
+# ── GET /categorizacion/plantilla ──────────────────────────────────────────────
+@router.get("/plantilla", summary="Opciones válidas de los 5 criterios (alta de médico)")
+def get_plantilla(
+    pais_codigo: str = Query(..., min_length=1, max_length=10),
+    _current_user: Usuario = Depends(get_current_active_user),
+    db: Session = Depends(get_db),
+):
+    """Alimenta el formulario de clasificación al dar de alta un médico.
+
+    Cada criterio tiene un vocabulario CERRADO definido por las reglas del país
+    (p. ej. KOL: 'Charlista Internacional'…'Ninguno'); por eso el formulario debe usar
+    desplegables con estas opciones y no texto libre. **No devuelve los puntajes**: la
+    categoría permanece oculta hasta que el Gerente de Distrito aprueba el alta."""
+    opciones = svc.opciones_plantilla(db, pais_codigo)
+    if not opciones:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"El país '{pais_codigo}' no tiene configuradas las reglas de "
+                   f"categorización; no se puede clasificar médicos todavía.")
+    return opciones
+
+
 # ── GET /categorizacion/lotes ──────────────────────────────────────────────────
 @router.get("/lotes", summary="Historial de lotes de carga")
 def get_lotes(

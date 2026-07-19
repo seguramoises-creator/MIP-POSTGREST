@@ -6,7 +6,7 @@ palabras del nombre coinciden con un médico ya registrado, se avisa al usuario.
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.models.visita import MedicoVisita
+from app.models.visita import MedicoVisita, MedicoClasificacion
 from app.models.dimensiones import Especialidad, RepresentanteMedico, Linea, Medico
 from app.schemas.visita import MedicoVisitaCrear, MedicoVisitaActualizar
 
@@ -131,6 +131,20 @@ def crear_medico(db: Session, datos: MedicoVisitaCrear, usuario_id: int | None) 
         registrado_por=usuario_id,
     )
     db.add(medico)
+    db.flush()   # necesitamos el id para colgar la plantilla de clasificación
+    # Plantilla de clasificación (Bloque B): se guarda tal cual la capturó el rep. NO se
+    # calcula la categoría aquí — la revela el motor cuando el GD aprueba el alta.
+    clas = getattr(datos, "clasificacion", None)
+    if clas is not None:
+        db.add(MedicoClasificacion(
+            medico_visita_id=medico.id,
+            pacientes_semana=clas.pacientes_semana,
+            costo_consulta=clas.costo_consulta,
+            potencial_prescripcion=clas.potencial_prescripcion,
+            ubicacion_territorial=clas.ubicacion_territorial,
+            kol_nivel=clas.kol_nivel,
+            capturado_por=usuario_id,
+        ))
     db.commit()
     db.refresh(medico)
     logger.info(f"Médico de visita creado id={medico.id} '{medico.nombre_completo}' (VM {medico.vm_id})")
