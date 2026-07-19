@@ -569,6 +569,15 @@ def listar_lineas(db: Session = Depends(get_db), current_user=RequireAnyAuth):
     return visita_parrilla_service.listar_lineas(db)
 
 
+@router.get("/parrilla/ultima-linea", response_model=dict)
+def parrilla_ultima_linea(ciclo_id: int | None = None,
+                          db: Session = Depends(get_db), current_user=ReadParrilla):
+    """Línea de la parrilla más reciente — para que las pantallas de consulta arranquen
+    en el último registro, no en la primera línea del catálogo."""
+    from app.services import visita_parrilla_service
+    return {"linea_id": visita_parrilla_service.ultima_linea_con_parrilla(db, ciclo_id)}
+
+
 @router.get("/parrilla", response_model=list[dict])
 def obtener_parrilla(linea_id: int | None = None, ciclo_id: int | None = None,
                      vm_id: int | None = None,

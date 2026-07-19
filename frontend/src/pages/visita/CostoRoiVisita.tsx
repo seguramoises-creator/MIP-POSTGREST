@@ -9,7 +9,7 @@ import { usePuede } from '../../store/permisos.store';
 import CostoMiLinea from './CostoMiLinea';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
-  costoEstructura, guardarCostoEstructura, importarCostoExcel, listarLineasVisita,
+  costoEstructura, guardarCostoEstructura, importarCostoExcel, listarLineasVisita, costoHojas,
   aprobarCostoEstructura, reabrirCostoEstructura,
   type CostoFull, type CostoEstructuraInput, type CostoProdInput, type Catalogo,
 } from '../../services/visita.service';
@@ -119,8 +119,16 @@ function CostoRoiGerencia() {
   }, [cicloParam, lineaParam]);
 
   useEffect(() => {
-    if (esGestor) listarLineasVisita().then((ls) => { setLineas(ls); if (ls.length && !lineaId) setLineaId(ls[0].id); }).catch(() => {});
+    if (esGestor) listarLineasVisita().then(setLineas).catch(() => {});
   }, [esGestor]);   // eslint-disable-line react-hooks/exhaustive-deps
+  // Default de línea = la de la ÚLTIMA hoja de Costo/ROI con datos (no la 1ª del catálogo), para
+  // que los roles de consulta no aterricen en una línea vacía. Solo mientras no haya línea elegida.
+  useEffect(() => {
+    if (!esGestor || lineaId || !lineas.length) return;
+    costoHojas(cicloParam)
+      .then((hojas) => { const u = hojas[0]?.linea_id; setLineaId(u && lineas.some((l) => l.id === u) ? u : lineas[0].id); })
+      .catch(() => setLineaId(lineas[0].id));
+  }, [esGestor, lineas, cicloParam, lineaId]);
   useEffect(() => { if (!esGestor || lineaId) cargar(); }, [esGestor, lineaId, cargar]);
 
   const setE = (k: keyof CostoEstructuraInput, v: number | string | null) => { if (!editable) return; setEst((e) => e ? { ...e, [k]: v } : e); };

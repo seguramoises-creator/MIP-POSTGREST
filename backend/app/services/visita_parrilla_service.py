@@ -66,6 +66,19 @@ def _ciclo_abierto_de_linea(db: Session, linea_id: int) -> int | None:
     return c.id if c else None
 
 
+def ultima_linea_con_parrilla(db: Session, ciclo_id: int | None = None) -> int | None:
+    """Línea con la parrilla más reciente — para que las pantallas de consulta arranquen
+    en el ÚLTIMO registro hecho en el sistema, no en la primera línea del catálogo.
+    Prioriza parrillas publicadas y, entre ellas, la creada más recientemente."""
+    q = db.query(ParrillaPromocional.linea_id).filter(ParrillaPromocional.activo == True)  # noqa: E712
+    if ciclo_id:
+        q = q.filter(ParrillaPromocional.ciclo_id == ciclo_id)
+    row = (q.order_by(ParrillaPromocional.publicada.desc(),
+                      ParrillaPromocional.fecha_creacion.desc(),
+                      ParrillaPromocional.id.desc()).first())
+    return row[0] if row else None
+
+
 def listar_parrilla(db: Session, ciclo_id: int | None, linea_id: int, solo_publicada: bool = False) -> list[dict]:
     ciclo_id = ciclo_id or _ciclo_abierto_de_linea(db, linea_id) or ciclo_por_defecto(db)
     q = db.query(ParrillaPromocional).filter(

@@ -10,6 +10,7 @@ import { useCicloStore } from '../../store/ciclo.store';
 import { useNavigate } from 'react-router-dom';
 import {
   listarLineasVisita, obtenerParrilla, guardarParrilla, publicarParrilla, parrillaPenetracion, listarProductosDim,
+  parrillaUltimaLinea,
   type Catalogo, type ParrillaItem, type PenetracionCiclo, type ProductoDim,
 } from '../../services/visita.service';
 
@@ -28,6 +29,11 @@ export default function ParrillaVisita() {
   // + ADMIN. El GD y demás roles solo consultan (soloLectura). Coincide con parrilla.configurar de la matriz.
   const esGestor = rol === 'ADMIN' || rol === 'GERENTE_MARCA';
   const puedeConfigProductos = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD';
+  const esRM = rol === 'REPRESENTANTE_MEDICO';
+  // Roles observadores (consulta/dirección/etc.): ven TODAS las líneas en SOLO LECTURA, con
+  // selector de línea. El RM queda fijo a su propia línea (la resuelve el backend).
+  const esObservador = !esGestor && !esRM;
+  const usaSelector = esGestor || esObservador;
   const navigate = useNavigate();
 
   const { cicloId, ciclo, esSoloLectura } = useCicloStore();
@@ -48,7 +54,7 @@ export default function ParrillaVisita() {
   const cicloParam = cicloId || undefined;
   const cerrado = esSoloLectura;               // "no editable" = ciclo != abierto (cubre cerrado y futuro)
   const soloLectura = !esGestor || vistaVM || esSoloLectura;
-  const lineaParam = esGestor ? (lineaId || undefined) : undefined;
+  const lineaParam = usaSelector ? (lineaId || undefined) : undefined;
 
   const cargarParrilla = useCallback(() => {
     obtenerParrilla(lineaParam, cicloParam).then(setParrilla).catch(() => setParrilla([]));
@@ -56,18 +62,24 @@ export default function ParrillaVisita() {
   }, [lineaParam, cicloParam]);
 
   useEffect(() => {
-    const tareas: Promise<unknown>[] = [];
-    if (esGestor) {
-      tareas.push(listarLineasVisita().then((ls) => { setLineas(ls); if (ls.length && !lineaId) setLineaId(ls[0].id); }).catch(() => {}));
-    }
-    Promise.all(tareas).finally(() => setCargando(false));
-  }, [esGestor]);   // eslint-disable-line react-hooks/exhaustive-deps
+    if (usaSelector) listarLineasVisita().then(setLineas).catch(() => {}).finally(() => setCargando(false));
+    else setCargando(false);
+  }, [usaSelector]);
+
+  // Default de línea = la de la ÚLTIMA parrilla registrada (no la 1ª del catálogo), para que
+  // los roles de consulta no aterricen en una línea vacía. Solo mientras no haya línea elegida.
+  useEffect(() => {
+    if (!usaSelector || lineaId || !lineas.length) return;
+    parrillaUltimaLinea(cicloParam)
+      .then((ultima) => setLineaId(ultima && lineas.some((l) => l.id === ultima) ? ultima : lineas[0].id))
+      .catch(() => setLineaId(lineas[0].id));
+  }, [usaSelector, lineas, cicloParam, lineaId]);
 
   useEffect(() => {
     setEditando(false);
     if (esGestor && lineaId) listarProductosDim(Number(lineaId)).then(setProductosDim).catch(() => {});
-    if (!esGestor || lineaId) cargarParrilla();
-  }, [esGestor, lineaId, cargarParrilla]);
+    if (!usaSelector || lineaId) cargarParrilla();
+  }, [esGestor, usaSelector, lineaId, cargarParrilla]);
 
   const publicada = parrilla.length > 0 && parrilla.every((p) => p.publicada);
 
@@ -145,7 +157,7 @@ export default function ParrillaVisita() {
       )}
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
 
-      {esGestor && (
+      {usaSelector && (
         <Stack direction="row" spacing={1.5} sx={{ mb: 2 }} alignItems="center" flexWrap="wrap">
           <TextField select size="small" label="Línea" value={lineaId} sx={{ minWidth: 220 }}
                      onChange={(e) => setLineaId(Number(e.target.value))}>

@@ -321,6 +321,10 @@ export interface MuestrasResumen {
   productos: MuestraResumenProducto[];
 }
 export const listarLineasVisita = () => api.get<Catalogo[]>('/visita/lineas').then(r => r.data);
+// Línea de la parrilla más reciente — para arrancar en el último registro, no en la 1ª línea.
+export const parrillaUltimaLinea = (cicloId?: number) =>
+  api.get<{ linea_id: number | null }>('/visita/parrilla/ultima-linea', { params: cicloId ? { ciclo_id: cicloId } : {} })
+    .then(r => r.data.linea_id);
 export const obtenerParrilla = (lineaId?: number, cicloId?: number, vmId?: number) =>
   api.get<ParrillaItem[]>('/visita/parrilla', { params: { ...(lineaId && { linea_id: lineaId }), ...(cicloId && { ciclo_id: cicloId }), ...(vmId && { vm_id: vmId }) } }).then(r => r.data);
 export const guardarParrilla = (linea_id: number, items: ParrillaItem[], cicloId?: number) =>
