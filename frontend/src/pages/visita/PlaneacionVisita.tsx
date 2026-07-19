@@ -9,6 +9,7 @@ import { Save, EventNote, Warning, CheckCircle, FilterList, Search, Badge, Super
          Lock, LockOpen, PublishedWithChanges } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
+import { usePuede } from '../../store/permisos.store';
 import { catChipSx } from './categoriaColores';
 import {
   listarMedicos, obtenerPlaneacion, planeacionResumen, guardarPlaneacion, listarVMs, miGerente,
@@ -38,8 +39,12 @@ const propuestaRevisita = (vSemana: number) => vSemana + 2;
 
 export default function PlaneacionVisita() {
   const rol = useAuthStore((s) => s.rol);
+  const puede = usePuede();
   const esVM = rol === 'REPRESENTANTE_MEDICO';
   const esSoloLectura = useCicloStore((s) => s.esSoloLectura);
+  // Editar la planeación = REGISTRAR (matriz planeacion.ciclo): solo el representante (su panel)
+  // y el ADMIN. Los demás (GD, CONSULTA, Analista, Dirección…) la ven en SOLO LECTURA.
+  const puedeEditar = rol === 'ADMIN' || puede('planeacion.ciclo', 'register') === true;
 
   const [vms, setVms] = useState<Catalogo[]>([]);
   const [vmId, setVmId] = useState<number | ''>('');        // solo ADMIN/GERENTE
@@ -62,8 +67,9 @@ export default function PlaneacionVisita() {
   const [motivoDesbloqueo, setMotivoDesbloqueo] = useState('');
   const [publicando, setPublicando] = useState(false);
   const congelada = !!estado?.publicada;
-  // Bloquea la parrilla: ciclo en consulta (solo lectura) o planeación ya publicada.
-  const bloqueado = esSoloLectura || congelada;
+  // Bloquea la edición: ciclo en consulta, planeación publicada, o el usuario no puede REGISTRAR
+  // (roles de solo lectura como CONSULTA/GD/Analista/Dirección la ven pero no la modifican).
+  const bloqueado = esSoloLectura || congelada || !puedeEditar;
   const esAdmin = rol === 'ADMIN';
 
   // Filtro visual (no afecta el guardado: se persiste TODO el plan, no solo lo visible).
@@ -470,16 +476,22 @@ export default function PlaneacionVisita() {
       </Card>
 
       <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap>
-        <Button variant="contained" startIcon={<Save />} disabled={guardando || bloqueado || medicos.length === 0} onClick={guardar}>
-          {guardando ? 'Guardando…' : 'Guardar planeación'}
-        </Button>
-        {/* Publicar CONGELA la planeación. Solo tiene sentido sobre un borrador con datos. */}
-        {!congelada && (
-          <Button variant="outlined" color="success" startIcon={<PublishedWithChanges />}
-                  disabled={publicando || bloqueado || !resumen?.total_planeadas}
-                  onClick={() => setConfirmarPublicar(true)}>
-            Publicar planeación del ciclo
-          </Button>
+        {/* Controles de edición: solo para quien puede REGISTRAR (RM + ADMIN). Roles de solo
+            lectura ven la planeación pero no estos botones. */}
+        {puedeEditar && (
+          <>
+            <Button variant="contained" startIcon={<Save />} disabled={guardando || bloqueado || medicos.length === 0} onClick={guardar}>
+              {guardando ? 'Guardando…' : 'Guardar planeación'}
+            </Button>
+            {/* Publicar CONGELA la planeación. Solo tiene sentido sobre un borrador con datos. */}
+            {!congelada && (
+              <Button variant="outlined" color="success" startIcon={<PublishedWithChanges />}
+                      disabled={publicando || bloqueado || !resumen?.total_planeadas}
+                      onClick={() => setConfirmarPublicar(true)}>
+                Publicar planeación del ciclo
+              </Button>
+            )}
+          </>
         )}
         {resumen && (
           <Stack direction="row" spacing={1} alignItems="center" color="text.secondary">
