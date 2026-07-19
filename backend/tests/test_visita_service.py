@@ -571,3 +571,43 @@ def test_plantilla_incompleta_es_rechazada():
     del incompleta["kol_nivel"]
     with pytest.raises(pydantic.ValidationError):
         MedicoVisitaCrear(vm_id=1, nombre_completo="PEREZ VALDEZ JUAN", clasificacion=incompleta)
+
+
+# ── B3/B4: al aprobar el alta se revela la categoría ───────────────────────────
+def _medico_pendiente(**over):
+    base = dict(id=5, vm_id=7, estado_aprobacion="PENDIENTE_ALTA", categoria=None,
+                aprobado_por=None, fecha_aprobacion=None)
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+def test_aprobar_alta_sella_la_categoria_calculada(monkeypatch):
+    from app.services import visita_aprobacion_service as aps
+    m = _medico_pendiente()
+    monkeypatch.setattr(aps, "puede_aprobar", lambda db, u, med: True)
+    monkeypatch.setattr(aps, "_clasificar_al_aprobar",
+                        lambda db, med: setattr(med, "categoria", "B"))
+    db = MagicMock()
+    aps.aprobar(db, m, SimpleNamespace(id=1))
+    assert m.estado_aprobacion == "APROBADO" and m.categoria == "B"
+
+
+def test_aprobar_baja_no_recalcula_categoria(monkeypatch):
+    """La baja no vuelve a puntuar: la categoría del médico no debe cambiar."""
+    from app.services import visita_aprobacion_service as aps
+    m = _medico_pendiente(estado_aprobacion="PENDIENTE_BAJA", categoria="A")
+    monkeypatch.setattr(aps, "puede_aprobar", lambda db, u, med: True)
+    llamado = []
+    monkeypatch.setattr(aps, "_clasificar_al_aprobar", lambda db, med: llamado.append(1))
+    aps.aprobar(MagicMock(), m, SimpleNamespace(id=1))
+    assert llamado == [] and m.categoria == "A"
+
+
+def test_clasificar_sin_plantilla_no_rompe_la_aprobacion(monkeypatch):
+    """Alta antigua sin plantilla: se aprueba igual, sin categoría (no revienta)."""
+    from app.services import visita_aprobacion_service as aps
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None   # sin plantilla
+    m = _medico_pendiente()
+    aps._clasificar_al_aprobar(db, m)      # no debe lanzar
+    assert m.categoria is None

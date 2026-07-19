@@ -106,12 +106,56 @@ def aprobar(db: Session, m: MedicoVisita, usuario) -> MedicoVisita:
         raise AprobacionError("No autorizado para aprobar este médico (no es de tu distrito).")
     if m.estado_aprobacion not in ("PENDIENTE_ALTA", "PENDIENTE_BAJA"):
         raise AprobacionError("El médico no tiene una solicitud pendiente.")
+    era_alta = m.estado_aprobacion == "PENDIENTE_ALTA"
     m.estado_aprobacion = "APROBADO"   # para BAJA queda APROBADO con ciclo_baja programado
     m.aprobado_por = getattr(usuario, "id", None)
     m.fecha_aprobacion = datetime.now(timezone.utc)
+    # Al aprobar el ALTA se revela la categoría: recién aquí el motor puntúa la plantilla
+    # que capturó el representante (y que el GD pudo ajustar antes de aprobar).
+    if era_alta:
+        _clasificar_al_aprobar(db, m)
     db.commit(); db.refresh(m)
-    logger.info(f"Médico id={m.id} APROBADO por={getattr(usuario,'id',None)}")
+    logger.info(f"Médico id={m.id} APROBADO por={getattr(usuario,'id',None)} categoria={m.categoria}")
     return m
+
+
+def _clasificar_al_aprobar(db: Session, m: MedicoVisita) -> None:
+    """Calcula y sella la categoría A/B/C/D del médico a partir de su plantilla.
+
+    Solo toca el Panel (`MedicoVisita.categoria`): el Maestro de Médicos queda SIN
+    clasificación a propósito — un mismo médico puede tener categorías distintas según
+    la línea/RM que lo visita, así que la clasificación vive en el plano de asignación.
+
+    Best-effort: si el país no tiene reglas configuradas (o falta alguna), el médico
+    queda aprobado SIN categoría (NULL) en vez de bloquear la aprobación o inventar una
+    letra. El GD lo verá como 'sin clasificar' y podrá resolverse al configurar el país.
+    """
+    from app.models.visita import MedicoClasificacion
+    from app.models.dimensiones import RepresentanteMedico
+    from app.services import categorizacion_service
+
+    try:
+        clas = db.query(MedicoClasificacion).filter(
+            MedicoClasificacion.medico_visita_id == m.id).first()
+        if clas is None:
+            return          # alta antigua, sin plantilla: no hay nada que puntuar
+        rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == m.vm_id).first()
+        if not rm or not rm.pais_codigo:
+            return
+        r = categorizacion_service.calcular_categoria_de_valores(db, rm.pais_codigo, {
+            "PacientesSemana": clas.pacientes_semana,
+            "CostoConsulta": clas.costo_consulta,
+            "RecetasSemana": clas.potencial_prescripcion,
+            "UbicacionTerritorialCM": clas.ubicacion_territorial,
+            "KOL": clas.kol_nivel,
+        })
+        if r.get("categoria"):
+            m.categoria = str(r["categoria"]).strip().upper()[:1]
+        else:
+            logger.warning(f"Médico id={m.id} aprobado SIN categoría "
+                           f"(estado={r.get('estado')}, país={rm.pais_codigo})")
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"No se pudo clasificar el médico id={m.id} al aprobar: {e}")
 
 
 def rechazar(db: Session, m: MedicoVisita, usuario, motivo: str | None) -> MedicoVisita:

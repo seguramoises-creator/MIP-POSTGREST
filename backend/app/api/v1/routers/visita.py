@@ -12,7 +12,7 @@ from app.models.usuario import Rol
 from app.schemas.visita import (
     MedicoVisitaCrear, MedicoVisitaActualizar, MedicoVisitaResponse, VisitaRegistrar,
     VisitaNoVisita, PlaneacionGuardar, ParrillaGuardar, MuestrasRegistrar,
-    ParametroCostoGuardar, CostoEstructuraGuardar, _CAUSAS_NO_VISITA,
+    ParametroCostoGuardar, CostoEstructuraGuardar, ClasificacionCrear, _CAUSAS_NO_VISITA,
 )
 from app.services import visita_service
 
@@ -265,9 +265,72 @@ def listar_aprobaciones(db: Session = Depends(get_db), current_user=RequireAprob
     return aps.listar_pendientes(db, current_user)
 
 
+@router.get("/medicos/{medico_id}/clasificacion", response_model=dict)
+def obtener_clasificacion(medico_id: int, db: Session = Depends(get_db), current_user=RequireVisita):
+    """Plantilla de clasificación capturada al dar de alta el médico.
+
+    La usa el Gerente de Distrito para revisarla (y corregirla) antes de aprobar. NO
+    devuelve categoría: se revela al aprobar."""
+    from app.models.visita import MedicoClasificacion
+    m = visita_service.obtener_medico(db, medico_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Médico no encontrado.")
+    c = db.query(MedicoClasificacion).filter(
+        MedicoClasificacion.medico_visita_id == medico_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Este médico no tiene plantilla de clasificación.")
+    return {
+        "medico_visita_id": c.medico_visita_id,
+        "pacientes_semana": float(c.pacientes_semana) if c.pacientes_semana is not None else None,
+        "costo_consulta": float(c.costo_consulta) if c.costo_consulta is not None else None,
+        "potencial_prescripcion": c.potencial_prescripcion,
+        "ubicacion_territorial": c.ubicacion_territorial,
+        "kol_nivel": c.kol_nivel,
+    }
+
+
+@router.put("/medicos/{medico_id}/clasificacion", response_model=dict)
+def actualizar_clasificacion(medico_id: int, datos: ClasificacionCrear,
+                             db: Session = Depends(get_db), current_user=RequireAprobador):
+    """El Gerente de Distrito ajusta la plantilla antes de aprobar.
+
+    Solo mientras el alta está PENDIENTE: una vez aprobada, la categoría ya fue sellada
+    y cambiarla a mano rompería la trazabilidad del cálculo."""
+    from datetime import datetime as _dt, timezone as _tz
+    from app.models.visita import MedicoClasificacion
+    from app.services import visita_aprobacion_service as aps
+    m = visita_service.obtener_medico(db, medico_id)
+    if not m:
+        raise HTTPException(status_code=404, detail="Médico no encontrado.")
+    if not aps.puede_aprobar(db, current_user, m):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="No autorizado para este médico (no es de tu distrito).")
+    if m.estado_aprobacion != "PENDIENTE_ALTA":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="La clasificación solo se edita mientras el alta está pendiente.")
+    c = db.query(MedicoClasificacion).filter(
+        MedicoClasificacion.medico_visita_id == medico_id).first()
+    if not c:
+        c = MedicoClasificacion(medico_visita_id=medico_id)
+        db.add(c)
+    c.pacientes_semana = datos.pacientes_semana
+    c.costo_consulta = datos.costo_consulta
+    c.potencial_prescripcion = datos.potencial_prescripcion
+    c.ubicacion_territorial = datos.ubicacion_territorial
+    c.kol_nivel = datos.kol_nivel
+    c.actualizado_por = getattr(current_user, "id", None)
+    c.fecha_actualizacion = _dt.now(_tz.utc)
+    db.commit()
+    return {"medico_visita_id": medico_id, "actualizado": True}
+
+
 @router.post("/medicos/{medico_id}/aprobar", response_model=dict)
 def aprobar_medico(medico_id: int, db: Session = Depends(get_db), current_user=RequireAprobador):
-    """Aprueba la solicitud pendiente (alta o baja). Efecto al próximo ciclo."""
+    """Aprueba la solicitud pendiente (alta o baja).
+
+    Al aprobar un ALTA se revela la categoría: el motor puntúa la plantilla y la sella en
+    el Panel. El Maestro de Médicos queda SIN clasificación (un médico puede tener
+    categorías distintas según la línea que lo visita)."""
     from app.services import visita_aprobacion_service as aps
     m = visita_service.obtener_medico(db, medico_id)
     if not m:
@@ -276,7 +339,7 @@ def aprobar_medico(medico_id: int, db: Session = Depends(get_db), current_user=R
         aps.aprobar(db, m, current_user)
     except aps.AprobacionError as e:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
-    return {"id": m.id, "estado_aprobacion": m.estado_aprobacion}
+    return {"id": m.id, "estado_aprobacion": m.estado_aprobacion, "categoria": m.categoria}
 
 
 @router.post("/medicos/{medico_id}/rechazar", response_model=dict)
