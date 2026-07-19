@@ -52,14 +52,19 @@ export const useCicloStore = create<CicloState>((set, get) => ({
     } else {
       paises = me.pais_codigo ? [me.pais_codigo] : [];
     }
-    set({ puedeCambiarPais: multipais, paisesDisponibles: paises });
-    // País inicial: el propio del usuario; si no tiene (ADMIN), el país con operación/datos
-    // (el de más RMs) para no arrancar en un país vacío; fallback: el primero de la lista.
+    // País inicial: el propio del usuario; si no tiene, el país con operación/datos (el de más
+    // RMs) para no arrancar en un país vacío; fallback: el primero de la lista. Esto aplica
+    // TAMBIÉN a roles de solo lectura sin país propio y fuera de ROLES_MULTIPAIS — antes se
+    // quedaban en `paises=[]` y nunca se fijaba país, dejando TODAS las pantallas en blanco.
     let inicial = me.pais_codigo || null;
-    if (!inicial && multipais) {
+    if (!inicial) {
       try { inicial = (await api.get('/admin/pais-defecto')).data as string | null; } catch { /* noop */ }
     }
     inicial = inicial || paises[0] || null;
+    // Si el rol no expone lista de países pero resolvimos uno, publícalo para que los
+    // selectores/KPIs tengan contexto (aunque no pueda cambiarlo).
+    if (inicial && paises.length === 0) paises = [inicial];
+    set({ puedeCambiarPais: multipais, paisesDisponibles: paises });
     if (inicial) await get().setPais(inicial);
   },
 

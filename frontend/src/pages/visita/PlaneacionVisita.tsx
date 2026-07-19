@@ -92,8 +92,12 @@ export default function PlaneacionVisita() {
   const vmParam = esVM ? undefined : (vmId || undefined);
   const listo = esVM || !!vmId;
 
-  // Lista de visitadores (solo para ADMIN/GERENTE).
-  useEffect(() => { if (!esVM) listarVMs().then(setVms).catch(() => {}); }, [esVM]);
+  // Lista de visitadores (solo para ADMIN/GERENTE). Autoselecciona el primero para que los
+  // roles de consulta no aterricen en una pantalla vacía ("Selecciona un visitador").
+  useEffect(() => {
+    if (esVM) return;
+    listarVMs().then((vs) => { setVms(vs); if (vs.length && !vmId) setVmId(vs[0].id); }).catch(() => {});
+  }, [esVM]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ficha del representante: el VM ve la suya; ADMIN/GERENTE la del VM seleccionado.
   useEffect(() => {
