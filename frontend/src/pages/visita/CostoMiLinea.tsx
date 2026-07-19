@@ -40,8 +40,8 @@ export default function CostoMiLinea() {
         <Typography variant="h5" fontWeight={700}>Mi Meta de Línea</Typography>
       </Stack>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Lo que necesitas producir por contacto para llegar al 100% de tu presupuesto, y el
-        impacto que tu cobertura está teniendo en el presupuesto de tu línea.
+        Lo que hay que producir por contacto para llegar al 100% del presupuesto, y el
+        impacto que la cobertura está teniendo en el presupuesto de la línea.
       </Typography>
 
       {!data.configurado && (
@@ -100,7 +100,7 @@ export default function CostoMiLinea() {
           </Typography>
         </Stack>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-          Los médicos que aún no has visitado representan una venta en riesgo para tu línea.
+          Los médicos que aún no se han visitado representan una venta en riesgo para la línea.
           Visitarlos protege ese presupuesto.
         </Typography>
 

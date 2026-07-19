@@ -51,6 +51,11 @@ ConfigurarParrilla = Depends(_require_authz(_Acc.CONFIGURE, _Rec.PARRILLA_CONFIG
 # configura no aprueba: FINANZAS≠PRESIDENCIA). ADMIN puede ambas + reabrir (dato cerrado).
 ConfigurarCosto = Depends(_require_authz(_Acc.CONFIGURE, _Rec.COSTOROI_CONFIGURAR))
 AprobarCosto = Depends(_require_authz(_Acc.APPROVE, _Rec.COSTOROI_CONFIGURAR))
+# #15 (jul-2026): el MODELO FINANCIERO completo (salarios, costos, pool) es costoroi.configurar
+# (lo ven FINANZAS/Director/ADMIN). El GD y el RM NO ven salarios/costos: solo el RECORTE de
+# resultados (unidades/contacto + impacto de cobertura) de su equipo/línea vía /costo/mi-linea.
+LeerCostoFull = Depends(_require_authz(_Acc.READ, _Rec.COSTOROI_CONFIGURAR))
+LeerCostoVer = Depends(_require_authz(_Acc.READ, _Rec.COSTOROI_VER))
 
 
 def _rol(u) -> str:
@@ -656,7 +661,7 @@ def guardar_parametros_costo(datos: ParametroCostoGuardar, db: Session = Depends
 
 @router.get("/costo/roi", response_model=dict)
 def costo_roi(vm_id: int | None = None, ciclo_id: int | None = None,
-              db: Session = Depends(get_db), current_user=RequireFinanciero):
+              db: Session = Depends(get_db), current_user=LeerCostoFull):
     """Costo & ROI del ciclo: costo por contacto/médico, ingresos, utilidad y ROI. Solo gestión
     (dato financiero). El representante ve su recorte en /costo/mi-linea."""
     from app.services import visita_costo_service
@@ -679,12 +684,26 @@ def _linea_del_representante(db, current_user) -> int | None:
     return linea_de_vm(db, vm)
 
 
+def _linea_del_gerente(db, current_user) -> int | None:
+    """Línea del equipo del Gerente de Distrito (resuelta por la línea de sus RMs). #15."""
+    gid = getattr(current_user, "gerente_id", None)
+    if not gid:
+        return None
+    from app.models.dimensiones import RepresentanteMedico
+    row = (db.query(RepresentanteMedico.linea_id)
+           .filter(RepresentanteMedico.gerente_id == gid,
+                   RepresentanteMedico.linea_id.isnot(None))
+           .first())
+    return row[0] if row else None
+
+
 # ── Costo & ROI de Visita — modelo financiero completo ────────────────────────
 @router.get("/costo/estructura", response_model=dict)
 def costo_estructura(linea_id: int | None = None, ciclo_id: int | None = None,
-                     db: Session = Depends(get_db), current_user=RequireFinanciero):
+                     db: Session = Depends(get_db), current_user=LeerCostoFull):
     """Modelo financiero completo (costo fijo, muestras, pool de ventas, plan anual,
-    resumen ROI e impacto de cobertura) por (ciclo, línea). Incluye el estado de aprobación."""
+    resumen ROI e impacto de cobertura) por (ciclo, línea). Incluye el estado de aprobación.
+    #15: SOLO FINANZAS/Director/ADMIN (dato con salarios/costos). El GD/RM usan /costo/mi-linea."""
     from app.services import visita_costo_service
     full = visita_costo_service.calcular_full(db, ciclo_id, linea_id)
     return {**full, **visita_costo_service.estado_estructura(db, ciclo_id, linea_id)}
@@ -692,16 +711,20 @@ def costo_estructura(linea_id: int | None = None, ciclo_id: int | None = None,
 
 @router.get("/costo/mi-linea", response_model=dict)
 def costo_mi_linea(ciclo_id: int | None = None, db: Session = Depends(get_db),
-                   current_user=RequireVisita):
-    """Vista del REPRESENTANTE en Costo & ROI: SOLO las unidades a producir por contacto para
-    el 100% de su presupuesto + el impacto de la cobertura en el presupuesto de su línea.
-    Nada de salarios, costos, ROI de la fuerza de venta ni presupuesto total (dato gerencial)."""
+                   current_user=LeerCostoVer):
+    """Vista ACOTADA de Costo & ROI (sin salarios/costos): unidades a producir por contacto para
+    el 100% del presupuesto + impacto de la cobertura en el presupuesto de la línea. La usan el
+    REPRESENTANTE (su línea) y el GERENTE DE DISTRITO (la línea de su equipo — #15)."""
     from app.services import visita_costo_service
-    if _rol(current_user) != "REPRESENTANTE_MEDICO":
-        raise HTTPException(403, "Esta vista es la de un representante médico.")
-    linea_id = _linea_del_representante(db, current_user)
+    rol = _rol(current_user)
+    if rol == "REPRESENTANTE_MEDICO":
+        linea_id = _linea_del_representante(db, current_user)
+    elif rol == "GERENTE_DISTRITO":
+        linea_id = _linea_del_gerente(db, current_user)
+    else:
+        raise HTTPException(403, "Esta vista acotada es para el representante o el gerente de distrito.")
     if not linea_id:
-        raise HTTPException(403, "Tu representante no tiene una línea asignada.")
+        raise HTTPException(403, "No hay una línea asignada para esta vista (representante o equipo).")
     return visita_costo_service.vista_representante(db, ciclo_id, linea_id)
 
 

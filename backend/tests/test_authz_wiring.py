@@ -148,6 +148,20 @@ def test_parrilla_configura_gerente_producto_no_gd():
         "/api/v1/visita/parrilla/publicar", params={"linea_id": 1}).status_code != 403
 
 
+def test_costoroi_gd_solo_recorte_no_modelo_completo():
+    from app.api.v1.routers.visita import router
+    # #15: el modelo financiero completo (salarios/costos) = FINANZAS/Director/ADMIN
+    assert _client(router, U(Rol.GERENTE_DISTRITO, gerente_id=1)).get(
+        "/api/v1/visita/costo/estructura").status_code == 403          # GD NO ve salarios/costos
+    assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).get(
+        "/api/v1/visita/costo/estructura").status_code == 403          # RM tampoco
+    assert _client(router, U(Rol.FINANZAS)).get(
+        "/api/v1/visita/costo/estructura").status_code != 403          # FINANZAS sí
+    # el GD SÍ accede al recorte (resultados de su equipo)
+    assert _client(router, U(Rol.GERENTE_DISTRITO, gerente_id=1)).get(
+        "/api/v1/visita/costo/mi-linea").status_code != 403
+
+
 def test_costoroi_segregacion_finanzas_configura_director_aprueba():
     from app.api.v1.routers.visita import router
     # Aprobar: FINANZAS no puede (solo configura) → 403; el Director sí pasa el guard

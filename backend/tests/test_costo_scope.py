@@ -18,9 +18,9 @@ def _fuente(fn):
 # ── Los endpoints financieros ya NO admiten al representante ──────────────────
 
 def test_estructura_financiera_completa_es_solo_gestion():
-    """`/costo/estructura` trae salarios, costos, ROI de la fuerza de venta y presupuesto
-    total. Antes usaba RequireVisita (incluye al representante) — era una fuga."""
-    assert "current_user=RequireFinanciero" in _fuente(router_vis.costo_estructura)
+    """`/costo/estructura` trae salarios, costos, ROI y presupuesto. #15 (jul-2026): SOLO
+    FINANZAS/Director/ADMIN (read costoroi.configurar) — ni el GD ni el RM ven salarios/costos."""
+    assert "current_user=LeerCostoFull" in _fuente(router_vis.costo_estructura)
 
 
 def test_parametros_de_costo_son_solo_gestion():
@@ -29,7 +29,7 @@ def test_parametros_de_costo_son_solo_gestion():
 
 
 def test_roi_por_vm_es_solo_gestion():
-    assert "current_user=RequireFinanciero" in _fuente(router_vis.costo_roi)
+    assert "current_user=LeerCostoFull" in _fuente(router_vis.costo_roi)
 
 
 def test_require_financiero_no_incluye_al_representante():
@@ -42,8 +42,15 @@ def test_require_financiero_no_incluye_al_representante():
 
 # ── La vista del representante es un recorte, no el modelo completo ───────────
 
-def test_mi_linea_exige_ser_representante():
-    assert 'if _rol(current_user) != "REPRESENTANTE_MEDICO"' in _fuente(router_vis.costo_mi_linea)
+def test_mi_linea_recorte_para_representante_y_gerente():
+    """#15 (jul-2026): la vista ACOTADA (sin salarios/costos) la usan el REPRESENTANTE (su línea)
+    y el GERENTE DE DISTRITO (la línea de su equipo). Cualquier otro rol → 403."""
+    fuente = _fuente(router_vis.costo_mi_linea)
+    assert 'rol == "REPRESENTANTE_MEDICO"' in fuente
+    assert 'rol == "GERENTE_DISTRITO"' in fuente
+    assert "_linea_del_gerente" in fuente
+    # el guard es de lectura de RESULTADOS (costoroi.ver), no del modelo financiero completo
+    assert "current_user=LeerCostoVer" in fuente
 
 
 def _salida_representante(monkeypatch):

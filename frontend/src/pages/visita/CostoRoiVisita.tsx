@@ -70,7 +70,10 @@ function productosDe(full: CostoFull): CostoProdInput[] {
  *  gerencial. Wrapper por rol: los hooks no admiten un return temprano. */
 export default function CostoRoiVisita() {
   const rolActual = useAuthStore((s) => s.rol);
-  return rolActual === 'REPRESENTANTE_MEDICO' ? <CostoMiLinea /> : <CostoRoiGerencia />;
+  // #15 (jul-2026): el RM y el GERENTE DE DISTRITO ven el RECORTE (resultados de su línea/equipo,
+  // sin salarios/costos). El modelo financiero completo queda para Finanzas/Director/ADMIN.
+  const soloRecorte = rolActual === 'REPRESENTANTE_MEDICO' || rolActual === 'GERENTE_DISTRITO';
+  return soloRecorte ? <CostoMiLinea /> : <CostoRoiGerencia />;
 }
 
 function CostoRoiGerencia() {
