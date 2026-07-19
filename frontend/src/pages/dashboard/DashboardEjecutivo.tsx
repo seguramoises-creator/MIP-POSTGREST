@@ -429,7 +429,9 @@ export default function DashboardEjecutivo() {
   const KPI_RADAR_LABEL: Record<string, string> = {
     COB_MD_F2:          'COB F2',
     COB_MD_F1:          'COB F1',
-    PROM_DIARIO:        'Diario',
+    // "Diario" solo no decía qué mide. El nombre canónico (constants/kpi.ts) es
+    // "Promedio diario Médicos": médicos atendidos por día, no visitas.
+    PROM_DIARIO:        'Médicos/día',
     COB_FARMACIAS:      'Farmacias',
     EVO_IR:             'EVO IR',
     VENTAS:             'Ventas',
