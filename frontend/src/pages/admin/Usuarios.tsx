@@ -103,6 +103,25 @@ export default function Usuarios() {
   const { data: gerentes } = useQuery({
     queryKey: ['gerentes-all'], queryFn: () => api.get('/admin/gerentes').then((r) => r.data), retry: 1,
   });
+  const { data: paises } = useQuery({
+    queryKey: ['paises-all'], queryFn: () => api.get('/admin/paises').then((r) => r.data), retry: 1,
+  });
+
+  // Selector de País (obligatorio para el REPRESENTANTE_MEDICO; recomendado para todos). Se guarda
+  // en Usuario.pais_codigo y fija el contexto de país del usuario. El value es el CÓDIGO del país.
+  const renderPais = () => (
+    <FormControl fullWidth size="small">
+      <InputLabel>País{form.rol === 'REPRESENTANTE_MEDICO' ? ' *' : ''}</InputLabel>
+      <Select label={`País${form.rol === 'REPRESENTANTE_MEDICO' ? ' *' : ''}`}
+              value={form.pais_codigo ?? ''}
+              onChange={(e) => setForm({ ...form, pais_codigo: e.target.value })}>
+        <MenuItem value=""><em>— Sin país —</em></MenuItem>
+        {(Array.isArray(paises) ? paises : []).map((p: any) => (
+          <MenuItem key={p.codigo} value={p.codigo}>{p.codigo} — {p.nombre}</MenuItem>
+        ))}
+      </Select>
+    </FormControl>
+  );
 
   // Selector relacional: RM (rm_id) o Gerente (gerente_id) según el rol elegido.
   const renderRelacion = () => {
@@ -231,7 +250,7 @@ export default function Usuarios() {
     setNuevaPass('');
     setEditBloqueado(!!row.bloqueado);
     setForm({ nombre_completo: row.nombre_completo || '', email: row.email || '', rol: row.rol || '',
-              rm_id: row.rm_id ?? null, gerente_id: row.gerente_id ?? null });
+              pais_codigo: row.pais_codigo ?? '', rm_id: row.rm_id ?? null, gerente_id: row.gerente_id ?? null });
     setOpenEdit(true);
   };
 
@@ -421,6 +440,7 @@ export default function Usuarios() {
                 {ROLES.map((r) => <MenuItem key={r} value={r}>{ROL_LABEL[r] ?? r}</MenuItem>)}
               </Select>
             </FormControl>
+            {renderPais()}
             {renderRelacion()}
           </Stack>
         </DialogContent>
@@ -461,6 +481,7 @@ export default function Usuarios() {
                 {ROLES.map((r) => <MenuItem key={r} value={r}>{ROL_LABEL[r] ?? r}</MenuItem>)}
               </Select>
             </FormControl>
+            {renderPais()}
             {renderRelacion()}
 
             {/* Casilla de bloqueo: marcada = usuario bloqueado; desmarcar = desbloquear. */}
