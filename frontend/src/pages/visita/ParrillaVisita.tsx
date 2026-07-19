@@ -224,7 +224,7 @@ export default function ParrillaVisita() {
                                    value={it.producto_id ?? (it.producto || '')}
                                    onChange={(e) => elegirProducto(i, e.target.value)}>
                           <MenuItem value=""><em>— Producto —</em></MenuItem>
-                          {productosDim.map((p) => <MenuItem key={p.id} value={p.id}>{p.nombre}{p.area_terapeutica ? ` · ${p.area_terapeutica}` : ''}</MenuItem>)}
+                          {productosDim.map((p) => <MenuItem key={p.id} value={p.id}>{(p.codigo || '').trim()} · {p.nombre}</MenuItem>)}
                           {it.producto_id == null && it.producto && !productosDim.some((p) => (p.codigo || '').trim() === (it.producto || '').trim()) && (
                             <MenuItem value={it.producto}>{it.producto}</MenuItem>
                           )}
@@ -267,7 +267,7 @@ export default function ParrillaVisita() {
                     <TableRow key={p.id ?? i} hover>
                       <TableCell>{dot(i)}</TableCell>
                       <TableCell>
-                        <Typography variant="body2" fontWeight={700}>{p.nombre || p.producto}</Typography>
+                        <Typography variant="body2" fontWeight={700}>{[p.producto, p.nombre].filter(Boolean).join(' · ')}</Typography>
                         {[p.area_terapeutica, p.descripcion].filter(Boolean).length > 0 && (
                           <Typography variant="caption" color="text.secondary" display="block">
                             {[p.area_terapeutica, p.descripcion].filter(Boolean).join(' · ')}
