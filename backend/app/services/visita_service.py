@@ -134,7 +134,38 @@ def crear_medico(db: Session, datos: MedicoVisitaCrear, usuario_id: int | None) 
     db.commit()
     db.refresh(medico)
     logger.info(f"Médico de visita creado id={medico.id} '{medico.nombre_completo}' (VM {medico.vm_id})")
+    _avisar_gerente_medico_pendiente(db, medico)
     return medico
+
+
+def _avisar_gerente_medico_pendiente(db: Session, medico: MedicoVisita) -> None:
+    """Correo al Gerente de Distrito del VM: tiene un médico nuevo por aprobar.
+    Best-effort — un fallo de correo nunca revierte el alta (ya commiteada)."""
+    try:
+        from app.models.dimensiones import RepresentanteMedico, Gerente, Especialidad
+        from app.models.usuario import Usuario
+        from app.services import notification_service
+
+        rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == medico.vm_id).first()
+        if not rm or not rm.gerente_id:
+            return
+        ger = db.query(Gerente).filter(Gerente.id == rm.gerente_id).first()
+        correo = ger.email if (ger and ger.email) else None
+        if not correo:   # sin email en DIM_Gerente, prueba el usuario vinculado
+            ug = db.query(Usuario).filter(Usuario.gerente_id == rm.gerente_id).first()
+            correo = ug.email if ug else None
+        if not correo:
+            return
+        esp = None
+        if medico.especialidad_id:
+            e = db.query(Especialidad).filter(Especialidad.id == medico.especialidad_id).first()
+            esp = e.nombre if e else None
+        notification_service.notificar_medico_pendiente_aprobacion(
+            destinatario=correo, nombre_gerente=(ger.nombre if ger else "Gerente"),
+            representante=rm.nombre, medico=medico.nombre_completo,
+            especialidad=esp, centro=medico.centro_trabajo)
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Aviso de médico pendiente al GD falló (no bloquea) medico={medico.id}: {e}")
 
 
 def obtener_medico(db: Session, medico_id: int) -> MedicoVisita | None:

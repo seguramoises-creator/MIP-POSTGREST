@@ -383,6 +383,33 @@ def notificar_asignacion_examen_gerente(destinatario: str, nombre_gerente: str,
     return _enviar(destinatario, f"Examen asignado a su equipo - {examen_nombre}", cuerpo)
 
 
+def notificar_medico_pendiente_aprobacion(destinatario: str, nombre_gerente: str,
+                                          representante: str, medico: str,
+                                          especialidad: Optional[str] = None,
+                                          centro: Optional[str] = None) -> bool:
+    """Avisa al Gerente de Distrito que un representante dio de alta un médico nuevo en su
+    panel y queda PENDIENTE DE APROBACIÓN. Best-effort (no bloquea el alta)."""
+    if not _habilitado() or not destinatario:
+        return False
+    extra = "".join([
+        f"<li>Especialidad: <strong>{especialidad}</strong></li>" if especialidad else "",
+        f"<li>Centro: <strong>{centro}</strong></li>" if centro else "",
+    ])
+    cuerpo = f"""<html><body style="font-family:Arial,sans-serif;color:#333;">
+  <h2 style="color:{_COLOR_TITULO};">Médico nuevo — requiere aprobación</h2>
+  <p>Hola <strong>{nombre_gerente}</strong>, el representante <strong>{representante}</strong>
+     ha creado un médico nuevo en su panel y está pendiente de su aprobación:</p>
+  <ul>
+    <li>Médico: <strong>{medico}</strong></li>
+    {extra}
+  </ul>
+  <p>Entra a la plataforma, sección <strong>Panel Médico</strong>, para revisarlo, ajustar su
+     clasificación y aprobarlo o rechazarlo.</p>
+  {_pie_pagina()}
+</body></html>"""
+    return _enviar(destinatario, f"Médico nuevo pendiente de aprobación - {medico}", cuerpo)
+
+
 def notificar_feedback_disponible(destinatario: str, nombre: str, examen_nombre: str,
                                   horas: int = 48, link: Optional[str] = None) -> bool:
     """Avisa que el feedback de un examen entregado ya está disponible EN LA PLATAFORMA.

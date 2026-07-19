@@ -497,3 +497,42 @@ def test_actualizar_sincroniza_solo_generales(monkeypatch):
     sync.clear()
     visita_service.actualizar_medico(db, medico, MedicoVisitaActualizar(frecuencia_visita="Mensual"), 1)
     assert sync == []                                            # asignación → NO sincroniza
+
+
+# ── B2: aviso al Gerente de Distrito cuando el rep crea un médico (pendiente) ──
+def _db_aviso(rm=None, gerente=None, usuario=None, especialidad=None):
+    """db.query(X).filter(...).first() devuelve el objeto según el modelo consultado."""
+    from app.models.dimensiones import RepresentanteMedico, Gerente, Especialidad
+    from app.models.usuario import Usuario
+    por_modelo = {RepresentanteMedico: rm, Gerente: gerente, Usuario: usuario, Especialidad: especialidad}
+    db = MagicMock()
+    db.query.side_effect = lambda modelo: SimpleNamespace(
+        filter=lambda *a, **k: SimpleNamespace(first=lambda: por_modelo.get(modelo)))
+    return db
+
+
+def test_aviso_gd_medico_pendiente_usa_email_del_gerente(monkeypatch):
+    enviados = []
+    monkeypatch.setattr("app.services.notification_service.notificar_medico_pendiente_aprobacion",
+                        lambda **kw: enviados.append(kw) or True)
+    db = _db_aviso(rm=SimpleNamespace(id=7, gerente_id=3, nombre="VM UNO"),
+                   gerente=SimpleNamespace(id=3, nombre="GD TRES", email="gd@x.com"),
+                   especialidad=SimpleNamespace(id=1, nombre="CARDIOLOGIA"))
+    medico = SimpleNamespace(id=99, vm_id=7, nombre_completo="PEREZ JUAN",
+                             especialidad_id=1, centro_trabajo="CENTRO X")
+    visita_service._avisar_gerente_medico_pendiente(db, medico)
+    assert len(enviados) == 1
+    assert enviados[0]["destinatario"] == "gd@x.com"
+    assert enviados[0]["representante"] == "VM UNO"
+    assert enviados[0]["medico"] == "PEREZ JUAN"
+
+
+def test_aviso_gd_no_falla_si_el_rm_no_tiene_gerente(monkeypatch):
+    enviados = []
+    monkeypatch.setattr("app.services.notification_service.notificar_medico_pendiente_aprobacion",
+                        lambda **kw: enviados.append(kw) or True)
+    db = _db_aviso(rm=SimpleNamespace(id=7, gerente_id=None, nombre="VM UNO"))
+    medico = SimpleNamespace(id=99, vm_id=7, nombre_completo="PEREZ JUAN",
+                             especialidad_id=None, centro_trabajo=None)
+    visita_service._avisar_gerente_medico_pendiente(db, medico)   # no debe lanzar
+    assert enviados == []
