@@ -17,7 +17,10 @@ from app.models.usuario import Usuario, Rol
 from app.models.dimensiones import (
     Pais, Linea, Gerente, RepresentanteMedico, Producto,
     Indicador, IndicadorTabla, Ciclo, ReglaElegibilidad, Premio, CapacitacionDim,
-    CategoriaMedica, CriterioCategoria, CriterioCategoriaTabla, Feriado,
+    CategoriaMedica, CriterioCategoria, CriterioCategoriaTabla, Feriado, CatalogoError,
+)
+from app.schemas.schemas import (
+    CatalogoErrorCrear, CatalogoErrorActualizar, CatalogoErrorResponse,
 )
 from app.schemas.schemas import (
     PaisCreate, PaisResponse,
@@ -1078,3 +1081,46 @@ def set_password_policy(body: dict, db: Session = Depends(get_db), _=AdminOnly):
     _int("PASSWORD_MIN_LONGITUD", "min_longitud", 8)
     _int("PASSWORD_MIN_LONGITUD_ADMIN", "min_longitud_admin", 8)
     return get_password_policy(db, _)
+
+
+# ── Catálogo de Errores (matriz de errores mantenible) ──────────────────────────
+_AdminOnly = Depends(require_roles(Rol.ADMIN))
+
+
+@router.get("/catalogo-errores", response_model=List[CatalogoErrorResponse],
+            summary="Listar la matriz de errores")
+def list_catalogo_errores(db: Session = Depends(get_db), _=AnyAuth):
+    return db.query(CatalogoError).order_by(CatalogoError.codigo).all()
+
+
+@router.post("/catalogo-errores", response_model=CatalogoErrorResponse, status_code=201,
+             summary="Crear un error del catálogo (ADMIN)")
+def crear_catalogo_error(datos: CatalogoErrorCrear, db: Session = Depends(get_db), _=_AdminOnly):
+    if db.query(CatalogoError).filter(CatalogoError.codigo == datos.codigo).first():
+        raise HTTPException(400, f"Ya existe un error con el código '{datos.codigo}'.")
+    obj = CatalogoError(**datos.model_dump())
+    db.add(obj); db.commit(); db.refresh(obj)
+    return obj
+
+
+@router.put("/catalogo-errores/{id}", response_model=CatalogoErrorResponse,
+            summary="Actualizar un error del catálogo (ADMIN)")
+def actualizar_catalogo_error(id: int, datos: CatalogoErrorActualizar,
+                              db: Session = Depends(get_db), _=_AdminOnly):
+    obj = db.query(CatalogoError).filter(CatalogoError.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Error no encontrado")
+    for k, v in datos.model_dump(exclude_unset=True).items():
+        setattr(obj, k, v)
+    db.commit(); db.refresh(obj)
+    return obj
+
+
+@router.delete("/catalogo-errores/{id}", response_model=Msg,
+               summary="Eliminar un error del catálogo (ADMIN)")
+def eliminar_catalogo_error(id: int, db: Session = Depends(get_db), _=_AdminOnly):
+    obj = db.query(CatalogoError).filter(CatalogoError.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Error no encontrado")
+    db.delete(obj); db.commit()
+    return Msg(message="Error eliminado del catálogo")

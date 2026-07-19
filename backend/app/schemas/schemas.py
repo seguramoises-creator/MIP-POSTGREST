@@ -815,3 +815,34 @@ class MaestroMedicoDuplicados(BaseModel):
     tipo: str  # "duro" | "blando"
     mensaje: str
     coincidencias: list[dict]
+
+
+# ── Catálogo de Errores (matriz de errores mantenible) ──────────────────────────
+class CatalogoErrorBase(BaseModel):
+    codigo: str = Field(..., min_length=2, max_length=40)
+    titulo: str = Field(..., min_length=2, max_length=160)
+    descripcion: Optional[str] = Field(None, max_length=600)
+    causa: Optional[str] = Field(None, max_length=600)
+    solucion: Optional[str] = Field(None, max_length=600)
+    categoria: Optional[str] = Field(None, max_length=60)
+    http_status: Optional[int] = None
+    activo: bool = True
+
+
+class CatalogoErrorCrear(CatalogoErrorBase):
+    pass
+
+
+class CatalogoErrorActualizar(BaseModel):
+    titulo: Optional[str] = Field(None, min_length=2, max_length=160)
+    descripcion: Optional[str] = Field(None, max_length=600)
+    causa: Optional[str] = Field(None, max_length=600)
+    solucion: Optional[str] = Field(None, max_length=600)
+    categoria: Optional[str] = Field(None, max_length=60)
+    http_status: Optional[int] = None
+    activo: Optional[bool] = None
+
+
+class CatalogoErrorResponse(CatalogoErrorBase):
+    id: int
+    model_config = ConfigDict(from_attributes=True)

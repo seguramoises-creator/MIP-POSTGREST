@@ -5,11 +5,12 @@
  */
 import { useState } from 'react';
 import { Box, Card, Tabs, Tab } from '@mui/material';
-import { People, Security, Lock, MarkEmailRead } from '@mui/icons-material';
+import { People, Security, Lock, MarkEmailRead, ReportProblem } from '@mui/icons-material';
 import Usuarios from './Usuarios';
 import MatrizRoles from './MatrizRoles';
 import PasswordPolicyTab from './PasswordPolicyTab';
 import CorreoAdmin from './CorreoAdmin';
+import CatalogoErrores from './CatalogoErrores';
 
 const NARANJA = '#ed6c02';
 
@@ -35,6 +36,7 @@ export default function Administracion() {
             <Tab icon={<Security fontSize="small" />} iconPosition="start" label="Roles y Permisos" />
             <Tab icon={<Lock fontSize="small" />} iconPosition="start" label="Política de contraseñas" />
             <Tab icon={<MarkEmailRead fontSize="small" />} iconPosition="start" label="Servidor de Correo (SMTP)" />
+            <Tab icon={<ReportProblem fontSize="small" />} iconPosition="start" label="Matriz de Errores" />
           </Tabs>
         </Box>
 
@@ -42,7 +44,8 @@ export default function Administracion() {
           {tab === 0 ? <Usuarios />
             : tab === 1 ? <MatrizRoles />
             : tab === 2 ? <PasswordPolicyTab />
-            : <CorreoAdmin />}
+            : tab === 3 ? <CorreoAdmin />
+            : <CatalogoErrores />}
         </Box>
       </Card>
     </Box>

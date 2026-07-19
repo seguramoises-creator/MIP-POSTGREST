@@ -782,3 +782,21 @@ class ParametroSistema(Base):
     clave: Mapped[str] = mapped_column(String(80), primary_key=True)
     valor: Mapped[str] = mapped_column(String(400), nullable=False)
     actualizado: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class CatalogoError(Base):
+    """Matriz de errores del sistema: catálogo mantenible (Administración) que documenta cada
+    error con su descripción, causa probable y solución, para que se entienda qué está pasando.
+    `codigo` es la llave estable que la app puede mostrar/relacionar con un mensaje amigable."""
+    __tablename__ = "DIM_CatalogoError"
+    __table_args__ = {"schema": "Config"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    codigo: Mapped[str] = mapped_column(String(40), unique=True, nullable=False, index=True)
+    titulo: Mapped[str] = mapped_column(String(160), nullable=False)
+    descripcion: Mapped[str | None] = mapped_column(String(600), nullable=True)
+    causa: Mapped[str | None] = mapped_column(String(600), nullable=True)
+    solucion: Mapped[str | None] = mapped_column(String(600), nullable=True)
+    categoria: Mapped[str | None] = mapped_column(String(60), nullable=True)   # Validación/Sistema/Permisos/Datos…
+    http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)     # 400/403/409/500…
+    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
