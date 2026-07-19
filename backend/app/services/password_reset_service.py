@@ -103,6 +103,10 @@ def restablecer(db: Session, email: str, codigo: str, password_nuevo: str) -> Us
     usuario.hashed_password = hash_password(password_nuevo)
     usuario.password_actualizado_en = ahora
     usuario.debe_cambiar_password = False
+    # Recuperar la clave por código (prueba de titularidad del correo) DESBLOQUEA la cuenta:
+    # limpia intentos fallidos y el bloqueo temporal para que pueda entrar de inmediato.
+    usuario.intentos_fallidos = 0
+    usuario.bloqueado_hasta = None
     # Consume ESTE código y cualquier otro pendiente del usuario (no reutilizable).
     db.query(PasswordResetCode).filter(
         PasswordResetCode.usuario_id == usuario.id, PasswordResetCode.usado == False  # noqa: E712

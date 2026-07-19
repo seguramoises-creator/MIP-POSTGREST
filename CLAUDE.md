@@ -731,7 +731,11 @@ Cada router nuevo (`lsii.py`, `cobertura_predictiva.py`, `categorizacion.py`, `e
 **Auto-filtro de scope** (patrón nuevo, repetido en Cobertura Predictiva y Categorización): `REPRESENTANTE_MEDICO` se restringe a su propio `rm_id` (403 si falta o no coincide); `GERENTE_DISTRITO` se restringe a su propio `gerente_id`, resuelto vía la nueva columna `Security.DIM_Usuario.gerente_id`.
 
 ### Seguridad
-- Bloqueo temporal tras 5 intentos fallidos (30 minutos)
+- Bloqueo temporal de login tras **3 intentos fallidos** (30 minutos). El bloqueo solo afecta a
+  `/auth/login`: la recuperación por correo/código (`/auth/forgot-password` → `/auth/reset-password`)
+  funciona aunque la cuenta esté bloqueada y, al completarse con éxito, **desbloquea la cuenta**
+  (limpia `intentos_fallidos`/`bloqueado_hasta`). El ADMIN también desbloquea al instante desde
+  Administración de Usuarios (casilla "Bloqueado" → `PATCH /admin/usuarios/{id}/bloqueo`).
 - `FACT_Auditoria` registra todos los logins y acciones POST/PUT/PATCH/DELETE
 - Contraseña: mínimo 12 chars, mayúscula, minúscula, número **y carácter especial** (política real en `password_policy_service.validar_complejidad`); no reutilización de las últimas N (`FACT_PasswordHistorial`)
 - Archivos ETL: validación de magic bytes + nombre UUID para prevenir Path Traversal

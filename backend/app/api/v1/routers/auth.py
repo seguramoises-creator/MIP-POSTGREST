@@ -92,8 +92,9 @@ def login(
     if not user or not verify_password(form_data.password, user.hashed_password):
         if user:
             user.intentos_fallidos += 1
-            if user.intentos_fallidos >= 5:
-                # FIX W-01: datetime.now(timezone.utc)
+            # Bloqueo temporal de 30 min tras 3 intentos fallidos (solo afecta al LOGIN;
+            # la recuperación por correo/código sigue disponible y desbloquea al completarse).
+            if user.intentos_fallidos >= 3:
                 user.bloqueado_hasta = datetime.now(timezone.utc) + timedelta(minutes=30)
             db.commit()
         _registrar_auditoria(db, user, "LOGIN_FALLIDO", request, False, "Credenciales inválidas")
