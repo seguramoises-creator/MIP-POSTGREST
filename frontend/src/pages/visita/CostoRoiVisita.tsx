@@ -70,15 +70,13 @@ function productosDe(full: CostoFull): CostoProdInput[] {
  *  gerencial. Wrapper por rol: los hooks no admiten un return temprano. */
 export default function CostoRoiVisita() {
   const rolActual = useAuthStore((s) => s.rol);
-  const puede = usePuede();
   // #15 (jul-2026): el RM y el GERENTE DE DISTRITO ven el RECORTE de su línea/equipo (sin salarios).
   if (rolActual === 'REPRESENTANTE_MEDICO' || rolActual === 'GERENTE_DISTRITO') return <CostoMiLinea />;
-  // Finanzas/Director/ADMIN CONFIGURAN/aprueban el modelo financiero completo (salarios, estructura).
-  const esConfigurador = rolActual === 'ADMIN' || puede('costoroi.configurar', 'read') === true;
-  if (esConfigurador) return <CostoRoiGerencia />;
-  // Roles de solo lectura (CONSULTA/Analista/Dirección/Producto/Marketing): OBSERVAN las hojas de
-  // ROI creadas — filtran y se mueven entre las de cada visitador/distrito, sin la vista de crear.
-  return <CostoMiLinea observador />;
+  // Todos los demás ven la HOJA COMPLETA (estructura, muestras, pool, ROI, impacto). La EDICIÓN
+  // la habilita puedeConfigurar dentro del componente: Finanzas/Director/ADMIN editan/aprueban;
+  // CONSULTA/Analista/Dirección/Producto/Marketing la ven completa en SOLO LECTURA, con selector
+  // de línea para navegar entre hojas.
+  return <CostoRoiGerencia />;
 }
 
 function CostoRoiGerencia() {
@@ -86,7 +84,7 @@ function CostoRoiGerencia() {
   const puede = usePuede();
   // RBAC Fase 2: la vista gerencial + selector de línea la ven quienes leen costoroi.configurar
   // (Finanzas, Director, Admin) además de los gestores previos (ADMIN/GERPROD).
-  const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD' || puede('costoroi.configurar', 'read') === true;
+  const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD' || puede('costoroi.configurar', 'read') === true || puede('costoroi.ver', 'read') === true;
   // Configurar (guardar/importar) = FINANZAS + ADMIN (matriz). Aprobar = Director + ADMIN.
   const puedeConfigurar = rol === 'ADMIN' || puede('costoroi.configurar', 'configure') === true;
   const puedeAprobar = puede('costoroi.configurar', 'approve') === true;
@@ -178,7 +176,7 @@ function CostoRoiGerencia() {
   const num = (label: string, val: number, k: keyof CostoEstructuraInput, sub?: string, width = 150, fmt?: boolean) => (
     <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ py: 0.75 }}>
       <Box><Typography variant="body2" fontWeight={600}>{label}</Typography>{sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}</Box>
-      <NumField value={val} width={width} fmt={fmt} disabled={cerrado} onNum={(n) => setE(k, n)} />
+      <NumField value={val} width={width} fmt={fmt} disabled={!editable} onNum={(n) => setE(k, n)} />
     </Stack>
   );
   const kpi = (label: string, valor: string, color = 'text.primary', sub?: string) => (
@@ -283,8 +281,8 @@ function CostoRoiGerencia() {
                 <TableRow key={p.producto}>
                   <TableCell>{i + 1}</TableCell>
                   <TableCell>{p.producto}</TableCell>
-                  <TableCell align="center"><NumField value={p.costo_unitario_muestra} width={120} fmt disabled={cerrado} onNum={(n) => setP(i, 'costo_unitario_muestra', n)} /></TableCell>
-                  <TableCell align="center"><NumField value={p.cantidad_muestras} disabled={cerrado} onNum={(n) => setP(i, 'cantidad_muestras', n)} /></TableCell>
+                  <TableCell align="center"><NumField value={p.costo_unitario_muestra} width={120} fmt disabled={!editable} onNum={(n) => setP(i, 'costo_unitario_muestra', n)} /></TableCell>
+                  <TableCell align="center"><NumField value={p.cantidad_muestras} disabled={!editable} onNum={(n) => setP(i, 'cantidad_muestras', n)} /></TableCell>
                   <TableCell align="right">{money(p.costo_unitario_muestra * p.cantidad_muestras)}</TableCell>
                 </TableRow>
               ))}
@@ -311,8 +309,8 @@ function CostoRoiGerencia() {
               {prods.map((p, i) => (
                 <TableRow key={p.producto}>
                   <TableCell>{i + 1}</TableCell><TableCell sx={{ fontWeight: 600 }}>{p.producto}</TableCell>
-                  <TableCell align="center"><NumField value={p.pool_ventas} width={160} fmt disabled={cerrado} onNum={(n) => setP(i, 'pool_ventas', n)} /></TableCell>
-                  <TableCell align="center"><NumField value={p.visitas_detalladas} width={130} fmt disabled={cerrado} onNum={(n) => setP(i, 'visitas_detalladas', n)} /></TableCell>
+                  <TableCell align="center"><NumField value={p.pool_ventas} width={160} fmt disabled={!editable} onNum={(n) => setP(i, 'pool_ventas', n)} /></TableCell>
+                  <TableCell align="center"><NumField value={p.visitas_detalladas} width={130} fmt disabled={!editable} onNum={(n) => setP(i, 'visitas_detalladas', n)} /></TableCell>
                   <TableCell align="right"><Typography variant="body2" fontWeight={700} color="success.main">{p.visitas_detalladas ? money2(p.pool_ventas / p.visitas_detalladas) : '—'}</Typography></TableCell>
                 </TableRow>
               ))}
@@ -333,11 +331,11 @@ function CostoRoiGerencia() {
           <Card variant="outlined"><CardContent>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}><CalendarMonth fontSize="small" color="action" /><Typography variant="subtitle1" fontWeight={700}>Planificación Anual — Productividad Objetivo del Contacto</Typography></Stack>
             <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" sx={{ mb: 2 }}>
-              <NumField label="Visitadores" value={est.visitadores} width={110} disabled={cerrado} onNum={(n) => setE('visitadores', n)} />
+              <NumField label="Visitadores" value={est.visitadores} width={110} disabled={!editable} onNum={(n) => setE('visitadores', n)} />
               <Typography>×</Typography>
-              <NumField label="Visitas/ciclo VM" value={est.visitas_ciclo_vm} width={130} disabled={cerrado} onNum={(n) => setE('visitas_ciclo_vm', n)} />
+              <NumField label="Visitas/ciclo VM" value={est.visitas_ciclo_vm} width={130} disabled={!editable} onNum={(n) => setE('visitas_ciclo_vm', n)} />
               <Typography>×</Typography>
-              <NumField label="Ciclos/año" value={est.ciclos_anio} width={110} disabled={cerrado} onNum={(n) => setE('ciclos_anio', n)} />
+              <NumField label="Ciclos/año" value={est.ciclos_anio} width={110} disabled={!editable} onNum={(n) => setE('ciclos_anio', n)} />
               <Typography>=</Typography>
               <Box><Typography variant="caption" color="text.secondary">Contactos/año equipo</Typography><Typography variant="h6" fontWeight={800} color="primary.main">{pa.contactos_anio.toLocaleString()}</Typography></Box>
               <Box sx={{ ml: 'auto' }}><Typography variant="caption" color="text.secondary">Contactos/año por VM</Typography><Typography variant="h6" fontWeight={800} color="primary.main">{pa.contactos_anio_vm.toLocaleString()}</Typography></Box>
@@ -356,8 +354,8 @@ function CostoRoiGerencia() {
                 return (
                   <TableRow key={p.producto}>
                     <TableCell>{p.producto}</TableCell>
-                    <TableCell align="center"><NumField value={p.presupuesto_anual} width={160} fmt disabled={cerrado} onNum={(n) => setP(i, 'presupuesto_anual', n)} /></TableCell>
-                    <TableCell align="center"><NumField value={p.precio_prom} width={120} fmt disabled={cerrado} onNum={(n) => setP(i, 'precio_prom', n)} /></TableCell>
+                    <TableCell align="center"><NumField value={p.presupuesto_anual} width={160} fmt disabled={!editable} onNum={(n) => setP(i, 'presupuesto_anual', n)} /></TableCell>
+                    <TableCell align="center"><NumField value={p.precio_prom} width={120} fmt disabled={!editable} onNum={(n) => setP(i, 'precio_prom', n)} /></TableCell>
                     <TableCell align="right">{money(pr?.productiv_obj_contacto ?? 0)}</TableCell>
                     <TableCell align="right">{(pr?.unidades_obj_contacto ?? 0).toFixed(1)} uds</TableCell>
                     <TableCell align="center"><Chip size="small" color={cumpl >= 100 ? 'success' : cumpl >= 80 ? 'warning' : 'error'} label={`${cumpl}%`} /></TableCell>
@@ -419,7 +417,7 @@ function CostoRoiGerencia() {
                           {im.categorias.find((x) => x.categoria === c.toUpperCase())?.medicos_sin_visitar ?? 0}
                         </Typography>
                       </TableCell>
-                      <TableCell align="center"><NumField value={Number(est[`psp_${c}` as keyof CostoEstructuraInput] ?? 0)} width={120} disabled={cerrado} onNum={(n) => setE(`psp_${c}` as keyof CostoEstructuraInput, n)} /></TableCell>
+                      <TableCell align="center"><NumField value={Number(est[`psp_${c}` as keyof CostoEstructuraInput] ?? 0)} width={120} disabled={!editable} onNum={(n) => setE(`psp_${c}` as keyof CostoEstructuraInput, n)} /></TableCell>
                     </TableRow>
                   ))}
                 </TableBody></Table>
@@ -428,9 +426,9 @@ function CostoRoiGerencia() {
                 <Typography variant="body2" fontWeight={600}>Coeficiente de atribución (visita → venta)</Typography>
                 <Box sx={{ px: 1 }}>
                   <Typography variant="caption">Conservador: {Math.round(est.coef_conservador * 100)}%</Typography>
-                  <Slider size="small" value={Math.round(est.coef_conservador * 100)} onChange={(_, v) => setE('coef_conservador', (v as number) / 100)} />
+                  <Slider size="small" disabled={!editable} value={Math.round(est.coef_conservador * 100)} onChange={(_, v) => setE('coef_conservador', (v as number) / 100)} />
                   <Typography variant="caption">Optimista: {Math.round(est.coef_optimista * 100)}%</Typography>
-                  <Slider size="small" color="secondary" value={Math.round(est.coef_optimista * 100)} onChange={(_, v) => setE('coef_optimista', (v as number) / 100)} />
+                  <Slider size="small" color="secondary" disabled={!editable} value={Math.round(est.coef_optimista * 100)} onChange={(_, v) => setE('coef_optimista', (v as number) / 100)} />
                 </Box>
               </Grid>
             </Grid>
