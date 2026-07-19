@@ -8,6 +8,7 @@ import { Logout, AccountCircle, LockReset, SupervisorAccount, Menu as MenuIcon, 
 import { useState, useEffect } from 'react';
 import Sidebar, { DRAWER_WIDTH } from './Sidebar';
 import InstalarAppDialog from '../InstalarAppDialog';
+import AvisoErrorGlobal from '../AvisoErrorGlobal';
 import { useAuthStore } from '../../store/auth.store';
 import { usePermisosStore } from '../../store/permisos.store';
 import { authService } from '../../services/auth.service';
@@ -195,6 +196,7 @@ export default function MainLayout() {
         </Menu>
 
         <InstalarAppDialog open={instalarOpen} onClose={() => setInstalarOpen(false)} />
+        <AvisoErrorGlobal />
 
         <Dialog open={pwOpen} onClose={() => setPwOpen(false)} maxWidth="xs" fullWidth>
           <DialogTitle>Cambiar contraseña</DialogTitle>

@@ -36,6 +36,15 @@ api.interceptors.response.use(
         }
       }
     }
+    // Aviso global para errores del SERVIDOR (500+) o de red: los que el usuario no entiende.
+    // Un componente escucha este evento, busca el error en la Matriz de Errores y muestra su
+    // descripción/solución. Los 4xx (400/403/409) ya traen su mensaje específico en cada pantalla.
+    const status = error.response?.status as number | undefined;
+    if (!error.response || (status !== undefined && status >= 500)) {
+      window.dispatchEvent(new CustomEvent('app:error-servidor', {
+        detail: { status: status ?? 0, detalle: error.response?.data?.detail },
+      }));
+    }
     return Promise.reject(error);
   }
 );
