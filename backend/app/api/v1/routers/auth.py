@@ -16,6 +16,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from jose import JWTError
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_current_active_user
@@ -70,9 +71,16 @@ def login(
     Retorna access_token (JWT) y refresh_token.
     Registra auditoría de login.
     """
-    user: Usuario | None = db.query(Usuario).filter(
-        Usuario.username == form_data.username
-    ).first()
+    # El usuario se busca sin distinguir mayúsculas y sin espacios sobrantes: en móvil el
+    # teclado AUTOCAPITALIZA la primera letra de un campo de texto, así que "mdavid" llega
+    # como "Mdavid" y con la comparación exacta no se encontraba a nadie → "Credenciales
+    # incorrectas" pese a que la contraseña era correcta. Se intenta primero la coincidencia
+    # EXACTA (por si algún día existieran dos usuarios que difieran solo en mayúsculas).
+    _usr = (form_data.username or "").strip()
+    user: Usuario | None = db.query(Usuario).filter(Usuario.username == _usr).first()
+    if user is None:
+        user = db.query(Usuario).filter(
+            func.lower(Usuario.username) == _usr.lower()).first()
 
     # Verificar bloqueo temporal (FIX W-01: comparación timezone-aware)
     now = datetime.now(timezone.utc)

@@ -134,6 +134,10 @@ export default function Login() {
               sx={{ mb: 2.5 }}
               autoFocus
               disabled={loading}
+              // En móvil el teclado autocapitaliza y autocorrige un campo de texto: "mdavid"
+              // llegaba como "Mdavid" y el login fallaba con "Credenciales incorrectas".
+              inputProps={{ autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false,
+                            autoComplete: 'username' }}
             />
             <TextField
               fullWidth
@@ -143,6 +147,10 @@ export default function Login() {
               onChange={(e) => setPassword(e.target.value)}
               sx={{ mb: 3 }}
               disabled={loading}
+              // Al pulsar el ojo el campo pasa a texto plano: sin esto, el móvil
+              // autocapitalizaría lo que se escriba a partir de ese momento.
+              inputProps={{ autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false,
+                            autoComplete: 'current-password' }}
               InputProps={{
                 endAdornment: (
                   <InputAdornment position="end">
@@ -205,19 +213,22 @@ export default function Login() {
                 </Typography>
                 <TextField
                   fullWidth size="small" label="Código de recuperación"
-                  value={fpCodigo} onChange={(e) => setFpCodigo(e.target.value)}
-                  inputProps={{ inputMode: 'numeric', maxLength: 6 }}
+                  value={fpCodigo} onChange={(e) => setFpCodigo(e.target.value.trim())}
+                  inputProps={{ inputMode: 'numeric', maxLength: 6, autoCapitalize: 'none',
+                                autoCorrect: 'off', spellCheck: false }}
                 />
                 <TextField
                   fullWidth size="small" label="Nueva contraseña" type="password"
                   value={fpPass} onChange={(e) => setFpPass(e.target.value)}
-                  autoComplete="new-password"
-                  helperText="Mín. 8 (12 para administradores) · mayúscula, minúscula, número y carácter especial"
+                  inputProps={{ autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false,
+                                autoComplete: 'new-password' }}
+                  helperText="Mayúscula, minúscula, número y un carácter especial (!@#$¿'…)"
                 />
                 <TextField
                   fullWidth size="small" label="Confirmar nueva contraseña" type="password"
                   value={fpConfirm} onChange={(e) => setFpConfirm(e.target.value)}
-                  autoComplete="new-password"
+                  inputProps={{ autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false,
+                                autoComplete: 'new-password' }}
                   error={fpConfirm.length > 0 && !fpCoincide}
                   helperText={fpConfirm.length > 0 && !fpCoincide ? 'No coinciden' : ' '}
                 />
