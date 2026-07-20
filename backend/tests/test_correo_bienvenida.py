@@ -30,9 +30,29 @@ def test_nunca_incluye_una_contrasena(monkeypatch):
     out = _capturar(monkeypatch)
     svc.notificar_bienvenida("nuevo@x.com", "Ana", "aperez")
     cuerpo = out["cuerpo"]
-    assert "contraseña temporal que te entregó" in cuerpo   # se referencia, no se incluye
     for pista in ("password=", "clave:", "contraseña:"):
         assert pista not in cuerpo.lower()
+
+
+def test_dice_EXPLICITAMENTE_que_la_contrasena_no_viene_en_el_correo(monkeypatch):
+    """Regresión jul-2026: el texto decía "ingresa con la contraseña temporal que te entregó
+    tu administrador" y el destinatario la buscaba dentro del mensaje, reportando que "el
+    correo dice contraseña temporal pero no llega la contraseña". No basta con omitirla: hay
+    que decir que no está aquí y por dónde se obtiene."""
+    out = _capturar(monkeypatch)
+    svc.notificar_bienvenida("nuevo@x.com", "Ana", "aperez")
+    cuerpo = out["cuerpo"].lower()
+    assert "no se envía por correo" in cuerpo
+    assert "olvidó su contraseña" in cuerpo, "debe ofrecer la vía de autoservicio"
+
+
+def test_no_promete_una_contrasena_dentro_del_mensaje(monkeypatch):
+    """Ninguna frase debe sugerir que la clave viaja en este correo."""
+    out = _capturar(monkeypatch)
+    svc.notificar_bienvenida("nuevo@x.com", "Ana", "aperez")
+    cuerpo = out["cuerpo"].lower()
+    for frase in ("contraseña temporal que te entregó", "tu contraseña es", "a continuación"):
+        assert frase not in cuerpo, f"redacción ambigua: {frase!r}"
 
 
 def test_sin_destinatario_no_envia(monkeypatch):

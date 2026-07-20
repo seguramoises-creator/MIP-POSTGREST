@@ -373,12 +373,15 @@ def notificar_asignacion_examen(destinatario: str, nombre: str, examen_nombre: s
 
 
 def notificar_bienvenida(destinatario: str, nombre: str, username: str) -> bool:
-    """Correo de bienvenida al crear un usuario: nombre del sistema + enlace de acceso.
+    """Correo de bienvenida cuando el ADMIN fijó la contraseña a mano (usuarios sin correo
+    o alta manual). El camino normal es `notificar_activacion_cuenta`.
 
     NO lleva la contraseña. Una clave enviada por correo queda para siempre en el buzón
-    (y en los servidores por los que pasó), así que el administrador la entrega por otra
-    vía o el usuario la establece con "¿Olvidó su contraseña?". Al entrar, el sistema le
-    exige cambiarla igualmente (`debe_cambiar_password`)."""
+    (y en los servidores por los que pasó), así que el administrador la entrega por otra vía.
+
+    El texto DEBE decir explícitamente que la contraseña no viaja en este correo: la
+    redacción anterior ("ingresa con la contraseña temporal que te entregó tu administrador")
+    hacía que el destinatario la buscara en el mensaje y reportara que "no llega"."""
     if not _habilitado() or not destinatario:
         return False
     cfg = mail_config()
@@ -396,9 +399,12 @@ def notificar_bienvenida(destinatario: str, nombre: str, username: str) -> bool:
       Entrar a {sistema}
     </a>
   </p>
-  <p>Ingresa con la contraseña temporal que te entregó tu administrador. <strong>Al entrar,
-     el sistema te pedirá cambiarla</strong> por una propia. Si no la tienes, usa
-     <em>“¿Olvidó su contraseña?”</em> en la pantalla de acceso.</p>
+  <p style="background:#fff8e1;border-left:4px solid #f9a825;padding:10px 14px;">
+     <strong>Por seguridad, tu contraseña no se envía por correo.</strong> Te la entrega
+     directamente tu administrador. Al entrar por primera vez, el sistema te pedirá
+     cambiarla por una propia.</p>
+  <p>¿No tienes contraseña o no la recuerdas? Pulsa <em>“¿Olvidó su contraseña?”</em> en la
+     pantalla de acceso y recibirás un código para crear la tuya.</p>
   <p style="color:#888;font-size:12px;">Si el botón no funciona, copia esta dirección: {url}</p>
   {_pie_pagina()}
 </body></html>"""
