@@ -611,3 +611,39 @@ def test_clasificar_sin_plantilla_no_rompe_la_aprobacion(monkeypatch):
     m = _medico_pendiente()
     aps._clasificar_al_aprobar(db, m)      # no debe lanzar
     assert m.categoria is None
+
+
+# ── Panel vs Maestro: el duplicado duro REUTILIZA, no bloquea ──────────────────
+def test_panel_reutiliza_el_maestro_si_el_medico_ya_existe(monkeypatch):
+    """Requerimiento: el Maestro es único, pero el PANEL sí puede repetir el mismo médico
+    entre representantes. Si el Maestro ya lo tiene, se enlaza esa ficha en vez de fallar
+    (regresión jul-2026: el blindaje estricto devolvía 409 y el 2º VM no podía agregarlo)."""
+    from app.services import maestro_medico_service as mm
+    monkeypatch.setattr(visita_service, "_pais_de_vm", lambda db, vm: "DO")
+    monkeypatch.setattr(mm, "_resolver_por_llave_dura",
+                        lambda db, pais, exequatur=None, cedula=None, codigo=None: None)
+
+    def _duro(*a, **k):
+        raise mm.DuplicadoDuroError([{"id": 321, "nombre": "PEREZ JUAN"}])
+    monkeypatch.setattr(mm, "crear_maestro", _duro)
+
+    datos = MedicoVisitaCrear(vm_id=9, nombre_completo="PEREZ VALDEZ JUAN",
+                              clasificacion=_clasif())
+    assert visita_service._resolver_o_crear_maestro(MagicMock(), datos, None) == 321
+
+
+def test_panel_propaga_el_duplicado_blando_para_que_el_usuario_confirme(monkeypatch):
+    """Coincidencia blanda (mismo nombre, OTRO centro) = posible homónimo: se pregunta."""
+    from app.services import maestro_medico_service as mm
+    monkeypatch.setattr(visita_service, "_pais_de_vm", lambda db, vm: "DO")
+    monkeypatch.setattr(mm, "_resolver_por_llave_dura",
+                        lambda db, pais, exequatur=None, cedula=None, codigo=None: None)
+
+    def _blando(*a, **k):
+        raise mm.PosibleDuplicadoError([{"id": 55, "nombre": "PEREZ JUAN"}])
+    monkeypatch.setattr(mm, "crear_maestro", _blando)
+
+    datos = MedicoVisitaCrear(vm_id=9, nombre_completo="PEREZ VALDEZ JUAN",
+                              clasificacion=_clasif())
+    with pytest.raises(visita_service.DuplicadoMedicoError):
+        visita_service._resolver_o_crear_maestro(MagicMock(), datos, None)

@@ -51,7 +51,22 @@ def _resolver_o_crear_maestro(db: Session, datos: MedicoVisitaCrear, usuario_id:
         m = mm.crear_maestro(db, pais, campos, origen="PANEL", estado="PENDIENTE",
                              confirmar_duplicado=getattr(datos, "confirmar_duplicado", False),
                              usuario_id=usuario_id)
-    except (mm.DuplicadoDuroError, mm.PosibleDuplicadoError) as e:
+    except mm.DuplicadoDuroError as e:
+        # El médico YA EXISTE en el Maestro (exequátur/cédula, o mismo nombre en el mismo
+        # centro). En el PANEL eso NO es un error: es la señal para REUTILIZAR la ficha
+        # central y asignársela también a este representante. El Maestro sigue único (no se
+        # crea una segunda ficha) y el Panel puede repetir el médico entre representantes,
+        # que es justo lo que exige el requerimiento. Bloquear aquí impedía que un segundo
+        # visitador agregara a su panel un médico ya registrado por otro.
+        ya = (e.coincidencias or [{}])[0]
+        if ya.get("id"):
+            logger.info(f"Panel: médico ya existe en el Maestro (id={ya['id']}) — se reutiliza "
+                        f"para el VM {datos.vm_id} en vez de crear un duplicado.")
+            return ya["id"]
+        raise DuplicadoMedicoError(e.coincidencias)
+    except mm.PosibleDuplicadoError as e:
+        # Coincidencia BLANDA (mismo nombre, otro centro): puede ser un homónimo distinto.
+        # Se devuelve al usuario para que confirme, como hasta ahora.
         raise DuplicadoMedicoError(e.coincidencias)
     return m.id
 
