@@ -3,6 +3,7 @@ SCGCPR — Router: Administración
 Gestión de catálogos: Países, Líneas, Gerentes, RMs,
 Indicadores, Tablas de puntuación, Ciclos, Reglas de Elegibilidad, Usuarios.
 """
+import secrets
 from datetime import date, datetime, timezone
 from typing import Annotated, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -898,29 +899,59 @@ def create_usuario(data: UsuarioCreate, db: Session = Depends(get_db), _=AdminOn
     if data.email and db.query(Usuario).filter(Usuario.email == data.email).first():
         raise HTTPException(400, f"El correo '{data.email}' ya está registrado con otro usuario.")
     from datetime import datetime, timezone
+    from loguru import logger            # este router no importa logger a nivel de módulo
     from app.services import password_policy_service
-    try:
-        password_policy_service.validar_complejidad(db, data.password, data.rol)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
+
+    # Dos caminos para la contraseña inicial:
+    #  (a) SIN contraseña + con correo  → se envía un ENLACE DE ACTIVACIÓN y el usuario crea
+    #      la suya. Es el camino recomendado: ninguna contraseña viaja por correo, donde
+    #      quedaría archivada para siempre en el buzón y en los servidores intermedios.
+    #  (b) CON contraseña → el administrador la fija y la entrega por otra vía. Necesario
+    #      para usuarios sin correo, donde no hay dónde mandar el enlace.
+    password = (data.password or "").strip()
+    por_activacion = not password
+    if por_activacion and not data.email:
+        raise HTTPException(422, "Sin correo no se puede enviar el enlace de activación: "
+                                 "escribe una contraseña inicial o agrega un correo.")
+    if not por_activacion:
+        try:
+            password_policy_service.validar_complejidad(db, password, data.rol)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+
     payload = data.model_dump()
-    payload["hashed_password"] = hash_password(payload.pop("password"))
+    payload.pop("password", None)
+    if por_activacion:
+        # Contraseña aleatoria que nadie conoce (ni el administrador): la cuenta solo puede
+        # abrirse con el enlace. El campo no admite NULL y dejarlo vacío haría que cualquier
+        # cadena que hasheara igual sirviera; esto la vuelve inutilizable por diseño.
+        payload["hashed_password"] = hash_password(secrets.token_urlsafe(32))
+        payload["activado_en"] = None
+        payload["password_actualizado_en"] = None
+    else:
+        payload["hashed_password"] = hash_password(password)
+        # El administrador le entregó credenciales que ya funcionan: la cuenta está activada
+        # aunque le exijamos cambiar la clave al primer ingreso.
+        payload["activado_en"] = datetime.now(timezone.utc)
+        payload["password_actualizado_en"] = datetime.now(timezone.utc)
     payload["debe_cambiar_password"] = True
-    payload["password_actualizado_en"] = datetime.now(timezone.utc)
     obj = Usuario(**payload)
     db.add(obj); db.commit(); db.refresh(obj)
-    # Bienvenida con el enlace de acceso. Best-effort: si el correo falla, el usuario ya
-    # quedó creado (y el admin puede reenviarlo). Nunca lleva la contraseña.
+
+    # Correo best-effort: si falla, el usuario ya quedó creado y el admin puede reenviarlo
+    # desde Administración → Usuarios. Ninguno de los dos correos lleva la contraseña.
     if obj.email:
         try:
-            from app.services import notification_service
-            notification_service.notificar_bienvenida(
-                destinatario=obj.email,
-                nombre=obj.nombre_completo or obj.username,
-                username=obj.username)
+            from app.services import activacion_service, notification_service
+            if por_activacion:
+                activacion_service.enviar_activacion(db, obj)
+            else:
+                notification_service.notificar_bienvenida(
+                    destinatario=obj.email,
+                    nombre=obj.nombre_completo or obj.username,
+                    username=obj.username)
         except Exception as e:  # noqa: BLE001
-            from loguru import logger      # este router no importa logger a nivel de módulo
-            logger.error(f"Correo de bienvenida falló (no bloquea) usuario={obj.id}: {e}")
+            logger.error(f"Correo de alta falló (no bloquea) usuario={obj.id}: {e}")
     return obj
 
 @router.put("/usuarios/{id}", response_model=UsuarioResponse, summary="Actualizar usuario")
@@ -966,6 +997,33 @@ def delete_usuario(id: int, db: Session = Depends(get_db), _=AdminOnly):
     obj.activo = False
     db.commit()
     return Msg(message="Usuario desactivado")
+
+
+@router.post("/usuarios/{id}/reenviar-activacion", response_model=Msg,
+             summary="Reenviar el enlace de activación de un usuario (ADMIN)")
+def reenviar_activacion_usuario(id: int, db: Session = Depends(get_db), _=AdminOnly):
+    """Genera un enlace de activación NUEVO y lo envía por correo. El anterior queda
+    inservible en el acto: sirve tanto para un enlace vencido como para uno que pudo
+    quedar expuesto.
+
+    A diferencia del endpoint público, aquí sí se dice qué pasó — quien lo llama es un
+    administrador autenticado que necesita saber por qué no se envió."""
+    from app.services import activacion_service
+    obj = db.query(Usuario).filter(Usuario.id == id).first()
+    if not obj:
+        raise HTTPException(404, "Usuario no encontrado")
+    if not obj.email:
+        raise HTTPException(422, f"{obj.username} no tiene correo registrado: no hay a dónde "
+                                 f"enviar el enlace. Agrégale un correo o fíjale una contraseña.")
+    if obj.activado_en is not None:
+        raise HTTPException(409, f"{obj.username} ya activó su cuenta. Si perdió la contraseña, "
+                                 f"usa «Restablecer contraseña» o que use «¿Olvidó su contraseña?».")
+    enviado = activacion_service.enviar_activacion(db, obj)
+    if not enviado:
+        # El token se generó igual; lo que falló fue el envío (SMTP mal configurado o caído).
+        raise HTTPException(502, "No se pudo enviar el correo. Revisa la configuración de "
+                                 "correo en Administración y vuelve a intentarlo.")
+    return Msg(message=f"Enlace de activación reenviado a {obj.email}")
 
 
 @router.post("/usuarios/{id}/reset-password", response_model=Msg, summary="Restablecer contraseña de un usuario (ADMIN)")

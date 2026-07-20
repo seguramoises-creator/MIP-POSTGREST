@@ -405,6 +405,41 @@ def notificar_bienvenida(destinatario: str, nombre: str, username: str) -> bool:
     return _enviar(destinatario, f"Bienvenido a {sistema} — tu acceso está listo", cuerpo)
 
 
+def notificar_activacion_cuenta(destinatario: str, nombre: str, username: str,
+                                enlace: str, horas: int = 24) -> bool:
+    """Correo de ACTIVACIÓN: enlace de un solo uso para que el usuario cree su contraseña.
+
+    Es la vía preferida frente a `notificar_bienvenida` + contraseña temporal. Aquí no
+    viaja ninguna contraseña: el correo solo lleva un enlace que caduca y se invalida al
+    usarse, así que aunque el buzón se filtre más tarde el enlace ya no sirve."""
+    if not _habilitado() or not destinatario:
+        return False
+    cfg = mail_config()
+    sistema = (cfg.get("from_name") or "VISTA").strip()
+    cuerpo = f"""<html><body style="font-family:Arial,sans-serif;color:#333;">
+  <h2 style="color:{_COLOR_TITULO};">Activación de cuenta</h2>
+  <p>Hola <strong>{nombre}</strong>:</p>
+  <p>Se ha creado una cuenta para ti en <strong>{sistema}</strong>. Para activar tu acceso,
+     haz clic en el siguiente enlace y crea tu contraseña:</p>
+  <ul>
+    <li>Usuario: <strong>{username}</strong></li>
+  </ul>
+  <p style="margin:24px 0;">
+    <a href="{enlace}" style="background:{_COLOR_TITULO};color:#ffffff;text-decoration:none;
+       padding:12px 22px;border-radius:6px;display:inline-block;font-weight:bold;">
+      Activar cuenta
+    </a>
+  </p>
+  <p>Este enlace es válido por <strong>{horas} horas</strong> y solo puede utilizarse una vez.</p>
+  <p>Si no solicitaste este acceso, puedes ignorar este mensaje o comunicarte con el
+     administrador del sistema.</p>
+  <p style="color:#888;font-size:12px;word-break:break-all;">Si el botón no funciona, copia
+     esta dirección en tu navegador:<br>{enlace}</p>
+  {_pie_pagina()}
+</body></html>"""
+    return _enviar(destinatario, f"Activación de cuenta — {sistema}", cuerpo)
+
+
 def notificar_asignacion_examen_gerente(destinatario: str, nombre_gerente: str,
                                         examen_nombre: str, representantes: list[str],
                                         fecha_limite: Optional[str] = None) -> bool:

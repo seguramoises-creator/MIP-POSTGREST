@@ -48,4 +48,29 @@ export const authService = {
       `${API_URL}/auth/reset-password`, { email, codigo, password_nuevo });
     return data.message;
   },
+
+  // ── Activación de cuenta (enlace de un solo uso) ──────────────────────────
+  // Endpoints públicos: quien llega todavía no tiene contraseña, así que no hay token
+  // de sesión que enviar. Lo que autoriza es el token del enlace del correo.
+
+  // Valida el enlace antes de pintar el formulario (para saludar por el nombre y avisar
+  // de inmediato si venció).
+  async validarActivacion(token: string): Promise<{ nombre: string; username: string; min_longitud: number }> {
+    const { data } = await axios.get(`${API_URL}/auth/activacion/${encodeURIComponent(token)}`);
+    return data;
+  },
+
+  // El usuario fija su propia contraseña; el token se consume en el servidor.
+  async activarCuenta(token: string, password: string): Promise<string> {
+    const { data } = await axios.post<{ message: string }>(
+      `${API_URL}/auth/activacion`, { token, password });
+    return data.message;
+  },
+
+  // Pide un enlace nuevo cuando el anterior venció. Respuesta siempre genérica.
+  async reenviarActivacion(email: string): Promise<string> {
+    const { data } = await axios.post<{ message: string }>(
+      `${API_URL}/auth/activacion/reenviar`, { email });
+    return data.message;
+  },
 };

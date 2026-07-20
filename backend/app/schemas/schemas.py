@@ -17,7 +17,11 @@ class UsuarioCreate(BaseModel):
     username: str
     # Email OPCIONAL: si se envía debe ser válido; vacío/espacios → None (sin correo).
     email: Optional[EmailStr] = None
-    password: str
+    # Contraseña OPCIONAL (jul-2026): con correo, lo normal es dejarla vacía y que el
+    # sistema envíe un enlace de activación para que el usuario cree la suya. Solo es
+    # obligatoria cuando el usuario NO tiene correo, porque entonces no hay dónde enviar
+    # el enlace. Ver `create_usuario` en admin.py.
+    password: Optional[str] = None
     nombre_completo: str
     rol: str
     pais_codigo: Optional[str] = None
@@ -47,6 +51,8 @@ class UsuarioResponse(BaseModel):
     ultimo_login: Optional[datetime]
     debe_cambiar_password: bool = False
     password_expira_en_dias: Optional[int] = None
+    # NULL = cuenta creada pero su titular aún no abrió el enlace de activación.
+    activado_en: Optional[datetime] = None
 
 class UsuarioUpdate(BaseModel):
     nombre_completo: Optional[str] = None
@@ -87,6 +93,26 @@ class ResetPassword(BaseModel):
 class AdminSetPassword(BaseModel):
     """Restablecimiento de contraseña por un ADMIN desde Administración de Usuarios."""
     password_nuevo: str
+
+
+class ActivarCuenta(BaseModel):
+    """Activación de cuenta: token del enlace + la contraseña que elige el usuario."""
+    token: str
+    password: str
+
+
+class ReenviarActivacion(BaseModel):
+    """Reenvío del enlace de activación cuando el anterior venció."""
+    email: EmailStr
+
+
+class ActivacionInfo(BaseModel):
+    """Datos para la pantalla de activación. Solo se devuelven si el token es válido:
+    con un token inválido el endpoint responde 400 genérico, sin filtrar a quién
+    pertenecía ni si llegó a existir."""
+    nombre: str
+    username: str
+    min_longitud: int
 
 
 class CorreoConfig(BaseModel):

@@ -17,6 +17,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import Casino from '@mui/icons-material/Casino';
+import ForwardToInbox from '@mui/icons-material/ForwardToInbox';
 import { api } from '../../services/api';
 
 // Genera una contraseña que cumple la política (mín. 12, mayúscula, minúscula,
@@ -204,11 +205,23 @@ export default function Usuarios() {
 
   const createMut = useMutation({
     mutationFn: () => api.post('/admin/usuarios', form),
-    onSuccess: () => {
+    onSuccess: (_r, _v, _c) => {
+      // Se lee `form` ANTES de limpiarlo: si no, el mensaje siempre diría "contraseña".
+      const conEnlace = !!form.email && !(form.password || '').trim();
+      const correo = form.email;
       setOpenNew(false); setForm({});
       qc.invalidateQueries({ queryKey: ['usuarios'] });
-      showMsg('Usuario creado correctamente');
+      showMsg(conEnlace
+        ? `Usuario creado. Se envió el enlace de activación a ${correo} (válido 24 horas).`
+        : 'Usuario creado con la contraseña indicada. Entrégasela por una vía segura, no por correo.');
     },
+    onError: (e: any) => showMsg(errorMsg(e), 'error'),
+  });
+
+  // Reenvía el enlace cuando venció o no llegó. El anterior queda inservible al instante.
+  const reenviarMut = useMutation({
+    mutationFn: (row: any) => api.post(`/admin/usuarios/${row.id}/reenviar-activacion`),
+    onSuccess: (r: any) => showMsg(r.data?.message || 'Enlace de activación reenviado'),
     onError: (e: any) => showMsg(errorMsg(e), 'error'),
   });
 
@@ -338,12 +351,22 @@ export default function Usuarios() {
                           />
                         </TableCell>
                         <TableCell>
-                          <Chip
-                            label={row.activo ? 'Activo' : 'Inactivo'}
-                            color={row.activo ? 'success' : 'default'}
-                            size="small"
-                            variant={row.activo ? 'filled' : 'outlined'}
-                          />
+                          {/* "Sin activar" ≠ "Inactivo": la cuenta está habilitada, lo que
+                              falta es que su titular abra el enlace y cree su contraseña.
+                              Distinguirlas evita que el admin "arregle" con el interruptor
+                              de activo/inactivo algo que solo se resuelve reenviando. */}
+                          {row.activo && !row.activado_en ? (
+                            <Tooltip title="El usuario todavía no abrió el enlace de activación ni creó su contraseña">
+                              <Chip label="Sin activar" color="warning" size="small" />
+                            </Tooltip>
+                          ) : (
+                            <Chip
+                              label={row.activo ? 'Activo' : 'Inactivo'}
+                              color={row.activo ? 'success' : 'default'}
+                              size="small"
+                              variant={row.activo ? 'filled' : 'outlined'}
+                            />
+                          )}
                         </TableCell>
                         <TableCell>
                           <Tooltip title={row.bloqueado ? 'Bloqueado — desmarca para desbloquear' : 'Marca para bloquear el acceso'}>
@@ -362,6 +385,16 @@ export default function Usuarios() {
                                 <EditIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
+                            {/* Solo aparece donde sirve: cuenta sin activar y con correo. */}
+                            {!row.activado_en && row.email && (
+                              <Tooltip title="Reenviar enlace de activación (invalida el anterior)">
+                                <IconButton size="small" color="info"
+                                            disabled={reenviarMut.isPending}
+                                            onClick={() => reenviarMut.mutate(row)}>
+                                  <ForwardToInbox fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            )}
                             <Tooltip title={row.activo ? 'Desactivar' : 'Activar'}>
                               <Button
                                 size="small"
@@ -408,15 +441,21 @@ export default function Usuarios() {
               value={form.email || ''}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
             />
-            {/* autoComplete="new-password" evita que el navegador autocomplete este
-                campo con las credenciales guardadas del ADMIN (causa de que el rep
-                quedara con una contraseña distinta a la esperada). El botón del ojo
-                deja VER la clave real; "Generar" crea una que cumple la política. */}
+            {/* Con correo, lo normal es DEJARLA VACÍA: el sistema envía un enlace de
+                activación y el usuario crea su propia contraseña. Una clave enviada por
+                correo queda archivada para siempre en el buzón y en cada servidor por el
+                que pasó; el enlace, en cambio, caduca y muere al usarse.
+                autoComplete="new-password" evita que el navegador rellene este campo con
+                las credenciales guardadas del ADMIN (causa de que un rep quedara con una
+                contraseña distinta a la esperada). */}
             <TextField
-              fullWidth size="small" label="Contraseña"
+              fullWidth size="small"
+              label={form.email ? 'Contraseña (opcional)' : 'Contraseña'}
               type={showPwd ? 'text' : 'password'}
               autoComplete="new-password"
-              helperText="Mín. 8 caracteres (12 para ADMIN) · mayúscula, minúscula, número y carácter especial (!@#$%…)"
+              helperText={form.email
+                ? 'Déjala vacía (recomendado): se enviará un enlace de activación para que el usuario cree su contraseña.'
+                : 'Sin correo no hay dónde enviar el enlace de activación, así que aquí es obligatoria. Mín. 8 caracteres (12 para ADMIN) · mayúscula, minúscula, número y especial (!@#$%…)'}
               value={form.password || ''}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
               InputProps={{

@@ -816,6 +816,38 @@ Cada router nuevo (`lsii.py`, `cobertura_predictiva.py`, `categorizacion.py`, `e
 - Contraseña: mínimo 12 chars, mayúscula, minúscula, número **y carácter especial** (política real en `password_policy_service.validar_complejidad`); no reutilización de las últimas N (`FACT_PasswordHistorial`)
 - Archivos ETL: validación de magic bytes + nombre UUID para prevenir Path Traversal
 
+### Activación de cuenta por enlace (jul-2026) — **cómo nace un usuario**
+Al crear un usuario **con correo** el sistema NO envía contraseña: manda un **enlace de
+activación de un solo uso** y el usuario crea la suya. Una clave enviada por correo queda
+archivada para siempre en el buzón y en cada servidor por el que pasó; el enlace caduca y
+muere al usarse.
+
+- **Modelo**: `Security.FACT_ActivacionCuenta` (token **SHA-256**, `expira_en`, `usado`,
+  `usado_en`, `usado_ip`) + `Security.DIM_Usuario.activado_en` (migración `0023`).
+  `activado_en` NULL = creada pero su titular nunca fijó su clave. **No confundir con
+  `activo`**, que es el interruptor manual del ADMIN.
+- **Por qué SHA-256 y no bcrypt** (a diferencia de `FACT_PasswordReset`): el usuario llega
+  con el token y nada más, así que hay que buscar la fila POR el token; bcrypt usa un salt
+  distinto por hash y obligaría a recorrer la tabla entera. Es seguro porque la entropía la
+  pone `secrets.token_urlsafe(32)` (256 bits), no una persona.
+- **Servicio**: `activacion_service.py` — `generar_token`, `enviar_activacion`, `validar`,
+  `activar`, `reenviar_por_email`. Caducidad 24 h, configurable en `ACTIVACION_EXPIRA_HORAS`.
+- **Endpoints públicos**: `GET /auth/activacion/{token}` (valida antes de pintar el formulario),
+  `POST /auth/activacion {token,password}`, `POST /auth/activacion/reenviar {email}` (respuesta
+  siempre genérica). ADMIN: `POST /admin/usuarios/{id}/reenviar-activacion` (409 si ya activó).
+- **`POST /admin/usuarios` con `password` OPCIONAL**: vacío + con correo → enlace de activación
+  (la cuenta nace con un hash aleatorio que nadie conoce); con contraseña → el ADMIN la entrega
+  por otra vía y la cuenta nace ya activada. **Sin correo la contraseña es obligatoria** (422):
+  no hay a dónde mandar el enlace.
+- **Reglas que evitan callejones sin salida** (cubiertas por `tests/test_activacion_reglas.py`):
+  el login **corta antes** de `verify_password` si `activado_en is None` (si no, la clave
+  aleatoria fallaría siempre y a los 3 intentos la cuenta quedaría bloqueada); una contraseña
+  débil **no consume** el token; y `password_reset_service.restablecer` también marca
+  `activado_en` (probar la titularidad del correo equivale a activar, para quien perdió el enlace).
+- **Frontend**: `pages/auth/ActivarCuenta.tsx`, ruta **pública** `/activar/:token` en `App.tsx`
+  (va antes del catch-all y **no** se condiciona a `isAuthenticated` — quien llega del correo
+  nunca lo está). En Usuarios: chip **"Sin activar"** (≠ Inactivo) y botón de reenvío.
+
 ### Gestión de contraseñas (jul-2026)
 - **ADMIN restablece cualquier contraseña** desde Administración de Usuarios: `POST /admin/usuarios/{id}/reset-password` (valida complejidad, guarda hasheada, `debe_cambiar_password=True`). UI: campo + botón en el diálogo de editar usuario.
 - **"Olvidó su contraseña"** (`password_reset_service.py` + modelo `Security.FACT_PasswordReset`, migración `0010`):

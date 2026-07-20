@@ -103,6 +103,11 @@ def restablecer(db: Session, email: str, codigo: str, password_nuevo: str) -> Us
     usuario.hashed_password = hash_password(password_nuevo)
     usuario.password_actualizado_en = ahora
     usuario.debe_cambiar_password = False
+    # Si la cuenta nunca se activó (enlace de activación vencido o perdido), probar la
+    # titularidad del correo con el código equivale a activarla: si no, el usuario fijaría
+    # una contraseña válida y el login la seguiría rechazando por "cuenta sin activar".
+    if usuario.activado_en is None:
+        usuario.activado_en = ahora
     # Recuperar la clave por código (prueba de titularidad del correo) DESBLOQUEA la cuenta:
     # limpia intentos fallidos y el bloqueo temporal para que pueda entrar de inmediato.
     usuario.intentos_fallidos = 0

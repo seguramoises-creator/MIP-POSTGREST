@@ -9,6 +9,7 @@ import ProtectedRoute from './components/common/ProtectedRoute';
 import MainLayout from './components/layout/MainLayout';
 import Login from './pages/auth/Login';
 import CambiarPassword from './pages/auth/CambiarPassword';
+import ActivarCuenta from './pages/auth/ActivarCuenta';
 import Setup from './pages/setup/Setup';
 const DashboardEjecutivo = lazyWithReload(() => import('./pages/dashboard/DashboardEjecutivo'));
 import { NAV_ITEMS } from './components/layout/Sidebar';
@@ -117,6 +118,10 @@ function AppRoutes() {
       <Route path="/setup" element={<Setup />} />
       <Route path="/login" element={isAuthenticated ? <Navigate to={inicio} /> : <Login />} />
       <Route path="/cambiar-password" element={isAuthenticated ? <CambiarPassword /> : <Navigate to="/login" />} />
+      {/* Activación de cuenta: ruta PÚBLICA y sin condicionar a isAuthenticated — quien
+          llega desde el correo aún no tiene contraseña, así que jamás está autenticado.
+          Va antes del catch-all para que el enlace no rebote al dashboard. */}
+      <Route path="/activar/:token" element={<ActivarCuenta />} />
       <Route path="/sin-acceso" element={<SinAcceso />} />
       <Route path="/" element={<ProtectedRoute><MainLayout /></ProtectedRoute>}>
         <Route index element={<Navigate to={inicio} />} />

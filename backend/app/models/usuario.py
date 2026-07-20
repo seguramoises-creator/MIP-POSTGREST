@@ -43,6 +43,11 @@ class Usuario(Base):
     rm_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     gerente_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("Config.DIM_Gerente.id"), nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Fecha en que el usuario ACTIVÓ su cuenta creando su propia contraseña desde el enlace
+    # de activación. NULL = creado pero nunca activado (no puede entrar todavía).
+    # Es distinto de `activo`, que es el interruptor manual del administrador: una cuenta
+    # puede estar activa (habilitada) y aún sin activar (su dueño no ha fijado su clave).
+    activado_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     debe_cambiar_password: Mapped[bool] = mapped_column(Boolean, default=True)
     intentos_fallidos: Mapped[int] = mapped_column(Integer, default=0)
     bloqueado_hasta: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -121,5 +126,36 @@ class PasswordResetCode(Base):
     expira_en: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
     usado: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     intentos: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    creado_en: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class ActivacionCuenta(Base):
+    """Token de activación de cuenta, de un solo uso, enviado por correo al crear un usuario.
+
+    Sustituye al envío de contraseñas temporales por correo: una clave enviada por correo
+    queda para siempre en el buzón (y en cada servidor por el que pasó), mientras que este
+    enlace caduca y se invalida al usarse.
+
+    **Por qué SHA-256 y no bcrypt** (a diferencia de `PasswordResetCode`): el usuario llega
+    con el token y nada más — no dice quién es — así que hay que localizar la fila POR el
+    token. bcrypt usa un salt distinto en cada hash, o sea que habría que recorrer la tabla
+    entera comparando fila por fila. SHA-256 es determinista y se busca por índice. Es
+    seguro aquí porque la entropía la pone el token (`secrets.token_urlsafe(32)` = 256 bits
+    aleatorios), no una persona: no hay diccionario que probar, que es justo el ataque para
+    el que existe el hash lento.
+    """
+    __tablename__ = "FACT_ActivacionCuenta"
+    __table_args__ = {"schema": "Security"}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    usuario_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Security.DIM_Usuario.id"), index=True, nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
+    expira_en: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    usado: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    usado_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # IP desde la que se completó la activación (auditoría).
+    usado_ip: Mapped[str | None] = mapped_column(String(50), nullable=True)
     creado_en: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc))

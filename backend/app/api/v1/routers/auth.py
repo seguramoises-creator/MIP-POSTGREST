@@ -29,9 +29,10 @@ from app.db.database import get_db
 from app.models.usuario import Usuario
 from app.models.hechos import Auditoria
 from app.schemas.common import Msg, TokenResponse
-from app.schemas.schemas import UsuarioResponse, PasswordChange, ForgotPassword, ResetPassword
+from app.schemas.schemas import (UsuarioResponse, PasswordChange, ForgotPassword, ResetPassword,
+                                ActivarCuenta, ReenviarActivacion, ActivacionInfo)
 from app.core.config import settings
-from app.services import password_policy_service, password_reset_service
+from app.services import activacion_service, password_policy_service, password_reset_service
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
@@ -96,6 +97,19 @@ def login(
                 status_code=423,
                 detail="Cuenta bloqueada temporalmente. Intente más tarde."
             )
+
+    # Cuenta creada pero nunca activada: su contraseña es un valor aleatorio que nadie
+    # conoce, así que la verificación de abajo fallaría siempre y a los 3 intentos la
+    # cuenta quedaría BLOQUEADA por algo que el usuario no puede resolver adivinando.
+    # Se corta antes, con un mensaje que dice qué hacer y sin contar intento fallido.
+    if user and user.activado_en is None:
+        _registrar_auditoria(db, user, "LOGIN_SIN_ACTIVAR", request, False, "Cuenta no activada")
+        raise HTTPException(
+            status_code=403,
+            detail="Tu cuenta aún no ha sido activada. Abre el enlace de activación que te "
+                   "enviamos por correo para crear tu contraseña. Si venció, usa "
+                   "“¿Olvidó su contraseña?” para recibir uno nuevo."
+        )
 
     if not user or not verify_password(form_data.password, user.hashed_password):
         if user:
@@ -294,3 +308,57 @@ def reset_password(datos: ResetPassword, request: Request, db: Session = Depends
         raise HTTPException(status_code=400, detail=str(e))
     _registrar_auditoria(db, usuario, "RESET_PASSWORD", request, True)
     return Msg(message="Contraseña restablecida correctamente. Ya puedes iniciar sesión.")
+
+
+# ── Activación de cuenta (enlace de un solo uso) ─────────────────────────────
+# Endpoints PÚBLICOS: el usuario todavía no tiene contraseña, así que no puede
+# autenticarse. Lo que lo autoriza es el token del correo.
+
+_MSG_ACTIVACION_GENERICO = ("Si la cuenta existe y está pendiente de activación, recibirás "
+                            "un enlace nuevo en unos minutos.")
+
+
+@router.get("/activacion/{token}", response_model=ActivacionInfo,
+            summary="Validar un enlace de activación")
+def validar_activacion(token: str, db: Session = Depends(get_db)):
+    """Comprueba el enlace ANTES de mostrar el formulario, para poder saludar al usuario
+    por su nombre y decirle de inmediato si el enlace venció (en vez de dejarlo escribir
+    una contraseña y rechazársela al final)."""
+    try:
+        usuario = activacion_service.usuario_del_token(db, token)
+    except activacion_service.TokenInvalidoError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ActivacionInfo(
+        nombre=usuario.nombre_completo or usuario.username,
+        username=usuario.username,
+        min_longitud=password_policy_service.min_longitud(db, usuario.rol),
+    )
+
+
+@router.post("/activacion", response_model=Msg, summary="Activar cuenta y crear contraseña")
+def activar_cuenta(datos: ActivarCuenta, request: Request, db: Session = Depends(get_db)):
+    """El usuario fija su propia contraseña. El token se consume aquí y no vuelve a servir."""
+    try:
+        usuario = activacion_service.activar(
+            db, datos.token, datos.password,
+            ip=request.client.host if request.client else None)
+    except activacion_service.TokenInvalidoError as e:
+        # Auditoría de intento fallido: sin usuario, porque un token inválido no identifica
+        # a nadie — lo que queda registrado es la IP y el intento.
+        _registrar_auditoria(db, None, "ACTIVACION_FALLIDA", request, False, str(e))
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:                     # contraseña débil: el enlace SIGUE sirviendo
+        raise HTTPException(status_code=400, detail=str(e))
+    _registrar_auditoria(db, usuario, "ACTIVACION", request, True, "Cuenta activada por su titular")
+    return Msg(message="Cuenta activada. Ya puedes iniciar sesión con tu nueva contraseña.")
+
+
+@router.post("/activacion/reenviar", response_model=Msg, summary="Reenviar enlace de activación")
+def reenviar_activacion(datos: ReenviarActivacion, db: Session = Depends(get_db)):
+    """Reenvía el enlace cuando el anterior venció. Responde SIEMPRE lo mismo: no revela
+    si el correo está registrado ni si la cuenta ya estaba activada."""
+    try:
+        activacion_service.reenviar_por_email(db, datos.email)
+    except Exception as e:  # nunca filtrar el error real al cliente
+        logger.warning(f"activacion/reenviar: fallo interno: {e}")
+    return Msg(message=_MSG_ACTIVACION_GENERICO)
