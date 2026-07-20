@@ -398,3 +398,46 @@ class MedicoClasificacion(Base):
     # Quién la ajustó al aprobar (el Gerente de Distrito puede corregir antes de aprobar).
     actualizado_por: Mapped[int | None] = mapped_column(Integer, nullable=True)
     fecha_actualizacion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class MedicoSolicitudCambio(Base):
+    """Cambio propuesto por el REPRESENTANTE sobre un médico YA APROBADO de su panel.
+
+    Regla (requerimiento jul-2026): al modificar, el médico **sigue activo con los datos
+    anteriores** — la operación del ciclo no se interrumpe por un cambio de teléfono — y
+    la propuesta queda aquí esperando validación del Gerente de Distrito. Al aprobarla se
+    vuelca sobre `DIM_MedicoVisita` y se recalcula la categoría.
+
+    Solo aplica a ediciones del REP: si edita el GD/ADMIN (que es quien valida) el cambio
+    se aplica directo, sin pasar por aquí.
+
+    `cambios_json` guarda solo los campos generales que cambian (patrón PATCH); los 5
+    criterios van en columnas propias porque el motor los necesita tipados.
+    """
+    __tablename__ = "MedicoSolicitudCambio"
+    __table_args__ = (
+        Index("IX_SolicitudCambio_estado", "estado"),
+        {"schema": "Visita"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    medico_visita_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Visita.DIM_MedicoVisita.id", ondelete="CASCADE"),
+        nullable=False, index=True)
+
+    cambios_json: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+
+    # Clasificación propuesta (obligatoria al modificar desde el Panel).
+    pacientes_semana: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    costo_consulta: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    potencial_prescripcion: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    ubicacion_territorial: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    kol_nivel: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    # PENDIENTE | APROBADO | RECHAZADO — se conserva el histórico de lo solicitado.
+    estado: Mapped[str] = mapped_column(String(12), nullable=False, default="PENDIENTE")
+    solicitado_por: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fecha_solicitud: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+    resuelto_por: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    fecha_resolucion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    motivo: Mapped[str | None] = mapped_column(String(300), nullable=True)

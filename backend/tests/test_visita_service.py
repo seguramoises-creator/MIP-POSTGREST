@@ -647,3 +647,37 @@ def test_panel_propaga_el_duplicado_blando_para_que_el_usuario_confirme(monkeypa
                               clasificacion=_clasif())
     with pytest.raises(visita_service.DuplicadoMedicoError):
         visita_service._resolver_o_crear_maestro(MagicMock(), datos, None)
+
+
+# ── Modificación del REP: queda pendiente, el médico sigue activo con lo anterior ──
+def test_solicitar_cambio_no_toca_el_medico(monkeypatch):
+    """Regla clave: el médico sigue ACTIVO con los datos ANTERIORES hasta que el GD valide
+    (un cambio de datos no debe sacarlo de la cobertura del ciclo)."""
+    from app.schemas.visita import MedicoVisitaActualizar
+    monkeypatch.setattr(visita_service, "_avisar_gerente_medico_pendiente", lambda db, m: None)
+    medico = SimpleNamespace(id=5, vm_id=7, sector="Naco", nombre_completo="PEREZ JUAN")
+    sol = visita_service.solicitar_cambio_medico(
+        MagicMock(), medico, MedicoVisitaActualizar(sector="Piantini"), None, usuario_id=3)
+    assert medico.sector == "Naco", "el médico NO debe cambiar al solicitar"
+    assert sol.estado == "PENDIENTE" and "Piantini" in sol.cambios_json
+
+
+def test_solicitar_cambio_sin_diferencias_falla():
+    """Enviar el mismo valor no genera solicitud (evita ruido para el GD)."""
+    from app.schemas.visita import MedicoVisitaActualizar
+    medico = SimpleNamespace(id=5, vm_id=7, sector="Naco")
+    with pytest.raises(visita_service.SolicitudCambioError):
+        visita_service.solicitar_cambio_medico(
+            MagicMock(), medico, MedicoVisitaActualizar(sector="Naco"), None, 3)
+
+
+def test_solo_se_guardan_los_campos_que_cambian(monkeypatch):
+    """El GD debe revisar diferencias, no un volcado completo de la ficha."""
+    import json
+    from app.schemas.visita import MedicoVisitaActualizar
+    monkeypatch.setattr(visita_service, "_avisar_gerente_medico_pendiente", lambda db, m: None)
+    medico = SimpleNamespace(id=5, vm_id=7, sector="Naco", subespecialidad="Clinica")
+    sol = visita_service.solicitar_cambio_medico(
+        MagicMock(), medico,
+        MedicoVisitaActualizar(sector="Piantini", subespecialidad="Clinica"), None, 3)
+    assert json.loads(sol.cambios_json) == {"sector": "Piantini"}   # subespecialidad no cambió

@@ -474,3 +474,96 @@ def importar_desde_categorizacion(db: Session, usuario_id: int | None = None) ->
     db.commit()
     logger.info(f"Importación Panel←Categorización: creados={creados} omitidos={omitidos} invalidos={invalidos}")
     return {"creados": creados, "omitidos": omitidos, "invalidos": invalidos, "total_origen": len(filas)}
+
+
+# ── Modificación por el REPRESENTANTE: pasa por validación del GD ──────────────
+# Requerimiento jul-2026: al modificar un médico ya aprobado de su panel, el médico
+# SIGUE ACTIVO CON LOS DATOS ANTERIORES (no se interrumpe la operación del ciclo) y el
+# cambio queda pendiente. Solo aplica al REP: si edita el GD/ADMIN —que es quien valida—
+# el cambio se aplica directo.
+
+class SolicitudCambioError(Exception):
+    pass
+
+
+def solicitar_cambio_medico(db: Session, medico: MedicoVisita, datos, clasificacion,
+                            usuario_id: int | None):
+    """Registra un cambio propuesto SIN tocar el médico. Reemplaza cualquier solicitud
+    pendiente previa del mismo médico (la última propuesta es la que vale)."""
+    import json
+    from app.models.visita import MedicoSolicitudCambio
+
+    cambios = datos.model_dump(exclude_unset=True) if datos is not None else {}
+    cambios.pop("activo", None)          # el alta/baja va por su propio flujo
+    # Solo se guarda lo que REALMENTE cambia, para que el GD revise diferencias y no
+    # un volcado completo de la ficha.
+    cambios = {k: v for k, v in cambios.items() if getattr(medico, k, None) != v}
+    if not cambios and clasificacion is None:
+        raise SolicitudCambioError("No hay cambios que solicitar.")
+
+    db.query(MedicoSolicitudCambio).filter(
+        MedicoSolicitudCambio.medico_visita_id == medico.id,
+        MedicoSolicitudCambio.estado == "PENDIENTE").delete(synchronize_session=False)
+
+    sol = MedicoSolicitudCambio(
+        medico_visita_id=medico.id,
+        cambios_json=json.dumps(cambios, default=str) if cambios else None,
+        estado="PENDIENTE", solicitado_por=usuario_id,
+    )
+    if clasificacion is not None:
+        sol.pacientes_semana = clasificacion.pacientes_semana
+        sol.costo_consulta = clasificacion.costo_consulta
+        sol.potencial_prescripcion = clasificacion.potencial_prescripcion
+        sol.ubicacion_territorial = clasificacion.ubicacion_territorial
+        sol.kol_nivel = clasificacion.kol_nivel
+    db.add(sol)
+    db.commit()
+    db.refresh(sol)
+    logger.info(f"Solicitud de cambio {sol.id} sobre médico {medico.id} "
+                f"(campos: {', '.join(cambios) or 'solo clasificación'}) por usuario={usuario_id}")
+    _avisar_gerente_medico_pendiente(db, medico)
+    return sol
+
+
+def aplicar_solicitud_cambio(db: Session, sol, usuario_id: int | None) -> MedicoVisita:
+    """El GD validó: vuelca los cambios sobre el médico y recalcula su categoría."""
+    import json
+    from datetime import datetime as _dt, timezone as _tz
+    from app.models.visita import MedicoClasificacion
+
+    medico = db.query(MedicoVisita).filter(MedicoVisita.id == sol.medico_visita_id).first()
+    if not medico:
+        raise SolicitudCambioError("El médico ya no existe.")
+
+    if sol.cambios_json:
+        for campo, valor in json.loads(sol.cambios_json).items():
+            if hasattr(medico, campo):
+                setattr(medico, campo, valor)
+
+    # La clasificación propuesta pasa a ser la vigente del médico.
+    if sol.potencial_prescripcion or sol.pacientes_semana is not None:
+        c = db.query(MedicoClasificacion).filter(
+            MedicoClasificacion.medico_visita_id == medico.id).first()
+        if c is None:
+            c = MedicoClasificacion(medico_visita_id=medico.id)
+            db.add(c)
+        c.pacientes_semana = sol.pacientes_semana
+        c.costo_consulta = sol.costo_consulta
+        c.potencial_prescripcion = sol.potencial_prescripcion
+        c.ubicacion_territorial = sol.ubicacion_territorial
+        c.kol_nivel = sol.kol_nivel
+        c.actualizado_por = usuario_id
+        c.fecha_actualizacion = _dt.now(_tz.utc)
+        db.flush()
+        # Recalcular la categoría con los valores nuevos (misma regla que en el alta).
+        from app.services.visita_aprobacion_service import _clasificar_al_aprobar
+        _clasificar_al_aprobar(db, medico)
+
+    sol.estado = "APROBADO"
+    sol.resuelto_por = usuario_id
+    sol.fecha_resolucion = _dt.now(_tz.utc)
+    db.commit()
+    db.refresh(medico)
+    logger.info(f"Solicitud de cambio {sol.id} APROBADA por={usuario_id} "
+                f"medico={medico.id} categoria={medico.categoria}")
+    return medico
