@@ -615,6 +615,19 @@ def calcular_categoria_de_valores(db: Session, pais_codigo: str, valores: dict) 
     return _puntuar(comps, reglas_idx, clases, valores)
 
 
+# Nombre del campo en la API (claves de `ClasificacionCrear`) para cada componente.
+# OJO: NO son los de _COMP_NUM/_COMP_TXT — esos son los nombres internos de las columnas
+# del Excel ("PacientesSemana", "RecetasSemana"…), que solo sirven de entrada al motor.
+# El formulario debe recibir el nombre que el endpoint de alta espera; mezclarlos dejaba
+# la plantilla imposible de completar (bug jul-2026: GUARDAR nunca se habilitaba).
+_CAMPO_API = {
+    "PACIENTES_SEMANA": "pacientes_semana",
+    "PODER_ADQUISITIVO": "costo_consulta",
+    "POTENCIAL_PRESCRIPCION": "potencial_prescripcion",
+    "UBICACION_TERRITORIAL_CM": "ubicacion_territorial",
+    "KOL": "kol_nivel",
+}
+
 # Etiquetas legibles de los 5 criterios (el código es el de cat.DimComponenteCategoria).
 _ETIQUETAS_CRITERIO = {
     "PACIENTES_SEMANA": "Pacientes por semana",
@@ -655,7 +668,7 @@ def opciones_plantilla(db: Session, pais_codigo: str) -> list[dict]:
 
     por_codigo: dict[str, dict] = {}
     for codigo, requerido, vmin, vmax, vtxt, _pct in filas:
-        campo = _COMP_NUM.get(codigo) or _COMP_TXT.get(codigo)
+        campo = _CAMPO_API.get(codigo)     # nombre que espera el endpoint de alta
         if not campo:
             continue
         d = por_codigo.setdefault(codigo, {

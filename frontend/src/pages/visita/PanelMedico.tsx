@@ -746,8 +746,13 @@ export default function PanelMedico() {
                 {editId === null && (
                 <Grid item xs={12}>
                   <Alert severity={plantillaError ? 'error' : 'info'} sx={{ mb: 1 }}>
-                    {plantillaError || 'Completa los 5 criterios. La categoría (A/B/C/D) la asigna '
-                      + 'el sistema cuando tu Gerente de Distrito apruebe el alta.'}
+                    {plantillaError || (
+                      <>
+                        <b>Completa tú estos 5 criterios</b> para registrar el médico. Tu Gerente
+                        de Distrito solo revisa el alta y puede ajustarlos al aprobarla.
+                        La categoría (A/B/C/D) la calcula el sistema; nadie la elige.
+                      </>
+                    )}
                   </Alert>
                 </Grid>
                 )}
@@ -935,11 +940,19 @@ export default function PanelMedico() {
               Registrar de todos modos
             </Button>
           ) : (
-            <Button variant="contained" onClick={() => guardar(false)}
-                    disabled={guardando || !form.nombre_completo
-                              || (editId === null && !clasificacionCompleta)}>
-              {guardando ? 'Guardando…' : 'Guardar'}
-            </Button>
+            <>
+              {/* Decir QUÉ falta: un botón gris sin explicación se lee como "no graba". */}
+              {editId === null && !clasificacionCompleta && (
+                <Typography variant="caption" color="error" sx={{ mr: 1 }}>
+                  Faltan criterios de clasificación
+                </Typography>
+              )}
+              <Button variant="contained" onClick={() => guardar(false)}
+                      disabled={guardando || !form.nombre_completo
+                                || (editId === null && !clasificacionCompleta)}>
+                {guardando ? 'Guardando…' : 'Guardar'}
+              </Button>
+            </>
           )}
         </DialogActions>
       </Dialog>

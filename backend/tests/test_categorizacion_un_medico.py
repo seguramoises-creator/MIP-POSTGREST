@@ -73,3 +73,19 @@ def test_componente_no_requerido_no_bloquea_el_calculo():
         "PacientesSemana": 80, "CostoConsulta": 1500, "RecetasSemana": "Alto",
         "UbicacionTerritorialCM": "Alta", "KOL": "Inexistente"})
     assert r["estado"] == "CALCULADO" and r["puntaje_pct"] == 90 and r["categoria"] == "A"
+
+
+# ── Contrato plantilla ↔ alta de médico ───────────────────────────────────────
+def test_los_campos_de_la_plantilla_son_los_que_espera_el_alta():
+    """El formulario se arma con `campo` de la plantilla y envía esas mismas claves al
+    endpoint de alta. Si divergen, el usuario llena los 5 criterios y GUARDAR nunca se
+    habilita (bug jul-2026: la plantilla devolvía los nombres internos del Excel
+    —'PacientesSemana', 'RecetasSemana'…— en vez de los de ClasificacionCrear)."""
+    from app.schemas.visita import ClasificacionCrear
+    assert set(svc._CAMPO_API.values()) == set(ClasificacionCrear.model_fields.keys())
+
+
+def test_campo_api_cubre_los_componentes_del_motor():
+    """Todo componente que el motor puntúa debe ser capturable desde el formulario."""
+    componentes = set(svc._COMP_NUM) | set(svc._COMP_TXT)
+    assert componentes == set(svc._CAMPO_API)
