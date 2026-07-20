@@ -26,6 +26,17 @@ const FRECUENCIAS = [
   { value: 'F1', label: 'F1 — una vez al mes' },
   { value: 'F2', label: 'F2 — dos veces al mes' },
 ];
+/** Desglosa "ANA ALBERTA SOLANO MEDINA" → {nombre:"ANA ALBERTA", apellidos:"SOLANO MEDINA"}.
+ *  Convención hispana: los DOS últimos términos son apellidos (paterno + materno) y el
+ *  resto son nombres; con solo 2 palabras, uno de cada. Hace falta porque la carga masiva
+ *  llenó únicamente `nombre_completo` (2704 de 2709 médicos no tienen el desglose). */
+export function partirNombre(completo: string): { nombre: string; apellidos: string } {
+  const p = (completo || '').trim().split(/\s+/).filter(Boolean);
+  if (p.length < 2) return { nombre: p[0] ?? '', apellidos: '' };
+  if (p.length === 2) return { nombre: p[0], apellidos: p[1] };
+  return { nombre: p.slice(0, -2).join(' '), apellidos: p.slice(-2).join(' ') };
+}
+
 const parseDias = (s?: string | null): string[] =>
   (s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
 const POTENCIAL = ['Alto', 'Medio', 'Bajo'];
@@ -315,7 +326,12 @@ export default function PanelMedico() {
       // los captura el representante. El resto queda precargado y editable.
       ...vacio,
       vm_id: esVM ? 0 : (vmFiltro || 0),
-      nombre_completo: m.nombre_completo, nombre: m.nombre, apellidos: m.apellidos,
+      nombre_completo: m.nombre_completo,
+      // El origen casi nunca trae el desglose (la carga masiva solo llenó nombre_completo),
+      // así que se deriva del nombre completo. Queda editable por si el corte no aplica.
+      ...(m.nombre || m.apellidos
+        ? { nombre: m.nombre, apellidos: m.apellidos }
+        : partirNombre(m.nombre_completo)),
       especialidad_id: m.especialidad_id, subespecialidad: m.subespecialidad, categoria: m.categoria,
       institucion_tipo: m.institucion_tipo, tipo_consultorio: m.tipo_consultorio,
       provincia: m.provincia, municipio: m.municipio, sector: m.sector,
@@ -784,7 +800,13 @@ export default function PanelMedico() {
                 <Grid item xs={12}>
                   <TextField fullWidth size="small" label="Nombre completo (MAYÚSCULAS, ≥2 palabras)" value={form.nombre_completo} required
                              error={!!errCampos.nombre_completo}
-                             onChange={(e) => set('nombre_completo', e.target.value.toUpperCase())}
+                             onChange={(e) => {
+                               // Desglosa Nombre/Apellidos sobre la marcha para no teclearlos
+                               // dos veces. Ambos quedan editables si el corte no aplica.
+                               const v = e.target.value.toUpperCase();
+                               const { nombre, apellidos } = partirNombre(v);
+                               setForm((f) => ({ ...f, nombre_completo: v, nombre, apellidos }));
+                             }}
                              helperText={errCampos.nombre_completo || 'Ej: MANUEL ANTONIO PEREZ GARCIA — sin abreviaciones con punto'} />
                 </Grid>
                 <Grid item xs={12} sm={6}>
