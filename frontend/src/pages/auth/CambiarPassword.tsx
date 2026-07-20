@@ -9,7 +9,11 @@ import { api } from '../../services/api';
 import { useAuthStore } from '../../store/auth.store';
 import { authService } from '../../services/auth.service';
 
-const ESPECIAL = /[!@#$%^&*()_+\-=\[\]{};:,.<>?/|~]/;
+// Carácter especial = cualquiera que no sea letra, número ni espacio. Debe coincidir con
+// `password_policy_service.es_especial` del backend. La lista fija anterior dejaba fuera
+// símbolos muy a mano en teclados móviles en español (¿ ¡ ' " `) y el botón no se
+// habilitaba nunca. \p{L}/\p{N} respetan acentos y ñ como LETRAS, no como especiales.
+const ESPECIAL = /[^\p{L}\p{N}\s]/u;
 
 export default function CambiarPassword() {
   const navigate = useNavigate();
@@ -19,7 +23,15 @@ export default function CambiarPassword() {
   const accessToken = useAuthStore((s) => s.accessToken);
   const logout = useAuthStore((s) => s.logout);
 
-  const minLen = rol === 'ADMIN' ? 12 : 8;
+  // La longitud mínima es CONFIGURABLE en BD y varía por rol: se consulta al backend en
+  // vez de fijarla aquí. Con el valor fijo, si el ADMIN subía el mínimo desde Política de
+  // contraseñas, la lista mostraba un número equivocado y el botón no se habilitaba nunca.
+  const [minLen, setMinLen] = useState(rol === 'ADMIN' ? 12 : 8);
+  useEffect(() => {
+    api.get<{ min_longitud: number }>('/auth/password-policy')
+      .then((r) => { if (r.data?.min_longitud) setMinLen(r.data.min_longitud); })
+      .catch(() => { /* sin conexión: queda el valor por defecto */ });
+  }, []);
   const [actual, setActual] = useState('');
   const [nueva, setNueva] = useState('');
   const [confirmar, setConfirmar] = useState('');
@@ -124,6 +136,18 @@ export default function CambiarPassword() {
                   </ListItem>
                 ))}
               </List>
+
+              {/* Decir QUÉ falta: en móvil la lista de requisitos suele quedar fuera de
+                  pantalla y el botón gris se lee como "no funciona". */}
+              {!saving && (!actual || !todasOk || !coincide) && (
+                <Alert severity="info" sx={{ mb: 1.5 }}>
+                  {!actual
+                    ? 'Falta escribir tu contraseña actual (la temporal que te dieron).'
+                    : !todasOk
+                      ? `Falta: ${reglas.filter((r) => !r.ok).map((r) => r.txt.toLowerCase()).join(', ')}.`
+                      : 'Las dos contraseñas nuevas no coinciden.'}
+                </Alert>
+              )}
 
               <Button type="submit" variant="contained" size="large" fullWidth
                       disabled={saving || !actual || !todasOk || !coincide}

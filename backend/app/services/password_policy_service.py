@@ -17,7 +17,14 @@ DEF_HISTORIAL_N = 5
 DEF_MIN_LONGITUD = 8
 DEF_MIN_LONGITUD_ADMIN = 12
 
-_ESPECIALES = set("!@#$%^&*()_+-=[]{};:,.<>?/|~")
+def es_especial(c: str) -> bool:
+    """¿Cuenta como carácter especial? Cualquiera que no sea letra ni dígito ni espacio.
+
+    Antes era una lista fija ("!@#$%^&*()_+-=[]{};:,.<>?/|~") que dejaba fuera símbolos
+    muy a mano en teclados móviles en español —`¿` `¡` `'` `"` `` ` ``— y en la práctica
+    esos usuarios no lograban cumplir la regla. `isalnum()` es Unicode-aware, así que las
+    letras acentuadas y la ñ siguen contando como LETRAS (no como especiales)."""
+    return not c.isalnum() and not c.isspace()
 
 
 def _rol_val(rol) -> str:
@@ -43,8 +50,8 @@ def validar_complejidad(db: Session, password: str, rol) -> None:
         raise ValueError("Debe contener al menos una minúscula")
     if not any(c.isdigit() for c in password):
         raise ValueError("Debe contener al menos un número")
-    if not any(c in _ESPECIALES for c in password):
-        raise ValueError("Debe contener al menos un carácter especial (!@#$%…)")
+    if not any(es_especial(c) for c in password):
+        raise ValueError("Debe contener al menos un carácter especial (!@#$%¿'…)")
 
 
 # ── Historial (no reutilización) ─────────────────────────────────────────────

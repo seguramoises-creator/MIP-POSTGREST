@@ -244,6 +244,22 @@ def change_password(
     return Msg(message="Contraseña actualizada correctamente")
 
 
+@router.get("/password-policy", summary="Requisitos de contraseña del usuario actual")
+def mi_politica_password(db: Session = Depends(get_db),
+                         current_user=Depends(get_current_active_user)):
+    """Longitud mínima que aplica a QUIEN llama (varía por rol y es configurable en BD).
+
+    La pantalla de cambio de contraseña la tenía fija en 12/8: si el ADMIN subía el mínimo
+    desde Política de contraseñas, la lista de requisitos mostraba un número equivocado y
+    el botón podía no habilitarse nunca. El endpoint de Admin no sirve aquí porque un
+    usuario normal no puede leerlo."""
+    return {
+        "min_longitud": password_policy_service.min_longitud(db, current_user.rol),
+        "requiere_mayuscula": True, "requiere_minuscula": True,
+        "requiere_numero": True, "requiere_especial": True,
+    }
+
+
 _MSG_GENERICO = ("Si el correo está registrado, recibirás un código de recuperación "
                  "en unos minutos.")
 
