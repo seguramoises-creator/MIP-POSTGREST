@@ -681,3 +681,40 @@ def test_solo_se_guardan_los_campos_que_cambian(monkeypatch):
         MagicMock(), medico,
         MedicoVisitaActualizar(sector="Piantini", subespecialidad="Clinica"), None, 3)
     assert json.loads(sol.cambios_json) == {"sector": "Piantini"}   # subespecialidad no cambió
+
+
+# ── Resolución del cambio por el Gerente de Distrito ──────────────────────────
+def test_rechazar_cambio_no_toca_el_medico(monkeypatch):
+    """Rechazar deja el médico intacto y marca la solicitud, sin borrar el histórico."""
+    from app.services import visita_aprobacion_service as aps
+    sol = SimpleNamespace(id=1, medico_visita_id=5, estado="PENDIENTE",
+                          resuelto_por=None, fecha_resolucion=None, motivo=None)
+    medico = SimpleNamespace(id=5, vm_id=7, sector="Naco")
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.side_effect = [sol, medico]
+    monkeypatch.setattr(aps, "puede_aprobar", lambda db_, u, m: True)
+
+    aps.resolver_cambio(db, 1, SimpleNamespace(id=9), aprobar_cambio=False, motivo="datos erróneos")
+    assert sol.estado == "RECHAZADO" and sol.motivo == "datos erróneos"
+    assert medico.sector == "Naco", "rechazar no debe alterar el médico"
+
+
+def test_no_se_puede_resolver_una_solicitud_ya_resuelta(monkeypatch):
+    from app.services import visita_aprobacion_service as aps
+    sol = SimpleNamespace(id=1, medico_visita_id=5, estado="APROBADO")
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = sol
+    with pytest.raises(aps.AprobacionError):
+        aps.resolver_cambio(db, 1, SimpleNamespace(id=9), aprobar_cambio=True)
+
+
+def test_la_clasificacion_no_se_vuelca_como_campo_del_medico(monkeypatch):
+    """`clasificacion` viaja en el mismo payload pero NO es columna del médico:
+    volcarla haría setattr de un objeto sobre el ORM."""
+    from app.schemas.visita import MedicoVisitaActualizar
+    monkeypatch.setattr(visita_service, "_avisar_gerente_medico_pendiente", lambda db, m: None)
+    medico = SimpleNamespace(id=5, vm_id=7, sector="Naco")
+    sol = visita_service.solicitar_cambio_medico(
+        MagicMock(), medico,
+        MedicoVisitaActualizar(sector="Piantini", clasificacion=_clasif()), None, 3)
+    assert "clasificacion" not in (sol.cambios_json or "")

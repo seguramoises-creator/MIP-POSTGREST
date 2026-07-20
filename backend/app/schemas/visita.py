@@ -134,7 +134,12 @@ class MedicoVisitaCrear(BaseModel):
 
 class MedicoVisitaActualizar(BaseModel):
     """Actualización parcial de un médico. Todos los campos opcionales: solo se
-    aplican los enviados (patrón PATCH). Incluye `activo` para activar/desactivar."""
+    aplican los enviados (patrón PATCH). Incluye `activo` para activar/desactivar.
+
+    `clasificacion`: obligatoria cuando el REPRESENTANTE modifica un médico de su panel
+    (el cambio queda pendiente de validación del Gerente de Distrito). El GD/ADMIN —que
+    es quien valida— edita directo y no la necesita."""
+    clasificacion: "ClasificacionCrear | None" = None
     codigo: str | None = None
     nombre_completo: str | None = Field(default=None, min_length=3, max_length=200)
     nombre: str | None = None

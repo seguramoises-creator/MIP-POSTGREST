@@ -208,4 +208,64 @@ def listar_pendientes(db: Session, usuario) -> list[dict]:
             "tipo_solicitud": "ALTA" if m.estado_aprobacion == "PENDIENTE_ALTA" else "BAJA",
             "fecha_solicitud": m.fecha_solicitud.isoformat() if m.fecha_solicitud else None,
         })
+    salida.extend(_pendientes_de_cambio(db, usuario))
     return salida
+
+
+def _pendientes_de_cambio(db: Session, usuario) -> list[dict]:
+    """Cambios propuestos por representantes sobre médicos YA aprobados.
+
+    Se listan junto a las altas/bajas para que el Gerente de Distrito tenga UNA sola
+    bandeja: si estuvieran en otra pantalla, en la práctica no se revisarían."""
+    import json
+    from app.models.visita import MedicoSolicitudCambio
+
+    sols = (db.query(MedicoSolicitudCambio)
+            .filter(MedicoSolicitudCambio.estado == "PENDIENTE")
+            .order_by(MedicoSolicitudCambio.fecha_solicitud.desc()).all())
+    if not sols:
+        return []
+    meds = {m.id: m for m in db.query(MedicoVisita).filter(
+        MedicoVisita.id.in_({s.medico_visita_id for s in sols})).all()}
+    salida = []
+    for s in sols:
+        m = meds.get(s.medico_visita_id)
+        if not m or not puede_aprobar(db, usuario, m):
+            continue
+        rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == m.vm_id).first()
+        salida.append({
+            "id": m.id, "solicitud_id": s.id,
+            "nombre_completo": m.nombre_completo, "categoria": m.categoria,
+            "vm_id": m.vm_id, "vm_nombre": rm.nombre if rm else f"VM #{m.vm_id}",
+            "linea_nombre": None,
+            "tipo_solicitud": "CAMBIO",
+            "cambios": json.loads(s.cambios_json) if s.cambios_json else {},
+            "fecha_solicitud": s.fecha_solicitud.isoformat() if s.fecha_solicitud else None,
+        })
+    return salida
+
+
+def resolver_cambio(db: Session, solicitud_id: int, usuario, aprobar_cambio: bool,
+                    motivo: str | None = None):
+    """El GD valida (o rechaza) un cambio propuesto por el representante."""
+    from datetime import datetime as _dt, timezone as _tz
+    from app.models.visita import MedicoSolicitudCambio
+    from app.services import visita_service
+
+    sol = db.query(MedicoSolicitudCambio).filter(
+        MedicoSolicitudCambio.id == solicitud_id).first()
+    if not sol or sol.estado != "PENDIENTE":
+        raise AprobacionError("La solicitud no existe o ya fue resuelta.")
+    m = db.query(MedicoVisita).filter(MedicoVisita.id == sol.medico_visita_id).first()
+    if not m or not puede_aprobar(db, usuario, m):
+        raise AprobacionError("No autorizado para resolver este cambio (no es de tu distrito).")
+
+    if aprobar_cambio:
+        return visita_service.aplicar_solicitud_cambio(db, sol, getattr(usuario, "id", None))
+    sol.estado = "RECHAZADO"
+    sol.resuelto_por = getattr(usuario, "id", None)
+    sol.fecha_resolucion = _dt.now(_tz.utc)
+    sol.motivo = motivo
+    db.commit()
+    logger.info(f"Solicitud de cambio {sol.id} RECHAZADA por={getattr(usuario,'id',None)}")
+    return m

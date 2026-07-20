@@ -209,6 +209,21 @@ def actualizar_medico(medico_id: int, datos: MedicoVisitaActualizar,
         rm = _scope_vm(current_user, None)
         if m.vm_id != rm:
             raise HTTPException(status_code=403, detail="Este médico no pertenece a tu panel.")
+        # El REP no deja el cambio activo por su cuenta: queda pendiente de validación del
+        # Gerente de Distrito y el médico SIGUE ACTIVO CON LOS DATOS ANTERIORES, para no
+        # interrumpir la operación del ciclo. (El GD/ADMIN, que es quien valida, edita directo.)
+        if m.estado_aprobacion == "APROBADO":
+            if datos.clasificacion is None:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Al modificar un médico debes completar su clasificación "
+                           "(los 5 criterios); el cambio quedará pendiente de aprobación.")
+            try:
+                visita_service.solicitar_cambio_medico(
+                    db, m, datos, datos.clasificacion, getattr(current_user, "id", None))
+            except visita_service.SolicitudCambioError as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            return m          # sin cambios: el médico sigue como estaba
     # El alta/baja (campo `activo`) NO se cambia por edición directa: pasa por aprobación.
     # (actualizar_medico ignora `activo` explícitamente; no lo asignamos aquí para no
     #  marcarlo como "set" en Pydantic, lo que haría un UPDATE activo=NULL — bug histórico.)
@@ -322,6 +337,21 @@ def actualizar_clasificacion(medico_id: int, datos: ClasificacionCrear,
     c.fecha_actualizacion = _dt.now(_tz.utc)
     db.commit()
     return {"medico_visita_id": medico_id, "actualizado": True}
+
+
+@router.post("/medicos/cambios/{solicitud_id}/resolver", response_model=dict)
+def resolver_cambio_medico(solicitud_id: int, aprobar: bool = True, motivo: str | None = None,
+                           db: Session = Depends(get_db), current_user=RequireAprobador):
+    """El Gerente de Distrito valida (o rechaza) un cambio propuesto por el representante.
+
+    Al aprobar se vuelcan los datos sobre el médico y se recalcula su categoría; hasta
+    entonces el médico siguió activo con la información anterior."""
+    from app.services import visita_aprobacion_service as aps
+    try:
+        m = aps.resolver_cambio(db, solicitud_id, current_user, aprobar, motivo)
+    except aps.AprobacionError as e:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+    return {"id": m.id, "aprobado": aprobar, "categoria": m.categoria}
 
 
 @router.post("/medicos/{medico_id}/aprobar", response_model=dict)

@@ -209,6 +209,8 @@ def actualizar_medico(db: Session, medico: MedicoVisita,
     # El alta/baja (campo `activo`) se gestiona solo por el flujo de aprobación
     # (solicitar_baja / reactivar), nunca por edición directa del médico.
     cambios.pop("activo", None)
+    # La clasificación no es un campo del médico: vive en MedicoClasificacion.
+    cambios.pop("clasificacion", None)
     # El nombre solo se valida (sin puntos, ≥2 palabras) si REALMENTE cambia, para no
     # bloquear la edición de otros campos en médicos con nombre heredado no conforme.
     if "nombre_completo" in cambios:
@@ -495,6 +497,7 @@ def solicitar_cambio_medico(db: Session, medico: MedicoVisita, datos, clasificac
 
     cambios = datos.model_dump(exclude_unset=True) if datos is not None else {}
     cambios.pop("activo", None)          # el alta/baja va por su propio flujo
+    cambios.pop("clasificacion", None)   # va en columnas propias de la solicitud
     # Solo se guarda lo que REALMENTE cambia, para que el GD revise diferencias y no
     # un volcado completo de la ficha.
     cambios = {k: v for k, v in cambios.items() if getattr(medico, k, None) != v}
