@@ -909,6 +909,18 @@ def create_usuario(data: UsuarioCreate, db: Session = Depends(get_db), _=AdminOn
     payload["password_actualizado_en"] = datetime.now(timezone.utc)
     obj = Usuario(**payload)
     db.add(obj); db.commit(); db.refresh(obj)
+    # Bienvenida con el enlace de acceso. Best-effort: si el correo falla, el usuario ya
+    # quedó creado (y el admin puede reenviarlo). Nunca lleva la contraseña.
+    if obj.email:
+        try:
+            from app.services import notification_service
+            notification_service.notificar_bienvenida(
+                destinatario=obj.email,
+                nombre=obj.nombre_completo or obj.username,
+                username=obj.username)
+        except Exception as e:  # noqa: BLE001
+            from loguru import logger      # este router no importa logger a nivel de módulo
+            logger.error(f"Correo de bienvenida falló (no bloquea) usuario={obj.id}: {e}")
     return obj
 
 @router.put("/usuarios/{id}", response_model=UsuarioResponse, summary="Actualizar usuario")

@@ -372,6 +372,39 @@ def notificar_asignacion_examen(destinatario: str, nombre: str, examen_nombre: s
     return _enviar(destinatario, f"Nuevo examen asignado - {examen_nombre}", cuerpo)
 
 
+def notificar_bienvenida(destinatario: str, nombre: str, username: str) -> bool:
+    """Correo de bienvenida al crear un usuario: nombre del sistema + enlace de acceso.
+
+    NO lleva la contraseña. Una clave enviada por correo queda para siempre en el buzón
+    (y en los servidores por los que pasó), así que el administrador la entrega por otra
+    vía o el usuario la establece con "¿Olvidó su contraseña?". Al entrar, el sistema le
+    exige cambiarla igualmente (`debe_cambiar_password`)."""
+    if not _habilitado() or not destinatario:
+        return False
+    cfg = mail_config()
+    sistema = (cfg.get("from_name") or "VISTA").strip()
+    url = (settings.PUBLIC_BASE_URL or "").rstrip("/")
+    cuerpo = f"""<html><body style="font-family:Arial,sans-serif;color:#333;">
+  <h2 style="color:{_COLOR_TITULO};">Bienvenido a {sistema}</h2>
+  <p>Hola <strong>{nombre}</strong>, se creó tu cuenta de acceso al sistema.</p>
+  <ul>
+    <li>Usuario: <strong>{username}</strong></li>
+  </ul>
+  <p style="margin:24px 0;">
+    <a href="{url}" style="background:{_COLOR_TITULO};color:#ffffff;text-decoration:none;
+       padding:12px 22px;border-radius:6px;display:inline-block;font-weight:bold;">
+      Entrar a {sistema}
+    </a>
+  </p>
+  <p>Ingresa con la contraseña temporal que te entregó tu administrador. <strong>Al entrar,
+     el sistema te pedirá cambiarla</strong> por una propia. Si no la tienes, usa
+     <em>“¿Olvidó su contraseña?”</em> en la pantalla de acceso.</p>
+  <p style="color:#888;font-size:12px;">Si el botón no funciona, copia esta dirección: {url}</p>
+  {_pie_pagina()}
+</body></html>"""
+    return _enviar(destinatario, f"Bienvenido a {sistema} — tu acceso está listo", cuerpo)
+
+
 def notificar_asignacion_examen_gerente(destinatario: str, nombre_gerente: str,
                                         examen_nombre: str, representantes: list[str],
                                         fecha_limite: Optional[str] = None) -> bool:
