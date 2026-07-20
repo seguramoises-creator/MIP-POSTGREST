@@ -142,18 +142,24 @@ def _clasificar_al_aprobar(db: Session, m: MedicoVisita) -> None:
         rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == m.vm_id).first()
         if not rm or not rm.pais_codigo:
             return
-        r = categorizacion_service.calcular_categoria_de_valores(db, rm.pais_codigo, {
+        valores = {
             "PacientesSemana": clas.pacientes_semana,
             "CostoConsulta": clas.costo_consulta,
             "RecetasSemana": clas.potencial_prescripcion,
             "UbicacionTerritorialCM": clas.ubicacion_territorial,
             "KOL": clas.kol_nivel,
-        })
+        }
+        r = categorizacion_service.calcular_categoria_de_valores(db, rm.pais_codigo, valores)
         if r.get("categoria"):
             m.categoria = str(r["categoria"]).strip().upper()[:1]
         else:
             logger.warning(f"Médico id={m.id} aprobado SIN categoría "
                            f"(estado={r.get('estado')}, país={rm.pais_codigo})")
+        # Maestro de Categorización: deja la evaluación de ESTE contexto (médico +
+        # representante + ciclo). Es lo que permite que el mismo médico tenga categorías
+        # distintas según quién lo evalúe y en qué centro.
+        categorizacion_service.registrar_en_maestro_categorizacion(
+            db, m, valores, r, usuario_id=getattr(m, "aprobado_por", None))
     except Exception as e:  # noqa: BLE001
         logger.error(f"No se pudo clasificar el médico id={m.id} al aprobar: {e}")
 

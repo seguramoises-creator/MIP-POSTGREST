@@ -1352,3 +1352,102 @@ def get_panel_rm(db: Session, rm_id: int) -> dict:
         "sin_categoria": sin_categoria,
         "medicos": filas,
     }
+
+
+# ---------------------------------------------------------------------------
+# Maestro de Categorización — una fila por (médico, representante, ciclo)
+# ---------------------------------------------------------------------------
+
+# Componente del motor → columna de score en DW.FACT_CategorizacionMedica.
+_SCORE_COL = {
+    "PACIENTES_SEMANA": "score_pacientes",
+    "PODER_ADQUISITIVO": "score_poder_adquisitivo",
+    "POTENCIAL_PRESCRIPCION": "score_prescripcion",
+    "UBICACION_TERRITORIAL_CM": "score_ubicacion",
+    "KOL": "score_kol",
+}
+
+
+def registrar_en_maestro_categorizacion(db: Session, medico, valores: dict,
+                                        resultado: dict, usuario_id=None) -> None:
+    """Persiste la categorización de un médico EN SU CONTEXTO (médico + representante + ciclo).
+
+    El grano de DW.FACT_CategorizacionMedica es (medico_id, rm_id, ciclo_id), así que el
+    MISMO médico puede tener categorías distintas según qué representante lo evalúe y en
+    qué centro — que es justo lo que exige el negocio: el Maestro Médico es único, pero su
+    categorización depende del contexto evaluado.
+
+    `medico_id` apunta al MAESTRO (Config.DIM_Medico), no al panel: la categorización
+    cuelga de la ficha única del médico. Si el médico del panel aún no está enlazado al
+    Maestro, no se escribe (no habría a quién colgarla).
+
+    Idempotente: re-aprobar o revalidar actualiza la fila del ciclo en vez de duplicarla.
+    """
+    from decimal import Decimal
+    from app.models.hechos import CategorizacionMedica
+    from app.models.dimensiones import RepresentanteMedico, CategoriaMedica
+    from app.services.visita_aprobacion_service import ciclo_actual_id
+
+    maestro_id = getattr(medico, "maestro_medico_id", None)
+    if not maestro_id:
+        logger.warning(f"[CAT] Médico de panel {medico.id} sin enlace al Maestro: "
+                       f"no se registra su categorización.")
+        return
+    rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == medico.vm_id).first()
+    if not rm or not rm.pais_codigo:
+        return
+    ciclo_id = ciclo_actual_id(db, medico.vm_id)
+    if not ciclo_id:
+        logger.warning(f"[CAT] Sin ciclo de trabajo para el VM {medico.vm_id}: "
+                       f"no se registra la categorización del médico {medico.id}.")
+        return
+
+    letra = (resultado.get("categoria") or "").strip()
+    cat = db.query(CategoriaMedica).filter(CategoriaMedica.codigo == letra).first()
+    if letra and not cat:
+        # La letra se calculó bien pero el catálogo Config.DIM_CategoriaMedica no la tiene:
+        # la fila queda con categoria_id NULL y los reportes que cruzan por ese FK no verán
+        # este médico. Es un hueco de CONFIGURACIÓN, no de cálculo — se avisa para que no
+        # pase inadvertido.
+        logger.warning(f"[CAT] Categoría {letra!r} calculada pero ausente en "
+                       f"DIM_CategoriaMedica: la fila queda sin categoria_id.")
+
+    fila = db.query(CategorizacionMedica).filter(
+        CategorizacionMedica.medico_id == maestro_id,
+        CategorizacionMedica.rm_id == rm.id,
+        CategorizacionMedica.ciclo_id == ciclo_id).first()
+    nueva = fila is None
+    if nueva:
+        fila = CategorizacionMedica(medico_id=maestro_id, rm_id=rm.id, ciclo_id=ciclo_id)
+        db.add(fila)
+        # Categoría del ciclo anterior de ESTE médico con ESTE representante (historial).
+        previa = (db.query(CategorizacionMedica)
+                  .filter(CategorizacionMedica.medico_id == maestro_id,
+                          CategorizacionMedica.rm_id == rm.id,
+                          CategorizacionMedica.ciclo_id != ciclo_id)
+                  .order_by(CategorizacionMedica.ciclo_id.desc()).first())
+        fila.categoria_anterior_id = previa.categoria_id if previa else None
+
+    fila.pais_codigo = rm.pais_codigo
+    fila.linea_id = rm.linea_id
+    fila.gerente_id = rm.gerente_id
+    # Valores crudos evaluados. `potencial_prescripcion` es numérico en la FACT pero el
+    # motor lo maneja como texto ("6 a 9"), así que se conserva en observaciones.
+    fila.pacientes_semana = valores.get("PacientesSemana")
+    fila.costo_consulta = valores.get("CostoConsulta")
+    fila.ubicacion_territorial = valores.get("UbicacionTerritorialCM")
+    fila.kol = valores.get("KOL")
+    fila.observaciones = f"Potencial de prescripción: {valores.get('RecetasSemana')}"
+
+    for d in resultado.get("detalle", []):
+        col = _SCORE_COL.get(d.get("componente"))
+        if col and d.get("puntaje_pct") is not None:
+            setattr(fila, col, Decimal(str(d["puntaje_pct"])))
+    fila.score_total = Decimal(str(resultado.get("puntaje_pct") or 0))
+    fila.categoria_id = cat.id if cat else None
+    fila.usuario_calculo = str(usuario_id) if usuario_id else None
+    fila.activo = True
+    db.flush()
+    logger.info(f"[CAT] Maestro de Categorización {'creada' if nueva else 'actualizada'}: "
+                f"medico={maestro_id} rm={rm.id} ciclo={ciclo_id} "
+                f"categoria={resultado.get('categoria')} score={fila.score_total}")

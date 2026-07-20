@@ -85,6 +85,18 @@ def main() -> None:
                     veredicto += " — sin bandas de clasificación (A/B/C/D)"
             print(f"{codigo:<6} {n_reglas:>7} {n_clases:>7}  {veredicto}")
 
+        # El catálogo de categorías (A/B/C/D) es lo que enlaza la fila del Maestro de
+        # Categorización (categoria_id). Si está vacío, la categoría se calcula igual pero
+        # los reportes que cruzan por ese FK no ven al médico.
+        cats = db.execute(text('SELECT codigo FROM "Config"."DIM_CategoriaMedica" '
+                               'WHERE activo = TRUE ORDER BY orden')).all()
+        print("-" * 78)
+        if cats:
+            print(f"Catálogo de categorías (DIM_CategoriaMedica): {', '.join(c[0] for c in cats)}")
+        else:
+            print("!! DIM_CategoriaMedica VACÍO — la categoría se calcula, pero la fila del")
+            print("   Maestro de Categorización quedará SIN categoria_id (reportes en blanco).")
+
         print("-" * 78)
         print("Lectura: un país con 'OK -> categoria X' ya puede clasificar médicos nuevos.")
         print("         'PENDIENTE' = falta cargar reglas/bandas para ese país; el alta")
