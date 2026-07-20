@@ -11,7 +11,7 @@ import {
   listarMedicos, obtenerMedico, listarMedicosExistentes, listarEspecialidades, listarVMs, crearMedico, actualizarMedico,
   solicitarBajaMedico, reactivarMedico, listarAprobaciones, aprobarMedico, rechazarMedico,
   listarProvincias, listarMunicipios, listarCentros, importarMedicosCategorizacion, miGerente,
-  plantillaCategorizacion, obtenerClasificacion, actualizarClasificacion,
+  plantillaCategorizacion, obtenerClasificacion, actualizarClasificacion, resolverCambioMedico,
   type MedicoVisita, type MedicoExistente, type Catalogo, type PosibleDuplicado, type MedicoCrear, type AprobacionPendiente,
   type Provincia, type Municipio, type MiGerente, type CriterioPlantilla, type ClasificacionCrear,
 } from '../../services/visita.service';
@@ -137,7 +137,32 @@ export default function PanelMedico() {
   // Los 5 criterios son obligatorios: sin ellos el backend rechaza el alta (422).
   const clasificacionCompleta = (['pacientes_semana', 'costo_consulta', 'potencial_prescripcion',
     'ubicacion_territorial', 'kol_nivel'] as const)
-    .every((k) => form.clasificacion?.[k] !== '' && form.clasificacion?.[k] !== undefined);
+    .every((k) => form.clasificacion?.[k] !== '' && form.clasificacion?.[k] !== undefined
+                  && form.clasificacion?.[k] !== null);
+  // Se pide la clasificación al DAR DE ALTA (siempre) y también cuando el REPRESENTANTE
+  // MODIFICA: ese cambio pasa por validación del GD y se recalcula la categoría. El
+  // GD/ADMIN —que es quien valida— edita directo y no la necesita.
+  const pideClasificacion = editId === null || esVM;
+
+  // ── Cambios propuestos por el representante sobre médicos ya activos ──────────
+  const [resolviendo, setResolviendo] = useState<number | null>(null);
+
+  async function resolverCambio(p: AprobacionPendiente, aprobar: boolean) {
+    if (!p.solicitud_id) return;
+    setResolviendo(p.solicitud_id);
+    try {
+      const r = await resolverCambioMedico(p.solicitud_id, aprobar);
+      setMsg({
+        tipo: 'success',
+        texto: aprobar
+          ? `Cambio aprobado.${r.categoria ? ` Categoría recalculada: ${r.categoria}.` : ''}`
+          : 'Cambio rechazado. El médico queda con la información anterior.',
+      });
+      cargar(); cargarPendientes();
+    } catch (err: unknown) {
+      setMsg({ tipo: 'error', texto: mensajeError(err) });
+    } finally { setResolviendo(null); }
+  }
 
   // ── Revisión de la clasificación por el Gerente de Distrito (antes de aprobar) ──
   const [revisar, setRevisar] = useState<AprobacionPendiente | null>(null);
@@ -307,10 +332,21 @@ export default function PanelMedico() {
     // La lista viene "lite" (sin la ficha pesada): traemos la ficha completa para editar.
     let m = mLite;
     try { m = await obtenerMedico(mLite.id); } catch { /* fallback: usa lo que trae la lista */ }
+    // El REPRESENTANTE debe confirmar/ajustar la clasificación al modificar (el cambio se
+    // revalida). Se precarga la vigente para que no la reescriba desde cero.
+    let clasActual = { ...clasificacionVacia };
+    if (esVM) {
+      try {
+        const c = await obtenerClasificacion(mLite.id);
+        clasActual = {
+          pacientes_semana: c.pacientes_semana ?? '', costo_consulta: c.costo_consulta ?? '',
+          potencial_prescripcion: c.potencial_prescripcion ?? '',
+          ubicacion_territorial: c.ubicacion_territorial ?? '', kol_nivel: c.kol_nivel ?? '',
+        };
+      } catch { /* médico anterior al Bloque B: se captura por primera vez */ }
+    }
     setForm({
-      // Al EDITAR no se toca la clasificación (la ajusta el GD al aprobar); va vacía
-      // y se descarta del payload en guardar().
-      clasificacion: { ...clasificacionVacia },
+      clasificacion: clasActual,
       vm_id: m.vm_id, codigo: m.codigo, nombre_completo: m.nombre_completo, nombre: m.nombre,
       apellidos: m.apellidos, especialidad_id: m.especialidad_id, subespecialidad: m.subespecialidad,
       categoria: m.categoria, centro_trabajo: m.centro_trabajo, institucion_tipo: m.institucion_tipo,
@@ -401,11 +437,17 @@ export default function PanelMedico() {
     setGuardando(true); setDuplicados(null);
     try {
       if (editId !== null) {
-        // La clasificación NO se edita aquí: se captura al dar de alta y el Gerente de
-        // Distrito la ajusta en la pantalla de aprobación.
-        const { confirmar_duplicado: _c, vm_id: _v, clasificacion: _cl, ...cambios } = form;
-        await actualizarMedico(editId, cambios);
-        setMsg({ tipo: 'success', texto: 'Médico actualizado.' });
+        const { confirmar_duplicado: _c, vm_id: _v, clasificacion, ...cambios } = form;
+        // El REPRESENTANTE envía la clasificación: su cambio queda PENDIENTE de validación
+        // y el médico sigue activo con los datos anteriores. El GD/ADMIN edita directo.
+        await actualizarMedico(editId, esVM ? { ...cambios, clasificacion } : cambios);
+        setMsg({
+          tipo: 'success',
+          texto: esVM
+            ? 'Cambio enviado. Tu Gerente de Distrito debe validarlo; mientras tanto el '
+              + 'médico sigue activo con la información anterior.'
+            : 'Médico actualizado.',
+        });
       } else {
         // Al copiar un médico existente, la duplicidad es intencional → se confirma directo.
         const res = await crearMedico({ ...form, confirmar_duplicado: confirmar || modoExistente });
@@ -562,17 +604,40 @@ export default function PanelMedico() {
                     <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
                       {[p.especialidad_nombre, p.linea_nombre, `VM: ${p.vm_nombre}`].filter(Boolean).join(' · ')}
                     </Typography>
+                    {/* Diferencias propuestas: el GD valida de un vistazo qué se movió,
+                        en vez de tener que comparar la ficha completa. */}
+                    {p.tipo_solicitud === 'CAMBIO' && (
+                      <Typography variant="caption" sx={{ display: 'block', color: 'warning.dark' }}>
+                        {Object.keys(p.cambios ?? {}).length
+                          ? Object.entries(p.cambios ?? {})
+                              .map(([k, v]) => `${k}: ${v ?? '—'}`).join(' · ')
+                          : 'Solo cambia la clasificación'}
+                      </Typography>
+                    )}
                   </Box>
-                  {/* En un ALTA se revisa la clasificación antes de aprobar (la categoría se
-                      calcula al aprobar). Una BAJA no tiene plantilla: se aprueba directo. */}
-                  {p.tipo_solicitud === 'ALTA' ? (
+                  {/* CAMBIO: el representante propuso modificar un médico ya activo. Se
+                      muestran las DIFERENCIAS para poder validar de un vistazo. */}
+                  {p.tipo_solicitud === 'CAMBIO' ? (
+                    <>
+                      <Button size="small" variant="contained" color="success" startIcon={<ThumbUp />}
+                              disabled={resolviendo === p.solicitud_id}
+                              onClick={() => resolverCambio(p, true)}>Aprobar cambio</Button>
+                      <Button size="small" variant="outlined" color="error" startIcon={<ThumbDown />}
+                              disabled={resolviendo === p.solicitud_id}
+                              onClick={() => resolverCambio(p, false)}>Rechazar</Button>
+                    </>
+                  ) : p.tipo_solicitud === 'ALTA' ? (
                     <Button size="small" variant="contained" color="success" startIcon={<ThumbUp />}
                             onClick={() => abrirRevision(p)}>Revisar y aprobar</Button>
                   ) : (
                     <Button size="small" variant="contained" color="success" startIcon={<ThumbUp />}
                             onClick={() => resolver(p.id, 'aprobar')}>Aprobar</Button>
                   )}
-                  <Button size="small" variant="outlined" color="error" startIcon={<ThumbDown />} onClick={() => resolver(p.id, 'rechazar')}>Rechazar</Button>
+                  {/* El CAMBIO ya trae su propio Rechazar (resuelve la solicitud, no el médico). */}
+                  {p.tipo_solicitud !== 'CAMBIO' && (
+                    <Button size="small" variant="outlined" color="error" startIcon={<ThumbDown />}
+                            onClick={() => resolver(p.id, 'rechazar')}>Rechazar</Button>
+                  )}
                 </Stack>
               ))}
             </Stack>
@@ -742,21 +807,27 @@ export default function PanelMedico() {
                 {/* Clasificación: el representante captura los 5 criterios; la categoría
                     A/B/C/D la calcula el sistema cuando el Gerente de Distrito aprueba.
                     Solo al DAR DE ALTA — al editar, la ajusta el GD en su pantalla. */}
-                {editId === null && seccion('Clasificación del médico (obligatoria)')}
-                {editId === null && (
+                {pideClasificacion && seccion('Clasificación del médico (obligatoria)')}
+                {pideClasificacion && (
                 <Grid item xs={12}>
                   <Alert severity={plantillaError ? 'error' : 'info'} sx={{ mb: 1 }}>
-                    {plantillaError || (
+                    {plantillaError || (editId !== null ? (
+                      <>
+                        <b>Confirma o ajusta estos 5 criterios.</b> Al guardar, el cambio queda
+                        <b> pendiente de validación</b> de tu Gerente de Distrito; mientras tanto
+                        el médico sigue activo con la información anterior.
+                      </>
+                    ) : (
                       <>
                         <b>Completa tú estos 5 criterios</b> para registrar el médico. Tu Gerente
                         de Distrito solo revisa el alta y puede ajustarlos al aprobarla.
                         La categoría (A/B/C/D) la calcula el sistema; nadie la elige.
                       </>
-                    )}
+                    ))}
                   </Alert>
                 </Grid>
                 )}
-                {editId === null && plantilla.map((c) => (
+                {pideClasificacion && plantilla.map((c) => (
                   <Grid item xs={12} sm={4} key={c.codigo}>
                     {c.tipo === 'TEXTO' ? (
                       <TextField select fullWidth size="small" required label={c.etiqueta}
@@ -942,14 +1013,14 @@ export default function PanelMedico() {
           ) : (
             <>
               {/* Decir QUÉ falta: un botón gris sin explicación se lee como "no graba". */}
-              {editId === null && !clasificacionCompleta && (
+              {pideClasificacion && !clasificacionCompleta && (
                 <Typography variant="caption" color="error" sx={{ mr: 1 }}>
                   Faltan criterios de clasificación
                 </Typography>
               )}
               <Button variant="contained" onClick={() => guardar(false)}
                       disabled={guardando || !form.nombre_completo
-                                || (editId === null && !clasificacionCompleta)}>
+                                || (pideClasificacion && !clasificacionCompleta)}>
                 {guardando ? 'Guardando…' : 'Guardar'}
               </Button>
             </>

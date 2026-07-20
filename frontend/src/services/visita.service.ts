@@ -43,10 +43,20 @@ export interface MedicoVisita {
 }
 
 export interface AprobacionPendiente {
-  id: number; nombre_completo: string; categoria: string; especialidad_nombre: string | null;
+  id: number; nombre_completo: string; categoria: string | null; especialidad_nombre?: string | null;
   vm_id: number; vm_nombre: string; linea_nombre: string | null;
-  tipo_solicitud: 'ALTA' | 'BAJA'; fecha_solicitud: string | null;
+  tipo_solicitud: 'ALTA' | 'BAJA' | 'CAMBIO'; fecha_solicitud: string | null;
+  /** Solo en CAMBIO: id de la solicitud y diff de campos propuestos por el representante. */
+  solicitud_id?: number;
+  cambios?: Record<string, unknown>;
 }
+
+/** El GD valida (o rechaza) un cambio propuesto por el representante. Al aprobar se
+ *  vuelcan los datos y se recalcula la categoría. */
+export const resolverCambioMedico = (solicitudId: number, aprobar: boolean, motivo?: string) =>
+  api.post<{ id: number; aprobado: boolean; categoria: string | null }>(
+    `/visita/medicos/cambios/${solicitudId}/resolver`,
+    null, { params: { aprobar, ...(motivo ? { motivo } : {}) } }).then(r => r.data);
 
 /** Plantilla de clasificación (5 criterios). OBLIGATORIA al dar de alta un médico:
  *  la categoría A/B/C/D no se elige — la calcula el sistema al aprobar el Gerente. */
