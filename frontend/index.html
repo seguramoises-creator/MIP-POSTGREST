@@ -62,6 +62,18 @@
             box.__body.appendChild(pre);
           } catch (e) { /* nunca romper por el propio overlay */ }
         }
+        // Ruido de EXTENSIONES del navegador (MetaMask, billeteras cripto, ad-blockers…):
+        // esas extensiones inyectan su código en TODA página y lanzan sus propios errores
+        // (p. ej. "Failed to connect to MetaMask" desde chrome-extension://…/inpage.js).
+        // No son fallos de VISTA — que el overlay los muestre alarma al usuario sin motivo.
+        // Se reconocen por el esquema de URL de la extensión en el mensaje o el stack.
+        function _esRuidoDeExtension() {
+          for (var i = 0; i < arguments.length; i++) {
+            var s = arguments[i];
+            if (s && /(?:chrome|moz|safari-web)-extension:\/\//.test(String(s))) return true;
+          }
+          return false;
+        }
         window.addEventListener('error', function (ev) {
           if (ev && ev.target && (ev.target.src || ev.target.href) && ev.target.tagName) {
             // Error de carga de recurso (script/css/img) — típico de un chunk 404 tras deploy.
@@ -69,6 +81,7 @@
           } else {
             var m = ev && ev.message ? ev.message : 'Error';
             var d = ev && ev.error && ev.error.stack ? ev.error.stack : (ev && ev.filename ? (ev.filename + ':' + ev.lineno + ':' + ev.colno) : '');
+            if (_esRuidoDeExtension(m, d, ev && ev.filename)) return;
             render(m, d);
           }
         }, true); // captura: atrapa también errores de carga de recursos
@@ -76,6 +89,7 @@
           var r = ev && ev.reason;
           var m = r && r.message ? r.message : ('Promesa rechazada: ' + String(r));
           var d = r && r.stack ? r.stack : '';
+          if (_esRuidoDeExtension(m, d)) return;
           render(m, d);
         });
       })();
