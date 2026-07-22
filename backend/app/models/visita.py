@@ -441,3 +441,43 @@ class MedicoSolicitudCambio(Base):
     resuelto_por: Mapped[int | None] = mapped_column(Integer, nullable=True)
     fecha_resolucion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     motivo: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+
+class FarmaciaVisita(Base):
+    """Farmacia del panel de un VM (referencia al Maestro, F19). Sin F1/F2: cobertura simple."""
+    __tablename__ = "DIM_FarmaciaVisita"
+    __table_args__ = (Index("IX_FarmaciaVisita_vm", "vm_id"), {"schema": "Visita"})
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    vm_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_RM.id"), nullable=False)
+    maestro_farmacia_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Config.DIM_Farmacia.id"), nullable=False, index=True)
+    estado_aprobacion: Mapped[str] = mapped_column(String(16), nullable=False, default="PENDIENTE_ALTA")
+    ciclo_alta_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=True)
+    ciclo_baja_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=True)
+    ciclos_sin_visita: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    solicitado_por: Mapped[int | None] = mapped_column(Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+    aprobado_por: Mapped[int | None] = mapped_column(Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+    fecha_solicitud: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fecha_aprobacion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    motivo: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    fecha_registro: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+
+
+class FactVisitaFarmacia(Base):
+    """Registro de visita a farmacia (Opción A: tabla paralela a FactVisita, cero regresión)."""
+    __tablename__ = "FactVisitaFarmacia"
+    __table_args__ = (Index("IX_FactVisitaFarm_vm_ciclo", "vm_id", "ciclo_id"), {"schema": "Visita"})
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    vm_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_RM.id"), nullable=False)
+    ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
+    farmacia_id: Mapped[int] = mapped_column(Integer, ForeignKey("Visita.DIM_FarmaciaVisita.id"), nullable=False)
+    fecha_hora: Mapped[datetime] = mapped_column(DateTime, default=_ahora)
+    comentario: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    ejecutada: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    causa_no_visita: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    latitud: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
+    longitud: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
+    foto: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    foto_mime: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    registrado_por: Mapped[int | None] = mapped_column(Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)

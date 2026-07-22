@@ -800,3 +800,40 @@ class CatalogoError(Base):
     categoria: Mapped[str | None] = mapped_column(String(60), nullable=True)   # Validación/Sistema/Permisos/Datos…
     http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)     # 400/403/409/500…
     activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
+
+
+class Farmacia(Base):
+    """Maestro único de farmacias (país-level). Los paneles de VM referencian aquí (F19)."""
+    __tablename__ = "DIM_Farmacia"
+    __table_args__ = (
+        Index("IX_Farmacia_cadena_sucursal", "pais_codigo", "cadena", "sucursal"),
+        Index("IX_Farmacia_estado", "estado"),
+        {"schema": "Config"},
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pais_codigo: Mapped[str] = mapped_column(String(10), ForeignKey("Config.DIM_Pais.codigo"), nullable=False)
+    es_cadena: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    cadena: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    sucursal: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    nombre: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    nombre_completo: Mapped[str] = mapped_column(String(250), nullable=False, default="")
+    direccion: Mapped[str] = mapped_column(String(300), nullable=False)     # F23 bloqueante
+    provincia: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    municipio: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    sector: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    latitud: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
+    longitud: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
+    encargado: Mapped[str] = mapped_column(String(200), nullable=False)     # F24 bloqueante
+    telefono: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    estado: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDIENTE_APROBACION")
+    origen: Mapped[str] = mapped_column(String(12), nullable=False, default="VM")   # VM | CONFIG
+    solicitado_por: Mapped[int | None] = mapped_column(Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+    aprobado_por: Mapped[int | None] = mapped_column(Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+    fecha_solicitud: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fecha_aprobacion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    motivo_rechazo: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    activo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc),
+                                                 onupdate=lambda: datetime.now(timezone.utc))
