@@ -20,6 +20,7 @@ GT = (Accion.REGISTER, Alcance.TEAM)
 GA = (Accion.REGISTER, Alcance.ALL)
 CF = (Accion.CONFIGURE, Alcance.ALL)
 AP = (Accion.APPROVE, Alcance.ALL)
+AT = (Accion.APPROVE, Alcance.TEAM)
 ET = (Accion.EXPORT, Alcance.TEAM)
 EA = (Accion.EXPORT, Alcance.ALL)
 AD = (Accion.ADMIN, Alcance.ALL)
@@ -60,11 +61,15 @@ ORACULO = {
     Recurso.LSII_EVALUAR:            [_,  GT, GA, _,  GA, _,  RA, RA, _,  AD],
     Recurso.LSII_ADMIN:              [_,  _,  _,  _,  CF, _,  _,  _,  _,  AD],
     Recurso.ETL_CARGAR:              [_,  _,  _,  _,  CF, _,  _,  _,  _,  AD],
+    # Módulo de Farmacias (Task 5, jul-2026)
+    Recurso.FARMACIA_PANEL:          [GO, RT, RA, RA, RA, RA, RA, RA, _,  AD],
+    Recurso.FARMACIA_APROBAR:        [_,  AT, _,  _,  _,  _,  _,  _,  _,  AD],
+    Recurso.FARMACIA_MAESTRO:        [_,  _,  _,  _,  CF, _,  _,  _,  _,  AD],
 }
 
 
-def test_matriz_tiene_32_recursos():
-    assert len(RECURSOS) == 32
+def test_matriz_tiene_35_recursos():
+    assert len(RECURSOS) == 35
     assert set(MATRIZ) == set(RECURSOS)
     assert set(ORACULO) == set(RECURSOS)
 

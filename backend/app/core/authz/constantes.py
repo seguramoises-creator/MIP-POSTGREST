@@ -69,6 +69,16 @@ class Recurso:
     LSII_EVALUAR = "lsii.evaluar"
     LSII_ADMIN = "lsii.admin"
     ETL_CARGAR = "etl.cargar"
+    # Módulo de Farmacias (jul-2026, plan `2026-07-22-modulo-farmacias.md`, Task 5). NOTA: las
+    # filas `FARMACIA_CONFIGURACION`/`FARMACIA_VISITA`/`FARMACIA_COBERTURA` de arriba fueron
+    # reservadas especulativamente por la deuda #3 (Fase 1, cuando el módulo aún no existía) y su
+    # diseño (p.ej. GERENTE_PRODUCTIVIDAD denegado en `farmacia.configuracion`) NO coincide con el
+    # diseño real aprobado en el spec de Farmacias. En vez de reescribir esas filas ya cubiertas
+    # por el oráculo (fuera del alcance de la Tarea 5), se agregan estos 3 recursos NUEVOS para el
+    # router real; las 3 filas antiguas quedan sin consumidor (deuda a reconciliar/retirar aparte).
+    FARMACIA_PANEL = "farmacia.panel"
+    FARMACIA_APROBAR = "farmacia.aprobar"
+    FARMACIA_MAESTRO = "farmacia.maestro"
 
 
 # (slug, nombre legible, módulo) — orden = filas del spec §5
@@ -105,6 +115,9 @@ RECURSOS_META: dict[str, tuple[str, str]] = {
     Recurso.LSII_EVALUAR: ("Evaluación LSII (Receptividad)", "LSII"),
     Recurso.LSII_ADMIN: ("Configuración catálogo LSII", "LSII"),
     Recurso.ETL_CARGAR: ("Carga de datos (ETL)", "Datos"),
+    Recurso.FARMACIA_PANEL: ("Panel de farmacias del VM", "Farmacias (maestro/panel)"),
+    Recurso.FARMACIA_APROBAR: ("Aprobación de altas de farmacia (VM→GD)", "Farmacias (maestro/panel)"),
+    Recurso.FARMACIA_MAESTRO: ("Maestro de farmacias: CRUD directo", "Farmacias (maestro/panel)"),
 }
 
 RECURSOS: list[str] = list(RECURSOS_META.keys())

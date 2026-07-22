@@ -74,6 +74,17 @@ MATRIZ: dict[str, dict] = {
     Recurso.LSII_EVALUAR:            _fila(_N,      REG_TEAM, REG_ALL, _N,      REG_ALL, _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.LSII_ADMIN:              _fila(_N,      _N,       _N,      _N,      CFG,     _N,      _N,      _N,      _N,      ADMIN_CELL),
     Recurso.ETL_CARGAR:              _fila(_N,      _N,       _N,      _N,      CFG,     _N,      _N,      _N,      _N,      ADMIN_CELL),
+    # Módulo de Farmacias (jul-2026, Task 5 del plan `2026-07-22-modulo-farmacias.md`).
+    #   - farmacia.panel: espejo de medico.panel — VM lee/solicita su propio panel (register
+    #     implica read own); GD lee el de su equipo; GERENTE_PRODUCTIVIDAD (a diferencia de
+    #     medico.panel, aquí SÍ) + resto de gerencias leen todo; FINANZAS sin acceso.
+    #   - farmacia.aprobar: SOLO Gerente de Distrito (su equipo) + ADMIN aprueban/rechazan altas.
+    #   - farmacia.maestro: SOLO GERENTE_PRODUCTIVIDAD + ADMIN administran el maestro directo
+    #     (mismo patrón exacto que LSII_ADMIN/ETL_CARGAR: una única gerencia configura).
+    #                                   RM       GD        MARCA    MKT      PROD     MED      PRES     ANAL     FIN      ADMIN
+    Recurso.FARMACIA_PANEL:          _fila(REG_OWN, R_TEAM, R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.FARMACIA_APROBAR:        _fila(_N,      (Accion.APPROVE, Alcance.TEAM), _N, _N, _N, _N, _N, _N, _N,   ADMIN_CELL),
+    Recurso.FARMACIA_MAESTRO:        _fila(_N,      _N,       _N,      _N,      CFG,     _N,      _N,      _N,      _N,      ADMIN_CELL),
 }
 
 # ── Roles legacy fuera de la matriz canónica de 10 columnas (Fase 2) ──────────────────────────

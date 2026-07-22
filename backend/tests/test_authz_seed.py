@@ -39,11 +39,11 @@ class _FakeSession:
 def test_seed_idempotente():
     db = _FakeSession()
     r1 = seed.sembrar_todo(db)
-    assert r1["recursos_nuevos"] == 32
+    assert r1["recursos_nuevos"] == 35
     assert r1["permisos_cambios"] > 0
     n_rec = len(db._store[Recurso])
     n_perm = len(db._store[RolPermiso])
-    assert n_rec == 32
+    assert n_rec == 35
 
     # segunda pasada: nada nuevo, nada cambia
     r2 = seed.sembrar_todo(db)

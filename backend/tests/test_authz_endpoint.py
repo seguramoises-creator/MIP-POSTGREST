@@ -82,4 +82,4 @@ def test_matriz_solo_admin():
     # admin → 200 con 28 recursos
     r = _app(U(Rol.ADMIN)).get("/api/v1/authz/matriz")
     assert r.status_code == 200
-    assert len(r.json()["recursos"]) == 32
+    assert len(r.json()["recursos"]) == 35
