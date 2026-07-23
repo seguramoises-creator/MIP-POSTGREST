@@ -43,7 +43,6 @@ const MisExamenes = lazyWithReload(() => import('./pages/examenes/MisExamenes'))
 const EquipoExamenes = lazyWithReload(() => import('./pages/examenes/EquipoExamenes'));
 const PanelMedico = lazyWithReload(() => import('./pages/visita/PanelMedico'));
 const PanelFarmacia = lazyWithReload(() => import('./pages/visita/PanelFarmacia'));
-const BandejaAprobacionFarmacias = lazyWithReload(() => import('./pages/farmacias/BandejaAprobacionFarmacias'));
 const MaestroFarmacias = lazyWithReload(() => import('./pages/admin/MaestroFarmacias'));
 const CoberturaDashboard = lazyWithReload(() => import('./pages/visita/CoberturaDashboard'));
 const RegistrarVisita = lazyWithReload(() => import('./pages/visita/RegistrarVisita'));
@@ -148,7 +147,6 @@ function AppRoutes() {
         <Route path="examenes-equipo" element={<ProtectedRoute allowedRoles={['GERENTE_DISTRITO']}><EquipoExamenes /></ProtectedRoute>} />
         <Route path="visita/panel-medico" element={<ProtectedRoute recurso="medico.panel" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><PanelMedico /></ProtectedRoute>} />
         <Route path="visita/panel-farmacia" element={<ProtectedRoute recurso="farmacia.panel" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><PanelFarmacia /></ProtectedRoute>} />
-        <Route path="farmacias/aprobacion" element={<ProtectedRoute recurso="farmacia.aprobar" accion="approve" allowedRoles={['ADMIN','GERENTE_DISTRITO']}><BandejaAprobacionFarmacias /></ProtectedRoute>} />
         <Route path="farmacias/maestro" element={<ProtectedRoute recurso="farmacia.maestro" accion="configure" allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><MaestroFarmacias /></ProtectedRoute>} />
         <Route path="visita/cobertura" element={<ProtectedRoute recurso="cobertura.diaria" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><CoberturaDashboard /></ProtectedRoute>} />
         <Route path="visita/registrar" element={<ProtectedRoute recurso="visita.registrar" accion="register" allowedRoles={['ADMIN','REPRESENTANTE_MEDICO']}><RegistrarVisita /></ProtectedRoute>} />

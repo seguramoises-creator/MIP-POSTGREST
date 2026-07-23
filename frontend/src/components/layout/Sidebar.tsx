@@ -9,7 +9,7 @@ import {
   CloudUpload, Settings, AdminPanelSettings, Assessment,
   SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn, Groups,
   MedicalServices, EditNote, EventNote, ReportProblem, Campaign, Paid,
-  ChevronLeft, ChevronRight, Add, Remove, RateReview, LocalPharmacy, HowToReg, Storefront,
+  ChevronLeft, ChevronRight, Add, Remove, RateReview, LocalPharmacy, Storefront,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { usePuede } from '../../store/permisos.store';
@@ -67,7 +67,6 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Médicos',               path: '/medicos',             icon: <LocalHospital />,   recurso: 'medico.panel', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_MARCA', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
       { label: 'Panel Farmacia',        path: '/visita/panel-farmacia', icon: <LocalPharmacy />, recurso: 'farmacia.panel', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
       { label: 'Maestro de Farmacias',  path: '/farmacias/maestro', icon: <Storefront />, recurso: 'farmacia.maestro', accion: 'configure', roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
-      { label: 'Aprobación Farmacias',  path: '/farmacias/aprobacion', icon: <HowToReg />, recurso: 'farmacia.aprobar', accion: 'approve', roles: ['ADMIN', 'GERENTE_DISTRITO'] },
       { label: 'Planeación Ciclo',      path: '/visita/planeacion',   icon: <EventNote />,       recurso: 'planeacion.ciclo', roles: ['ADMIN', 'REPRESENTANTE_MEDICO'] },
     ],
   },
