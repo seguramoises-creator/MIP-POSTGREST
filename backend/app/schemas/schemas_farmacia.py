@@ -140,3 +140,28 @@ class EditarAprobarIn(BaseModel):
     provincia: str | None = Field(default=None, max_length=100)
     municipio: str | None = Field(default=None, max_length=100)
     sector: str | None = Field(default=None, max_length=100)
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Registro de visita a Farmacia (Task 6) — AD-HOC, sin planeación de ciclo.
+# Tabla paralela Visita.FactVisitaFarmacia (Opción A).
+# ─────────────────────────────────────────────────────────────────────────
+
+class VisitaFarmaciaRegistrar(BaseModel):
+    """Registro AD-HOC de una visita a una farmacia del panel (guard F22 en el
+    servicio: el panel debe estar APROBADO y el maestro ACTIVA)."""
+    comentario: str | None = Field(default=None, max_length=1000)
+    hace_minutos: int = Field(default=0, ge=0, le=60)  # hora servidor menos ventana
+    ejecutada: bool = True
+    causa_no_visita: str | None = Field(default=None, max_length=80)
+    latitud: float | None = None
+    longitud: float | None = None
+
+
+class VisitaFarmaciaResponse(BaseModel):
+    id: int
+    vm_id: int
+    ciclo_id: int
+    farmacia_id: int
+    ejecutada: bool
+    fecha_hora: datetime | None = None

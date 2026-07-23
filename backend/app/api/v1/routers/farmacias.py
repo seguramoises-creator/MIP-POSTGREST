@@ -18,7 +18,7 @@ fuerza a su propio `rm_id`; un GERENTE_DISTRITO se fuerza a su propio `gerente_i
 """
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, File, status
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db
@@ -26,12 +26,14 @@ from app.core.authz.deps import require as _require_authz
 from app.core.authz.constantes import Accion, Recurso
 from app.models.usuario import Rol, Usuario
 from app.models.dimensiones import Farmacia, RepresentanteMedico, Gerente
-from app.models.visita import FarmaciaVisita
+from app.models.visita import FarmaciaVisita, FactVisitaFarmacia
 from app.services import maestro_farmacia_service as maestro_svc
 from app.services import farmacia_aprobacion_service as aprobacion_svc
+from app.services import visita_farmacia_service as visita_svc
 from app.schemas.schemas_farmacia import (
     FarmaciaMaestroCrear, FarmaciaMaestroActualizar, FarmaciaMaestroResponse,
     PanelAgregarIn, PanelCrearIn, PanelResponse, RechazarIn, EditarAprobarIn,
+    VisitaFarmaciaRegistrar,
 )
 
 router = APIRouter(prefix="/farmacias", tags=["Farmacias"])
@@ -109,6 +111,18 @@ def _raise_negocio(e: ValueError) -> None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, msg)
     # "no tiene una alta pendiente" / "ya está en tu panel": conflicto de estado
     raise HTTPException(status.HTTP_409_CONFLICT, msg)
+
+
+def _raise_captura_error(e: ValueError) -> None:
+    """Traduce un ValueError del registro de visita a farmacia: F22 (panel no
+    aprobado/maestro no activa) y ciclo cerrado son conflictos de estado (409);
+    el resto (p.ej. 'No hay ciclo activo') son errores de negocio (400)."""
+    if isinstance(e, visita_svc.PanelNoAprobadoError):
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    msg = str(e)
+    if "cerrado" in msg.lower() or "solo lectura" in msg.lower():
+        raise HTTPException(status.HTTP_409_CONFLICT, msg)
+    raise HTTPException(status.HTTP_400_BAD_REQUEST, msg)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -230,6 +244,73 @@ def panel_listar(
         }
         for p in paneles
     ]
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Registro de visita a Farmacia (Task 6) — AD-HOC, guard F22 + ciclo abierto.
+# Tabla paralela Visita.FactVisitaFarmacia (Opción A): se registra en el MISMO
+# módulo de Visita (mismo VM, misma auto-scope), reusando el recurso
+# farmacia.panel con la acción REGISTER — no se crea ningún recurso nuevo.
+# ─────────────────────────────────────────────────────────────────────────
+
+def _cargar_panel_del_vm(db: Session, panel_id: int, vm_id: int) -> FarmaciaVisita:
+    """Carga el registro de panel y verifica que pertenece al VM que llama
+    (403 si no) — mismo criterio de auto-scope que el resto del router."""
+    panel = db.query(FarmaciaVisita).filter(FarmaciaVisita.id == panel_id).first()
+    if panel is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Panel de farmacia ID={panel_id} no encontrado.")
+    if panel.vm_id != vm_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Esta farmacia no pertenece a tu panel.")
+    return panel
+
+
+@router.post("/{panel_id}/visita", response_model=dict, status_code=status.HTTP_201_CREATED,
+             summary="Registrar visita a una farmacia del panel (AD-HOC, guard F22)")
+def registrar_visita_farmacia(
+    panel_id: int,
+    body: VisitaFarmaciaRegistrar,
+    vm_id: Optional[int] = Query(None, description="Solo ADMIN puede indicar otro VM"),
+    db: Session = Depends(get_db),
+    current_user: Usuario = RegistrarPanel,
+):
+    vm = _scope_vm(current_user, vm_id)
+    if not vm:
+        raise HTTPException(400, "Indica el VM (vm_id).")
+    panel = _cargar_panel_del_vm(db, panel_id, vm)
+    try:
+        v = visita_svc.registrar_visita(db, vm, panel, body, usuario_id=current_user.id)
+    except ValueError as e:
+        _raise_captura_error(e)
+    return {
+        "id": v.id, "vm_id": v.vm_id, "ciclo_id": v.ciclo_id, "farmacia_id": v.farmacia_id,
+        "ejecutada": v.ejecutada,
+        "hora": v.fecha_hora.isoformat() if v.fecha_hora else None,
+    }
+
+
+@router.post("/{visita_id}/foto", response_model=dict, status_code=status.HTTP_201_CREATED,
+             summary="Subir foto de una visita a farmacia (JPEG/PNG, máx 3 MB)")
+async def subir_foto_visita_farmacia(
+    visita_id: int, archivo: UploadFile = File(...),
+    db: Session = Depends(get_db), current_user: Usuario = RegistrarPanel,
+):
+    contenido = await archivo.read()
+    try:
+        visita_svc.guardar_foto_visita(db, visita_id, contenido, archivo.content_type or "image/jpeg")
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    return {"id": visita_id, "bytes": len(contenido)}
+
+
+@router.get("/{visita_id}/foto", summary="Obtener la foto de una visita a farmacia")
+def obtener_foto_visita_farmacia(
+    visita_id: int, db: Session = Depends(get_db), current_user: Usuario = ReadPanel,
+):
+    data = visita_svc.obtener_foto_visita(db, visita_id)
+    if data is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Sin foto")
+    contenido, mime = data
+    return Response(content=contenido, media_type=mime)
 
 
 # ─────────────────────────────────────────────────────────────────────────
