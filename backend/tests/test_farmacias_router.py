@@ -335,7 +335,7 @@ def test_panel_listar_incluye_motivo_del_panel_cuando_rechazado():
                             estado_aprobacion="RECHAZADO", ciclos_sin_visita=0,
                             motivo="Dirección incompleta")
     maestro = SimpleNamespace(id=50, nombre_completo="GBC PANTOJA", direccion="Calle 1",
-                              encargado="Ana", estado="RECHAZADA", motivo_rechazo=None)
+                              encargado="Ana", estado="RECHAZADA", motivo_rechazo=None, es_cadena=False)
     db = _db_panel(panel, maestro)
 
     client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
@@ -350,7 +350,7 @@ def test_panel_listar_motivo_cae_al_del_maestro_si_panel_no_lo_trae():
                             motivo=None)
     maestro = SimpleNamespace(id=50, nombre_completo="GBC PANTOJA", direccion="Calle 1",
                               encargado="Ana", estado="RECHAZADA",
-                              motivo_rechazo="Rechazado desde el maestro")
+                              motivo_rechazo="Rechazado desde el maestro", es_cadena=False)
     db = _db_panel(panel, maestro)
 
     client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
@@ -364,13 +364,70 @@ def test_panel_listar_motivo_nulo_si_no_esta_rechazado():
                             estado_aprobacion="APROBADO", ciclos_sin_visita=0,
                             motivo=None)
     maestro = SimpleNamespace(id=50, nombre_completo="GBC PANTOJA", direccion="Calle 1",
-                              encargado="Ana", estado="ACTIVA", motivo_rechazo=None)
+                              encargado="Ana", estado="ACTIVA", motivo_rechazo=None, es_cadena=False)
     db = _db_panel(panel, maestro)
 
     client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
     r = client.get("/api/v1/farmacias/panel")
     assert r.status_code == 200
     assert r.json()[0]["motivo"] is None
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Pestaña Farmacia de Registrar Visita (jul-2026): es_cadena SIEMPRE; estado de
+# visita (hoy/ciclo) + último comentario SOLO si se pide `ciclo_id`.
+# ─────────────────────────────────────────────────────────────────────────
+
+def test_panel_listar_incluye_es_cadena_siempre():
+    panel = SimpleNamespace(id=1, maestro_farmacia_id=50, vm_id=7, activo=True,
+                            estado_aprobacion="APROBADO", ciclos_sin_visita=0, motivo=None)
+    maestro = SimpleNamespace(id=50, nombre_completo="GBC PANTOJA", direccion="Calle 1",
+                              encargado="Ana", estado="ACTIVA", motivo_rechazo=None, es_cadena=True)
+    db = _db_panel(panel, maestro)
+
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
+    r = client.get("/api/v1/farmacias/panel")
+    assert r.status_code == 200
+    assert r.json()[0]["es_cadena"] is True
+
+
+def test_panel_listar_sin_ciclo_id_estado_visita_en_default():
+    panel = SimpleNamespace(id=1, maestro_farmacia_id=50, vm_id=7, activo=True,
+                            estado_aprobacion="APROBADO", ciclos_sin_visita=0, motivo=None)
+    maestro = SimpleNamespace(id=50, nombre_completo="GBC PANTOJA", direccion="Calle 1",
+                              encargado="Ana", estado="ACTIVA", motivo_rechazo=None, es_cadena=False)
+    db = _db_panel(panel, maestro)
+
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
+    r = client.get("/api/v1/farmacias/panel")
+    assert r.status_code == 200
+    body = r.json()[0]
+    assert body["es_cadena"] is False
+    assert body["visitada_hoy"] is False
+    assert body["visitada_ciclo"] is False
+    assert body["ultimo_comentario"] is None
+
+
+def test_panel_listar_con_ciclo_id_incluye_estado_de_visita(monkeypatch):
+    panel = SimpleNamespace(id=1, maestro_farmacia_id=50, vm_id=7, activo=True,
+                            estado_aprobacion="APROBADO", ciclos_sin_visita=0, motivo=None)
+    maestro = SimpleNamespace(id=50, nombre_completo="GBC PANTOJA", direccion="Calle 1",
+                              encargado="Ana", estado="ACTIVA", motivo_rechazo=None, es_cadena=True)
+    db = _db_panel(panel, maestro)
+    monkeypatch.setattr(
+        mod.visita_svc, "estado_visita_panel",
+        lambda db_, vm, ciclo_id, panel_ids: {
+            1: {"visitada_hoy": True, "visitada_ciclo": True, "ultimo_comentario": "Todo en orden"},
+        },
+    )
+
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
+    r = client.get("/api/v1/farmacias/panel", params={"ciclo_id": 42})
+    assert r.status_code == 200
+    body = r.json()[0]
+    assert body["visitada_hoy"] is True
+    assert body["visitada_ciclo"] is True
+    assert body["ultimo_comentario"] == "Todo en orden"
 
 
 # ─────────────────────────────────────────────────────────────────────────

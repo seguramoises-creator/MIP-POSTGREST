@@ -104,15 +104,25 @@ export interface FarmaciaPanelItem {
   direccion: string | null;
   encargado: string | null;
   estado_maestro: string | null;
+  /** Badge Cadena/Independiente (RegistrarVisita, pestaña Farmacia) — del maestro. */
+  es_cadena?: boolean;
   estado_aprobacion: string;   // PENDIENTE_ALTA | APROBADO | RECHAZADO
   ciclos_sin_visita: number;
   /** No siempre viene del backend (solo si se agrega en el futuro) — se muestra si está presente. */
   motivo?: string | null;
+  /** Los 3 siguientes solo vienen calculados si se pidió `cicloId` — si no, quedan en false/None. */
+  visitada_hoy?: boolean;
+  visitada_ciclo?: boolean;
+  ultimo_comentario?: string | null;
 }
 
-export const listarPanelFarmacias = (vmId?: number, incluirInactivos = false) =>
+export const listarPanelFarmacias = (vmId?: number, incluirInactivos = false, cicloId?: number) =>
   api.get<FarmaciaPanelItem[]>('/farmacias/panel', {
-    params: { ...(vmId ? { vm_id: vmId } : {}), incluir_inactivos: incluirInactivos },
+    params: {
+      ...(vmId ? { vm_id: vmId } : {}),
+      incluir_inactivos: incluirInactivos,
+      ...(cicloId ? { ciclo_id: cicloId } : {}),
+    },
   }).then((r) => r.data);
 
 // Cobertura interna del VM en un ciclo: visitadas / universo (farmacias APROBADO+activas).
