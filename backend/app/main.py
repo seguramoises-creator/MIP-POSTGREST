@@ -92,9 +92,13 @@ API REST empresarial multipaís para la gestión integral del desempeño comerci
 - **Admin** — Gestión de catálogos y configuración
     """,
     version=settings.APP_VERSION,
-    openapi_url=f"{settings.API_PREFIX}/openapi.json",
-    docs_url=f"{settings.API_PREFIX}/docs",
-    redoc_url=f"{settings.API_PREFIX}/redoc",
+    # FIX SEC (informe 2026-07-21, HALLAZGO ALTO): Swagger UI, ReDoc y el esquema
+    # OpenAPI solo se exponen si ENABLE_API_DOCS=true. Por defecto (producción)
+    # responden 404, para no publicar el mapa completo de los 238 endpoints a
+    # cualquier visitante de internet. Se activa temporalmente solo en dev/staging.
+    openapi_url=f"{settings.API_PREFIX}/openapi.json" if settings.ENABLE_API_DOCS else None,
+    docs_url=f"{settings.API_PREFIX}/docs" if settings.ENABLE_API_DOCS else None,
+    redoc_url=f"{settings.API_PREFIX}/redoc" if settings.ENABLE_API_DOCS else None,
     lifespan=lifespan,
     contact={"name": "SCGCPR Team", "email": "soporte@empresa.com"},
     license_info={"name": "Propietario"},

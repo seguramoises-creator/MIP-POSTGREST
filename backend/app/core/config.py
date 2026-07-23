@@ -20,6 +20,18 @@ class Settings(BaseSettings):
     DEBUG: bool = True
     API_PREFIX: str = "/api/v1"
 
+    # ── Seguridad / superficie de API (FIX informe de seguridad 2026-07-21)
+    # HALLAZGO ALTO: la documentación (Swagger UI, ReDoc y el esquema OpenAPI)
+    # queda APAGADA por defecto; solo se expone si ENABLE_API_DOCS=true en el
+    # entorno. No se ata a APP_ENV para no arrastrar los efectos del modo
+    # producción (TrustedHostMiddleware y la validación estricta de JWT_SECRET_KEY).
+    ENABLE_API_DOCS: bool = False
+    # HALLAZGO MEDIO: /api/v1/setup/inicializar exige, ADEMÁS de que no existan
+    # usuarios en la BD, que SETUP_ENABLED=true. Así, aunque la tabla de usuarios
+    # quedara vacía (borrado, migración, ataque), nadie puede re-crear un ADMIN
+    # sin habilitarlo explícitamente en el entorno. Se deja en false ya inicializado.
+    SETUP_ENABLED: bool = False
+
     # ── Servidor
     HOST: str = "0.0.0.0"
     PORT: int = 8000

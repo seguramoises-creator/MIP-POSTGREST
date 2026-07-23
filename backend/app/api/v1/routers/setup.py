@@ -12,6 +12,7 @@ import re
 from app.db.database import get_db
 from app.models.usuario import Usuario, Rol
 from app.core.security import hash_password
+from app.core.config import settings
 
 router = APIRouter(prefix="/setup", tags=["setup"])
 
@@ -46,6 +47,13 @@ def setup_status(db: Session = Depends(get_db)):
 @router.post("/inicializar")
 def inicializar(data: SetupRequest, db: Session = Depends(get_db)):
     """Crea el primer usuario ADMIN. Solo disponible cuando no hay usuarios."""
+    # FIX SEC (informe 2026-07-21, HALLAZGO MEDIO): control adicional e
+    # independiente de la BD. Sin SETUP_ENABLED=true el endpoint no existe de
+    # cara al exterior (404), aunque la tabla de usuarios quede vacía. Evita la
+    # re-inicialización / creación de un ADMIN por un atacante.
+    if not settings.SETUP_ENABLED:
+        raise HTTPException(status_code=404, detail="No encontrado.")
+
     total = db.query(Usuario).count()
     if total > 0:
         raise HTTPException(
