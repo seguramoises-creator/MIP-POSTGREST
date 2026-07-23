@@ -37,7 +37,7 @@ export default function MainLayout() {
     // Parrilla y Costo/ROI ya traen su PROPIO selector de ciclo: la franja los duplicaba.
     '/visita/parrilla', '/visita/costo-roi',
     // No leen el ciclo en absoluto: la franja solo sugeria que influia en algo.
-    '/visita/panel-medico', '/mis-examenes', '/examenes-equipo',
+    '/visita/panel-medico', '/visita/panel-farmacia', '/mis-examenes', '/examenes-equipo',
     // Solo usaban el ciclo para derivar `esSoloLectura` y apagar el boton de guardar. Sin
     // franja no hay forma de elegir un ciclo pasado, asi que siempre se trabaja sobre el
     // ABIERTO — que es la regla. El candado real no se pierde: el backend sigue rechazando

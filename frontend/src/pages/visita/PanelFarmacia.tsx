@@ -5,15 +5,15 @@
  * Espejo de PanelMedico.tsx, alcance reducido a lo que pide la Tarea 8 del plan
  * `2026-07-22-modulo-farmacias.md`.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Alert,
   MenuItem, CircularProgress, Avatar, Divider, Switch, FormControlLabel, Tooltip,
 } from '@mui/material';
-import { LocalPharmacy, Search, Add, FiberManualRecord, HowToReg } from '@mui/icons-material';
+import { LocalPharmacy, Search, Add, FiberManualRecord, HowToReg, Badge, SupervisorAccount, Layers } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
-import { listarVMs, type Catalogo } from '../../services/visita.service';
+import { listarVMs, miGerente, type Catalogo, type MiGerente } from '../../services/visita.service';
 import {
   buscarFarmaciaMaestro, panelAgregarFarmacia, panelCrearFarmacia, listarPanelFarmacias,
   type FarmaciaDuro, type FarmaciaPanelItem, type FarmaciaDatos,
@@ -49,6 +49,21 @@ function nombreVistaPrevia(f: FarmaciaDatos): string {
   return s.toUpperCase();
 }
 
+const cap = (s: string) => (s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s);
+
+// Dato con ícono + etiqueta, para la ficha del representante (mismo estilo que Panel Médico).
+function infoDato(icon: ReactNode, label: string, value: string) {
+  return (
+    <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+      <Box sx={{ color: 'text.secondary', display: 'flex' }}>{icon}</Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.1, fontWeight: 600, letterSpacing: 0.3 }}>{label}</Typography>
+        <Typography variant="body2" fontWeight={700} noWrap>{value}</Typography>
+      </Box>
+    </Stack>
+  );
+}
+
 export default function PanelFarmacia() {
   const rol = useAuthStore((s) => s.rol);
   const esVM = rol === 'REPRESENTANTE_MEDICO';
@@ -58,6 +73,8 @@ export default function PanelFarmacia() {
 
   const [vms, setVms] = useState<Catalogo[]>([]);
   const [vmFiltro, setVmFiltro] = useState<number | ''>('');
+  // Ficha del representante (Gerente de Distrito + Línea), igual que Panel Médico.
+  const [infoRep, setInfoRep] = useState<MiGerente | null>(null);
   const vmParam = esVM ? undefined : (vmFiltro || undefined);
   const listo = esVM || !!vmFiltro;
 
@@ -87,6 +104,12 @@ export default function PanelFarmacia() {
 
   useEffect(() => { cargarPanel(); }, [cargarPanel]);
   useEffect(() => { if (!esVM) listarVMs().then(setVms).catch(() => {}); }, [esVM]);
+  // El VM se ELIGE arriba; su Gerente de Distrito y Línea se muestran solos (de la dim del RM).
+  useEffect(() => {
+    if (esVM) miGerente().then(setInfoRep).catch(() => setInfoRep(null));
+    else if (vmFiltro) miGerente(Number(vmFiltro)).then(setInfoRep).catch(() => setInfoRep(null));
+    else setInfoRep(null);
+  }, [esVM, vmFiltro]);
 
   const reiniciarBusqueda = () => {
     setBuscado(false); setResultados([]); setForm(formVacio);
@@ -159,14 +182,33 @@ export default function PanelFarmacia() {
         </Stack>
       </Box>
 
-      {!esVM && (
-        <Card variant="outlined" sx={{ mb: 2 }}>
+      {/* Ficha del representante: se ELIGE el VM aquí; su Gerente de Distrito y Línea salen
+          solos (de la dim del RM). Un VM ve su ficha fija. Mismo patrón que Panel Médico. */}
+      {(!esVM || (infoRep && (infoRep.vm || infoRep.gerente || infoRep.linea))) && (
+        <Card variant="outlined" sx={{ mb: 2, borderColor: 'primary.light', bgcolor: 'rgba(46,91,255,0.05)' }}>
           <CardContent sx={{ py: 1.25, '&:last-child': { pb: 1.25 } }}>
-            <TextField select fullWidth size="small" label="Visitador (VM)" value={vmFiltro}
-                       onChange={(e) => setVmFiltro(e.target.value === '' ? '' : Number(e.target.value))}>
-              <MenuItem value=""><em>— Selecciona un visitador —</em></MenuItem>
-              {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
-            </TextField>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1.25, sm: 4 }} alignItems={{ sm: 'center' }}
+                   flexWrap="wrap"
+                   divider={<Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', sm: 'block' } }} />}>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+                <Avatar sx={{ bgcolor: 'primary.main', color: '#fff', width: 32, height: 32 }}><Badge fontSize="small" /></Avatar>
+                {esVM ? (
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.1, fontWeight: 600, letterSpacing: 0.3 }}>Representante médico</Typography>
+                    <Typography variant="body2" fontWeight={700} noWrap>{infoRep?.vm ?? '—'}</Typography>
+                  </Box>
+                ) : (
+                  <TextField select variant="standard" label="Representante médico (VM)" value={vmFiltro} sx={{ minWidth: 240 }}
+                             onChange={(e) => setVmFiltro(e.target.value === '' ? '' : Number(e.target.value))}>
+                    <MenuItem value=""><em>— Selecciona un visitador —</em></MenuItem>
+                    {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
+                  </TextField>
+                )}
+              </Stack>
+              {infoRep?.gerente && infoDato(<SupervisorAccount fontSize="small" />,
+                infoRep.gerente_tipo ? `Gerente de ${cap(infoRep.gerente_tipo)}` : 'Gerente de Distrito', infoRep.gerente)}
+              {infoRep?.linea && infoDato(<Layers fontSize="small" />, 'Línea', infoRep.linea)}
+            </Stack>
           </CardContent>
         </Card>
       )}
