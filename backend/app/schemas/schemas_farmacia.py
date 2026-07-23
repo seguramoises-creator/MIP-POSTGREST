@@ -114,11 +114,18 @@ class PanelItem(BaseModel):
     direccion: str
     encargado: str
     estado_maestro: str
+    es_cadena: bool = False
+    """Badge Cadena/Independiente (RegistrarVisita, pestaña Farmacia) — del maestro."""
     estado_aprobacion: str
     ciclos_sin_visita: int
     motivo: str | None = None
     """F26: motivo de rechazo (del panel o, en su defecto, del maestro RECHAZADA) — el VM lo ve
     en su móvil. None salvo que estado_aprobacion == RECHAZADO."""
+    visitada_hoy: bool = False
+    visitada_ciclo: bool = False
+    ultimo_comentario: str | None = None
+    """Los 3 anteriores solo se calculan si `GET /farmacias/panel` recibe `ciclo_id`
+    (ver `visita_farmacia_service.estado_visita_panel`); si no, quedan en su default."""
 
 
 # ─────────────────────────────────────────────────────────────────────────

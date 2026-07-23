@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { CheckCircle, Save, EventBusy, AccessAlarm, Medication, ChatBubbleOutline, Assignment, FiberManualRecord, SupervisorAccount, History, ExpandMore, ExpandLess, Lock, LocalPharmacy, MedicalServices } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import { useCicloStore } from '../../store/ciclo.store';
 import {
   agendaHoy, listarCausas, misVisitasHoy, registrarVisita, registrarNoVisita, listarVMs, obtenerParrilla, miGerente, subirFotoVisita, historialVisitas, registrarMuestras, listarMedicos,
   type AgendaMedico, type VisitaHoy, type Catalogo, type ParrillaItem, type ProductoDetalle, type MiGerente, type MedicoVisita,
@@ -86,6 +87,10 @@ interface Registrada extends VisitaHoy { sync: SyncEstado; }
 export default function RegistrarVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esVM = rol === 'REPRESENTANTE_MEDICO';
+  // Ciclo abierto del contexto global — solo lo usa la pestaña Farmacia, para pedirle
+  // al panel el estado de visita (hoy/ciclo) + último comentario, como la de Médico
+  // (que resuelve el ciclo del lado del servidor vía `ciclo_por_defecto`).
+  const cicloAbiertoId = useCicloStore((s) => s.cicloAbiertoId);
   // Sin contexto de ciclo: el registro SIEMPRE opera sobre el ciclo abierto del
   // país del visitador (el backend lo resuelve y lo protege con su guard).
 
@@ -180,17 +185,28 @@ export default function RegistrarVisita() {
   }, [listo, vmParam]);
 
   // Farmacias del panel — solo cuentan las APROBADO (F22: pendientes no aparecen aquí).
-  useEffect(() => {
+  // Con `cicloAbiertoId` el backend agrega estado de visita (hoy/ciclo) + último
+  // comentario (`visita_farmacia_service.estado_visita_panel`), igual que la pestaña
+  // de Médico (que resuelve el ciclo del lado del servidor).
+  const cargarFarmacias = useCallback(() => {
     if (tipoEntidad !== 'farmacia' || !listo) { setFarmacias([]); return; }
-    listarPanelFarmacias(vmParam)
+    listarPanelFarmacias(vmParam, false, cicloAbiertoId ?? undefined)
       .then((r) => setFarmacias(r.filter((f) => f.estado_aprobacion === 'APROBADO')))
       .catch(() => setFarmacias([]));
-  }, [tipoEntidad, listo, vmParam]);
+  }, [tipoEntidad, listo, vmParam, cicloAbiertoId]);
+  useEffect(() => { cargarFarmacias(); }, [cargarFarmacias]);
 
   const farmaciasFiltradas = useMemo(() => {
     const q = farmBusqueda.trim().toUpperCase();
     return farmacias.filter((f) => !q || (f.nombre_completo ?? '').toUpperCase().includes(q));
   }, [farmacias, farmBusqueda]);
+
+  // Dos grupos, como médico (día/ciclo) pero adaptado AD-HOC: Pendientes (sin
+  // registro en el ciclo abierto) vs Visitadas (hoy o en algún momento del ciclo).
+  const farmaciasPendientes = useMemo(
+    () => farmaciasFiltradas.filter((f) => !f.visitada_hoy && !f.visitada_ciclo), [farmaciasFiltradas]);
+  const farmaciasVisitadas = useMemo(
+    () => farmaciasFiltradas.filter((f) => f.visitada_hoy || f.visitada_ciclo), [farmaciasFiltradas]);
 
   function seleccionarFarmacia(f: FarmaciaPanelItem) {
     setSelFarmacia(f); setFarmComentario(''); setFarmModoNoVisita(false); setFarmCausa('');
@@ -219,6 +235,8 @@ export default function RegistrarVisita() {
       setMsg((m) => m ?? { tipo: 'success', texto: farmModoNoVisita ? 'No-visita a farmacia registrada.' : 'Visita a farmacia registrada.' });
       setSelFarmacia(null); setFarmGps(null); setFarmFoto(null); setFarmFotoPreview(null);
       setFarmComentario(''); setFarmModoNoVisita(false); setFarmCausa('');
+      // Refresca el panel para que la farmacia pase a "Registrada hoy" / grupo Visitadas.
+      cargarFarmacias();
     } catch (e) {
       setMsg({ tipo: 'error', texto: msgError(e, 'No se pudo registrar la visita a la farmacia.') });
     } finally { setFarmGuardando(false); }
@@ -620,6 +638,150 @@ export default function RegistrarVisita() {
     )
   );
 
+  // Badge Cadena/Independiente — igual criterio para la fila del panel y el
+  // encabezado del formulario (deriva de `es_cadena` del maestro).
+  const badgeCadena = (esCadena: boolean | undefined, size: 'tiny' | 'normal' = 'normal') => (
+    <Chip size="small" variant="outlined" color={esCadena ? 'info' : 'default'}
+          label={esCadena ? 'Cadena' : 'Independiente'}
+          sx={{ height: size === 'tiny' ? 18 : 20, fontSize: size === 'tiny' ? '0.6rem' : '0.66rem', fontWeight: 700 }} />
+  );
+
+  // Formulario de registro de visita a farmacia — INLINE bajo la farmacia
+  // seleccionada (mismo patrón que el formulario de médico, `formulario` arriba).
+  const formularioFarmacia = selFarmacia ? (
+    <div ref={formRefFarmacia}>
+      <Card elevation={0} sx={{ ...cardSx, mb: 1 }}>
+        <Box sx={{ background: `linear-gradient(120deg, ${NAVY}0d 0%, ${TEAL}0d 100%)`,
+                   borderBottom: '1px solid #eef1f6', px: 2, py: 1.5 }}>
+          <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" rowGap={0.3}>
+            <Typography fontWeight={800} sx={{ color: INK, fontSize: 'clamp(0.82rem, 3.2vw, 1.05rem)' }}>
+              {selFarmacia.nombre_completo}
+            </Typography>
+            {badgeCadena(selFarmacia.es_cadena)}
+          </Stack>
+          <Typography variant="caption" color="text.secondary">
+            {[selFarmacia.direccion, selFarmacia.encargado ? `Encargado: ${selFarmacia.encargado}` : null].filter(Boolean).join(' · ')}
+          </Typography>
+        </Box>
+        <CardContent>
+          <Stack spacing={2}>
+            {farmModoNoVisita && (
+              <TextField select label="Causa de no-visita" value={farmCausa} required
+                         onChange={(e) => setFarmCausa(e.target.value)}>
+                {causas.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
+              </TextField>
+            )}
+            <Box>
+              <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
+                <ChatBubbleOutline sx={{ fontSize: 18, color: TEAL }} />
+                <Typography variant="caption" sx={secHeadSx}>Comentario de visita</Typography>
+              </Stack>
+              <TextField fullWidth multiline minRows={2} maxRows={4} value={farmComentario}
+                         onChange={(e) => setFarmComentario(e.target.value)}
+                         placeholder="Describe algo relevante que ocurrió en la visita… (opcional)" />
+            </Box>
+            {!farmModoNoVisita && (
+              <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" rowGap={1}>
+                <Button size="small" variant="outlined" startIcon={<span>📍</span>}
+                        color={farmGps ? 'success' : 'primary'}
+                        sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, borderWidth: 1.5 }}
+                        onClick={() => {
+                          if (!navigator.geolocation) { setMsg({ tipo: 'error', texto: 'Este dispositivo no soporta geolocalización.' }); return; }
+                          navigator.geolocation.getCurrentPosition(
+                            (pos) => setFarmGps({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+                            () => setMsg({ tipo: 'error', texto: 'No se pudo obtener la ubicación (permiso denegado o sin señal).' }),
+                            { enableHighAccuracy: true, timeout: 8000 });
+                        }}>
+                  {farmGps ? 'Ubicación capturada' : 'Capturar ubicación'}
+                </Button>
+                {farmGps && <Typography variant="caption" color="text.secondary">📍 {farmGps.lat.toFixed(5)}, {farmGps.lng.toFixed(5)}</Typography>}
+                <Button size="small" variant="outlined" component="label" startIcon={<span>📷</span>}
+                        color={farmFoto ? 'success' : 'primary'}
+                        sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, borderWidth: 1.5 }}>
+                  {farmFoto ? 'Cambiar foto' : 'Foto de la farmacia'}
+                  <input hidden type="file" accept="image/*" capture="environment"
+                         onChange={(e) => { const f = e.target.files?.[0] || null; setFarmFoto(f); setFarmFotoPreview(f ? URL.createObjectURL(f) : null); }} />
+                </Button>
+                {farmFotoPreview && <Box component="img" src={farmFotoPreview} alt="foto" sx={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 1, border: '1px solid #ddd' }} />}
+              </Stack>
+            )}
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ pt: 0.5 }}>
+              <Button variant="contained" fullWidth startIcon={<Save />}
+                      disabled={farmGuardando}
+                      onClick={guardarFarmacia}
+                      sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 800, textTransform: 'none', fontSize: '0.95rem',
+                            boxShadow: '0 8px 18px rgba(15,155,142,0.30)',
+                            background: `linear-gradient(120deg, ${TEAL} 0%, #0b7d72 100%)`,
+                            '&:hover': { background: `linear-gradient(120deg, #0d8a7f 0%, #0a6f66 100%)` },
+                            '&.Mui-disabled': { background: '#cbd5e1', color: '#fff', boxShadow: 'none' } }}>
+                {farmGuardando ? 'Guardando…' : (farmModoNoVisita ? 'Registrar no-visita' : 'Guardar visita')}
+              </Button>
+              <Button variant="outlined" color={farmModoNoVisita ? 'primary' : 'error'} startIcon={<EventBusy />}
+                      onClick={() => { setFarmModoNoVisita(!farmModoNoVisita); setMsg(null); }}
+                      sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 700, textTransform: 'none', borderWidth: 1.5 }}>
+                {farmModoNoVisita ? 'Fue visita' : 'No visité'}
+              </Button>
+            </Stack>
+          </Stack>
+        </CardContent>
+      </Card>
+    </div>
+  ) : null;
+
+  // Renderiza un grupo de farmacias (Pendientes/Visitadas); el formulario aparece
+  // INLINE bajo la farmacia seleccionada — mismo patrón que `renderGrupo` (médico).
+  const renderGrupoFarmacia = (titulo: string, lista: FarmaciaPanelItem[]) => (
+    lista.length === 0 ? null : (
+      <Box sx={{ mb: 1.5 }}>
+        <Typography variant="caption" sx={{ ...secHeadSx, display: 'block', mb: 0.5 }}>
+          {titulo} · {lista.length}
+        </Typography>
+        <Stack divider={<Divider />}>
+          {lista.map((f) => {
+            const activa = selFarmacia?.panel_id === f.panel_id;
+            return (
+              <Box key={f.panel_id}>
+                <Stack direction="row" alignItems="center" spacing={1.5}
+                       onClick={() => seleccionarFarmacia(f)}
+                       sx={{ py: 1, px: 0.5, cursor: 'pointer', borderRadius: 1,
+                             bgcolor: activa ? 'rgba(255,193,7,0.14)' : 'transparent',
+                             '&:hover': { bgcolor: 'action.hover' } }}>
+                  <Avatar sx={{ bgcolor: `${TEAL}1a`, color: TEAL, width: 36, height: 36 }}><LocalPharmacy fontSize="small" /></Avatar>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Stack direction="row" alignItems="center" spacing={0.6} flexWrap="wrap" rowGap={0.2}>
+                      <Typography fontWeight={700} noWrap sx={{ fontSize: 'clamp(0.78rem, 3vw, 0.9rem)' }}>
+                        {f.nombre_completo ?? '—'}
+                      </Typography>
+                      {badgeCadena(f.es_cadena, 'tiny')}
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                      {f.direccion ?? 'Sin dirección'}
+                    </Typography>
+                    {f.ultimo_comentario && (
+                      <Typography variant="caption" title={f.ultimo_comentario}
+                                  sx={{ display: 'block', mt: 0.2, fontStyle: 'italic', color: 'text.secondary',
+                                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        “{f.ultimo_comentario}”
+                      </Typography>
+                    )}
+                  </Box>
+                  {f.visitada_hoy ? (
+                    <Chip size="small" variant="filled" color="success" label="Registrada hoy ✓" />
+                  ) : f.visitada_ciclo ? (
+                    <Chip size="small" variant="outlined" color="info" label="Visitada" />
+                  ) : (
+                    <Typography variant="caption" sx={{ color: 'warning.main', fontWeight: 700 }}>Pendiente</Typography>
+                  )}
+                </Stack>
+                {activa && <Box sx={{ mt: 1 }}>{formularioFarmacia}</Box>}
+              </Box>
+            );
+          })}
+        </Stack>
+      </Box>
+    )
+  );
+
   return (
     <Box sx={{ maxWidth: 620, mx: 'auto', p: { xs: 1.5, sm: 3 } }}>
       {/* HERO — encabezado corporativo: título + fecha + Gerente de Distrito, con el
@@ -689,7 +851,9 @@ export default function RegistrarVisita() {
 
         {tipoEntidad === 'farmacia' ? (
         <>
-        {/* Panel de farmacias (solo APROBADO — F22) */}
+        {/* Panel de farmacias (solo APROBADO — F22) — agrupado Pendientes/Visitadas,
+            con badge Cadena/Independiente, estado de visita y último comentario,
+            igual criterio que la pestaña de Médico. */}
         <Card elevation={0} sx={{ ...cardSx, mb: 2 }}>
           <CardContent sx={{ py: 1.5 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
@@ -707,109 +871,13 @@ export default function RegistrarVisita() {
             ) : farmaciasFiltradas.length === 0 ? (
               <Alert severity="info">Ninguna farmacia coincide con el filtro.</Alert>
             ) : (
-              <Stack divider={<Divider />}>
-                {farmaciasFiltradas.map((f) => {
-                  const activa = selFarmacia?.panel_id === f.panel_id;
-                  return (
-                    <Stack key={f.panel_id} direction="row" alignItems="center" spacing={1.5}
-                           onClick={() => seleccionarFarmacia(f)}
-                           sx={{ py: 1, px: 0.5, cursor: 'pointer', borderRadius: 1,
-                                 bgcolor: activa ? 'rgba(255,193,7,0.14)' : 'transparent',
-                                 '&:hover': { bgcolor: 'action.hover' } }}>
-                      <Avatar sx={{ bgcolor: `${TEAL}1a`, color: TEAL, width: 36, height: 36 }}><LocalPharmacy fontSize="small" /></Avatar>
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography fontWeight={700} noWrap sx={{ fontSize: 'clamp(0.78rem, 3vw, 0.9rem)' }}>
-                          {f.nombre_completo ?? '—'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-                          {f.direccion ?? 'Sin dirección'}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  );
-                })}
-              </Stack>
+              <>
+                {renderGrupoFarmacia('Pendientes', farmaciasPendientes)}
+                {renderGrupoFarmacia('Visitadas', farmaciasVisitadas)}
+              </>
             )}
           </CardContent>
         </Card>
-
-        {/* Formulario de registro de visita a farmacia — INLINE bajo la seleccionada */}
-        {selFarmacia && (
-          <div ref={formRefFarmacia}>
-          <Card elevation={0} sx={{ ...cardSx, mb: 2 }}>
-            <Box sx={{ background: `linear-gradient(120deg, ${NAVY}0d 0%, ${TEAL}0d 100%)`,
-                       borderBottom: '1px solid #eef1f6', px: 2, py: 1.5 }}>
-              <Typography fontWeight={800} sx={{ color: INK, fontSize: 'clamp(0.82rem, 3.2vw, 1.05rem)' }}>
-                {selFarmacia.nombre_completo}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {[selFarmacia.direccion, selFarmacia.encargado ? `Encargado: ${selFarmacia.encargado}` : null].filter(Boolean).join(' · ')}
-              </Typography>
-            </Box>
-            <CardContent>
-              <Stack spacing={2}>
-                {farmModoNoVisita && (
-                  <TextField select label="Causa de no-visita" value={farmCausa} required
-                             onChange={(e) => setFarmCausa(e.target.value)}>
-                    {causas.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
-                  </TextField>
-                )}
-                <Box>
-                  <Stack direction="row" alignItems="center" spacing={0.75} sx={{ mb: 0.75 }}>
-                    <ChatBubbleOutline sx={{ fontSize: 18, color: TEAL }} />
-                    <Typography variant="caption" sx={secHeadSx}>Comentario de visita</Typography>
-                  </Stack>
-                  <TextField fullWidth multiline minRows={2} maxRows={4} value={farmComentario}
-                             onChange={(e) => setFarmComentario(e.target.value)}
-                             placeholder="Describe algo relevante que ocurrió en la visita… (opcional)" />
-                </Box>
-                {!farmModoNoVisita && (
-                  <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" rowGap={1}>
-                    <Button size="small" variant="outlined" startIcon={<span>📍</span>}
-                            color={farmGps ? 'success' : 'primary'}
-                            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, borderWidth: 1.5 }}
-                            onClick={() => {
-                              if (!navigator.geolocation) { setMsg({ tipo: 'error', texto: 'Este dispositivo no soporta geolocalización.' }); return; }
-                              navigator.geolocation.getCurrentPosition(
-                                (pos) => setFarmGps({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-                                () => setMsg({ tipo: 'error', texto: 'No se pudo obtener la ubicación (permiso denegado o sin señal).' }),
-                                { enableHighAccuracy: true, timeout: 8000 });
-                            }}>
-                      {farmGps ? 'Ubicación capturada' : 'Capturar ubicación'}
-                    </Button>
-                    {farmGps && <Typography variant="caption" color="text.secondary">📍 {farmGps.lat.toFixed(5)}, {farmGps.lng.toFixed(5)}</Typography>}
-                    <Button size="small" variant="outlined" component="label" startIcon={<span>📷</span>}
-                            color={farmFoto ? 'success' : 'primary'}
-                            sx={{ borderRadius: 2, textTransform: 'none', fontWeight: 700, borderWidth: 1.5 }}>
-                      {farmFoto ? 'Cambiar foto' : 'Foto de la farmacia'}
-                      <input hidden type="file" accept="image/*" capture="environment"
-                             onChange={(e) => { const f = e.target.files?.[0] || null; setFarmFoto(f); setFarmFotoPreview(f ? URL.createObjectURL(f) : null); }} />
-                    </Button>
-                    {farmFotoPreview && <Box component="img" src={farmFotoPreview} alt="foto" sx={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 1, border: '1px solid #ddd' }} />}
-                  </Stack>
-                )}
-                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ pt: 0.5 }}>
-                  <Button variant="contained" fullWidth startIcon={<Save />}
-                          disabled={farmGuardando}
-                          onClick={guardarFarmacia}
-                          sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 800, textTransform: 'none', fontSize: '0.95rem',
-                                boxShadow: '0 8px 18px rgba(15,155,142,0.30)',
-                                background: `linear-gradient(120deg, ${TEAL} 0%, #0b7d72 100%)`,
-                                '&:hover': { background: `linear-gradient(120deg, #0d8a7f 0%, #0a6f66 100%)` },
-                                '&.Mui-disabled': { background: '#cbd5e1', color: '#fff', boxShadow: 'none' } }}>
-                    {farmGuardando ? 'Guardando…' : (farmModoNoVisita ? 'Registrar no-visita' : 'Guardar visita')}
-                  </Button>
-                  <Button variant="outlined" color={farmModoNoVisita ? 'primary' : 'error'} startIcon={<EventBusy />}
-                          onClick={() => { setFarmModoNoVisita(!farmModoNoVisita); setMsg(null); }}
-                          sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 700, textTransform: 'none', borderWidth: 1.5 }}>
-                    {farmModoNoVisita ? 'Fue visita' : 'No visité'}
-                  </Button>
-                </Stack>
-              </Stack>
-            </CardContent>
-          </Card>
-          </div>
-        )}
         </>
         ) : (
         <>

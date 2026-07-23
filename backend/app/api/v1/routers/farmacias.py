@@ -251,6 +251,8 @@ def _panel_a_response(panel: FarmaciaVisita) -> PanelResponse:
 def panel_listar(
     vm_id: Optional[int] = Query(None, description="VM auto-scope; otros roles pueden filtrar"),
     incluir_inactivos: bool = Query(False),
+    ciclo_id: Optional[int] = Query(
+        None, description="Si se indica, agrega estado de visita (hoy/ciclo) + último comentario"),
     db: Session = Depends(get_db),
     current_user: Usuario = ReadPanel,
 ):
@@ -270,6 +272,13 @@ def panel_listar(
 
     maestro_ids = {p.maestro_farmacia_id for p in paneles}
     maestros = {f.id: f for f in db.query(Farmacia).filter(Farmacia.id.in_(maestro_ids)).all()}
+
+    # Estado de visita (hoy/ciclo) + último comentario — como la pestaña de Médico,
+    # adaptado AD-HOC (sin agenda/planeación). Una sola query agregada por VM+ciclo
+    # (no N+1), ver `visita_farmacia_service.estado_visita_panel`.
+    estados: dict = {}
+    if ciclo_id is not None:
+        estados = visita_svc.estado_visita_panel(db, vm, ciclo_id, [p.id for p in paneles])
 
     def _motivo(p: FarmaciaVisita) -> Optional[str]:
         """F26: motivo de rechazo — primero el del panel (siempre lo trae `rechazar()`,
@@ -294,9 +303,14 @@ def panel_listar(
                          if p.maestro_farmacia_id in maestros else None),
             "estado_maestro": (maestros[p.maestro_farmacia_id].estado
                               if p.maestro_farmacia_id in maestros else None),
+            "es_cadena": bool(maestros[p.maestro_farmacia_id].es_cadena)
+                        if p.maestro_farmacia_id in maestros else False,
             "estado_aprobacion": p.estado_aprobacion,
             "ciclos_sin_visita": p.ciclos_sin_visita,
             "motivo": _motivo(p),
+            "visitada_hoy": estados.get(p.id, {}).get("visitada_hoy", False),
+            "visitada_ciclo": estados.get(p.id, {}).get("visitada_ciclo", False),
+            "ultimo_comentario": estados.get(p.id, {}).get("ultimo_comentario"),
         }
         for p in paneles
     ]

@@ -167,6 +167,63 @@ def test_obtener_foto_visita_ok():
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# estado_visita_panel — pestaña Farmacia de Registrar Visita (jul-2026): badge
+# Cadena/Independiente + estado (hoy/ciclo) + comentario de la visita anterior,
+# como la pestaña de Médico.
+# ─────────────────────────────────────────────────────────────────────────
+
+from datetime import datetime, timezone, timedelta
+
+
+def _visita_ejecutada(**over):
+    base = dict(farmacia_id=1, ejecutada=True, fecha_hora=datetime.now(timezone.utc),
+                ciclo_id=42, comentario=None)
+    base.update(over)
+    return SimpleNamespace(**base)
+
+
+def test_estado_visita_panel_sin_panel_ids_devuelve_vacio():
+    db = _fake_db()
+    assert svc.estado_visita_panel(db, vm_id=7, ciclo_id=42, panel_ids=[]) == {}
+
+
+def test_estado_visita_panel_hoy_ciclo_y_ultimo_comentario():
+    db = _fake_db()
+    ahora = datetime.now(timezone.utc)
+    ayer = ahora - timedelta(days=1)
+    # Ordenadas DESC por fecha_hora (como hace la query real): la más reciente primero.
+    filas = [
+        _visita_ejecutada(farmacia_id=1, fecha_hora=ahora, ciclo_id=42, comentario="Hoy mismo"),
+        _visita_ejecutada(farmacia_id=1, fecha_hora=ayer, ciclo_id=41, comentario="Ayer"),
+        _visita_ejecutada(farmacia_id=2, fecha_hora=ayer, ciclo_id=42, comentario="Otra farmacia"),
+    ]
+    db.query.return_value.filter.return_value.order_by.return_value.all.return_value = filas
+
+    estados = svc.estado_visita_panel(db, vm_id=7, ciclo_id=42, panel_ids=[1, 2, 3])
+
+    # farmacia 1: visitada hoy Y en el ciclo 42 (la fila de hoy); comentario = el de la más reciente.
+    assert estados[1] == {"visitada_hoy": True, "visitada_ciclo": True, "ultimo_comentario": "Hoy mismo"}
+    # farmacia 2: NO hoy (fue ayer), pero SÍ en el ciclo 42.
+    assert estados[2] == {"visitada_hoy": False, "visitada_ciclo": True, "ultimo_comentario": "Otra farmacia"}
+    # farmacia 3: sin visitas -> no aparece en el mapa (el llamador debe usar defaults).
+    assert 3 not in estados
+
+
+def test_estado_visita_panel_farmacia_solo_en_otro_ciclo():
+    db = _fake_db()
+    ayer = datetime.now(timezone.utc) - timedelta(days=5)
+    db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
+        _visita_ejecutada(farmacia_id=9, fecha_hora=ayer, ciclo_id=41, comentario="Ciclo anterior"),
+    ]
+
+    estados = svc.estado_visita_panel(db, vm_id=7, ciclo_id=42, panel_ids=[9])
+
+    assert estados[9]["visitada_hoy"] is False
+    assert estados[9]["visitada_ciclo"] is False   # el ciclo pedido es el 42, la visita fue en el 41
+    assert estados[9]["ultimo_comentario"] == "Ciclo anterior"
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Capa router — auto-scope (403 panel ajeno), F22 (409), ciclo cerrado (409), foto
 # ─────────────────────────────────────────────────────────────────────────
 

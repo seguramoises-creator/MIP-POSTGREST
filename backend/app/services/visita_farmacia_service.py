@@ -118,3 +118,49 @@ def obtener_foto_visita(db: Session, visita_id: int):
     if v is None or not v.foto:
         return None
     return bytes(v.foto), (v.foto_mime or "image/jpeg")
+
+
+# ── Estado de visita del panel (pestaña Farmacia de Registrar Visita) ──────────
+# Espejo adaptado de `visita_cobertura_service._mapa_visitas` (médicos): UNA sola
+# query agregada por VM+ciclo (no N+1 por farmacia), igual que el patrón usado para
+# `estado_visita`/`fecha_ultima_visita` en `visita_service.listar_medicos`.
+
+def estado_visita_panel(db: Session, vm_id: int, ciclo_id: int, panel_ids: list[int]) -> dict[int, dict]:
+    """Estado de visita por farmacia del panel, por `farmacia_id` (id del panel,
+    `Visita.DIM_FarmaciaVisita.id` — NO el id del maestro):
+      - `visitada_hoy`: alguna visita EJECUTADA de HOY (fecha UTC del servidor).
+      - `visitada_ciclo`: alguna visita EJECUTADA dentro del `ciclo_id` dado.
+      - `ultimo_comentario`: comentario de la visita EJECUTADA más reciente (de
+        cualquier ciclo) — mismo criterio de "visita anterior" que el historial
+        de médicos (`visita_registro_service.historial_visitas`).
+
+    AD-HOC (sin planeación): a diferencia de médicos, no hay un universo/agenda
+    previo — este helper solo agrega lo que ya se registró.
+    """
+    if not panel_ids:
+        return {}
+    hoy = datetime.now(timezone.utc).date()
+    filas = (
+        db.query(FactVisitaFarmacia)
+        .filter(FactVisitaFarmacia.vm_id == vm_id,
+                FactVisitaFarmacia.farmacia_id.in_(panel_ids),
+                FactVisitaFarmacia.ejecutada == True)  # noqa: E712
+        .order_by(FactVisitaFarmacia.fecha_hora.desc())
+        .all()
+    )
+    salida: dict[int, dict] = {}
+    for v in filas:
+        # `setdefault` solo fija en el PRIMER encuentro de esta farmacia_id — como las
+        # filas vienen ordenadas por fecha_hora DESC, ese primer encuentro es la visita
+        # más reciente (de ahí sale `ultimo_comentario`, sea o no None).
+        d = salida.setdefault(v.farmacia_id, {
+            "visitada_hoy": False, "visitada_ciclo": False,
+            "ultimo_comentario": v.comentario,
+        })
+        # `.date()` evita comparar datetimes naive/aware entre sí (la columna es
+        # DateTime sin tz; el valor almacenado siempre es hora UTC, ver `_ahora()`).
+        if v.fecha_hora and v.fecha_hora.date() == hoy:
+            d["visitada_hoy"] = True
+        if v.ciclo_id == ciclo_id:
+            d["visitada_ciclo"] = True
+    return salida
