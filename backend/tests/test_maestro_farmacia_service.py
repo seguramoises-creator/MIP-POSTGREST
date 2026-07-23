@@ -191,10 +191,67 @@ def test_crear_maestro_ok_setea_nombre_completo_y_audita(monkeypatch):
 
 def test_actualizar_maestro_recalcula_nombre_completo(monkeypatch):
     db = _fake_db()
-    f = SimpleNamespace(id=1, es_cadena=True, cadena="GBC", sucursal="Pantoja",
+    monkeypatch.setattr(svc, "detectar_duplicados", lambda *a, **k: {"duros": []})
+    f = SimpleNamespace(id=1, pais_codigo="DO", es_cadena=True, cadena="GBC", sucursal="Pantoja",
                         nombre=None, direccion="Calle 1", encargado="Ana",
                         nombre_completo="GBC PANTOJA")
     f2 = svc.actualizar_maestro(db, f, {"sucursal": "Villa Mella"}, usuario_id=7)
     assert f2.sucursal == "Villa Mella"
     assert f2.nombre_completo == "GBC VILLA MELLA"
+    db.commit.assert_called_once()
+
+
+# ── actualizar_maestro: anti-dup en edición (hallazgo menor M1) ─────────────────
+def test_actualizar_maestro_bloquea_por_duplicado_duro(monkeypatch):
+    """Editar `(cadena,sucursal)`/`nombre`/`es_cadena` hacia la clave de OTRA farmacia
+    ya existente debe bloquear igual que el alta — antes `actualizar_maestro` aplicaba
+    los cambios sin correr ningún anti-dup."""
+    db = _fake_db()
+    monkeypatch.setattr(
+        svc, "detectar_duplicados",
+        lambda *a, **k: {"duros": [{"id": 99, "cadena": "OTRA", "sucursal": "YA EXISTE"}]},
+    )
+    f = SimpleNamespace(id=1, pais_codigo="DO", es_cadena=True, cadena="GBC", sucursal="Pantoja",
+                        nombre=None, direccion="Calle 1", encargado="Ana",
+                        nombre_completo="GBC PANTOJA")
+    with pytest.raises(svc.DuplicadoDuroError) as exc:
+        svc.actualizar_maestro(db, f, {"sucursal": "Ya Existe"}, usuario_id=7)
+    assert exc.value.coincidencias == [{"id": 99, "cadena": "OTRA", "sucursal": "YA EXISTE"}]
+    # No se mutó la farmacia ni se llegó a commitear.
+    assert f.sucursal == "Pantoja"
+    db.commit.assert_not_called()
+
+
+def test_actualizar_maestro_sin_colision_aplica_cambios(monkeypatch):
+    db = _fake_db()
+    monkeypatch.setattr(svc, "detectar_duplicados", lambda *a, **k: {"duros": []})
+    f = SimpleNamespace(id=1, pais_codigo="DO", es_cadena=True, cadena="GBC", sucursal="Pantoja",
+                        nombre=None, direccion="Calle 1", encargado="Ana",
+                        nombre_completo="GBC PANTOJA")
+    f2 = svc.actualizar_maestro(db, f, {"sucursal": "Naco"}, usuario_id=7)
+    assert f2.sucursal == "Naco"
+    assert f2.nombre_completo == "GBC NACO"
+    db.commit.assert_called_once()
+
+
+def test_actualizar_maestro_excluye_su_propio_id_del_anti_dup(monkeypatch):
+    """Editar la propia farmacia sin cambiar realmente la clave (misma cadena/sucursal
+    de siempre) no debe auto-colisionar — `detectar_duplicados` se llama con
+    `excluir_id=farmacia.id`."""
+    db = _fake_db()
+    llamado = {}
+
+    def _detectar(db_, pais, *, es_cadena, cadena=None, sucursal=None, nombre=None, excluir_id=None):
+        llamado.update(pais=pais, es_cadena=es_cadena, cadena=cadena, sucursal=sucursal,
+                       excluir_id=excluir_id)
+        return {"duros": []}
+    monkeypatch.setattr(svc, "detectar_duplicados", _detectar)
+
+    f = SimpleNamespace(id=1, pais_codigo="DO", es_cadena=True, cadena="GBC", sucursal="Pantoja",
+                        nombre=None, direccion="Calle 1", encargado="Ana",
+                        nombre_completo="GBC PANTOJA")
+    svc.actualizar_maestro(db, f, {"sucursal": "Pantoja"}, usuario_id=7)
+
+    assert llamado == {"pais": "DO", "es_cadena": True, "cadena": "GBC",
+                       "sucursal": "Pantoja", "excluir_id": 1}
     db.commit.assert_called_once()

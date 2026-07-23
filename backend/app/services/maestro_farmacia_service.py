@@ -158,6 +158,23 @@ def actualizar_maestro(db: Session, farmacia: Farmacia, cambios: dict, usuario_i
             "encargado": cambios.get("encargado", farmacia.encargado),
         })
 
+    # Anti-dup también en edición (hallazgo menor M1): si la edición toca la clave de
+    # nombre (cadena/sucursal/nombre/es_cadena), calcular los valores FINALES resultantes
+    # de aplicar `cambios` y correr el mismo detector duro del alta, excluyendo la propia
+    # farmacia — antes `actualizar_maestro` aplicaba los cambios sin verificar que la
+    # nueva clave no colisionara con otra farmacia ya existente.
+    if {"cadena", "sucursal", "nombre", "es_cadena"} & set(cambios):
+        es_cadena_final = cambios.get("es_cadena", farmacia.es_cadena)
+        dups = detectar_duplicados(
+            db, farmacia.pais_codigo, es_cadena=bool(es_cadena_final),
+            cadena=cambios.get("cadena", farmacia.cadena),
+            sucursal=cambios.get("sucursal", farmacia.sucursal),
+            nombre=cambios.get("nombre", farmacia.nombre),
+            excluir_id=farmacia.id,
+        )
+        if dups["duros"]:
+            raise DuplicadoDuroError(dups["duros"])
+
     aplicados = []
     for k, v in cambios.items():
         if hasattr(Farmacia, k) and k not in ("id", "pais_codigo", "created_at"):

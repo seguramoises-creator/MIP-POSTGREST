@@ -48,14 +48,22 @@ def solicitar_agregar_al_panel(db: Session, vm_id: int, maestro_farmacia_id: int
     Hallazgo importante 3: antes NO se consultaba `Farmacia` — se podía "agregar al
     panel" un `maestro_farmacia_id` inexistente, o uno RECHAZADA/PENDIENTE_APROBACION
     (violando F22), o de OTRO país. Ahora se valida el maestro antes de crear el panel.
+
+    Hallazgo menor 4: simetría con `solicitar_crear` — si `vm_id` no resuelve a un RM,
+    antes se seguía de largo (`_pais_de_vm` devolvía `None`, el chequeo de país se
+    saltaba) y el 500 llegaba más adelante al insertar el panel (FK). Ahora se valida
+    el VM antes de tocar el maestro.
     """
+    pais_vm = _pais_de_vm(db, vm_id)
+    if not pais_vm:
+        raise ValueError(f"El VM ID={vm_id} no existe o no tiene país asignado.")
+
     maestro = db.query(Farmacia).filter(Farmacia.id == maestro_farmacia_id).first()
     if maestro is None:
         raise ValueError(f"La farmacia ID={maestro_farmacia_id} no existe en el maestro.")
     if maestro.estado != "ACTIVA":
         raise ValueError("La farmacia no está activa en el maestro.")
-    pais_vm = _pais_de_vm(db, vm_id)
-    if pais_vm and maestro.pais_codigo != pais_vm:
+    if maestro.pais_codigo != pais_vm:
         raise ValueError("La farmacia no pertenece al país de tu operación.")
 
     if _panel_existente(db, vm_id, maestro_farmacia_id) is not None:
@@ -159,11 +167,18 @@ def aprobar(db: Session, panel_id: int, usuario_id=None) -> FarmaciaVisita:
     _guard_panel_pendiente(panel)
 
     maestro = db.query(Farmacia).filter(Farmacia.id == panel.maestro_farmacia_id).first()
-    if maestro is not None and maestro.estado != "ACTIVA":
-        maestro.estado = "ACTIVA"
-        maestro.aprobado_por = usuario_id
-        maestro.fecha_aprobacion = datetime.now(timezone.utc)
-        maestro.updated_at = datetime.now(timezone.utc)
+    if maestro is not None:
+        if maestro.estado == "PENDIENTE_APROBACION":
+            # Flujo normal (Acción B): el maestro nació con la solicitud, se promueve.
+            maestro.estado = "ACTIVA"
+            maestro.aprobado_por = usuario_id
+            maestro.fecha_aprobacion = datetime.now(timezone.utc)
+            maestro.updated_at = datetime.now(timezone.utc)
+        elif maestro.estado != "ACTIVA":
+            # Hallazgo menor M3: el maestro quedó INACTIVA/RECHAZADA (p.ej. un ADMIN lo
+            # desactivó entre la Acción A y la aprobación) — no resucitarlo en silencio.
+            raise ValueError(
+                "La farmacia del maestro no está activa; no se puede aprobar la solicitud.")
 
     panel.estado_aprobacion = "APROBADO"
     panel.ciclo_alta_id = ciclo_actual_id(db, panel.vm_id)

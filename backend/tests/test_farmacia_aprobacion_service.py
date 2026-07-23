@@ -80,11 +80,25 @@ def test_agregar_al_panel_rechaza_si_ya_esta_en_el_panel(monkeypatch):
 
 
 # ── Acción A: validación del maestro (hallazgo importante 3) ───────────────────
-def test_agregar_al_panel_falla_si_maestro_no_existe():
+def test_agregar_al_panel_falla_si_maestro_no_existe(monkeypatch):
     db = _fake_db()
+    monkeypatch.setattr(svc, "_pais_de_vm", lambda db_, vm: "DO")
     db.query.return_value.filter.return_value.first.return_value = None
-    with pytest.raises(ValueError, match="no existe"):
+    with pytest.raises(ValueError, match="no existe en el maestro"):
         svc.solicitar_agregar_al_panel(db, vm_id=7, maestro_farmacia_id=999, usuario_id=3)
+    db.add.assert_not_called()
+
+
+# ── Acción A: validación del VM (hallazgo menor 4) ──────────────────────────────
+def test_agregar_al_panel_falla_si_vm_no_existe(monkeypatch):
+    """Hallazgo menor 4: simetría con `solicitar_crear` — un `vm_id` que no resuelve
+    a un RM debía seguir de largo y reventar en 500 más adelante al insertar el panel
+    (FK). Ahora es un ValueError claro, sin ni siquiera consultar el maestro."""
+    db = _fake_db()
+    monkeypatch.setattr(svc, "_pais_de_vm", lambda db_, vm: None)
+    with pytest.raises(ValueError, match="no existe"):
+        svc.solicitar_agregar_al_panel(db, vm_id=99999, maestro_farmacia_id=50, usuario_id=3)
+    db.query.assert_not_called()
     db.add.assert_not_called()
 
 
@@ -212,6 +226,24 @@ def test_aprobar_no_reactiva_maestro_ya_activo(monkeypatch):
     assert maestro.estado == "ACTIVA"
     assert maestro.aprobado_por == 1
     assert maestro.fecha_aprobacion == "ya-fijado"
+
+
+# ── aprobar: guard de maestro desactivado (hallazgo menor M3) ──────────────────
+@pytest.mark.parametrize("estado", ["INACTIVA", "RECHAZADA"])
+def test_aprobar_falla_si_maestro_no_esta_activo_ni_pendiente(estado):
+    """Si el maestro quedó INACTIVA/RECHAZADA entre la Acción A y la aprobación (p.ej.
+    un ADMIN lo desactivó), aprobar el panel NO debe resucitarlo en silencio."""
+    db = _fake_db()
+    panel = _panel()
+    maestro = _maestro(estado=estado)
+    db.query.side_effect = [_Q(first=panel), _Q(first=maestro)]
+
+    with pytest.raises(ValueError, match="no está activa"):
+        svc.aprobar(db, panel_id=1, usuario_id=9)
+
+    assert panel.estado_aprobacion == "PENDIENTE_ALTA"
+    assert maestro.estado == estado
+    db.commit.assert_not_called()
 
 
 def test_aprobar_falla_si_panel_no_existe():
