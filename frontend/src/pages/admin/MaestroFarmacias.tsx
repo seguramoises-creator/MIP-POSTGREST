@@ -6,7 +6,7 @@
  * Espejo de MaestroMedicos.tsx, alcance reducido a lo que pide la Tarea 8 del plan
  * `2026-07-22-modulo-farmacias.md`.
  */
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Box, Card, CardContent, Typography, TextField, MenuItem, Button, Stack,
@@ -23,6 +23,7 @@ import {
   listarMaestroFarmacias, crearMaestroFarmacia, actualizarMaestroFarmacia,
   type FarmaciaMaestro, type FarmaciaDatos,
 } from '../../services/farmacias.service';
+import { listarProvincias, listarMunicipios } from '../../services/visita.service';
 
 const ESTADO_COLOR: Record<string, 'success' | 'warning' | 'error' | 'default'> = {
   ACTIVA: 'success', PENDIENTE_APROBACION: 'warning', RECHAZADA: 'error',
@@ -43,6 +44,9 @@ export default function MaestroFarmacias() {
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState<FarmaciaDatos>(formVacio);
   const [msg, setMsg] = useState<{ t: string; tipo: 'success' | 'error' } | null>(null);
+  // Provincia/Municipio son listas desplegables del catálogo del sistema (no texto libre).
+  // El modelo guarda el NOMBRE (string); `provinciaId` es solo para encadenar los municipios.
+  const [provinciaId, setProvinciaId] = useState<number | ''>('');
 
   const flash = (t: string, tipo: 'success' | 'error' = 'success') => {
     setMsg({ t, tipo }); setTimeout(() => setMsg(null), 5000);
@@ -58,9 +62,30 @@ export default function MaestroFarmacias() {
 
   const refrescar = () => qc.invalidateQueries({ queryKey: ['farm-maestro'] });
 
-  const abrirCrear = () => { setEditId(null); setForm(formVacio); setOpenForm(true); };
+  // Catálogo de provincias del país + municipios en cascada de la provincia elegida.
+  const { data: provincias = [] } = useQuery({
+    queryKey: ['geo-provincias', paisCodigo],
+    queryFn: () => listarProvincias(paisCodigo || undefined),
+    enabled: !!paisCodigo,
+  });
+  const { data: municipios = [] } = useQuery({
+    queryKey: ['geo-municipios', provinciaId],
+    queryFn: () => listarMunicipios(provinciaId as number),
+    enabled: provinciaId !== '',
+  });
+  // Al editar, la farmacia trae la provincia por NOMBRE: se resuelve a su id para poder
+  // cargar sus municipios en el desplegable.
+  useEffect(() => {
+    if (openForm && form.provincia && provinciaId === '' && provincias.length) {
+      const p = provincias.find((x) => x.nombre === form.provincia);
+      if (p) setProvinciaId(p.id);
+    }
+  }, [openForm, form.provincia, provincias, provinciaId]);
+
+  const abrirCrear = () => { setEditId(null); setForm(formVacio); setProvinciaId(''); setOpenForm(true); };
   const abrirEditar = (f: FarmaciaMaestro) => {
     setEditId(f.id);
+    setProvinciaId('');   // el useEffect lo resuelve desde el nombre de la provincia
     setForm({
       es_cadena: f.es_cadena, cadena: f.cadena ?? '', sucursal: f.sucursal ?? '', nombre: f.nombre ?? '',
       direccion: f.direccion, provincia: f.provincia ?? '', municipio: f.municipio ?? '', sector: f.sector ?? '',
@@ -188,8 +213,28 @@ export default function MaestroFarmacias() {
             <Grid item xs={12} sm={6}><TextField fullWidth size="small" label="Teléfono" value={form.telefono ?? ''} onChange={(e) => setF('telefono', e.target.value)} /></Grid>
             <Grid item xs={12} sm={6}><TextField fullWidth size="small" label="Email" value={form.email ?? ''} onChange={(e) => setF('email', e.target.value)} /></Grid>
             <Grid item xs={12} sm={6}><TextField fullWidth size="small" label="Sector" value={form.sector ?? ''} onChange={(e) => setF('sector', e.target.value)} /></Grid>
-            <Grid item xs={12} sm={6}><TextField fullWidth size="small" label="Provincia" value={form.provincia ?? ''} onChange={(e) => setF('provincia', e.target.value)} /></Grid>
-            <Grid item xs={12} sm={6}><TextField fullWidth size="small" label="Municipio" value={form.municipio ?? ''} onChange={(e) => setF('municipio', e.target.value)} /></Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField select fullWidth size="small" label="Provincia" value={provinciaId}
+                onChange={(e) => {
+                  const id = e.target.value === '' ? '' : Number(e.target.value);
+                  setProvinciaId(id);
+                  const p = provincias.find((x) => x.id === id);
+                  // Guarda el NOMBRE (contrato del modelo) y limpia el municipio al cambiar de provincia.
+                  setForm((f) => ({ ...f, provincia: p ? p.nombre : '', municipio: '' }));
+                }}>
+                <MenuItem value=""><em>— Selecciona —</em></MenuItem>
+                {provincias.map((p) => <MenuItem key={p.id} value={p.id}>{p.nombre}</MenuItem>)}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField select fullWidth size="small" label="Municipio" value={form.municipio ?? ''}
+                disabled={provinciaId === ''}
+                helperText={provinciaId === '' ? 'Elige primero la provincia' : ' '}
+                onChange={(e) => setF('municipio', e.target.value)}>
+                <MenuItem value=""><em>— Selecciona —</em></MenuItem>
+                {municipios.map((m) => <MenuItem key={m.id} value={m.nombre}>{m.nombre}</MenuItem>)}
+              </TextField>
+            </Grid>
             {faltantes.length > 0 && (
               <Grid item xs={12}><Typography variant="caption" color="error">Falta: {faltantes.join(', ')}.</Typography></Grid>
             )}
