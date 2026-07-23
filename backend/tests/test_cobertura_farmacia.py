@@ -23,10 +23,13 @@ def _fake_db():
 
 
 class _Q:
-    """Doble simple de Session.query(...).filter(...).all()/.distinct().count()."""
+    """Doble simple de Session.query(...).join(...).filter(...).all()/.distinct().count()."""
 
     def __init__(self, rows=None):
         self._rows = rows if rows is not None else []
+
+    def join(self, *a, **k):
+        return self
 
     def filter(self, *a, **k):
         return self
@@ -79,6 +82,21 @@ def test_panel_vacio_cobertura_cero_sin_dividir_por_cero():
     assert resultado == {"visitadas": 0, "universo": 0, "cobertura_pct": 0.0}
     # No debe ni intentar el segundo query (universo vacío = corto-circuito).
     assert db.query.call_count == 1
+
+
+def test_universo_filtra_por_maestro_activa():
+    """Hallazgo menor 6: `_universo_ids` debe unir con `Farmacia` y filtrar
+    `estado == "ACTIVA"` — una farmacia con panel APROBADO pero maestro INACTIVA
+    (p.ej. dada de baja) no debe entrar al universo de cobertura."""
+    db = MagicMock()
+    db.query.return_value.join.return_value.filter.return_value.all.return_value = []
+
+    svc._universo_ids(db, vm_id=7)
+
+    db.query.return_value.join.assert_called_once()
+    condiciones = db.query.return_value.join.return_value.filter.call_args[0]
+    valores = [getattr(getattr(c, "right", None), "value", None) for c in condiciones]
+    assert "ACTIVA" in valores
 
 
 def test_visita_no_ejecutada_no_cuenta_como_visitada():
@@ -181,7 +199,9 @@ def test_router_gd_rm_ajeno_403():
 
 def test_router_admin_sin_filtrar_agrega_todos_los_distritos(monkeypatch):
     db = MagicMock()
-    db.query.return_value.all.return_value = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
+    # Hallazgo menor 7: ahora filtra Gerente.tipo == "DISTRITO" antes de .all().
+    db.query.return_value.filter.return_value.all.return_value = [
+        SimpleNamespace(id=1, tipo="DISTRITO"), SimpleNamespace(id=2, tipo="DISTRITO")]
     monkeypatch.setattr(svc, "cobertura_equipo",
                         lambda db_, gerente_id, ciclo_id: [{"vm_id": gerente_id, "cobertura_pct": 0.0}])
     client = _client(U(Rol.ADMIN), db=db)

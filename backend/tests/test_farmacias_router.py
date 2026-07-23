@@ -88,6 +88,47 @@ def test_gerente_productividad_administra_maestro_pasa_guard():
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# GET /maestro/buscar — coherencia con detectar_duplicados para no-cadena
+# (hallazgo importante 2c): antes se armaba `cadena=nombre` y la farmacia no-cadena
+# nunca se encontraba por su propio nombre.
+# ─────────────────────────────────────────────────────────────────────────
+
+def test_buscar_maestro_no_cadena_encuentra_por_nombre(monkeypatch):
+    llamado = {}
+
+    def _fake_detectar(db_, pais, *, es_cadena, cadena=None, sucursal=None, nombre=None, excluir_id=None):
+        llamado.update(es_cadena=es_cadena, cadena=cadena, sucursal=sucursal, nombre=nombre)
+        return {"duros": [{"id": 4, "nombre": "Farmacia Sol"}]}
+    monkeypatch.setattr(mod.maestro_svc, "detectar_duplicados", _fake_detectar)
+
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=MagicMock())
+    r = client.get("/api/v1/farmacias/maestro/buscar",
+                   params={"pais_codigo": "DO", "nombre": "Farmacia Sol"})
+
+    assert r.status_code == 200
+    assert r.json() == {"duros": [{"id": 4, "nombre": "Farmacia Sol"}], "existe": True}
+    # es_cadena se infiere en False porque no llegó `cadena` — antes se mezclaba
+    # `cadena or nombre` en el campo cadena y esto nunca hacía match.
+    assert llamado == {"es_cadena": False, "cadena": None, "sucursal": None, "nombre": "Farmacia Sol"}
+
+
+def test_buscar_maestro_cadena_infiere_es_cadena_true(monkeypatch):
+    llamado = {}
+
+    def _fake_detectar(db_, pais, *, es_cadena, cadena=None, sucursal=None, nombre=None, excluir_id=None):
+        llamado.update(es_cadena=es_cadena)
+        return {"duros": []}
+    monkeypatch.setattr(mod.maestro_svc, "detectar_duplicados", _fake_detectar)
+
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=MagicMock())
+    r = client.get("/api/v1/farmacias/maestro/buscar",
+                   params={"pais_codigo": "DO", "cadena": "GBC", "sucursal": "Pantoja"})
+
+    assert r.status_code == 200
+    assert llamado == {"es_cadena": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # POST /panel/crear — bloqueantes F23/F24 -> 422 (mensaje exacto del servicio)
 # ─────────────────────────────────────────────────────────────────────────
 
@@ -126,6 +167,18 @@ def test_panel_crear_duplicado_duro_409(monkeypatch):
     r = client.post("/api/v1/farmacias/panel/crear",
                     json={"direccion": "Calle 1", "encargado": "Ana", "cadena": "GBC", "sucursal": "Pantoja"})
     assert r.status_code == 409
+
+
+def test_panel_agregar_maestro_inexistente_404(monkeypatch):
+    """Hallazgo importante 3: `solicitar_agregar_al_panel` ahora valida el maestro;
+    el router traduce "no existe" a 404 vía `_raise_negocio` (antes era 409 fijo)."""
+    def _raise(*a, **k):
+        raise ValueError("La farmacia ID=999 no existe en el maestro.")
+    monkeypatch.setattr(mod.aprobacion_svc, "solicitar_agregar_al_panel", _raise)
+
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=MagicMock())
+    r = client.post("/api/v1/farmacias/panel/agregar", json={"maestro_farmacia_id": 999})
+    assert r.status_code == 404
 
 
 def test_panel_agregar_ya_en_panel_409(monkeypatch):

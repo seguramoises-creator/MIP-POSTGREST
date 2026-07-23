@@ -15,19 +15,28 @@ Dashboard operativo interno, **AD-HOC y SIN F1/F2** (Global Constraint del plan)
 """
 from sqlalchemy.orm import Session
 
-from app.models.dimensiones import RepresentanteMedico
+from app.models.dimensiones import Farmacia, RepresentanteMedico
 from app.models.visita import FarmaciaVisita, FactVisitaFarmacia
 
 
 def _universo_ids(db: Session, vm_id: int) -> list[int]:
-    """IDs de panel (`Visita.DIM_FarmaciaVisita.id`) que cuentan para cobertura: APROBADO
-    y activas. PENDIENTE_APROBACION/PENDIENTE_ALTA quedan fuera (F22)."""
+    """IDs de panel (`Visita.DIM_FarmaciaVisita.id`) que cuentan para cobertura: panel
+    APROBADO+activo Y maestro `ACTIVA`. PENDIENTE_APROBACION/PENDIENTE_ALTA quedan
+    fuera (F22).
+
+    Hallazgo menor 6: antes solo se filtraba por `estado_aprobacion` del panel; una
+    farmacia cuyo MAESTRO pasó a INACTIVA (p.ej. cerró, fue dada de baja por el
+    ADMIN/GERENTE_PRODUCTIVIDAD) seguía contando en universo y visitas aunque ya no
+    exista como tal — se agrega el join con `Farmacia` y el filtro `estado == "ACTIVA"`.
+    """
     filas = (
         db.query(FarmaciaVisita.id)
+        .join(Farmacia, Farmacia.id == FarmaciaVisita.maestro_farmacia_id)
         .filter(
             FarmaciaVisita.vm_id == vm_id,
             FarmaciaVisita.estado_aprobacion == "APROBADO",
             FarmaciaVisita.activo == True,  # noqa: E712
+            Farmacia.estado == "ACTIVA",
         )
         .all()
     )

@@ -43,7 +43,21 @@ def _panel_existente(db: Session, vm_id: int, maestro_farmacia_id: int):
 
 def solicitar_agregar_al_panel(db: Session, vm_id: int, maestro_farmacia_id: int,
                                usuario_id=None) -> FarmaciaVisita:
-    """Acción A: agrega al panel del VM una farmacia YA ACTIVA del maestro."""
+    """Acción A: agrega al panel del VM una farmacia YA ACTIVA del maestro.
+
+    Hallazgo importante 3: antes NO se consultaba `Farmacia` — se podía "agregar al
+    panel" un `maestro_farmacia_id` inexistente, o uno RECHAZADA/PENDIENTE_APROBACION
+    (violando F22), o de OTRO país. Ahora se valida el maestro antes de crear el panel.
+    """
+    maestro = db.query(Farmacia).filter(Farmacia.id == maestro_farmacia_id).first()
+    if maestro is None:
+        raise ValueError(f"La farmacia ID={maestro_farmacia_id} no existe en el maestro.")
+    if maestro.estado != "ACTIVA":
+        raise ValueError("La farmacia no está activa en el maestro.")
+    pais_vm = _pais_de_vm(db, vm_id)
+    if pais_vm and maestro.pais_codigo != pais_vm:
+        raise ValueError("La farmacia no pertenece al país de tu operación.")
+
     if _panel_existente(db, vm_id, maestro_farmacia_id) is not None:
         raise ValueError("Esta farmacia ya está en tu panel.")
 
@@ -63,8 +77,14 @@ def solicitar_crear(db: Session, vm_id: int, datos: dict, usuario_id=None) -> Fa
     Propaga `DuplicadoDuroError`/`ValueError` de `maestro_farmacia_service.crear_maestro`
     (bloqueantes F23/F24, anti-dup F25/F09) sin envolverlos: el llamador (router) decide
     cómo traducirlos a HTTP.
+
+    Hallazgo menor 4: si `vm_id` no resuelve a un RM, `_pais_de_vm` devolvía `None` y
+    `crear_maestro` reventaba en 500 al intentar grabar `Farmacia(pais_codigo=None, ...)`
+    (columna NOT NULL). Ahora se valida el VM antes de tocar el maestro.
     """
     pais_codigo = _pais_de_vm(db, vm_id)
+    if not pais_codigo:
+        raise ValueError(f"El VM ID={vm_id} no existe o no tiene país asignado.")
     maestro = maestro_svc.crear_maestro(
         db, pais_codigo, datos, origen="VM", estado="PENDIENTE_APROBACION", usuario_id=usuario_id)
 

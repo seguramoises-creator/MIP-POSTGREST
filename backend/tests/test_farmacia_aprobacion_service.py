@@ -58,6 +58,8 @@ class _Q:
 # ── Acción A: agregar farmacia existente (ACTIVA) al panel ─────────────────────
 def test_agregar_al_panel_crea_pendiente_alta(monkeypatch):
     db = _fake_db()
+    db.query.return_value.filter.return_value.first.return_value = _maestro(estado="ACTIVA")
+    monkeypatch.setattr(svc, "_pais_de_vm", lambda db_, vm: "DO")
     monkeypatch.setattr(svc, "_panel_existente", lambda *a, **k: None)
     panel = svc.solicitar_agregar_al_panel(db, vm_id=7, maestro_farmacia_id=50, usuario_id=3)
     assert panel.estado_aprobacion == "PENDIENTE_ALTA"
@@ -69,8 +71,38 @@ def test_agregar_al_panel_crea_pendiente_alta(monkeypatch):
 
 def test_agregar_al_panel_rechaza_si_ya_esta_en_el_panel(monkeypatch):
     db = _fake_db()
+    db.query.return_value.filter.return_value.first.return_value = _maestro(estado="ACTIVA")
+    monkeypatch.setattr(svc, "_pais_de_vm", lambda db_, vm: "DO")
     monkeypatch.setattr(svc, "_panel_existente", lambda *a, **k: _panel())
     with pytest.raises(ValueError, match="ya está en tu panel"):
+        svc.solicitar_agregar_al_panel(db, vm_id=7, maestro_farmacia_id=50, usuario_id=3)
+    db.add.assert_not_called()
+
+
+# ── Acción A: validación del maestro (hallazgo importante 3) ───────────────────
+def test_agregar_al_panel_falla_si_maestro_no_existe():
+    db = _fake_db()
+    db.query.return_value.filter.return_value.first.return_value = None
+    with pytest.raises(ValueError, match="no existe"):
+        svc.solicitar_agregar_al_panel(db, vm_id=7, maestro_farmacia_id=999, usuario_id=3)
+    db.add.assert_not_called()
+
+
+@pytest.mark.parametrize("estado", ["PENDIENTE_APROBACION", "RECHAZADA", "INACTIVA"])
+def test_agregar_al_panel_falla_si_maestro_no_esta_activa(estado):
+    db = _fake_db()
+    db.query.return_value.filter.return_value.first.return_value = _maestro(estado=estado)
+    with pytest.raises(ValueError, match="no está activa"):
+        svc.solicitar_agregar_al_panel(db, vm_id=7, maestro_farmacia_id=50, usuario_id=3)
+    db.add.assert_not_called()
+
+
+def test_agregar_al_panel_falla_si_es_de_otro_pais(monkeypatch):
+    db = _fake_db()
+    db.query.return_value.filter.return_value.first.return_value = _maestro(
+        estado="ACTIVA", pais_codigo="GT")
+    monkeypatch.setattr(svc, "_pais_de_vm", lambda db_, vm: "DO")
+    with pytest.raises(ValueError, match="país"):
         svc.solicitar_agregar_al_panel(db, vm_id=7, maestro_farmacia_id=50, usuario_id=3)
     db.add.assert_not_called()
 
@@ -116,6 +148,22 @@ def test_solicitar_crear_propaga_duplicado_duro(monkeypatch):
 
     with pytest.raises(mm.DuplicadoDuroError):
         svc.solicitar_crear(db, vm_id=7, datos={"direccion": "x", "encargado": "y"}, usuario_id=3)
+    db.add.assert_not_called()
+
+
+def test_solicitar_crear_falla_si_vm_no_existe(monkeypatch):
+    """Hallazgo menor 4: `vm_id` que no resuelve a un RM debía reventar en 500 al
+    intentar `Farmacia(pais_codigo=None, ...)` (columna NOT NULL) — ahora es un
+    ValueError claro, sin tocar el maestro."""
+    db = _fake_db()
+    monkeypatch.setattr(svc, "_pais_de_vm", lambda db_, vm: None)
+
+    def _no_deberia_llamarse(*a, **k):
+        raise AssertionError("crear_maestro no debe llamarse si el VM no existe")
+    monkeypatch.setattr(svc.maestro_svc, "crear_maestro", _no_deberia_llamarse)
+
+    with pytest.raises(ValueError, match="no existe"):
+        svc.solicitar_crear(db, vm_id=99999, datos={"direccion": "x", "encargado": "y"}, usuario_id=3)
     db.add.assert_not_called()
 
 

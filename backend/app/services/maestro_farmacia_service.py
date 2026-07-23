@@ -64,17 +64,36 @@ def _base(db: Session, pais_codigo: str, excluir_id=None):
     return q
 
 
-def detectar_duplicados(db: Session, pais_codigo: str, *, cadena=None, sucursal=None,
-                        excluir_id=None) -> dict:
-    """DURA (bloquea) = misma `(pais_codigo, cadena, sucursal)` normalizada, sobre
-    farmacias activas y no rechazadas. Comparación normalizada en Python (acentos,
-    mayúsculas y espacios no distinguen), igual que el patrón de Médicos."""
-    norm_cadena = normalizar(cadena)
-    norm_sucursal = normalizar(sucursal)
+def detectar_duplicados(db: Session, pais_codigo: str, *, es_cadena: bool = True, cadena=None,
+                        sucursal=None, nombre=None, excluir_id=None) -> dict:
+    """DURA (bloquea), ramificada por `es_cadena` (hallazgo importante 2):
+
+    - `es_cadena=True`  -> clave `(cadena, sucursal)` normalizados.
+    - `es_cadena=False` -> clave `(nombre)` normalizado. Antes, con `es_cadena=False`,
+      `cadena`/`sucursal` venían `None` y TODAS las farmacias no-cadena colapsaban a la
+      misma clave `("", "")` — dos farmacias no-cadena con nombres distintos se
+      bloqueaban entre sí como si fueran duplicadas, y ninguna con nombre distinto se
+      detectaba correctamente.
+
+    Compara SOLO contra farmacias del MISMO tipo (`Farmacia.es_cadena == es_cadena`)
+    del país — una cadena y una no-cadena nunca compiten por la misma clave.
+    """
     duros = []
-    for f in _base(db, pais_codigo, excluir_id).all():
-        if normalizar(f.cadena) == norm_cadena and normalizar(f.sucursal) == norm_sucursal:
-            duros.append(_dto(f))
+    base = _base(db, pais_codigo, excluir_id).filter(Farmacia.es_cadena == es_cadena)  # noqa: E712
+
+    if es_cadena:
+        norm_cadena = normalizar(cadena)
+        norm_sucursal = normalizar(sucursal)
+        for f in base.all():
+            if normalizar(f.cadena) == norm_cadena and normalizar(f.sucursal) == norm_sucursal:
+                duros.append(_dto(f))
+    else:
+        norm_nombre = normalizar(nombre)
+        if not norm_nombre:
+            return {"duros": duros}
+        for f in base.all():
+            if normalizar(f.nombre) == norm_nombre:
+                duros.append(_dto(f))
     return {"duros": duros}
 
 
@@ -114,8 +133,9 @@ def crear_maestro(db: Session, pais_codigo: str, datos: dict, *, origen="VM",
                   estado="PENDIENTE_APROBACION", usuario_id=None) -> Farmacia:
     validar_bloqueantes(datos)
 
-    dups = detectar_duplicados(db, pais_codigo, cadena=datos.get("cadena"),
-                               sucursal=datos.get("sucursal"))
+    dups = detectar_duplicados(db, pais_codigo, es_cadena=bool(datos.get("es_cadena")),
+                               cadena=datos.get("cadena"), sucursal=datos.get("sucursal"),
+                               nombre=datos.get("nombre"))
     if dups["duros"]:
         raise DuplicadoDuroError(dups["duros"])
 

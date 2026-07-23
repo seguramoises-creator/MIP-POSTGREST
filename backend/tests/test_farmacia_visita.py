@@ -247,14 +247,26 @@ def test_registrar_visita_rol_sin_permiso_403():
     assert r.status_code == 403
 
 
-# ── Foto vía router ──────────────────────────────────────────────────────
+# ── Foto vía router — scope de dueño (IDOR, hallazgo crítico 1) ──────────────
+# `_cargar_visita_farmacia_scoped` (farmacias.py) resuelve la visita por `visita_id`
+# y verifica que quien pide subir/leer la foto es su dueño (VM), su GD, o ADMIN.
+# Antes `subir_foto_visita_farmacia`/`obtener_foto_visita_farmacia` NO verificaban
+# nada: cualquier VM autenticado podía leer/sobrescribir la foto de OTRO VM con solo
+# adivinar el `visita_id`.
+
+def _visita_farmacia(**over):
+    base = dict(id=1, vm_id=7)
+    base.update(over)
+    return SimpleNamespace(**base)
+
 
 def test_subir_foto_visita_farmacia_tipo_invalido_400(monkeypatch):
     def _raise(*a, **k):
         raise ValueError("El archivo no es una imagen JPEG/PNG válida")
     monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", _raise)
 
-    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=MagicMock())
+    db = _db_con_panel(_visita_farmacia(vm_id=7))
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
     r = client.post("/api/v1/farmacias/1/foto",
                     files={"archivo": ("x.pdf", b"%PDF-1.4", "application/pdf")})
     assert r.status_code == 400
@@ -265,7 +277,8 @@ def test_subir_foto_visita_farmacia_excede_tamano_400(monkeypatch):
         raise ValueError("La foto excede el tamaño máximo (3 MB)")
     monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", _raise)
 
-    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=MagicMock())
+    db = _db_con_panel(_visita_farmacia(vm_id=7))
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
     r = client.post("/api/v1/farmacias/1/foto",
                     files={"archivo": ("x.jpg", _JPEG, "image/jpeg")})
     assert r.status_code == 400
@@ -273,7 +286,8 @@ def test_subir_foto_visita_farmacia_excede_tamano_400(monkeypatch):
 
 def test_subir_foto_visita_farmacia_ok(monkeypatch):
     monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", lambda *a, **k: None)
-    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=MagicMock())
+    db = _db_con_panel(_visita_farmacia(vm_id=7))
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
     r = client.post("/api/v1/farmacias/1/foto",
                     files={"archivo": ("x.jpg", _JPEG, "image/jpeg")})
     assert r.status_code == 201
@@ -281,15 +295,103 @@ def test_subir_foto_visita_farmacia_ok(monkeypatch):
 
 def test_obtener_foto_visita_farmacia_404_sin_foto(monkeypatch):
     monkeypatch.setattr(mod.visita_svc, "obtener_foto_visita", lambda *a, **k: None)
-    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=MagicMock())
+    db = _db_con_panel(_visita_farmacia(vm_id=7))
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
     r = client.get("/api/v1/farmacias/1/foto")
     assert r.status_code == 404
 
 
 def test_obtener_foto_visita_farmacia_ok(monkeypatch):
     monkeypatch.setattr(mod.visita_svc, "obtener_foto_visita", lambda *a, **k: (b"abc", "image/jpeg"))
-    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=MagicMock())
+    db = _db_con_panel(_visita_farmacia(vm_id=7))
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
     r = client.get("/api/v1/farmacias/1/foto")
     assert r.status_code == 200
     assert r.content == b"abc"
     assert r.headers["content-type"] == "image/jpeg"
+
+
+def test_visita_farmacia_inexistente_404(monkeypatch):
+    db = _db_con_panel(None)
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
+    r = client.get("/api/v1/farmacias/999/foto")
+    assert r.status_code == 404
+
+
+def test_subir_foto_visita_farmacia_de_otro_vm_403(monkeypatch):
+    """VM_A (rm_id=7) intenta subir la foto de una visita de VM_B (vm_id=999)."""
+    guardar = MagicMock()
+    monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", guardar)
+    db = _db_con_panel(_visita_farmacia(vm_id=999))
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
+    r = client.post("/api/v1/farmacias/1/foto",
+                    files={"archivo": ("x.jpg", _JPEG, "image/jpeg")})
+    assert r.status_code == 403
+    guardar.assert_not_called()
+
+
+def test_obtener_foto_visita_farmacia_de_otro_vm_403(monkeypatch):
+    """VM_A (rm_id=7) intenta leer la foto de una visita de VM_B (vm_id=999)."""
+    obtener = MagicMock(return_value=(b"abc", "image/jpeg"))
+    monkeypatch.setattr(mod.visita_svc, "obtener_foto_visita", obtener)
+    db = _db_con_panel(_visita_farmacia(vm_id=999))
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
+    r = client.get("/api/v1/farmacias/1/foto")
+    assert r.status_code == 403
+    obtener.assert_not_called()
+
+
+def test_subir_foto_visita_farmacia_admin_ok_aunque_sea_de_otro_vm(monkeypatch):
+    monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", lambda *a, **k: None)
+    db = _db_con_panel(_visita_farmacia(vm_id=999))
+    client = _client(U(Rol.ADMIN), db=db)
+    r = client.post("/api/v1/farmacias/1/foto",
+                    files={"archivo": ("x.jpg", _JPEG, "image/jpeg")})
+    assert r.status_code == 201
+
+
+def test_obtener_foto_visita_farmacia_admin_ok_aunque_sea_de_otro_vm(monkeypatch):
+    monkeypatch.setattr(mod.visita_svc, "obtener_foto_visita", lambda *a, **k: (b"abc", "image/jpeg"))
+    db = _db_con_panel(_visita_farmacia(vm_id=999))
+    client = _client(U(Rol.ADMIN), db=db)
+    r = client.get("/api/v1/farmacias/1/foto")
+    assert r.status_code == 200
+    assert r.content == b"abc"
+
+
+def _db_con_visita_y_rm(visita, rm_gerente_id):
+    """FakeDB dispatchado por modelo: FactVisitaFarmacia -> la visita; RepresentanteMedico
+    -> un RM del gerente indicado (para el chequeo de equipo del GD)."""
+    db = MagicMock()
+    rm = SimpleNamespace(id=visita.vm_id, gerente_id=rm_gerente_id)
+
+    def _query(modelo):
+        q = MagicMock()
+        nombre = getattr(modelo, "__name__", None)
+        if nombre == "FactVisitaFarmacia":
+            q.filter.return_value.first.return_value = visita
+        elif nombre == "RepresentanteMedico":
+            q.filter.return_value.first.return_value = rm
+        return q
+    db.query.side_effect = _query
+    return db
+
+
+def test_gd_lee_foto_de_su_equipo_ok(monkeypatch):
+    monkeypatch.setattr(mod.visita_svc, "obtener_foto_visita", lambda *a, **k: (b"abc", "image/jpeg"))
+    visita = _visita_farmacia(vm_id=7)
+    db = _db_con_visita_y_rm(visita, rm_gerente_id=3)
+    client = _client(U(Rol.GERENTE_DISTRITO, gerente_id=3), db=db)
+    r = client.get("/api/v1/farmacias/1/foto")
+    assert r.status_code == 200
+
+
+def test_gd_no_lee_foto_de_otro_equipo_403(monkeypatch):
+    obtener = MagicMock(return_value=(b"abc", "image/jpeg"))
+    monkeypatch.setattr(mod.visita_svc, "obtener_foto_visita", obtener)
+    visita = _visita_farmacia(vm_id=7)
+    db = _db_con_visita_y_rm(visita, rm_gerente_id=999)  # el VM es de OTRO gerente
+    client = _client(U(Rol.GERENTE_DISTRITO, gerente_id=3), db=db)
+    r = client.get("/api/v1/farmacias/1/foto")
+    assert r.status_code == 403
+    obtener.assert_not_called()

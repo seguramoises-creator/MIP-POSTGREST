@@ -96,6 +96,39 @@ def _verificar_alcance_gd(current_user: Usuario, panel: FarmaciaVisita, db: Sess
             raise HTTPException(403, "Esta solicitud no pertenece a tu equipo.")
 
 
+def _verificar_alcance_vm(db: Session, current_user: Usuario, vm_id: int) -> None:
+    """GERENTE_DISTRITO solo puede ver/actuar sobre VMs de su propio equipo (403 si no).
+    ADMIN y el resto de gerencias con acceso al recurso (ya filtradas por RBAC) pasan
+    sin restricción adicional. Usado por `panel_listar`, `cobertura_farmacias` y el
+    scope de fotos de visita (IDOR, hallazgo crítico 1)."""
+    if current_user.rol == Rol.GERENTE_DISTRITO:
+        if not current_user.gerente_id:
+            raise HTTPException(403, "Tu usuario no tiene un gerente_id asignado.")
+        rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
+        if not rm or rm.gerente_id != current_user.gerente_id:
+            raise HTTPException(403, "Este VM no pertenece a tu equipo.")
+
+
+def _cargar_visita_farmacia_scoped(db: Session, current_user: Usuario, visita_id: int) -> FactVisitaFarmacia:
+    """Carga una visita a farmacia (`FactVisitaFarmacia`) verificando que quien la pide
+    tiene alcance sobre ella: el REPRESENTANTE_MEDICO solo la suya (403 si no), el
+    GERENTE_DISTRITO solo las de su equipo, el resto de roles con acceso (ADMIN y
+    gerencias con `farmacia.panel`, ya filtradas por RBAC) sin restricción adicional.
+    404 si la visita no existe. Cierra el IDOR de `subir_foto_visita_farmacia`/
+    `obtener_foto_visita_farmacia` (hallazgo crítico 1): antes se resolvían solo por
+    `id`, sin verificar dueño — cualquier VM podía leer/sobrescribir la foto de otro."""
+    v = db.query(FactVisitaFarmacia).filter(FactVisitaFarmacia.id == visita_id).first()
+    if v is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Visita a farmacia ID={visita_id} no encontrada.")
+    if current_user.rol == Rol.REPRESENTANTE_MEDICO:
+        rm_propio = getattr(current_user, "rm_id", None)
+        if not rm_propio or v.vm_id != rm_propio:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Esta visita no te pertenece.")
+    else:
+        _verificar_alcance_vm(db, current_user, v.vm_id)
+    return v
+
+
 def _cargar_panel_pendiente(db: Session, panel_id: int) -> FarmaciaVisita:
     panel = db.query(FarmaciaVisita).filter(FarmaciaVisita.id == panel_id).first()
     if panel is None:
@@ -135,15 +168,25 @@ def buscar_maestro(
     cadena: Optional[str] = Query(None),
     sucursal: Optional[str] = Query(None),
     nombre: Optional[str] = Query(None, description="Si la farmacia no es cadena, buscar por nombre"),
+    es_cadena: Optional[bool] = Query(
+        None, description="Si se omite, se infiere: True si viene `cadena`, False si no"),
     pais_codigo: Optional[str] = Query(None, description="Requerido salvo para VM (se resuelve de su propio país)"),
     db: Session = Depends(get_db),
     current_user: Usuario = ReadPanel,
 ):
     """Búsqueda usada por el formulario del VM antes de dar de alta (F25): si no hay
-    coincidencia dura, el frontend habilita el formulario de creación (Acción B)."""
+    coincidencia dura, el frontend habilita el formulario de creación (Acción B).
+
+    Hallazgo importante 2: antes se mezclaba `cadena or nombre` en el parámetro
+    `cadena` de `detectar_duplicados`, así que una farmacia NO-cadena nunca se
+    encontraba por nombre (buscaba `(nombre, "")` como si fuera cadena/sucursal).
+    Ahora se pasa `es_cadena` explícito (o inferido de qué campo llegó) y el
+    servicio decide la clave de búsqueda correcta para cada caso."""
     pais = _resolver_pais(db, current_user, pais_codigo)
+    if es_cadena is None:
+        es_cadena = bool(cadena)
     dups = maestro_svc.detectar_duplicados(
-        db, pais, cadena=cadena or nombre, sucursal=sucursal or "")
+        db, pais, es_cadena=es_cadena, cadena=cadena, sucursal=sucursal, nombre=nombre)
     return {"duros": dups["duros"], "existe": bool(dups["duros"])}
 
 
@@ -167,7 +210,10 @@ def panel_agregar(
             db, vm_id=vm, maestro_farmacia_id=body.maestro_farmacia_id,
             usuario_id=current_user.id)
     except ValueError as e:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+        # Hallazgo importante 3: `solicitar_agregar_al_panel` ahora valida el maestro
+        # (inexistente -> 404; no ACTIVA/cross-país -> 409) — usa el mismo traductor
+        # que el resto del flujo de aprobación en vez de un 409 fijo.
+        _raise_negocio(e)
     return _panel_a_response(panel)
 
 
@@ -212,10 +258,7 @@ def panel_listar(
     if not vm:
         raise HTTPException(400, "Indica el VM (vm_id).")
 
-    if current_user.rol == Rol.GERENTE_DISTRITO:
-        rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm).first()
-        if not rm or not current_user.gerente_id or rm.gerente_id != current_user.gerente_id:
-            raise HTTPException(403, "Este VM no pertenece a tu equipo.")
+    _verificar_alcance_vm(db, current_user, vm)
 
     q = db.query(FarmaciaVisita).filter(FarmaciaVisita.vm_id == vm)
     if not incluir_inactivos:
@@ -284,18 +327,17 @@ def cobertura_farmacias(
         if not current_user.gerente_id:
             raise HTTPException(403, "Tu usuario no tiene un gerente_id asignado.")
         if vm:
-            rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm).first()
-            if not rm or rm.gerente_id != current_user.gerente_id:
-                raise HTTPException(403, "Este VM no pertenece a tu equipo.")
+            _verificar_alcance_vm(db, current_user, vm)
             return cobertura_svc.cobertura_rm(db, vm, ciclo_id)
         return {"equipo": cobertura_svc.cobertura_equipo(db, current_user.gerente_id, ciclo_id)}
 
     if vm:
         return cobertura_svc.cobertura_rm(db, vm, ciclo_id)
 
-    # ADMIN/gerencias sin filtrar: agrega la cobertura de todos los distritos.
+    # ADMIN/gerencias sin filtrar: agrega la cobertura de todos los distritos
+    # (hallazgo menor 7: solo Gerente.tipo == "DISTRITO" — MARCA/REGIONAL no tienen equipo de VMs).
     equipo: list = []
-    for g in db.query(Gerente).all():
+    for g in db.query(Gerente).filter(Gerente.tipo == "DISTRITO").all():
         equipo.extend(cobertura_svc.cobertura_equipo(db, g.id, ciclo_id))
     return {"equipo": equipo}
 
@@ -348,6 +390,9 @@ async def subir_foto_visita_farmacia(
     visita_id: int, archivo: UploadFile = File(...),
     db: Session = Depends(get_db), current_user: Usuario = RegistrarPanel,
 ):
+    # Hallazgo crítico 1 (IDOR): verifica dueño/equipo ANTES de escribir la foto —
+    # antes se resolvía solo por `id`, sin comprobar que la visita fuera del VM.
+    _cargar_visita_farmacia_scoped(db, current_user, visita_id)
     contenido = await archivo.read()
     try:
         visita_svc.guardar_foto_visita(db, visita_id, contenido, archivo.content_type or "image/jpeg")
@@ -360,6 +405,8 @@ async def subir_foto_visita_farmacia(
 def obtener_foto_visita_farmacia(
     visita_id: int, db: Session = Depends(get_db), current_user: Usuario = ReadPanel,
 ):
+    # Hallazgo crítico 1 (IDOR): mismo guard de dueño/equipo antes de leer la foto.
+    _cargar_visita_farmacia_scoped(db, current_user, visita_id)
     data = visita_svc.obtener_foto_visita(db, visita_id)
     if data is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Sin foto")
@@ -385,9 +432,10 @@ def aprobacion_pendientes(
     if gerente_id is not None:
         return aprobacion_svc.pendientes_del_gd(db, gerente_id)
 
-    # ADMIN sin filtrar: agrega la bandeja de todos los distritos.
+    # ADMIN sin filtrar: agrega la bandeja de todos los distritos (hallazgo menor 7:
+    # solo Gerente.tipo == "DISTRITO" — MARCA/REGIONAL no tienen equipo de VMs).
     salida: list = []
-    for g in db.query(Gerente).all():
+    for g in db.query(Gerente).filter(Gerente.tipo == "DISTRITO").all():
         salida.extend(aprobacion_svc.pendientes_del_gd(db, g.id))
     return salida
 

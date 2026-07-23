@@ -51,15 +51,65 @@ def _cand(**kw):
 def test_detectar_duro_por_cadena_sucursal_normalizados():
     db = MagicMock()
     db.query.side_effect = [_Q([_cand(id=3, cadena="gbc", sucursal="  Pantoja ")])]
-    res = svc.detectar_duplicados(db, "DO", cadena="GBC", sucursal="pantoja")
+    res = svc.detectar_duplicados(db, "DO", es_cadena=True, cadena="GBC", sucursal="pantoja")
     assert [d["id"] for d in res["duros"]] == [3]
 
 
 def test_detectar_duplicados_sin_coincidencia():
     db = MagicMock()
     db.query.side_effect = [_Q([_cand(id=3, cadena="OTRA", sucursal="OTRA SUCURSAL")])]
-    res = svc.detectar_duplicados(db, "DO", cadena="GBC", sucursal="Pantoja")
+    res = svc.detectar_duplicados(db, "DO", es_cadena=True, cadena="GBC", sucursal="Pantoja")
     assert res["duros"] == []
+
+
+# ── detectar_duplicados: farmacias NO-cadena (hallazgo importante 2) ────────────
+# Antes, con es_cadena=False, cadena/sucursal venían None y TODAS las no-cadena
+# colapsaban a la misma clave ("", "") — dos farmacias con nombres distintos se
+# bloqueaban como si fueran duplicadas entre sí, y el match real (mismo nombre) no
+# se detectaba porque la comparación nunca miraba `nombre`.
+
+def test_detectar_duro_no_cadena_por_nombre_normalizado():
+    db = MagicMock()
+    db.query.side_effect = [_Q([_cand(id=4, cadena=None, sucursal=None, nombre="  Farmacia SOL ")])]
+    res = svc.detectar_duplicados(db, "DO", es_cadena=False, nombre="farmacia sol")
+    assert [d["id"] for d in res["duros"]] == [4]
+
+
+def test_detectar_no_cadena_nombres_distintos_no_colisionan():
+    """(a) Dos farmacias no-cadena con nombres DISTINTOS en el mismo país: ninguna
+    coincidencia dura — antes ambas colapsaban a la clave ("", "") y se bloqueaban
+    entre sí sin importar el nombre real."""
+    db = MagicMock()
+    db.query.side_effect = [_Q([_cand(id=4, cadena=None, sucursal=None, nombre="Farmacia Luna")])]
+    res = svc.detectar_duplicados(db, "DO", es_cadena=False, nombre="Farmacia Sol")
+    assert res["duros"] == []
+
+
+def test_detectar_no_cadena_mismo_nombre_bloquea():
+    """(b) Dos farmacias no-cadena con el MISMO nombre: la segunda queda bloqueada."""
+    db = MagicMock()
+    db.query.side_effect = [_Q([_cand(id=4, cadena=None, sucursal=None, nombre="Farmacia Sol")])]
+    res = svc.detectar_duplicados(db, "DO", es_cadena=False, nombre="Farmacia Sol")
+    assert [d["id"] for d in res["duros"]] == [4]
+
+
+def test_detectar_no_cadena_nombre_vacio_no_marca_duplicado():
+    """Sin nombre, corta antes de comparar filas (no llega a `.all()`)."""
+    db = MagicMock()
+    res = svc.detectar_duplicados(db, "DO", es_cadena=False, nombre="")
+    assert res["duros"] == []
+    db.query.return_value.filter.return_value.filter.return_value.all.assert_not_called()
+
+
+def test_detectar_duplicados_filtra_por_es_cadena_en_la_query():
+    """La comparación debe restringirse al MISMO tipo de farmacia: `detectar_duplicados`
+    compila el filtro `Farmacia.es_cadena == es_cadena` sobre la query base — se
+    inspecciona el argumento real pasado a `.filter()`, no una simulación de fila."""
+    db = MagicMock()
+    db.query.return_value.filter.return_value.filter.return_value.all.return_value = []
+    svc.detectar_duplicados(db, "DO", es_cadena=False, nombre="Farmacia Sol")
+    condicion = db.query.return_value.filter.return_value.filter.call_args[0][0]
+    assert "es_cadena" in str(condicion)
 
 
 # ── detectar_posibles_duplicados: BLANDA (informativa) por prefijo — bandeja del GD (§3.2) ──
