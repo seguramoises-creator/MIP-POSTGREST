@@ -1,6 +1,8 @@
 /**
- * MaestroFarmacias.tsx — Maestro de Farmacias (tab de Admin.tsx). Tabla + alta/edición
- * directa (ADMIN/GERENTE_PRODUCTIVIDAD, sin aprobación — crea origen=CONFIG, estado=ACTIVA).
+ * MaestroFarmacias.tsx — Maestro de Farmacias. Pantalla del menú lateral ("Maestros y
+ * planeación" → ruta /farmacias/maestro), NO una tab de Admin (jul-2026: se movió al menú
+ * junto a "Médicos"). Tabla + alta/edición directa (ADMIN/GERENTE_PRODUCTIVIDAD, sin
+ * aprobación — crea origen=CONFIG, estado=ACTIVA).
  * Espejo de MaestroMedicos.tsx, alcance reducido a lo que pide la Tarea 8 del plan
  * `2026-07-22-modulo-farmacias.md`.
  */
