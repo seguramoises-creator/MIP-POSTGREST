@@ -30,6 +30,7 @@ from app.models.visita import FarmaciaVisita, FactVisitaFarmacia
 from app.services import maestro_farmacia_service as maestro_svc
 from app.services import farmacia_aprobacion_service as aprobacion_svc
 from app.services import visita_farmacia_service as visita_svc
+from app.services import cobertura_farmacia_service as cobertura_svc
 from app.schemas.schemas_farmacia import (
     FarmaciaMaestroCrear, FarmaciaMaestroActualizar, FarmaciaMaestroResponse,
     PanelAgregarIn, PanelCrearIn, PanelResponse, RechazarIn, EditarAprobarIn,
@@ -244,6 +245,47 @@ def panel_listar(
         }
         for p in paneles
     ]
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Cobertura interna de Farmacias (Task 7) — AD-HOC, SIN F1/F2, COEXISTE con el SFA.
+# Reusa el recurso farmacia.panel (acción READ) — no se crea ningún recurso nuevo.
+# ─────────────────────────────────────────────────────────────────────────
+
+@router.get("/cobertura", response_model=dict,
+            summary="Cobertura interna de farmacias (AD-HOC, sin F1/F2; NO se cablea al Score)")
+def cobertura_farmacias(
+    ciclo_id: int = Query(..., description="Ciclo a evaluar"),
+    rm_id: Optional[int] = Query(None, description="VM auto-scope; GD/ADMIN pueden filtrar un VM puntual"),
+    db: Session = Depends(get_db),
+    current_user: Usuario = ReadPanel,
+):
+    """
+    cobertura = (farmacias del panel APROBADO+activas del VM con >=1 visita
+    ejecutada en el ciclo) / (farmacias del panel APROBADO+activas del VM).
+    F22: PENDIENTE_APROBACION/PENDIENTE_ALTA no cuentan. Coexiste con el SFA:
+    esto NO alimenta `COB_FARMACIAS` del Score/Ranking (sigue viniendo del SFA).
+    """
+    vm = _scope_vm(current_user, rm_id)
+
+    if current_user.rol == Rol.GERENTE_DISTRITO:
+        if not current_user.gerente_id:
+            raise HTTPException(403, "Tu usuario no tiene un gerente_id asignado.")
+        if vm:
+            rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm).first()
+            if not rm or rm.gerente_id != current_user.gerente_id:
+                raise HTTPException(403, "Este VM no pertenece a tu equipo.")
+            return cobertura_svc.cobertura_rm(db, vm, ciclo_id)
+        return {"equipo": cobertura_svc.cobertura_equipo(db, current_user.gerente_id, ciclo_id)}
+
+    if vm:
+        return cobertura_svc.cobertura_rm(db, vm, ciclo_id)
+
+    # ADMIN/gerencias sin filtrar: agrega la cobertura de todos los distritos.
+    equipo: list = []
+    for g in db.query(Gerente).all():
+        equipo.extend(cobertura_svc.cobertura_equipo(db, g.id, ciclo_id))
+    return {"equipo": equipo}
 
 
 # ─────────────────────────────────────────────────────────────────────────
