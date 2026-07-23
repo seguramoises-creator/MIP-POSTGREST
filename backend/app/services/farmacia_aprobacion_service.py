@@ -102,6 +102,15 @@ def pendientes_del_gd(db: Session, gerente_id: int) -> list[dict]:
         f = maestros.get(p.maestro_farmacia_id)
         rm = rms.get(p.vm_id)
         es_alta_nueva = bool(f) and f.origen == "VM" and f.estado == "PENDIENTE_APROBACION"
+        # §3.2: alerta de posible duplicado VISIBLE en la bandeja (no bloquea). Solo tiene
+        # sentido para altas nuevas (Acción B) contra OTRA farmacia ya ACTIVA del maestro; en
+        # la Acción A (agregar una que ya está ACTIVA) no aplica — el propio maestro es esa
+        # farmacia, no hay "otra" con la que compararla.
+        posible_duplicado = (
+            maestro_svc.detectar_posibles_duplicados(
+                db, f.pais_codigo, nombre_completo=f.nombre_completo, excluir_id=f.id)
+            if f and rm and es_alta_nueva else []
+        )
         salida.append({
             "id": p.id,
             "maestro_farmacia_id": p.maestro_farmacia_id,
@@ -113,6 +122,7 @@ def pendientes_del_gd(db: Session, gerente_id: int) -> list[dict]:
             "vm_id": p.vm_id,
             "vm_nombre": rm.nombre if rm else f"VM #{p.vm_id}",
             "fecha_solicitud": p.fecha_solicitud.isoformat() if p.fecha_solicitud else None,
+            "posible_duplicado": posible_duplicado,
         })
     return salida
 

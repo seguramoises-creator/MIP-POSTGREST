@@ -62,6 +62,35 @@ def test_detectar_duplicados_sin_coincidencia():
     assert res["duros"] == []
 
 
+# ── detectar_posibles_duplicados: BLANDA (informativa) por prefijo — bandeja del GD (§3.2) ──
+def test_detectar_posibles_duplicados_por_prefijo():
+    db = MagicMock()
+    db.query.side_effect = [_Q([_cand(id=9, nombre_completo="GBC PANTOJA", estado="ACTIVA")])]
+    res = svc.detectar_posibles_duplicados(db, "DO", nombre_completo="GBC PANTOJA 2")
+    assert [d["id"] for d in res] == [9]
+
+
+def test_detectar_posibles_duplicados_prefijo_en_sentido_inverso():
+    db = MagicMock()
+    db.query.side_effect = [_Q([_cand(id=9, nombre_completo="GBC PANTOJA 2", estado="ACTIVA")])]
+    res = svc.detectar_posibles_duplicados(db, "DO", nombre_completo="GBC PANTOJA")
+    assert [d["id"] for d in res] == [9]
+
+
+def test_detectar_posibles_duplicados_sin_coincidencia():
+    db = MagicMock()
+    db.query.side_effect = [_Q([_cand(id=9, nombre_completo="FARMACIA CARIBE", estado="ACTIVA")])]
+    res = svc.detectar_posibles_duplicados(db, "DO", nombre_completo="GBC PANTOJA")
+    assert res == []
+
+
+def test_detectar_posibles_duplicados_nombre_vacio_no_consulta_bd():
+    db = MagicMock()
+    res = svc.detectar_posibles_duplicados(db, "DO", nombre_completo="")
+    assert res == []
+    db.query.assert_not_called()
+
+
 # ── crear_maestro / validar_bloqueantes / anti-dup integrados ───────────────────
 def _fake_db():
     db = MagicMock()

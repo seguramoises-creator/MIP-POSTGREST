@@ -252,3 +252,89 @@ def test_gd_no_ve_panel_de_vm_ajeno_403():
     client = _client(U(Rol.GERENTE_DISTRITO, gerente_id=3), db=db)
     r = client.get("/api/v1/farmacias/panel", params={"vm_id": 999})
     assert r.status_code == 403
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# F26: GET /farmacias/panel expone `motivo` de rechazo (Sub-parte A, Tarea 9)
+# ─────────────────────────────────────────────────────────────────────────
+
+def _db_panel(panel, maestro):
+    """Doble de Session dispatchado por modelo (mismo patrón que `_db_con_panel_y_rm`
+    arriba): así el guard RBAC (`require`, que hace su propio `db.query(func.max(...))`/
+    `db.query(RolPermiso)` antes de entrar al endpoint) no desalinea un side_effect
+    posicional — solo respondemos a los modelos que el endpoint realmente consulta."""
+    db = MagicMock()
+
+    def _query(modelo):
+        q = MagicMock()
+        nombre = getattr(modelo, "__name__", None)
+        if nombre == "FarmaciaVisita":
+            q.filter.return_value.filter.return_value.order_by.return_value.all.return_value = [panel]
+        elif nombre == "Farmacia":
+            q.filter.return_value.all.return_value = [maestro]
+        return q
+    db.query.side_effect = _query
+    return db
+
+
+def test_panel_listar_incluye_motivo_del_panel_cuando_rechazado():
+    panel = SimpleNamespace(id=1, maestro_farmacia_id=50, vm_id=7, activo=True,
+                            estado_aprobacion="RECHAZADO", ciclos_sin_visita=0,
+                            motivo="Dirección incompleta")
+    maestro = SimpleNamespace(id=50, nombre_completo="GBC PANTOJA", direccion="Calle 1",
+                              encargado="Ana", estado="RECHAZADA", motivo_rechazo=None)
+    db = _db_panel(panel, maestro)
+
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
+    r = client.get("/api/v1/farmacias/panel")
+    assert r.status_code == 200
+    assert r.json()[0]["motivo"] == "Dirección incompleta"
+
+
+def test_panel_listar_motivo_cae_al_del_maestro_si_panel_no_lo_trae():
+    panel = SimpleNamespace(id=1, maestro_farmacia_id=50, vm_id=7, activo=True,
+                            estado_aprobacion="RECHAZADO", ciclos_sin_visita=0,
+                            motivo=None)
+    maestro = SimpleNamespace(id=50, nombre_completo="GBC PANTOJA", direccion="Calle 1",
+                              encargado="Ana", estado="RECHAZADA",
+                              motivo_rechazo="Rechazado desde el maestro")
+    db = _db_panel(panel, maestro)
+
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
+    r = client.get("/api/v1/farmacias/panel")
+    assert r.status_code == 200
+    assert r.json()[0]["motivo"] == "Rechazado desde el maestro"
+
+
+def test_panel_listar_motivo_nulo_si_no_esta_rechazado():
+    panel = SimpleNamespace(id=1, maestro_farmacia_id=50, vm_id=7, activo=True,
+                            estado_aprobacion="APROBADO", ciclos_sin_visita=0,
+                            motivo=None)
+    maestro = SimpleNamespace(id=50, nombre_completo="GBC PANTOJA", direccion="Calle 1",
+                              encargado="Ana", estado="ACTIVA", motivo_rechazo=None)
+    db = _db_panel(panel, maestro)
+
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
+    r = client.get("/api/v1/farmacias/panel")
+    assert r.status_code == 200
+    assert r.json()[0]["motivo"] is None
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# §3.2: GET /farmacias/aprobacion/pendientes reenvía `posible_duplicado` (Sub-parte A)
+# ─────────────────────────────────────────────────────────────────────────
+
+def test_aprobacion_pendientes_reenvia_posible_duplicado(monkeypatch):
+    pendiente = {
+        "id": 1, "maestro_farmacia_id": 50, "nombre_completo": "GBC PANTOJA",
+        "direccion": "Calle 1", "encargado": "Ana", "estado_maestro": "PENDIENTE_APROBACION",
+        "tipo_solicitud": "NUEVA", "vm_id": 7, "vm_nombre": "VM Siete",
+        "fecha_solicitud": None,
+        "posible_duplicado": [{"id": 77, "nombre_completo": "GBC PANTOJA 2"}],
+    }
+    monkeypatch.setattr(mod.aprobacion_svc, "pendientes_del_gd", lambda db_, gerente_id: [pendiente])
+
+    client = _client(U(Rol.GERENTE_DISTRITO, gerente_id=3), db=MagicMock())
+    r = client.get("/api/v1/farmacias/aprobacion/pendientes")
+    assert r.status_code == 200
+    assert r.json()[0]["posible_duplicado"] == [{"id": 77, "nombre_completo": "GBC PANTOJA 2"}]

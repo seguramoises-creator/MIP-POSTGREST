@@ -228,6 +228,17 @@ def panel_listar(
     maestro_ids = {p.maestro_farmacia_id for p in paneles}
     maestros = {f.id: f for f in db.query(Farmacia).filter(Farmacia.id.in_(maestro_ids)).all()}
 
+    def _motivo(p: FarmaciaVisita) -> Optional[str]:
+        """F26: motivo de rechazo — primero el del panel (siempre lo trae `rechazar()`,
+        Acción A o B); si por algún dato legado faltara, cae al `motivo_rechazo` del maestro
+        cuando éste quedó RECHAZADA."""
+        if p.motivo:
+            return p.motivo
+        maestro = maestros.get(p.maestro_farmacia_id)
+        if maestro is not None and maestro.estado == "RECHAZADA":
+            return maestro.motivo_rechazo
+        return None
+
     return [
         {
             "panel_id": p.id,
@@ -242,6 +253,7 @@ def panel_listar(
                               if p.maestro_farmacia_id in maestros else None),
             "estado_aprobacion": p.estado_aprobacion,
             "ciclos_sin_visita": p.ciclos_sin_visita,
+            "motivo": _motivo(p),
         }
         for p in paneles
     ]

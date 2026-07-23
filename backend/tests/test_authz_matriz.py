@@ -40,9 +40,6 @@ ORACULO = {
     Recurso.PARRILLA_CONSULTA:       [RO, RT, RA, RA, RA, RA, RA, RA, RA, AD],
     Recurso.PRODUCTIVIDAD_COMERCIAL: [RO, RT, RA, RA, RA, _,  RA, RA, RA, AD],
     Recurso.RANKING_RKT:             [RO, RT, RA, RA, RA, _,  RA, RA, RA, AD],
-    Recurso.FARMACIA_CONFIGURACION:  [_,  CF, _,  RA, _,  _,  RA, RA, _,  AD],
-    Recurso.FARMACIA_VISITA:         [GO, _,  _,  _,  _,  _,  _,  _,  _,  AD],
-    Recurso.FARMACIA_COBERTURA:      [RO, RT, RA, RA, RA, _,  RA, RA, _,  AD],
     Recurso.COACHING_HOJA:           [RO, GT, _,  _,  RT, RA, RA, RA, _,  AD],
     Recurso.COACHING_KPI:            [_,  RT, _,  _,  RA, RA, RA, RA, _,  AD],
     Recurso.EXAMEN_RENDIR:           [GO, RT, _,  _,  RT, RA, RA, RA, _,  AD],
@@ -68,8 +65,8 @@ ORACULO = {
 }
 
 
-def test_matriz_tiene_35_recursos():
-    assert len(RECURSOS) == 35
+def test_matriz_tiene_32_recursos():
+    assert len(RECURSOS) == 32
     assert set(MATRIZ) == set(RECURSOS)
     assert set(ORACULO) == set(RECURSOS)
 

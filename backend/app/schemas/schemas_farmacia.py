@@ -116,6 +116,9 @@ class PanelItem(BaseModel):
     estado_maestro: str
     estado_aprobacion: str
     ciclos_sin_visita: int
+    motivo: str | None = None
+    """F26: motivo de rechazo (del panel o, en su defecto, del maestro RECHAZADA) — el VM lo ve
+    en su móvil. None salvo que estado_aprobacion == RECHAZADO."""
 
 
 # ─────────────────────────────────────────────────────────────────────────

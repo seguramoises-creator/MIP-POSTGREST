@@ -665,6 +665,115 @@ no se muestra ni se envía (la ajusta el GD al aprobar).
 
 ---
 
+## 14d. Módulo de Farmacias (jul-2026)
+
+**Archivos**: `app/api/v1/routers/farmacias.py` (`prefix="/farmacias"`), `app/services/maestro_farmacia_service.py`,
+`app/services/farmacia_aprobacion_service.py`, `app/services/visita_farmacia_service.py`,
+`app/services/cobertura_farmacia_service.py`. Frontend: `pages/visita/PanelFarmacia.tsx` (VM),
+`pages/farmacias/BandejaAprobacionFarmacias.tsx` (GD), `pages/admin/MaestroFarmacias.tsx` (CRUD directo),
+`services/farmacias.service.ts`. Spec/plan: `docs/superpowers/specs/2026-07-22-modulo-farmacias-maestro-aprobacion-design.md`
++ `docs/superpowers/plans/2026-07-22-modulo-farmacias.md`.
+
+**Idea central**: espejo del módulo de Médicos (§14b), con tres capas separadas:
+
+| Capa | Tabla | Descripción |
+|------|-------|-------------|
+| **Maestro** (país-level) | `Config.DIM_Farmacia` | Identidad única de la farmacia. Estados `PENDIENTE_APROBACION \| ACTIVA \| RECHAZADA \| INACTIVA` |
+| **Panel** (por VM) | `Visita.DIM_FarmaciaVisita` | Referencia al maestro (`maestro_farmacia_id`, F19) + estado de la solicitud del VM: `PENDIENTE_ALTA \| APROBADO \| RECHAZADO` |
+| **Registro** (visita) | `Visita.FactVisitaFarmacia` | Bitácora de visitas. **Opción A**: tabla PARALELA a `Visita.FactVisita` (médicos) — cero regresión, nunca comparten fila ni discriminador |
+
+**Flujo VM→GD (F21)** — `farmacia_aprobacion_service.py`, espejo de `visita_aprobacion_service`:
+- **Acción A** (`solicitar_agregar_al_panel`): el VM agrega al panel una farmacia que YA existe y está
+  `ACTIVA` en el maestro. Solo crea el panel en `PENDIENTE_ALTA`; el maestro no se toca.
+- **Acción B** (`solicitar_crear`): el VM da de alta una farmacia nueva. Crea el maestro
+  (`estado="PENDIENTE_APROBACION"`, `origen="VM"`) + el panel enlazado en `PENDIENTE_ALTA`.
+- **Bandeja del GD** (`GET /farmacias/aprobacion/pendientes`, auto-scope a su distrito): **aprobar**
+  (maestro → `ACTIVA` si seguía pendiente; panel → `APROBADO` con `ciclo_alta_id` = ciclo de trabajo del
+  VM), **rechazar** (motivo obligatorio, F26 — maestro origen VM pendiente → `RECHAZADA` +
+  `motivo_rechazo`; panel → `RECHAZADO`), o **editar y aprobar** (corrige el maestro —p.ej. dirección—
+  y aprueba en el mismo paso).
+- El alta directa en el maestro sin pasar por aprobación (`POST/PUT /farmacias/maestro`) es exclusiva de
+  ADMIN/GERENTE_PRODUCTIVIDAD (`origen="CONFIG"`, `estado="ACTIVA"` de entrada).
+
+**Campos bloqueantes (F23/F24)**: `direccion` y `encargado` son `NOT NULL` en el modelo **y** validados
+con mensaje de negocio exacto en `maestro_farmacia_service.validar_bloqueantes` (cliente y servidor;
+el 422 lleva el mensaje del servicio, no el genérico de Pydantic — los schemas de payload no llevan
+`min_length` a propósito).
+
+**Nomenclatura CADENA + SUCURSAL (F20)**: `nombre_completo` es **derivado**, nunca capturado a mano —
+`cadena + " " + sucursal` (normalizado: NFKD sin acentos, mayúsculas, espacios colapsados) si
+`es_cadena`, si no `nombre` normalizado. Se recalcula en cada `crear_maestro`/`actualizar_maestro` que
+toque esos campos.
+
+**Anti-duplicados (F25/F09)** — `maestro_farmacia_service.py`, dos niveles:
+- **DURA** (`detectar_duplicados`, bloquea con `DuplicadoDuroError`): misma `(pais_codigo, cadena,
+  sucursal)` normalizada entre farmacias activas y no rechazadas. Corre en `crear_maestro` (Acción B y
+  alta directa). El formulario del VM solo se habilita tras una búsqueda sin resultado
+  (`GET /farmacias/maestro/buscar`).
+- **BLANDA** (`detectar_posibles_duplicados`, jul-2026, Tarea 9): coincidencia por **prefijo** del
+  `nombre_completo` normalizado (en cualquier dirección, p.ej. `"GBC PANTOJA"` vs `"GBC PANTOJA 2"`)
+  contra OTRA farmacia ya `ACTIVA` del maestro. **No bloquea** — es la alerta "Posible duplicado"
+  visible en la bandeja del GD (`posible_duplicado` en `GET /farmacias/aprobacion/pendientes`, solo
+  para altas `NUEVA`/Acción B; en Acción A la farmacia ya ES esa misma fila del maestro, no aplica).
+
+**Regla F22 (bloqueante transversal)**: una farmacia en `PENDIENTE_APROBACION`/panel `PENDIENTE_ALTA`
+**no cuenta para cobertura ni admite Registro de Visita**. Se aplica en dos guards independientes:
+`visita_farmacia_service._guard_f22` (levanta `PanelNoAprobadoError` → 409) y el universo de
+`cobertura_farmacia_service._universo_ids` (filtra directo por `estado_aprobacion="APROBADO"`).
+
+**Registro de visita — AD-HOC, en el MISMO módulo de Visita, SIN planeación de ciclo**: a diferencia de
+Médicos, **no existe** un equivalente de `PlaneacionCiclo` para farmacias — el VM registra cuando la
+hace, sin universo planeado ni ruptura de secuencia programada. La UI vive en la misma pantalla
+**Registrar Visita** (selector Médico/Farmacia), pero el backend escribe en la tabla paralela
+`FactVisitaFarmacia` (Opción A). Reusa hora-servidor (`hace_minutos`, ventana), guard de ciclo abierto
+(`recalculo_service.validar_ciclo_abierto`) y foto BLOB con magic bytes JPEG/PNG ≤ 3 MB
+(`POST/GET /farmacias/{visita_id}/foto`), igual que `FactVisita` de médicos.
+
+**Cobertura interna simple — COEXISTE con el SFA, no pisa el score**: `cobertura_farmacia_service.py`
+calcula `visitadas / universo` sobre el panel `APROBADO`+activo del VM, **sin F1/F2** (a diferencia de
+Médicos: solo visitada/no-visitada, decisión aprobada en el spec). Es puramente informativo/operativo —
+**nunca** toca `motor_calculo_service`/`iup_service`: `COB_FARMACIAS` del Score/Ranking (§6-7) sigue
+viniendo del SFA externo. `GET /farmacias/cobertura` (auto-scope VM/GD igual que el resto del módulo).
+
+**Endpoints** (verificados en `farmacias.py`):
+
+| Método | Ruta | Recurso RBAC | Descripción |
+|--------|------|--------------|-------------|
+| GET | `/farmacias/maestro/buscar` | `farmacia.panel` (read) | Búsqueda anti-dup (habilita el form si no hay resultado, F25) |
+| POST | `/farmacias/panel/agregar` | `farmacia.panel` (register) | Acción A |
+| POST | `/farmacias/panel/crear` | `farmacia.panel` (register) | Acción B (bloqueantes + anti-dup duro) |
+| GET | `/farmacias/panel` | `farmacia.panel` (read) | Panel del VM — incluye `motivo` de rechazo (F26, jul-2026) |
+| GET | `/farmacias/cobertura` | `farmacia.panel` (read) | Cobertura interna simple (Task 7) |
+| POST | `/farmacias/{panel_id}/visita` | `farmacia.panel` (register) | Registro AD-HOC, guard F22 + ciclo abierto |
+| POST/GET | `/farmacias/{visita_id}/foto` | `farmacia.panel` | Foto BLOB (magic bytes JPEG/PNG, ≤ 3 MB) |
+| GET | `/farmacias/aprobacion/pendientes` | `farmacia.aprobar` (read) | Bandeja del GD — incluye `posible_duplicado` (§3.2, jul-2026) |
+| POST | `/farmacias/aprobacion/{panel_id}/aprobar` `/rechazar` `/editar-aprobar` | `farmacia.aprobar` (approve) | Solo GERENTE_DISTRITO (su equipo) + ADMIN |
+| GET/POST/PUT | `/farmacias/maestro` (+ `/{id}`) | `farmacia.maestro` (read/configure) | CRUD directo, solo GERENTE_PRODUCTIVIDAD + ADMIN |
+
+**RBAC** (matriz, §25): 3 recursos — `farmacia.panel` (VM `register` propio; GD `read` de su equipo
+`team`; el resto de gerencias `read all` salvo FINANZAS sin acceso; espejo de `medico.panel`),
+`farmacia.aprobar` (SOLO GERENTE_DISTRITO `approve team` + ADMIN), `farmacia.maestro` (SOLO
+GERENTE_PRODUCTIVIDAD `configure` + ADMIN, mismo patrón que `lsii.admin`/`etl.cargar`). **Nota
+histórica**: la Fase 1 de RBAC (§25) había reservado especulativamente 3 filas
+`farmacia.configuracion`/`farmacia.visita`/`farmacia.cobertura` con un diseño que NO coincidía con el
+aprobado aquí; quedaron sin consumidor y se **retiraron** en la Tarea 9 (cierre del módulo,
+`constantes.py`/`matrix.py`/`test_authz_matriz.py`, matriz 35→32 recursos).
+
+**Reglas de negocio F19–F26** (spec §11):
+
+| Regla | Resumen | Dónde |
+|-------|---------|-------|
+| F19 | Maestro único + panel referenciado | `DIM_Farmacia` + `DIM_FarmaciaVisita.maestro_farmacia_id` |
+| F20 | Nombre visible CADENA+SUCURSAL | `nombre_completo` derivado |
+| F21 | Alta/asignación con aprobación del GD | `farmacia_aprobacion_service` |
+| F22 | PENDIENTE no cuenta cobertura ni admite registro | guards en `visita_farmacia_service`/`cobertura_farmacia_service` |
+| F23 | Dirección bloqueante | NOT NULL + `validar_bloqueantes` |
+| F24 | Encargado bloqueante | NOT NULL + `validar_bloqueantes` |
+| F25 | Formulario solo tras búsqueda sin resultado | `detectar_duplicados` (dura) |
+| F26 | Rechazo con motivo + histórico visible al VM | `motivo_rechazo` (maestro) / `motivo` (panel), expuesto en `GET /farmacias/panel` |
+
+---
+
 ## 15. Módulo Exportación / Reportes
 
 **Archivo**: `app/api/v1/routers/exportacion.py` (99 líneas). Router: `prefix="/exportacion"`. Resuelve el pendiente histórico de v1.0 "Exportación PDF/Excel de reportes".
@@ -1163,5 +1272,5 @@ migración `0018`; UI en `CostoRoiVisita.tsx`. Tests `tests/test_authz_wiring.py
   Director (`notification_service.notificar_costo_pendiente_aprobacion`, best-effort).
 - **Los 5 puntos de deuda de Fase 2 quedaron RESUELTOS (jul-2026).**
 - Del spec §9 (Fase 1): `team` para roles no-GD (`GERENTE_PRODUCTIVIDAD` en coaching/examen — alcance
-  literal, sin resolución de equipo); módulos inexistentes (Farmacias, Inteligencia/Encuestas); separación
-  de `medical_contact.read` de `medico.panel`.
+  literal, sin resolución de equipo); módulos inexistentes (Inteligencia/Encuestas — Farmacias ya se
+  construyó, ver §14d); separación de `medical_contact.read` de `medico.panel`.

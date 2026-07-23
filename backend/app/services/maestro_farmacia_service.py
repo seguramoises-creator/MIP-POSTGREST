@@ -78,6 +78,31 @@ def detectar_duplicados(db: Session, pais_codigo: str, *, cadena=None, sucursal=
     return {"duros": duros}
 
 
+def detectar_posibles_duplicados(db: Session, pais_codigo: str, *, nombre_completo: str,
+                                 excluir_id=None) -> list[dict]:
+    """BLANDA (informativa, NO bloquea): farmacias ACTIVAS del maestro cuyo `nombre_completo`
+    normalizado coincide por PREFIJO con el de `nombre_completo` (en cualquier dirección) —
+    p.ej. "GBC PANTOJA" vs "GBC PANTOJA 2". Usada en la bandeja del GD (§3.2 del txt) como
+    alerta visible junto a la solicitud; no bloquea aprobar/rechazar (a diferencia de
+    `detectar_duplicados`, que es DURA y solo corre en el alta)."""
+    objetivo = normalizar(nombre_completo)
+    if not objetivo:
+        return []
+    q = db.query(Farmacia).filter(
+        Farmacia.pais_codigo == pais_codigo,
+        Farmacia.activo == True,  # noqa: E712
+        Farmacia.estado == "ACTIVA",
+    )
+    if excluir_id:
+        q = q.filter(Farmacia.id != excluir_id)
+    posibles = []
+    for f in q.all():
+        candidato = normalizar(f.nombre_completo)
+        if candidato and (candidato.startswith(objetivo) or objetivo.startswith(candidato)):
+            posibles.append(_dto(f))
+    return posibles
+
+
 def _auditar(db: Session, usuario_id, farmacia_id, accion: str, detalle: str) -> None:
     """Deja rastro estructurado en Audit.FACT_Auditoria (fuente del historial de la farmacia)."""
     from app.models.hechos import Auditoria

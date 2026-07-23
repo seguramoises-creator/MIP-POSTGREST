@@ -261,6 +261,7 @@ def test_pendientes_del_gd_filtra_por_distrito(monkeypatch):
     panel_de_mi_equipo = _panel(id=1, vm_id=7, maestro_farmacia_id=50,
                                 fecha_solicitud=datetime.now(timezone.utc))
     maestro = _maestro(id=50, estado="PENDIENTE_APROBACION", origen="VM")
+    monkeypatch.setattr(svc.maestro_svc, "detectar_posibles_duplicados", lambda *a, **k: [])
 
     # Orden de queries dentro de pendientes_del_gd:
     # 1) RM del gerente -> [rm7, rm8]
@@ -281,6 +282,60 @@ def test_pendientes_del_gd_filtra_por_distrito(monkeypatch):
     assert resultado[0]["vm_nombre"] == "VM Siete"
     assert resultado[0]["tipo_solicitud"] == "NUEVA"
     assert resultado[0]["nombre_completo"] == "GBC PANTOJA"
+    assert resultado[0]["posible_duplicado"] == []
+
+
+def test_pendientes_del_gd_expone_posible_duplicado_para_alta_nueva(monkeypatch):
+    """§3.2: alerta de posible duplicado VISIBLE en la bandeja (informativa, no bloquea)."""
+    db = _fake_db()
+    rm7 = SimpleNamespace(id=7, gerente_id=100, nombre="VM Siete")
+    panel = _panel(id=1, vm_id=7, maestro_farmacia_id=50,
+                  fecha_solicitud=datetime.now(timezone.utc))
+    maestro = _maestro(id=50, estado="PENDIENTE_APROBACION", origen="VM",
+                       nombre_completo="GBC PANTOJA")
+    coincidencia = {"id": 77, "nombre_completo": "GBC PANTOJA 2"}
+    llamada = {}
+
+    def _fake_posibles(db_, pais, *, nombre_completo, excluir_id=None):
+        llamada.update(pais=pais, nombre_completo=nombre_completo, excluir_id=excluir_id)
+        return [coincidencia]
+    monkeypatch.setattr(svc.maestro_svc, "detectar_posibles_duplicados", _fake_posibles)
+
+    db.query.side_effect = [
+        _Q(rows=[rm7]),
+        _Q(rows=[panel]),
+        _Q(rows=[maestro]),
+        _Q(rows=[rm7]),
+    ]
+
+    resultado = svc.pendientes_del_gd(db, gerente_id=100)
+
+    assert resultado[0]["posible_duplicado"] == [coincidencia]
+    assert llamada == {"pais": "DO", "nombre_completo": "GBC PANTOJA", "excluir_id": 50}
+
+
+def test_pendientes_del_gd_no_evalua_posible_duplicado_en_accion_a(monkeypatch):
+    """Acción A (AGREGAR, maestro ya ACTIVA): no tiene sentido comparar la farmacia
+    contra sí misma -> posible_duplicado vacío, sin ni siquiera llamar al detector."""
+    db = _fake_db()
+    rm7 = SimpleNamespace(id=7, gerente_id=100, nombre="VM Siete")
+    panel = _panel(id=2, vm_id=7, maestro_farmacia_id=51,
+                  fecha_solicitud=datetime.now(timezone.utc))
+    maestro_activo = _maestro(id=51, estado="ACTIVA", origen="CONFIG")
+
+    def _no_deberia_llamarse(*a, **k):
+        raise AssertionError("detectar_posibles_duplicados no debe llamarse en Acción A")
+    monkeypatch.setattr(svc.maestro_svc, "detectar_posibles_duplicados", _no_deberia_llamarse)
+
+    db.query.side_effect = [
+        _Q(rows=[rm7]),
+        _Q(rows=[panel]),
+        _Q(rows=[maestro_activo]),
+        _Q(rows=[rm7]),
+    ]
+
+    resultado = svc.pendientes_del_gd(db, gerente_id=100)
+    assert resultado[0]["posible_duplicado"] == []
 
 
 def test_pendientes_del_gd_sin_equipo_devuelve_vacio():

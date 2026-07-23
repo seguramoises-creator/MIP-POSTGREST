@@ -48,9 +48,6 @@ class Recurso:
     PARRILLA_CONSULTA = "parrilla.consulta"
     PRODUCTIVIDAD_COMERCIAL = "productividad.comercial"
     RANKING_RKT = "ranking.rkt"
-    FARMACIA_CONFIGURACION = "farmacia.configuracion"
-    FARMACIA_VISITA = "farmacia.visita"
-    FARMACIA_COBERTURA = "farmacia.cobertura"
     COACHING_HOJA = "coaching.hoja"
     COACHING_KPI = "coaching.kpi"
     EXAMEN_RENDIR = "examen.rendir"
@@ -69,13 +66,12 @@ class Recurso:
     LSII_EVALUAR = "lsii.evaluar"
     LSII_ADMIN = "lsii.admin"
     ETL_CARGAR = "etl.cargar"
-    # Módulo de Farmacias (jul-2026, plan `2026-07-22-modulo-farmacias.md`, Task 5). NOTA: las
-    # filas `FARMACIA_CONFIGURACION`/`FARMACIA_VISITA`/`FARMACIA_COBERTURA` de arriba fueron
-    # reservadas especulativamente por la deuda #3 (Fase 1, cuando el módulo aún no existía) y su
-    # diseño (p.ej. GERENTE_PRODUCTIVIDAD denegado en `farmacia.configuracion`) NO coincide con el
-    # diseño real aprobado en el spec de Farmacias. En vez de reescribir esas filas ya cubiertas
-    # por el oráculo (fuera del alcance de la Tarea 5), se agregan estos 3 recursos NUEVOS para el
-    # router real; las 3 filas antiguas quedan sin consumidor (deuda a reconciliar/retirar aparte).
+    # Módulo de Farmacias (jul-2026, plan `2026-07-22-modulo-farmacias.md`, Task 5). NOTA
+    # histórica: la deuda #3 (Fase 1, cuando el módulo aún no existía) había reservado
+    # especulativamente 3 filas `farmacia.configuracion`/`farmacia.visita`/`farmacia.cobertura`
+    # cuyo diseño (p.ej. GERENTE_PRODUCTIVIDAD denegado en `farmacia.configuracion`) NO coincidía
+    # con el diseño real aprobado en el spec de Farmacias — se agregaron estos 3 recursos reales
+    # en su lugar y las 3 antiguas, sin consumidor, se retiraron en la Tarea 9 (cierre del módulo).
     FARMACIA_PANEL = "farmacia.panel"
     FARMACIA_APROBAR = "farmacia.aprobar"
     FARMACIA_MAESTRO = "farmacia.maestro"
@@ -95,9 +91,6 @@ RECURSOS_META: dict[str, tuple[str, str]] = {
     Recurso.PARRILLA_CONSULTA: ("Parrilla de muestras: consulta", "Comercial"),
     Recurso.PRODUCTIVIDAD_COMERCIAL: ("Productividad comercial", "Comercial"),
     Recurso.RANKING_RKT: ("Ranking general (RKT)", "Comercial"),
-    Recurso.FARMACIA_CONFIGURACION: ("Configuración de farmacias", "Farmacias"),
-    Recurso.FARMACIA_VISITA: ("Registro de visita a farmacia", "Farmacias"),
-    Recurso.FARMACIA_COBERTURA: ("Cobertura de farmacias", "Farmacias"),
     Recurso.COACHING_HOJA: ("Hoja de acompañamiento GD→RM", "Coaching (MORE)"),
     Recurso.COACHING_KPI: ("KPI Coaching de equipo", "Coaching (MORE)"),
     Recurso.EXAMEN_RENDIR: ("Rendir examen de producto", "Formación / Exámenes"),
