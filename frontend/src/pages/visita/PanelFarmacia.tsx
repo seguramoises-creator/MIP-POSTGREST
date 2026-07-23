@@ -16,7 +16,8 @@ import { useCicloStore } from '../../store/ciclo.store';
 import { listarVMs, miGerente, type Catalogo, type MiGerente } from '../../services/visita.service';
 import {
   buscarFarmaciaMaestro, panelAgregarFarmacia, panelCrearFarmacia, listarPanelFarmacias,
-  type FarmaciaDuro, type FarmaciaPanelItem, type FarmaciaDatos,
+  coberturaFarmaciaVM,
+  type FarmaciaDuro, type FarmaciaPanelItem, type FarmaciaDatos, type CoberturaFarmacia,
 } from '../../services/farmacias.service';
 
 const formVacio: FarmaciaDatos = {
@@ -70,6 +71,7 @@ export default function PanelFarmacia() {
   const esAprobador = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD' || rol === 'GERENTE_DISTRITO';
   const puedeGestionar = esVM || esAprobador;
   const paisCodigo = useCicloStore((s) => s.paisCodigo);
+  const cicloAbiertoId = useCicloStore((s) => s.cicloAbiertoId);
 
   const [vms, setVms] = useState<Catalogo[]>([]);
   const [vmFiltro, setVmFiltro] = useState<number | ''>('');
@@ -79,6 +81,7 @@ export default function PanelFarmacia() {
   const listo = esVM || !!vmFiltro;
 
   const [panel, setPanel] = useState<FarmaciaPanelItem[]>([]);
+  const [cober, setCober] = useState<CoberturaFarmacia | null>(null);
   const [cargando, setCargando] = useState(true);
   const [msg, setMsg] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null);
 
@@ -97,10 +100,13 @@ export default function PanelFarmacia() {
   const [guardando, setGuardando] = useState(false);
 
   const cargarPanel = useCallback(() => {
-    if (!listo) { setPanel([]); setCargando(false); return; }
+    if (!listo) { setPanel([]); setCober(null); setCargando(false); return; }
     setCargando(true);
     listarPanelFarmacias(vmParam, true).then(setPanel).catch(() => setPanel([])).finally(() => setCargando(false));
-  }, [listo, vmParam]);
+    // KPIs del ciclo abierto (Total / Visitadas / Sin visitar). Ad-hoc, no toca el Score.
+    if (cicloAbiertoId) coberturaFarmaciaVM(cicloAbiertoId, vmParam).then(setCober).catch(() => setCober(null));
+    else setCober(null);
+  }, [listo, vmParam, cicloAbiertoId]);
 
   useEffect(() => { cargarPanel(); }, [cargarPanel]);
   useEffect(() => { if (!esVM) listarVMs().then(setVms).catch(() => {}); }, [esVM]);
@@ -219,6 +225,24 @@ export default function PanelFarmacia() {
         <Alert severity="info">Selecciona un visitador para gestionar su panel de farmacias.</Alert>
       ) : (
         <>
+          {/* KPIs del ciclo abierto. Aplican a farmacias (ad-hoc, sin F1/F2): Total activas,
+              Visitadas y Sin visitar. NO se cablean al Score (COB_FARMACIAS viene del SFA). */}
+          <Stack direction="row" spacing={1.5} sx={{ mb: 2 }} flexWrap="wrap">
+            {[
+              { label: 'Total panel', valor: cober?.universo ?? 0, sub: 'farmacias activas', color: 'text.primary' },
+              { label: 'Visitadas', valor: cober?.visitadas ?? 0, sub: 'en el ciclo actual', color: 'success.main' },
+              { label: 'Sin visitar', valor: cober ? Math.max(0, cober.universo - cober.visitadas) : 0, sub: 'requieren atención', color: 'warning.main' },
+            ].map((k) => (
+              <Card key={k.label} variant="outlined" sx={{ flex: '1 1 140px', minWidth: 130 }}>
+                <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: 0.3, fontWeight: 600, display: 'block' }}>{k.label}</Typography>
+                  <Typography variant="h4" fontWeight={700} sx={{ color: k.color, lineHeight: 1.15, my: 0.25 }}>{k.valor}</Typography>
+                  <Typography variant="caption" color="text.secondary">{k.sub}</Typography>
+                </CardContent>
+              </Card>
+            ))}
+          </Stack>
+
           {puedeGestionar && (
             <Card variant="outlined" sx={{ mb: 2 }}>
               <CardContent>

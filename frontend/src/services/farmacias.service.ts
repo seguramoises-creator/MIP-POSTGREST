@@ -115,6 +115,14 @@ export const listarPanelFarmacias = (vmId?: number, incluirInactivos = false) =>
     params: { ...(vmId ? { vm_id: vmId } : {}), incluir_inactivos: incluirInactivos },
   }).then((r) => r.data);
 
+// Cobertura interna del VM en un ciclo: visitadas / universo (farmacias APROBADO+activas).
+// AD-HOC, no cableada al Score (coexiste con el SFA).
+export interface CoberturaFarmacia { visitadas: number; universo: number; cobertura_pct: number; }
+export const coberturaFarmaciaVM = (cicloId: number, vmId?: number) =>
+  api.get<CoberturaFarmacia>('/farmacias/cobertura', {
+    params: { ciclo_id: cicloId, ...(vmId ? { rm_id: vmId } : {}) },
+  }).then((r) => r.data);
+
 // ─────────────────────────────────────────────────────────────────────────
 // Registro de visita a Farmacia (AD-HOC, guard F22)
 // ─────────────────────────────────────────────────────────────────────────
