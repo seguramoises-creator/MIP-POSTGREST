@@ -42,9 +42,13 @@ def _severidad(n: int) -> str:
 
 
 def estado_ruptura(db: Session, vm_id: int | None = None,
-                   gerente_id: int | None = None, linea_id: int | None = None) -> dict:
+                   gerente_id: int | None = None, linea_id: int | None = None,
+                   pais_codigo: str | None = None) -> dict:
     """Médicos en ruptura agrupados por severidad (1 / 2 / ≥3 ciclos sin visita).
-    Filtros (gestión): `vm_id` (un visitador), `gerente_id`/`linea_id` (distrito/línea)."""
+    Filtros (gestión): `vm_id` (un visitador), `gerente_id`/`linea_id` (distrito/línea),
+    `pais_codigo` (aislamiento multipaís, jul-2026: cuando ADMIN/gerencias consultan
+    "todos los visitadores" sin distrito/línea, sin este filtro se mezclaban médicos de
+    TODOS los países del sistema)."""
     from app.services.visita_cobertura_service import _rm_ids_por
     q = db.query(MedicoVisita).filter(
         MedicoVisita.activo == True, MedicoVisita.ciclos_sin_visita >= SEV_ALERTA)  # noqa: E712
@@ -53,6 +57,11 @@ def estado_ruptura(db: Session, vm_id: int | None = None,
     rm_ids = _rm_ids_por(db, gerente_id, linea_id)  # None = sin filtro de distrito/línea
     if rm_ids is not None:
         q = q.filter(MedicoVisita.vm_id.in_(rm_ids or [-1]))
+    elif pais_codigo:
+        # Sin distrito/línea (agregado): acotar por país si se indicó.
+        rm_ids_pais = [r[0] for r in db.query(RepresentanteMedico.id)
+                       .filter(RepresentanteMedico.pais_codigo == pais_codigo).all()]
+        q = q.filter(MedicoVisita.vm_id.in_(rm_ids_pais or [-1]))
     medicos = q.order_by(MedicoVisita.ciclos_sin_visita.desc()).all()
 
     vm_ids = {m.vm_id for m in medicos}
@@ -77,13 +86,28 @@ def estado_ruptura(db: Session, vm_id: int | None = None,
 
 
 def _resumen_cierre(db: Session, ciclo_id: int, aplicar: bool, usuario_id: int | None) -> dict:
-    """Núcleo compartido por previsualizar (aplicar=False) y cerrar (aplicar=True)."""
+    """Núcleo compartido por previsualizar (aplicar=False) y cerrar (aplicar=True).
+
+    FIX AISLAMIENTO POR PAÍS (jul-2026, hallazgo crítico): un ciclo pertenece a UN país
+    (`Ciclo.pais_codigo`). Antes esta función traía TODOS los médicos del sistema sin
+    filtrar por país. Como ningún médico de OTRO país tiene visitas registradas bajo
+    ESTE `ciclo_id` (los ciclos son país-específicos), cada cierre de ciclo de un país
+    incrementaba por error el contador de ruptura de secuencia (`ciclos_sin_visita`) de
+    los médicos de TODOS los demás países — corrupción de datos activa en cada cierre.
+    Ahora se acota primero a los VM del país del ciclo."""
     from app.services.visita_aprobacion_service import ordenes_ciclo, cuenta_en_ciclo
     ordenes = ordenes_ciclo(db)
     ciclo_orden = ordenes.get(ciclo_id)
-    mapa = _mapa_visitas(db, ciclo_id, None)  # todos los VM
+    mapa = _mapa_visitas(db, ciclo_id, None)  # todos los VM del país (ver filtro abajo)
+
+    ciclo = db.query(Ciclo).filter(Ciclo.id == ciclo_id).first()
+    mq = db.query(MedicoVisita)
+    if ciclo and ciclo.pais_codigo:
+        rm_ids_pais = [r[0] for r in db.query(RepresentanteMedico.id)
+                       .filter(RepresentanteMedico.pais_codigo == ciclo.pais_codigo).all()]
+        mq = mq.filter(MedicoVisita.vm_id.in_(rm_ids_pais or [-1]))
     # Solo los médicos vigentes para el ciclo (excluye altas pendientes, respeta alta/baja).
-    medicos = [m for m in db.query(MedicoVisita).all() if cuenta_en_ciclo(m, ciclo_orden, ordenes)]
+    medicos = [m for m in mq.all() if cuenta_en_ciclo(m, ciclo_orden, ordenes)]
     panel = len(medicos)
     visitados = sin_visitar = ruptura_nueva = ruptura_critica = 0
     for m in medicos:

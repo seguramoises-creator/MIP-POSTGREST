@@ -227,12 +227,44 @@ def _patch_gating(monkeypatch):
     monkeypatch.setattr(aps, "cuenta_en_ciclo", lambda m, o, ords: m.activo)
 
 
-def test_cierre_resetea_visitados_e_incrementa_ausentes(monkeypatch):
-    # m1 visitado (contador 5 → 0); m2 sin visita (contador 2 → 3 = crítica)
-    m1 = SimpleNamespace(id=1, ciclos_sin_visita=5, activo=True)
-    m2 = SimpleNamespace(id=2, ciclos_sin_visita=2, activo=True)
+def _db_cierre(pais_ciclo, rm_ids_pais, medicos, ya_cerrado=None):
+    """Doble de `db` para `_resumen_cierre`, discrimina por MODELO consultado (no por
+    orden de llamada, a propósito — así el test no depende de la secuencia interna):
+      Ciclo               -> ciclo con `pais_codigo=pais_ciclo`.
+      RepresentanteMedico.id -> ids de RM de ESE país (`rm_ids_pais`).
+      MedicoVisita        -> si se filtra (`.filter(vm_id.in_(...))`, el camino con país
+                             resuelto), solo devuelve los médicos cuyo `vm_id` está en
+                             `rm_ids_pais` — así se prueba que el filtro de país realmente
+                             excluye a los de otro país, sin re-implementar SQL real.
+    """
+    ciclo_obj = SimpleNamespace(pais_codigo=pais_ciclo)
+
+    def query(model):
+        mq = MagicMock()
+        if model is cs.Ciclo:
+            mq.filter.return_value.first.return_value = ciclo_obj
+        elif model is cs.CierreCicloVisita:
+            mq.filter.return_value.first.return_value = ya_cerrado
+        elif model is getattr(cs.RepresentanteMedico, "id", None):
+            mq.filter.return_value.all.return_value = [(i,) for i in rm_ids_pais]
+        elif model is cs.MedicoVisita:
+            def filtrar(*_a, **_k):
+                fq = MagicMock()
+                fq.all.return_value = [m for m in medicos if m.vm_id in rm_ids_pais]
+                return fq
+            mq.filter.side_effect = filtrar
+            mq.all.return_value = medicos  # si el ciclo no resuelve país (no debería pasar)
+        return mq
     db = MagicMock()
-    db.query.return_value.all.return_value = [m1, m2]
+    db.query.side_effect = query
+    return db
+
+
+def test_cierre_resetea_visitados_e_incrementa_ausentes(monkeypatch):
+    # m1 visitado (contador 5 → 0); m2 sin visita (contador 2 → 3 = crítica). Un solo país.
+    m1 = SimpleNamespace(id=1, vm_id=100, ciclos_sin_visita=5, activo=True)
+    m2 = SimpleNamespace(id=2, vm_id=100, ciclos_sin_visita=2, activo=True)
+    db = _db_cierre(pais_ciclo="DO", rm_ids_pais=[100], medicos=[m1, m2])
     _patch_gating(monkeypatch)
     monkeypatch.setattr(cs, "_mapa_visitas", lambda db, ciclo, vm: {1: {"v": True, "r": False}})
     r = cs._resumen_cierre(db, ciclo_id=10, aplicar=True, usuario_id=None)
@@ -242,11 +274,27 @@ def test_cierre_resetea_visitados_e_incrementa_ausentes(monkeypatch):
     assert m2.ciclos_sin_visita == 3   # incrementado a ruptura crítica
 
 
+def test_cierre_NO_toca_medicos_de_otro_pais(monkeypatch):
+    """HALLAZGO CRÍTICO (jul-2026): cerrar el ciclo de un país incrementaba por error el
+    contador de ruptura de médicos de TODOS los demás países (ninguno tiene visitas bajo
+    un ciclo_id ajeno, así que a todos se les contaba como "sin visitar"). Este test fija
+    el comportamiento correcto: solo los médicos de VMs del país del ciclo se tocan."""
+    # m_do: VM 100, país DO (el ciclo que se cierra). m_gt: VM 200, país GT (OTRO país).
+    m_do = SimpleNamespace(id=1, vm_id=100, ciclos_sin_visita=0, activo=True)
+    m_gt = SimpleNamespace(id=2, vm_id=200, ciclos_sin_visita=0, activo=True)
+    # rm_ids_pais=[100]: solo el VM de DO — el 200 (GT) queda excluido a propósito.
+    db = _db_cierre(pais_ciclo="DO", rm_ids_pais=[100], medicos=[m_do, m_gt])
+    _patch_gating(monkeypatch)
+    monkeypatch.setattr(cs, "_mapa_visitas", lambda db, ciclo, vm: {})  # nadie visitado
+    r = cs._resumen_cierre(db, ciclo_id=10, aplicar=True, usuario_id=None)
+    assert r["panel"] == 1               # SOLO el médico de DO entra al cierre
+    assert m_do.ciclos_sin_visita == 1   # el de DO sí rueda (correcto: sin visita en su ciclo)
+    assert m_gt.ciclos_sin_visita == 0   # el de GT NO se toca — antes se incrementaba por error
+
+
 def test_cierre_previsualizar_no_muta(monkeypatch):
-    m = SimpleNamespace(id=1, ciclos_sin_visita=1, activo=True)
-    db = MagicMock()
-    db.query.return_value.all.return_value = [m]
-    db.query.return_value.filter.return_value.first.return_value = None  # no cerrado aún
+    m = SimpleNamespace(id=1, vm_id=100, ciclos_sin_visita=1, activo=True)
+    db = _db_cierre(pais_ciclo="DO", rm_ids_pais=[100], medicos=[m], ya_cerrado=None)
     _patch_gating(monkeypatch)
     monkeypatch.setattr(cs, "_mapa_visitas", lambda db, ciclo, vm: {})   # nadie visitado
     monkeypatch.setattr(cs, "ciclo_por_defecto", lambda db: 10)
@@ -256,10 +304,38 @@ def test_cierre_previsualizar_no_muta(monkeypatch):
 
 
 def test_cierre_bloquea_si_ya_cerrado(monkeypatch):
-    db = MagicMock()
-    db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(fecha_cierre=None)
+    db = _db_cierre(pais_ciclo="DO", rm_ids_pais=[100], medicos=[],
+                    ya_cerrado=SimpleNamespace(fecha_cierre=None))
     with pytest.raises(cs.CicloVisitaYaCerradoError):
         cs.cerrar_ciclo(db, ciclo_id=10, usuario_id=1)
+
+
+def test_estado_ruptura_filtra_por_pais_en_modo_agregado():
+    """Sin gerente_id/linea_id (ADMIN viendo "todos los visitadores"), el agregado de
+    ruptura debe acotarse por `pais_codigo` si se indica — mismo hallazgo que el cierre.
+
+    Doble simplificado: en vez de simular cada `.filter()` en cadena, se comprueba el
+    resultado final (`estado_ruptura` devuelve `MedicoVisita.filter(...).order_by(...).all()`
+    del lado "medicos" — se fuerza esa cadena a devolver ya el subconjunto de DO, y se
+    verifica que el lookup de nombres por `RepresentanteMedico` no reviente con 2 columnas)."""
+    m_do = SimpleNamespace(id=1, vm_id=100, nombre_completo="Dr DO", categoria="A",
+                           ciclos_sin_visita=3, activo=True)
+    db = MagicMock()
+
+    def query(*models):
+        mq = MagicMock()
+        if models[0] is cs.MedicoVisita:
+            mq.filter.return_value.filter.return_value.order_by.return_value.all.return_value = [m_do]
+        elif len(models) == 1 and models[0] is getattr(cs.RepresentanteMedico, "id", None):
+            mq.filter.return_value.all.return_value = [(100,)]
+        else:
+            # db.query(RepresentanteMedico.id, RepresentanteMedico.nombre) — lookup de nombres.
+            mq.filter.return_value.all.return_value = [(100, "VM Uno")]
+        return mq
+    db.query.side_effect = query
+    r = cs.estado_ruptura(db, pais_codigo="DO")
+    assert r["total"] == 1
+    assert r["medicos"]["critica"][0]["nombre"] == "Dr DO"
 
 
 # ── Parrilla promocional / Muestras ───────────────────────────────────
