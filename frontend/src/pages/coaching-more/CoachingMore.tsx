@@ -226,16 +226,16 @@ export default function CoachingMore() {
 
   const recargar = useCallback(() => {
     cmListar().then(setHojas).catch(() => setHojas([]));
-    if (!esVM) cmKpi(cicloId || undefined).then(setKpi).catch(() => setKpi(null));
-  }, [esVM, cicloId]);
+    if (!esVM) cmKpi(cicloId || undefined, paisCodigo).then(setKpi).catch(() => setKpi(null));
+  }, [esVM, cicloId, paisCodigo]);
 
   useEffect(() => {
     setCargando(true);
-    Promise.all([cmCatalogo().catch(() => []), esVM ? Promise.resolve([]) : cmVms().catch(() => [])])
+    Promise.all([cmCatalogo().catch(() => []), esVM ? Promise.resolve([]) : cmVms(paisCodigo).catch(() => [])])
       .then(([cat, v]) => { setCatalogo(cat); setVms(v as VMItem[]); })
       .finally(() => setCargando(false));
     recargar();
-  }, [esVM, recargar]);
+  }, [esVM, recargar, paisCodigo]);
 
   const secciones = useMemo(() => {
     const map = new Map<string, CatalogoItem[]>();

@@ -229,9 +229,9 @@ export default function PanelMedico() {
 
   const cargar = useCallback(() => {
     setCargando(true);
-    listarMedicos(esVM ? undefined : (vmFiltro || undefined), estadoFiltro !== 'activos', true)
+    listarMedicos(esVM ? undefined : (vmFiltro || undefined), estadoFiltro !== 'activos', true, paisCodigo)
       .then(setMedicos).catch(() => setMedicos([])).finally(() => setCargando(false));
-  }, [esVM, vmFiltro, estadoFiltro]);
+  }, [esVM, vmFiltro, estadoFiltro, paisCodigo]);
 
   const cargarPendientes = useCallback(() => {
     if (esAprobador) listarAprobaciones().then(setPendientes).catch(() => setPendientes([]));
@@ -242,9 +242,9 @@ export default function PanelMedico() {
     listarEspecialidades().then(setEspecialidades).catch(() => {});
     listarProvincias().then(setProvincias).catch(() => {});
     listarCentros().then(setCentros).catch(() => {});
-    if (!esVM) listarVMs().then(setVms).catch(() => {});
+    if (!esVM) listarVMs(paisCodigo).then(setVms).catch(() => {});
     cargarPendientes();
-  }, [esVM, cargarPendientes]);
+  }, [esVM, cargarPendientes, paisCodigo]);
 
   // Ficha del representante: el VM ve la suya; ADMIN/GERENTE la del VM seleccionado.
   useEffect(() => {

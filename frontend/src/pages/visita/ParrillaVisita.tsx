@@ -36,7 +36,7 @@ export default function ParrillaVisita() {
   const usaSelector = esGestor || esObservador;
   const navigate = useNavigate();
 
-  const { cicloId, ciclo, esSoloLectura } = useCicloStore();
+  const { cicloId, ciclo, esSoloLectura, paisCodigo } = useCicloStore();
 
   const [lineas, setLineas] = useState<Catalogo[]>([]);
   const [lineaId, setLineaId] = useState<number | ''>('');
@@ -62,9 +62,9 @@ export default function ParrillaVisita() {
   }, [lineaParam, cicloParam]);
 
   useEffect(() => {
-    if (usaSelector) listarLineasVisita().then(setLineas).catch(() => {}).finally(() => setCargando(false));
+    if (usaSelector) listarLineasVisita(paisCodigo).then(setLineas).catch(() => {}).finally(() => setCargando(false));
     else setCargando(false);
-  }, [usaSelector]);
+  }, [usaSelector, paisCodigo]);
 
   // Default de línea = la de la ÚLTIMA parrilla registrada (no la 1ª del catálogo), para que
   // los roles de consulta no aterricen en una línea vacía. Solo mientras no haya línea elegida.
