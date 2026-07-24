@@ -184,6 +184,7 @@ def get_resultados(
     representante: Optional[str] = Query(None),
     medico: Optional[str] = Query(None, description="Filtro por nombre del médico (parcial)"),
     especialidad: Optional[str] = Query(None, description="Filtro por especialidad (exacta)"),
+    pais: Optional[str] = Query(None, description="Código de país, ej. DO"),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     current_user: Usuario = RequireAuth,
@@ -197,6 +198,7 @@ def get_resultados(
         representante=representante,
         medico=medico,
         especialidad=especialidad,
+        pais=pais,
         codigos_rep=_codigos_scope(db, current_user),
         skip=skip,
         limit=limit,
@@ -207,20 +209,22 @@ def get_resultados(
 @router.get("/por-representante", summary="Categorización agrupada por equipo y representante")
 def get_por_representante(
     periodo: Optional[str] = Query(None),
+    pais: Optional[str] = Query(None, description="Código de país, ej. DO"),
     _current_user: Usuario = RequireAuth,
     db: Session = Depends(get_db),
 ):
-    return svc.get_por_representante(db, periodo=periodo)
+    return svc.get_por_representante(db, periodo=periodo, pais=pais)
 
 
 # ── GET /categorizacion/por-especialidad ──────────────────────────────────────
 @router.get("/por-especialidad", summary="Categorización agrupada por especialidad")
 def get_por_especialidad(
     periodo: Optional[str] = Query(None),
+    pais: Optional[str] = Query(None, description="Código de país, ej. DO"),
     _current_user: Usuario = RequireAuth,
     db: Session = Depends(get_db),
 ):
-    return svc.get_por_especialidad(db, periodo=periodo)
+    return svc.get_por_especialidad(db, periodo=periodo, pais=pais)
 
 
 # ── GET /categorizacion/componentes ───────────────────────────────────────────

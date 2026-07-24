@@ -773,7 +773,7 @@ def get_lotes(db: Session, limit: int = 50) -> list:
     return [dict(r) for r in rows]
 
 
-def get_resultados(db: Session, periodo=None, categoria=None, estado_conciliacion=None, representante=None, medico=None, especialidad=None, codigos_rep=None, skip=0, limit=100) -> dict:
+def get_resultados(db: Session, periodo=None, categoria=None, estado_conciliacion=None, representante=None, medico=None, especialidad=None, pais=None, codigos_rep=None, skip=0, limit=100) -> dict:
     where_parts = ["1=1"]
     params = {"skip": skip, "limit": limit}
     # Scope de datos (Item 5 Mallén): None = ve todos; lista = solo esos representantes;
@@ -786,6 +786,8 @@ def get_resultados(db: Session, periodo=None, categoria=None, estado_conciliacio
             where_parts.append(f'v."CodigoRepresentante" IN ({", ".join(keys)})')
         else:
             where_parts.append("1=0")
+    if pais:
+        where_parts.append('v."CodigoPais"=:pais'); params["pais"] = pais
     if periodo:
         where_parts.append('v."Periodo"=:periodo'); params["periodo"] = periodo
     if categoria:
@@ -888,12 +890,17 @@ def get_resumen(
     }
 
 
-def get_por_representante(db: Session, periodo=None) -> list:
+def get_por_representante(db: Session, periodo=None, pais=None) -> list:
     params: dict = {}
     where = "WHERE 1=1"
     if periodo:
         where += ' AND f."Periodo"=:periodo'
         params["periodo"] = periodo
+    join_pais = ""
+    if pais:
+        join_pais = 'JOIN "cat"."DimPais" p ON p."PaisKey" = f."PaisKey"'
+        where += ' AND p."CodigoPais"=:pais'
+        params["pais"] = pais
     rows = db.execute(text(f"""
         SELECT
             COALESCE(f."Equipo",'Sin Equipo')            AS equipo,
@@ -904,6 +911,7 @@ def get_por_representante(db: Session, periodo=None) -> list:
             SUM(CASE WHEN f."CategoriaCalculada"='D' THEN 1 ELSE 0 END) AS d,
             COUNT(*) AS total
         FROM "cat"."FactMedicoCategoriaSnapshot" f
+        {join_pais}
         LEFT JOIN "cat"."DimRepresentanteMedico" r ON r."RepresentanteKey" = f."RepresentanteKey"
         {where}
         GROUP BY COALESCE(f."Equipo",'Sin Equipo'), COALESCE(r."NombreRepresentante",'Sin Rep')
@@ -912,12 +920,17 @@ def get_por_representante(db: Session, periodo=None) -> list:
     return [dict(r) for r in rows]
 
 
-def get_por_especialidad(db: Session, periodo=None) -> list:
+def get_por_especialidad(db: Session, periodo=None, pais=None) -> list:
     params: dict = {}
     where = "WHERE 1=1"
     if periodo:
         where += ' AND f."Periodo"=:periodo'
         params["periodo"] = periodo
+    join_pais = ""
+    if pais:
+        join_pais = 'JOIN "cat"."DimPais" p ON p."PaisKey" = f."PaisKey"'
+        where += ' AND p."CodigoPais"=:pais'
+        params["pais"] = pais
     rows = db.execute(text(f"""
         SELECT
             COALESCE(e."Especialidad",'Sin Especialidad') AS especialidad,
@@ -929,6 +942,7 @@ def get_por_especialidad(db: Session, periodo=None) -> list:
         FROM "cat"."FactMedicoCategoriaSnapshot" f
         JOIN "cat"."DimMedico" m ON m."MedicoKey" = f."MedicoKey"
         LEFT JOIN "cat"."DimEspecialidad" e ON e."EspecialidadKey" = m."EspecialidadKey"
+        {join_pais}
         {where}
         GROUP BY COALESCE(e."Especialidad",'Sin Especialidad')
         ORDER BY total DESC

@@ -25,6 +25,7 @@ import DetalleMedicos from './DetalleMedicos';
 import PanelRM from './PanelRM';
 import { CAT_PAL, CATS } from './paleta';
 import { useAuthStore } from '../../store/auth.store';
+import { useCicloStore } from '../../store/ciclo.store';
 
 // ── Paleta profesional A/B/C/D (sincronizada con DetalleMedicos.tsx) ─────────
 // A = Teal esmeralda  B = Azul zafiro  C = Ámbar dorado  D = Gris acero
@@ -165,6 +166,8 @@ function CategorizacionMotor() {
   const rol = useAuthStore((s) => s.rol);
   const accesoCompleto = ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_MARCA']
     .includes(rol ?? '');
+  // Contexto global País+Ciclo (v2): aísla los datos por país seleccionado en la barra superior.
+  const paisCodigo = useCicloStore((s) => s.paisCodigo) || '';
   const [categoria, setCategoria] = useState('');
   const [busqueda, setBusqueda] = useState('');              // representante
   const [busquedaMedico, setBusquedaMedico] = useState('');  // nombre del médico
@@ -174,18 +177,21 @@ function CategorizacionMotor() {
 
   // Resumen
   const { data: resumen, isLoading: loadingResumen } = useQuery<Resumen>({
-    queryKey: ['cat-resumen'],
+    queryKey: ['cat-resumen', paisCodigo],
     queryFn: async () => {
-      const r = await api.get('/categorizacion/resumen');
+      const params = new URLSearchParams();
+      if (paisCodigo) params.set('pais', paisCodigo);
+      const r = await api.get(`/categorizacion/resumen?${params}`);
       return r.data;
     },
   });
 
   // Resultados paginados
   const { data: resultados, isLoading: loadingResultados } = useQuery({
-    queryKey: ['cat-resultados', categoria, busqueda, busquedaMedico, especialidadFiltro, page, rowsPerPage],
+    queryKey: ['cat-resultados', paisCodigo, categoria, busqueda, busquedaMedico, especialidadFiltro, page, rowsPerPage],
     queryFn: async () => {
       const params = new URLSearchParams({ skip: String(page * rowsPerPage), limit: String(rowsPerPage) });
+      if (paisCodigo) params.set('pais', paisCodigo);
       if (categoria) params.set('categoria', categoria);
       if (busqueda) params.set('representante', busqueda);
       if (busquedaMedico) params.set('medico', busquedaMedico);
@@ -207,18 +213,22 @@ function CategorizacionMotor() {
 
   // Por representante
   const { data: porRep = [] } = useQuery<FilaRepresentante[]>({
-    queryKey: ['cat-por-rep'],
+    queryKey: ['cat-por-rep', paisCodigo],
     queryFn: async () => {
-      const r = await api.get('/categorizacion/por-representante');
+      const params = new URLSearchParams();
+      if (paisCodigo) params.set('pais', paisCodigo);
+      const r = await api.get(`/categorizacion/por-representante?${params}`);
       return r.data;
     },
   });
 
   // Por especialidad
   const { data: porEsp = [] } = useQuery<FilaEspecialidad[]>({
-    queryKey: ['cat-por-esp'],
+    queryKey: ['cat-por-esp', paisCodigo],
     queryFn: async () => {
-      const r = await api.get('/categorizacion/por-especialidad');
+      const params = new URLSearchParams();
+      if (paisCodigo) params.set('pais', paisCodigo);
+      const r = await api.get(`/categorizacion/por-especialidad?${params}`);
       return r.data;
     },
   });
