@@ -8,7 +8,7 @@ from datetime import datetime, date, timezone
 from decimal import Decimal
 from sqlalchemy import (
     String, Boolean, Integer, Date, DateTime,
-    Numeric, ForeignKey, Text, UniqueConstraint, CheckConstraint, Index, func
+    Numeric, ForeignKey, Text, UniqueConstraint, Index, func
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.database import Base
@@ -77,40 +77,6 @@ class RepresentanteMedico(Base):
     gerente: Mapped["Gerente"] = relationship("Gerente", back_populates="rms")
 
 
-class RepresentanteMedicoV2(Base):
-    """
-    Fase 1 - Correccion F2 (colision de ids explícitos) + F9 (codigo unico
-    global en vez de por pais). Tabla paralela nueva (migracion
-    5f3a9c7e1b46) - NO sustituye a DIM_RM todavia, ver changelog Fase 1.
-
-    Diferencias respecto a RepresentanteMedico (DIM_RM):
-    - `id` es autoincrement real generado por la BD (dims.py ya no necesita
-      forzar un id explícito con el RM_CODIGO del Excel).
-    - `codigo_origen_excel` conserva el codigo de negocio importado, para
-      trazabilidad con el Excel fuente.
-    - `codigo` es UNIQUE por (pais_codigo, codigo), no global — dos paises
-      pueden reusar el mismo codigo de RM sin chocar.
-    """
-    __tablename__ = "DIM_RM_V2"
-    __table_args__ = (
-        UniqueConstraint("pais_codigo", "codigo", name="UQ_RM_V2_Pais_Codigo"),
-        {"schema": "Config"},
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    codigo_origen_excel: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    pais_codigo: Mapped[str] = mapped_column(String(10), ForeignKey("Config.DIM_Pais.codigo"), nullable=False)
-    linea_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Linea.id"), nullable=False)
-    gerente_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("Config.DIM_Gerente.id"), nullable=True)
-    codigo: Mapped[str] = mapped_column(String(20), nullable=False)
-    nombre: Mapped[str] = mapped_column(String(200), nullable=False)
-    cedula: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    email: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    zona: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    activo: Mapped[bool] = mapped_column(Boolean, default=True)
-    fecha_ingreso: Mapped[date | None] = mapped_column(Date, nullable=True)
-
-
 class Indicador(Base):
     __tablename__ = "DIM_Indicador"
     __table_args__ = (
@@ -144,53 +110,6 @@ class Indicador(Base):
     orden: Mapped[int] = mapped_column(Integer, default=0)
 
     tablas: Mapped[list["IndicadorTabla"]] = relationship("IndicadorTabla", back_populates="indicador")
-
-
-MODULOS_INDICADOR_V2 = (
-    "PRODUCTIVIDAD", "COMERCIAL", "COACHING", "CAPACITACION", "GESTION", "RESULTADOS",
-)
-
-
-class IndicadorV2(Base):
-    """
-    Fase 1 - Correccion F1 (campo `modulo` sin validar). Tabla paralela
-    nueva (migracion 5f3a9c7e1b46) - NO sustituye a DIM_Indicador todavia.
-
-    `modulo` ahora tiene un CHECK constraint (CK_Indicador_V2_Modulo) con
-    los 6 valores realmente vigentes en el codigo (iup_service.py usa
-    PRODUCTIVIDAD/COACHING/CAPACITACION; productividad.py y dashboard.py
-    siguen consultando GESTION/RESULTADOS en vivo). Angostar a un solo
-    esquema de 3-4 valores es trabajo de Fase 2 coordinado con esos
-    archivos — ver docstring de la migracion.
-    """
-    __tablename__ = "DIM_Indicador_V2"
-    __table_args__ = (
-        UniqueConstraint("pais_codigo", "codigo", name="UQ_Indicador_V2_Pais_Codigo"),
-        CheckConstraint(
-            "modulo IN ('PRODUCTIVIDAD','COMERCIAL','COACHING','CAPACITACION','GESTION','RESULTADOS')",
-            name="CK_Indicador_V2_Modulo",
-        ),
-        {"schema": "Config"},
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    pais_codigo: Mapped[str] = mapped_column(String(10), ForeignKey("Config.DIM_Pais.codigo"), nullable=False)
-    codigo: Mapped[str] = mapped_column(String(50), nullable=False)
-    nombre: Mapped[str] = mapped_column(String(200), nullable=False)
-    descripcion: Mapped[str | None] = mapped_column(Text, nullable=True)
-    rol: Mapped[str] = mapped_column(String(20), nullable=False, default="RM")
-    modulo: Mapped[str] = mapped_column(String(50), nullable=False)
-    tipo_periodo: Mapped[str] = mapped_column(String(10), nullable=False, default="CICLO")
-    ponderacion_pct: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    escala: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    valor_min: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=True)
-    valor_max: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=True)
-    formula: Mapped[str | None] = mapped_column(Text, nullable=True)
-    peso_iup: Mapped[Decimal] = mapped_column(Numeric(5, 4), default=0)
-    unidad: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    meta_global: Mapped[Decimal | None] = mapped_column(Numeric(10, 4), nullable=True)
-    activo: Mapped[bool] = mapped_column(Boolean, default=True)
-    orden: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class IndicadorTabla(Base):
@@ -457,32 +376,6 @@ class TargetMedico(Base):
     especialidad: Mapped[str | None] = mapped_column(String(100), nullable=True)
     potencial: Mapped[str | None] = mapped_column(String(20), nullable=True)  # ej: A | B | C
     programado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)  # ← columna I (programado_flag)
-    activo: Mapped[bool] = mapped_column(Boolean, default=True)
-
-
-class MedicoCoberturaV2(Base):
-    """
-    Fase 1 - Correccion F3 (FACT_Visita.medico_codigo sin FK). Tabla
-    paralela nueva (migracion 5f3a9c7e1b46), Config.DIM_MedicoCobertura_V2.
-
-    Master de medicos del dominio Cobertura Predictiva/4DX, poblado desde
-    la union de Config.DIM_TargetMedico + DW.FACT_Visita (por
-    pais_codigo+medico_codigo). DELIBERADAMENTE distinta de Config.DIM_Medico
-    (esa pertenece al modulo Categorizacion Medica: otro Excel fuente,
-    deduplicada por nombre, sin codigo estable — universo medico
-    diferente). hechos.VisitaV2.medico_id apunta aqui.
-    """
-    __tablename__ = "DIM_MedicoCobertura_V2"
-    __table_args__ = (
-        UniqueConstraint("pais_codigo", "codigo", name="UQ_MedicoCobertura_V2_Pais_Codigo"),
-        {"schema": "Config"},
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    pais_codigo: Mapped[str] = mapped_column(String(10), ForeignKey("Config.DIM_Pais.codigo"), nullable=False)
-    codigo: Mapped[str] = mapped_column(String(50), nullable=False)
-    nombre: Mapped[str | None] = mapped_column(String(200), nullable=True)
-    especialidad: Mapped[str | None] = mapped_column(String(100), nullable=True)
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
 
 

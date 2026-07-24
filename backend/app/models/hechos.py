@@ -215,39 +215,14 @@ class Visita(Base):
     fecha_carga: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
-class VisitaV2(Base):
-    """
-    Fase 1 - Correccion F3 (medico_codigo sin FK). Tabla paralela nueva
-    (migracion 5f3a9c7e1b46), DW.FACT_Visita_V2 — NO sustituye a
-    FACT_Visita todavia, ver changelog Fase 1.
-
-    Agrega `medico_id`, FK real a Config.DIM_MedicoCobertura_V2 (nuevo
-    master del dominio Cobertura Predictiva). Se conserva `medico_codigo`
-    como columna de trazabilidad/auditoria del valor de origen del Excel.
-    """
-    __tablename__ = "FACT_Visita_V2"
-    __table_args__ = {"schema": "DW"}
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    pais_codigo: Mapped[str] = mapped_column(String(10), ForeignKey("Config.DIM_Pais.codigo"), nullable=False)
-    rm_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_RM.id"), nullable=False)
-    ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
-    medico_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_MedicoCobertura_V2.id"), nullable=False, index=True)
-
-    medico_codigo: Mapped[str] = mapped_column(String(50), nullable=False)
-    fecha_visita: Mapped[date] = mapped_column(Date, nullable=False)
-    tipo_contacto: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    estado_visita: Mapped[str] = mapped_column(String(20), nullable=False, default="Realizada")
-    producto_foco: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    carga_excel_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    fecha_carga: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-
 # ═════════════════════════════════════════════════════════════════════════
 # NUEVO — Módulo de Categorización Médica (sustituye a Capacitación)
 # ═════════════════════════════════════════════════════════════════════════
 
-# CÓDIGO MUERTO — sustituido en jun-2026 por cat.FactMedicoCategoriaSnapshot (cat_models.py)
+# NO es código muerto (verificado jul-2026): aunque el listado/lectura de Categorización
+# Médica corre exclusivamente sobre cat.* (cat_models.py), esta tabla SÍ se sigue
+# escribiendo en cada aprobación de médico vía
+# categorizacion_service.registrar_en_maestro_categorizacion (patrón write-only).
 class CategorizacionMedica(Base):
     """Categorización A/B/C/D de cada médico, por ciclo — DW.FACT_CategorizacionMedica.
 

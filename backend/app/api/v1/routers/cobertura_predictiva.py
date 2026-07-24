@@ -866,46 +866,25 @@ def reset_datos_cat(
 
         if incluir_dims:
             # Orden FK: FactMedicoCategoriaDetalle → FactMedicoCategoriaSnapshot → DimMedico
-            # FactMedicoCategoriaDetalle no tiene PaisKey propio: se borra por subquery
+            # FactMedicoCategoriaDetalle no tiene PaisKey propio: se borra por subquery.
+            # "MedicoCategoriaKey" es fijo (ver CREATE TABLE en 0001_baseline_postgres.py) —
+            # no hay FK constraint real que introspeccionar (y sys.foreign_keys/OBJECT_SCHEMA_NAME
+            # son catálogos de SQL Server, inexistentes en PostgreSQL; el DELETE FROM ... con
+            # subquery EXISTS de abajo es portable y no depende de nombres de constraint).
             def _tabla_existe(nombre: str) -> bool:
                 return bool(db.execute(_t(
-                    f"SELECT 1 FROM INFORMATION_SCHEMA.TABLES "
-                    f"WHERE TABLE_SCHEMA='cat' AND TABLE_NAME='{nombre}'"
-                )).fetchone())
+                    "SELECT 1 FROM INFORMATION_SCHEMA.TABLES "
+                    "WHERE TABLE_SCHEMA='cat' AND TABLE_NAME=:t"
+                ), {"t": nombre}).fetchone())
 
             if _tabla_existe("FactMedicoCategoriaDetalle"):
-                # Obtener nombres exactos de columnas del FK constraint desde sys.foreign_keys
-                # (evita hardcodear nombres que pueden diferir entre migraciones y BD real)
-                fk_info = db.execute(_t("""
-                    SELECT pc.name AS parent_col, rc.name AS ref_col
-                    FROM sys.foreign_keys fk
-                    JOIN sys.foreign_key_columns fkc ON fk.object_id = fkc.constraint_object_id
-                    JOIN sys.columns pc ON fkc.parent_object_id = pc.object_id
-                        AND fkc.parent_column_id = pc.column_id
-                    JOIN sys.columns rc ON fkc.referenced_object_id = rc.object_id
-                        AND fkc.referenced_column_id = rc.column_id
-                    WHERE fk.name = 'FK_FactDetalle_Snapshot'
-                      AND OBJECT_SCHEMA_NAME(fk.parent_object_id) = 'cat'
-                """)).fetchone()
-                if fk_info:
-                    parent_col, ref_col = fk_info[0], fk_info[1]
-                    r = db.execute(_t(
-                        f'DELETE d FROM "cat"."FactMedicoCategoriaDetalle" d '
-                        f'INNER JOIN "cat"."FactMedicoCategoriaSnapshot" s '
-                        f'  ON s."{ref_col}" = d."{parent_col}" '
-                        f'WHERE s."PaisKey" = {pais_key}'
-                    ))
-                    conteos["FactMedicoCategoriaDetalle"] = r.rowcount
-                else:
-                    # Fallback: si no se encuentra el FK, intentar borrar por subquery en PK
-                    _log.warning("[reset_datos_cat] FK_FactDetalle_Snapshot no encontrado, intentando DELETE directo")
-                    r = db.execute(_t(
-                        f'DELETE FROM "cat"."FactMedicoCategoriaDetalle" WHERE '
-                        f'EXISTS (SELECT 1 FROM "cat"."FactMedicoCategoriaSnapshot" snap '
-                        f'  WHERE snap."PaisKey" = {pais_key} '
-                        f'  AND snap."MedicoCategoriaKey" = "cat"."FactMedicoCategoriaDetalle"."MedicoCategoriaKey")'
-                    ))
-                    conteos["FactMedicoCategoriaDetalle"] = r.rowcount
+                r = db.execute(_t(
+                    'DELETE FROM "cat"."FactMedicoCategoriaDetalle" WHERE '
+                    'EXISTS (SELECT 1 FROM "cat"."FactMedicoCategoriaSnapshot" snap '
+                    '  WHERE snap."PaisKey" = :pk '
+                    '  AND snap."MedicoCategoriaKey" = "cat"."FactMedicoCategoriaDetalle"."MedicoCategoriaKey")'
+                ), {"pk": pais_key})
+                conteos["FactMedicoCategoriaDetalle"] = r.rowcount
 
             if _tabla_existe("FactMedicoCategoriaSnapshot"):
                 r = db.execute(_t(f'DELETE FROM "cat"."FactMedicoCategoriaSnapshot" WHERE "PaisKey" = {pais_key}'))
