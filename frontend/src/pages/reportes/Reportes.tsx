@@ -6,6 +6,7 @@ import {
 import { PictureAsPdf, TableChart, Download } from '@mui/icons-material';
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
+import { useCicloStore } from '../../store/ciclo.store';
 
 interface FiltrosReporte {
   paisId: string;
@@ -77,7 +78,7 @@ function ProximamenteCard({ title, desc }: { title: string; desc: string }) {
 }
 
 export default function Reportes() {
-  const [paisId, setPaisId] = useState('');
+  const paisId = useCicloStore((s) => s.paisCodigo) || '';
   const [cicloId, setCicloId] = useState('');
   const [tipoRanking, setTipoRanking] = useState('MENSUAL');
 
@@ -92,15 +93,11 @@ export default function Reportes() {
   const paisNombrePorId: Record<number, string> = Object.fromEntries((paises || []).map((p: any) => [p.id, p.nombre]));
   const cicloLabel = (c: any) => paisId ? c.nombre : `${c.nombre} — ${paisNombrePorId[c.pais_codigo] || 'País desconocido'}`;
 
-  // ── Auto-seleccionar República Dominicana al cargar ───────────────────
+  // El país ahora viene del contexto global (CicloPaisHeader) — al cambiar, se limpia el
+  // ciclo seleccionado para que el efecto de más abajo elija el último ciclo con datos del país nuevo.
   useEffect(() => {
-    if (!(paises || []).length || paisId) return;
-    const rd = (paises as any[]).find((p: any) =>
-      p.codigo?.toUpperCase() === 'RD' ||
-      p.nombre?.toLowerCase().includes('dominicana')
-    );
-    if (rd) setPaisId(rd.codigo);
-  }, [paises]); // eslint-disable-line react-hooks/exhaustive-deps
+    setCicloId('');
+  }, [paisId]);
 
   // Obtener el último ciclo con datos reales
   const { data: _cicloEf } = useQuery({
@@ -131,12 +128,6 @@ export default function Reportes() {
       <Card elevation={1} sx={{ mb: 3, borderRadius: 2 }}>
         <CardContent>
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} sm={4}>
-              <TextField select fullWidth size="small" label="País" value={paisId} onChange={(e) => { setPaisId(e.target.value); setCicloId(''); }}>
-                <MenuItem value="">Todos los países</MenuItem>
-                {(paises || []).map((p: any) => <MenuItem key={p.id} value={p.codigo}>{p.nombre}</MenuItem>)}
-              </TextField>
-            </Grid>
             <Grid item xs={12} sm={4}>
               <TextField select fullWidth size="small" label="Ciclo" value={cicloId} onChange={(e) => setCicloId(e.target.value)}>
                 <MenuItem value="">Todos los ciclos</MenuItem>

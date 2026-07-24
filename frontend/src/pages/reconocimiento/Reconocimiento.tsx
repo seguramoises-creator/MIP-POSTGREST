@@ -8,6 +8,7 @@ import {
 import { AutoAwesome, Download } from '@mui/icons-material';
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
+import { useCicloStore } from '../../store/ciclo.store';
 
 /* ── utilidades ───────────────────────────────────────────── */
 function FilterLabel({ children }: { children: React.ReactNode }) {
@@ -89,30 +90,23 @@ function PodiumCard({ cfg, rm }: { cfg: typeof PODIUM_CFG[0]; rm?: any }) {
 /* ── página principal ─────────────────────────────────────── */
 export default function Reconocimiento() {
   const queryClient = useQueryClient();
-  const [paisId,      setPaisId]      = useState<string | ''>('');
+  const paisId = useCicloStore((s) => s.paisCodigo) || '';
   const [cicloId,     setCicloId]     = useState<number | ''>('');
   const [descargando, setDescargando] = useState<number | null>(null);
   const [generando,   setGenerando]   = useState(false);
   const [mensaje,     setMensaje]     = useState<string | null>(null);
 
-  const handlePaisChange = (val: string | '') => { setPaisId(val); setCicloId(''); };
-
   const { data: catalogos } = useQuery({
     queryKey: ['rec-catalogos', paisId],
     queryFn: () => api.get('/dashboard/catalogos', { params: paisId ? { pais_codigo: paisId } : {} }).then(r => r.data),
   });
-  const paises: any[] = catalogos?.paises ?? [];
   const ciclos: any[] = catalogos?.ciclos  ?? [];
 
-  // ── Auto-seleccionar República Dominicana al cargar ───────────────────
+  // El país ahora viene del contexto global (CicloPaisHeader) — al cambiar, se limpia el
+  // ciclo seleccionado para que el efecto de más abajo elija el último ciclo con datos del país nuevo.
   useEffect(() => {
-    if (!paises.length || paisId) return;
-    const rd = paises.find((p: any) =>
-      p.codigo?.toUpperCase() === 'RD' ||
-      p.nombre?.toLowerCase().includes('dominicana')
-    );
-    if (rd) handlePaisChange(rd.codigo);
-  }, [paises]); // eslint-disable-line react-hooks/exhaustive-deps
+    setCicloId('');
+  }, [paisId]);
 
 
 
@@ -211,14 +205,6 @@ export default function Reconocimiento() {
       <Card elevation={1} sx={{ mb: 3, borderRadius: 2 }}>
         <CardContent sx={{ py: '12px !important' }}>
           <Box sx={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Box sx={{ width: 200 }}>
-              <FilterLabel>País</FilterLabel>
-              <Select size="small" fullWidth value={paisId}
-                onChange={(e) => handlePaisChange(e.target.value as string | '')} displayEmpty>
-                <MenuItem value=""><em>Todos los países</em></MenuItem>
-                {paises.map((p: any) => <MenuItem key={p.id} value={p.codigo}>{p.nombre}</MenuItem>)}
-              </Select>
-            </Box>
             <Box sx={{ width: 200 }}>
               <FilterLabel>Ciclo</FilterLabel>
               <Select size="small" fullWidth value={cicloId}

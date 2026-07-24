@@ -25,6 +25,7 @@ import {
 } from '@mui/material';
 import { Add, Refresh, TableChart, Edit, Upload, ToggleOn, ToggleOff, LockOpen, Lock, Delete, Psychology, TrendingUp, LocalHospital } from '@mui/icons-material';
 import { api } from '../../services/api';
+import { useCicloStore } from '../../store/ciclo.store';
 import ImportDims from './ImportDims';
 import LsiiAdmin from './LsiiAdmin';
 import CoberturaPredictivaAdmin from './CoberturaPredictivaAdmin';
@@ -552,7 +553,7 @@ function CatalogoTab({
  */
 function RangosIndicadorTab() {
   const [selectedIndicadorId, setSelectedIndicadorId] = useState<number | ''>('');
-  const [selectedPaisId, setSelectedPaisId] = useState<string | ''>('');
+  const selectedPaisId = useCicloStore((s) => s.paisCodigo) || '';
   const [open, setOpen] = useState(false);
   const [openDel, setOpenDel] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
@@ -562,6 +563,10 @@ function RangosIndicadorTab() {
   const [editForm, setEditForm] = useState({ rango_desde: '', rango_hasta: '', puntos: '', descripcion: '' });
   const [msg, setMsg] = useState('');
   const qc = useQueryClient();
+
+  // El país ahora viene del contexto global (CicloPaisHeader) — al cambiar, se limpia el
+  // indicador seleccionado (que pertenecía al país anterior).
+  useEffect(() => { setSelectedIndicadorId(''); }, [selectedPaisId]);
 
   const { data: _indRaw } = useQuery({
     queryKey: ['indicadores-rangos', selectedPaisId],
@@ -648,16 +653,8 @@ function RangosIndicadorTab() {
 
       {msg && <Alert severity={msg.startsWith('Error') ? 'error' : 'success'} sx={{ mb: 2 }} onClose={() => setMsg('')}>{msg}</Alert>}
 
-      {/* Filtros: primero País, luego Indicador filtrado por ese país */}
+      {/* Filtro de indicador (el país viene del contexto global — CicloPaisHeader) */}
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-        {/* 1. Selector de país */}
-        <Box sx={{ minWidth: 220 }}>
-          <PaisSelector
-            value={selectedPaisId}
-            onChange={(v) => { setSelectedPaisId(v); setSelectedIndicadorId(''); }}
-          />
-        </Box>
-        {/* 2. Selector de indicador: solo los del país seleccionado, sin duplicados */}
         <Box sx={{ flex: 1, minWidth: 260 }}>
           <FormControl fullWidth size="small">
             <InputLabel>Indicador</InputLabel>
@@ -911,37 +908,16 @@ function CicloStateButtons({ row, refetch }: { row: any; refetch: () => void }) 
 
 // ── Tab genérico de DIM con filtro de País ────────────────────────────
 function DimTabWithPais({ tabConfig }: { tabConfig: (typeof TABS_DIM)[0] }) {
-  const [paisCodigo, setPaisId] = useState<string | ''>('');
-  const { data: paises, isLoading: loadingPaises } = usePaises();
-
-  useEffect(() => {
-    if (!(paises || []).length || paisCodigo) return;
-    const rd = (paises as any[]).find((p: any) =>
-      p.codigo?.toUpperCase() === 'RD' ||
-      p.nombre?.toLowerCase().includes('dominicana')
-    );
-    if (rd) setPaisId(rd.codigo);
-  }, [paises]); // eslint-disable-line react-hooks/exhaustive-deps
+  // El país viene del contexto global (CicloPaisHeader, arriba de todos los módulos) — ya
+  // no tiene un selector propio duplicado.
+  const paisCodigo = useCicloStore((s) => s.paisCodigo) || '';
+  const { data: paises } = usePaises();
 
   return (
     <Box>
-      {/* Filtro de país */}
+      {/* País activo (informativo — se cambia desde el selector superior) */}
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2,
                  bgcolor: '#e3f2fd', borderRadius: 2, px: 2, py: 1.5 }}>
-        <FormControl size="small" sx={{ minWidth: 260 }}>
-          <InputLabel>{loadingPaises ? 'Cargando países…' : 'Filtrar por País'}</InputLabel>
-          <Select
-            value={paisCodigo}
-            label={loadingPaises ? 'Cargando países…' : 'Filtrar por País'}
-            onChange={(e) => setPaisId(e.target.value as string | '')}
-            disabled={loadingPaises}
-          >
-            <MenuItem value="">Todos los países</MenuItem>
-            {(paises || []).map((p: any) => (
-              <MenuItem key={p.id} value={p.codigo}>{p.codigo} — {p.nombre}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
         <Typography variant="body2" color="primary.main" fontWeight={600}>
           {tabConfig.label} — {paisCodigo
             ? (paises || []).find((p: any) => p.codigo === paisCodigo)
@@ -995,19 +971,11 @@ function contarDiasHabiles(inicioStr: string, finStr: string, feriados: Set<stri
  * los días no laborables (feriados) que se excluyen del cálculo.
  */
 function CiclosPorPaisTab() {
-  const [paisCodigo, setPaisId] = useState<string | ''>('');
-  const { data: paises, isLoading: loadingPaises } = usePaises();
+  // El país viene del contexto global (CicloPaisHeader, arriba de todos los módulos) — ya
+  // no tiene un selector propio duplicado.
+  const paisCodigo = useCicloStore((s) => s.paisCodigo) || '';
+  const { data: paises } = usePaises();
   const qc = useQueryClient();
-
-  // Auto-seleccionar República Dominicana al cargar
-  useEffect(() => {
-    if (!(paises || []).length || paisCodigo) return;
-    const rd = (paises as any[]).find((p: any) =>
-      p.codigo?.toUpperCase() === 'RD' ||
-      p.nombre?.toLowerCase().includes('dominicana')
-    );
-    if (rd) setPaisId(rd.codigo);
-  }, [paises]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data: ciclos, isLoading, refetch } = useQuery({
     queryKey: ['ciclos', paisCodigo],
@@ -1088,24 +1056,10 @@ function CiclosPorPaisTab() {
     <Box>
       {msg && <Alert severity={msg.tipo} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.texto}</Alert>}
 
-      {/* Selector de país + Nuevo ciclo */}
+      {/* País activo (informativo — se cambia desde el selector superior) + Nuevo ciclo */}
       <Card elevation={1} sx={{ mb: 2, borderRadius: 2 }}>
         <CardContent sx={{ py: '12px !important' }}>
           <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-            <FormControl size="small" sx={{ minWidth: 260 }}>
-              <InputLabel>{loadingPaises ? 'Cargando países…' : 'Filtrar por País'}</InputLabel>
-              <Select
-                value={paisCodigo}
-                label={loadingPaises ? 'Cargando países…' : 'Filtrar por País'}
-                onChange={(e) => setPaisId(e.target.value as string | '')}
-                disabled={loadingPaises}
-              >
-                <MenuItem value="">Todos los países</MenuItem>
-                {(paises || []).map((p: any) => (
-                  <MenuItem key={p.id} value={p.codigo}>{p.codigo} — {p.nombre}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
             <Typography variant="body2" color="text.secondary">
               {rows.length} ciclo{rows.length !== 1 ? 's' : ''}
               {paisCodigo ? ` — ${paisNombre(String(paisCodigo))}` : ' en todos los países'}

@@ -26,6 +26,7 @@ import {
 } from 'recharts';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
+import { useCicloStore } from '../../store/ciclo.store';
 
 // ── Colores de semáforo ───────────────────────────────────────────────────────
 const SEM: Record<string, string> = {
@@ -656,7 +657,7 @@ const DashboardTab = ({
 // Nota: la carga y el reset de datos se hacen desde
 // Administración → Cobertura Predictiva (CoberturaPredictivaAdmin.tsx).
 export default function CoberturaPredictiva() {
-  const [paisCodigo, setPaisCodigo] = useState('DO');
+  const paisCodigo = useCicloStore((s) => s.paisCodigo) || '';
   const [cicloSeleccionado, setCicloSeleccionado] = useState('');
   const [fechaCorte, setFechaCorte] = useState('');
   const [lineaFiltro, setLineaFiltro] = useState('');
@@ -668,6 +669,12 @@ export default function CoberturaPredictiva() {
     queryFn: () => api.get(`/cobertura-predictiva/vivo/ciclos?pais_codigo=${paisCodigo}`).then(r => r.data),
     staleTime: 5 * 60 * 1000,
   });
+
+  // El país ahora viene del contexto global (CicloPaisHeader) — al cambiar, se limpia el
+  // ciclo seleccionado para que el efecto de abajo elija el ciclo ABIERTO del país nuevo.
+  React.useEffect(() => {
+    setCicloSeleccionado('');
+  }, [paisCodigo]);
 
   React.useEffect(() => {
     // Default = ciclo ABIERTO del país (no el primero de la lista, que sería un ciclo cerrado).
@@ -743,17 +750,6 @@ export default function CoberturaPredictiva() {
       {/* Filtros */}
       <Paper sx={{ p: 2, mb: 2, borderRadius: 2 }}>
         <Grid container spacing={2} alignItems="flex-start">
-          <Grid item xs={12} sm={6} md={3}>
-            <FormControl fullWidth size="small">
-              <InputLabel>País</InputLabel>
-              <Select value={paisCodigo} label="País" onChange={e => { setPaisCodigo(e.target.value); setCicloSeleccionado(''); }}>
-                <MenuItem value="DO">República Dominicana</MenuItem>
-                <MenuItem value="CR">Costa Rica</MenuItem>
-                <MenuItem value="GT">Guatemala</MenuItem>
-                <MenuItem value="PA">Panamá</MenuItem>
-              </Select>
-            </FormControl>
-          </Grid>
           <Grid item xs={12} sm={6} md={3}>
             <FormControl fullWidth size="small" disabled={ciclosLoading || ciclos.length === 0}>
               <InputLabel>Ciclo</InputLabel>
