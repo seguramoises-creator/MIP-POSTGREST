@@ -32,6 +32,7 @@ export default function RupturaVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esGestor = rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD';
   const esSoloLectura = useCicloStore((s) => s.esSoloLectura);
+  const paisCodigo = useCicloStore((s) => s.paisCodigo);
 
   const [estado, setEstado] = useState<RupturaEstado | null>(null);
   const [preview, setPreview] = useState<CierrePreview | null>(null);
@@ -52,23 +53,24 @@ export default function RupturaVisita() {
 
   useEffect(() => {
     if (!esGestor) return;
-    listarVMs().then(setVms).catch(() => {});
-    listarGerentesVisita().then(setGerentes).catch(() => {});
-    listarLineasVisita().then(setLineas).catch(() => {});
-  }, [esGestor]);
+    listarVMs(paisCodigo).then(setVms).catch(() => {});
+    listarGerentesVisita(paisCodigo).then(setGerentes).catch(() => {});
+    listarLineasVisita(paisCodigo).then(setLineas).catch(() => {});
+  }, [esGestor, paisCodigo]);
 
   const cargar = useCallback(() => {
     setCargando(true);
     const tareas: Promise<unknown>[] = [
-      estadoRuptura({ vmId: vmId || undefined, gerenteId: gerenteId || undefined, lineaId: lineaId || undefined })
-        .then(setEstado).catch(() => setEstado(null)),
+      estadoRuptura({
+        vmId: vmId || undefined, gerenteId: gerenteId || undefined, lineaId: lineaId || undefined, paisCodigo,
+      }).then(setEstado).catch(() => setEstado(null)),
     ];
     if (esGestor) {
       tareas.push(previsualizarCierre().then(setPreview).catch(() => setPreview(null)));
       tareas.push(historialCierres().then(setHist).catch(() => setHist([])));
     }
     Promise.all(tareas).finally(() => setCargando(false));
-  }, [esGestor, vmId, gerenteId, lineaId]);
+  }, [esGestor, vmId, gerenteId, lineaId, paisCodigo]);
   useEffect(() => { cargar(); }, [cargar]);
 
   async function confirmarCierre() {

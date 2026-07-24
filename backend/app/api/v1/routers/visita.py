@@ -153,24 +153,28 @@ def mi_gerente(vm_id: int | None = None, db: Session = Depends(get_db), current_
 
 
 @router.get("/vms", response_model=list[dict])
-def listar_vms(db: Session = Depends(get_db), current_user=RequireAnyAuth):
-    """Visitadores médicos (DIM_RM) — para que ADMIN/GERENTE elijan el panel a ver."""
+def listar_vms(pais_codigo: str | None = None, db: Session = Depends(get_db), current_user=RequireAnyAuth):
+    """Visitadores médicos (DIM_RM) — para que ADMIN/GERENTE elijan el panel a ver.
+    `pais_codigo` (aislamiento multipaís): sin filtro, listaba VMs de TODOS los países."""
     from app.models.dimensiones import RepresentanteMedico
-    return [{"id": r.id, "nombre": r.nombre}
-            for r in db.query(RepresentanteMedico).filter(RepresentanteMedico.activo == True)  # noqa: E712
-            .order_by(RepresentanteMedico.nombre).all()]
+    q = db.query(RepresentanteMedico).filter(RepresentanteMedico.activo == True)  # noqa: E712
+    if pais_codigo:
+        q = q.filter(RepresentanteMedico.pais_codigo == pais_codigo)
+    return [{"id": r.id, "nombre": r.nombre} for r in q.order_by(RepresentanteMedico.nombre).all()]
 
 
 @router.get("/medicos", response_model=list[dict])
 def listar_medicos(vm_id: int | None = None, incluir_inactivos: bool = False,
-                   lite: bool = False,
+                   lite: bool = False, pais_codigo: str | None = None,
                    db: Session = Depends(get_db), current_user=ReadMedicoPanel):
     """Panel médico. El VM ve solo el suyo; ADMIN/GERENTE pueden filtrar por ?vm_id=.
     `incluir_inactivos=true` incluye los médicos desactivados (para reactivarlos).
     `lite=true` devuelve solo los campos de LISTA (rendimiento; la ficha completa se
-    obtiene con GET /visita/medicos/{id} al editar)."""
+    obtiene con GET /visita/medicos/{id} al editar).
+    `pais_codigo` (aislamiento multipaís): sin `vm_id`, acota el panel agregado a un país."""
     vm = _scope_vm(current_user, vm_id)
-    return visita_service.listar_medicos(db, vm_id=vm, incluir_inactivos=incluir_inactivos, lite=lite)
+    return visita_service.listar_medicos(db, vm_id=vm, incluir_inactivos=incluir_inactivos,
+                                         lite=lite, pais_codigo=pais_codigo)
 
 
 @router.get("/medicos/existentes", response_model=list[dict])
@@ -413,35 +417,41 @@ def importar_medicos_categorizacion(db: Session = Depends(get_db), current_user=
 
 
 @router.get("/gerentes", response_model=list[dict])
-def listar_gerentes(db: Session = Depends(get_db), current_user=RequireAnyAuth):
-    """Gerentes de Distrito (para el filtro de cobertura)."""
+def listar_gerentes(pais_codigo: str | None = None,
+                    db: Session = Depends(get_db), current_user=RequireAnyAuth):
+    """Gerentes de Distrito (para el filtro de cobertura). `pais_codigo` (aislamiento
+    multipaís, opcional/retrocompatible): acota a los gerentes de ese país."""
     from app.models.dimensiones import Gerente
-    return [{"id": g.id, "nombre": g.nombre}
-            for g in db.query(Gerente).filter(Gerente.tipo == "DISTRITO", Gerente.activo == True)  # noqa: E712
-            .order_by(Gerente.nombre).all()]
+    q = db.query(Gerente).filter(Gerente.tipo == "DISTRITO", Gerente.activo == True)  # noqa: E712
+    if pais_codigo:
+        q = q.filter(Gerente.pais_codigo == pais_codigo)
+    return [{"id": g.id, "nombre": g.nombre} for g in q.order_by(Gerente.nombre).all()]
 
 
 @router.get("/cobertura/resumen", response_model=dict)
 def cobertura_resumen(ciclo_id: int | None = None, vm_id: int | None = None,
                       gerente_id: int | None = None, linea_id: int | None = None,
-                      solo_ruptura: bool = False,
+                      solo_ruptura: bool = False, pais_codigo: str | None = None,
                       db: Session = Depends(get_db), current_user=ReadCobertura):
     """Dashboard de Cobertura: gauges (cobertura/V+R/gap), desglose A/B/C, listas y ruptura.
     El VM ve su propia cobertura; ADMIN/GERENTE ven el equipo o filtran por visitador
-    (?vm_id=), Gerente de Distrito (?gerente_id=), Línea (?linea_id=) y ruptura (?solo_ruptura=)."""
+    (?vm_id=), Gerente de Distrito (?gerente_id=), Línea (?linea_id=), país (?pais_codigo=,
+    aislamiento multipaís) y ruptura (?solo_ruptura=)."""
     from app.services import visita_cobertura_service
     vm = _scope_vm(current_user, vm_id)
     return visita_cobertura_service.resumen_cobertura(
-        db, ciclo_id, vm, gerente_id, linea_id, solo_ruptura)
+        db, ciclo_id, vm, gerente_id, linea_id, solo_ruptura, pais_codigo)
 
 
 @router.get("/cobertura/ranking", response_model=dict)
 def cobertura_ranking(metrica: str = "cobertura", ciclo_id: int | None = None,
+                      pais_codigo: str | None = None,
                       db: Session = Depends(get_db), current_user=ReadCobertura):
     """Detalle desplegable por visitador: ranking de quién cumple/no el indicador.
-    metrica: 'cobertura' | 'completa' | 'sin_visitar'."""
+    metrica: 'cobertura' | 'completa' | 'sin_visitar'.
+    `pais_codigo` (aislamiento multipaís): acota el ranking a los VMs de ese país."""
     from app.services import visita_cobertura_service
-    return visita_cobertura_service.ranking_visitadores(db, ciclo_id, metrica)
+    return visita_cobertura_service.ranking_visitadores(db, ciclo_id, metrica, pais_codigo)
 
 
 # ── Registro de visita (Parte 4) ──────────────────────────────────────────────
@@ -613,13 +623,14 @@ def resumen_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
 # ── Ruptura de secuencia / Cierre de ciclo (Parte 5) ──────────────────────────
 @router.get("/ruptura", response_model=dict)
 def estado_ruptura(vm_id: int | None = None, gerente_id: int | None = None,
-                   linea_id: int | None = None, db: Session = Depends(get_db),
-                   current_user=ReadCobertura):
+                   linea_id: int | None = None, pais_codigo: str | None = None,
+                   db: Session = Depends(get_db), current_user=ReadCobertura):
     """Médicos en ruptura por severidad (1 / 2 / ≥3 ciclos sin visita). El VM ve el suyo;
-    gestión puede filtrar por Gerente de Distrito (?gerente_id=) y Línea (?linea_id=)."""
+    gestión puede filtrar por Gerente de Distrito (?gerente_id=), Línea (?linea_id=) y
+    País (?pais_codigo=, aislamiento multipaís del agregado "todos los visitadores")."""
     from app.services import visita_cierre_service
     return visita_cierre_service.estado_ruptura(
-        db, _scope_vm(current_user, vm_id), gerente_id, linea_id)
+        db, _scope_vm(current_user, vm_id), gerente_id, linea_id, pais_codigo)
 
 
 @router.get("/cierre/previsualizar", response_model=dict)
@@ -656,10 +667,11 @@ def historial_cierres(db: Session = Depends(get_db), current_user=RequireCierre)
 
 # ── Parrilla promocional / Muestras (Parte 6) ─────────────────────────────────
 @router.get("/lineas", response_model=list[dict])
-def listar_lineas(db: Session = Depends(get_db), current_user=RequireAnyAuth):
-    """Líneas de producto (para el selector de la parrilla)."""
+def listar_lineas(pais_codigo: str | None = None, db: Session = Depends(get_db), current_user=RequireAnyAuth):
+    """Líneas de producto (para el selector de la parrilla).
+    `pais_codigo` (aislamiento multipaís): sin filtro, listaba líneas de TODOS los países."""
     from app.services import visita_parrilla_service
-    return visita_parrilla_service.listar_lineas(db)
+    return visita_parrilla_service.listar_lineas(db, pais_codigo)
 
 
 @router.get("/parrilla/ultima-linea", response_model=dict)

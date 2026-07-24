@@ -91,6 +91,8 @@ export default function RegistrarVisita() {
   // al panel el estado de visita (hoy/ciclo) + último comentario, como la de Médico
   // (que resuelve el ciclo del lado del servidor vía `ciclo_por_defecto`).
   const cicloAbiertoId = useCicloStore((s) => s.cicloAbiertoId);
+  // País del contexto global — aislamiento multipaís en el selector de VM (ADMIN/GERENTE).
+  const paisCodigo = useCicloStore((s) => s.paisCodigo);
   // Sin contexto de ciclo: el registro SIEMPRE opera sobre el ciclo abierto del
   // país del visitador (el backend lo resuelve y lo protege con su guard).
 
@@ -167,9 +169,9 @@ export default function RegistrarVisita() {
 
   useEffect(() => {
     listarCausas().then(setCausas).catch(() => {});
-    if (!esVM) listarVMs().then(setVms).catch(() => {});
+    if (!esVM) listarVMs(paisCodigo).then(setVms).catch(() => {});
     setCargando(false);
-  }, [esVM]);
+  }, [esVM, paisCodigo]);
 
   useEffect(() => { setSel(null); cargarAgenda(); cargarRegistradas(); }, [cargarAgenda, cargarRegistradas]);
   // Historial: carga perezosa al abrir la sección (y se refresca si cambia el VM).

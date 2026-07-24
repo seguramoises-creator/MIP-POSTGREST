@@ -39,7 +39,8 @@ export interface CoachingKpi {
 }
 
 export const cmCatalogo = () => api.get<CatalogoItem[]>('/coaching-more/catalogo').then(r => r.data);
-export const cmVms = () => api.get<VMItem[]>('/coaching-more/vms').then(r => r.data);
+export const cmVms = (paisCodigo?: string) =>
+  api.get<VMItem[]>('/coaching-more/vms', { params: paisCodigo ? { pais_codigo: paisCodigo } : {} }).then(r => r.data);
 export const cmAcompanadasHoy = (rmId: number) =>
   api.get<AcompanadasHoy>('/coaching-more/acompanadas-hoy', { params: { rm_id: rmId } }).then(r => r.data);
 export const cmCrear = (p: HojaPayload) => api.post('/coaching-more', p).then(r => r.data);
@@ -47,7 +48,9 @@ export const cmCrear = (p: HojaPayload) => api.post('/coaching-more', p).then(r 
 export const cmListar = (params: { rm_id?: number; ciclo_id?: number } = {}) =>
   api.get<HojaResumen[]>('/coaching-more', { params }).then(r => r.data);
 export const cmDetalle = (id: number) => api.get<HojaDetalle>(`/coaching-more/${id}`).then(r => r.data);
-export const cmKpi = (cicloId?: number) =>
-  api.get<CoachingKpi>('/coaching-more/kpi', { params: cicloId ? { ciclo_id: cicloId } : {} }).then(r => r.data);
+export const cmKpi = (cicloId?: number, paisCodigo?: string) =>
+  api.get<CoachingKpi>('/coaching-more/kpi', { params: {
+    ...(cicloId ? { ciclo_id: cicloId } : {}), ...(paisCodigo ? { pais_codigo: paisCodigo } : {}),
+  } }).then(r => r.data);
 export const cmConsolidar = (destino: 'coaching' | 'indicador', cicloId: number, paisCodigo: string) =>
   api.post('/coaching-more/consolidar', null, { params: { destino, ciclo_id: cicloId, pais_codigo: paisCodigo } }).then(r => r.data);

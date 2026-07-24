@@ -16,7 +16,8 @@ export interface DuplicadoDetalle { tipo: 'duro' | 'blando'; mensaje: string; co
 
 export const mmListar = (params: Record<string, any> = {}) =>
   api.get<MaestroMedico[]>('/medicos/maestro', { params }).then(r => r.data);
-export const mmKpis = () => api.get<MaestroMedicoKpis>('/medicos/maestro/kpis').then(r => r.data);
+export const mmKpis = (paisCodigo?: string) =>
+  api.get<MaestroMedicoKpis>('/medicos/maestro/kpis', { params: paisCodigo ? { pais_codigo: paisCodigo } : {} }).then(r => r.data);
 export const mmObtener = (id: number) => api.get<MaestroMedico>(`/medicos/maestro/${id}`).then(r => r.data);
 export const mmCrear = (p: Partial<MaestroMedico> & { pais_codigo: string; confirmar_duplicado?: boolean }) =>
   api.post<MaestroMedico>('/medicos/maestro', p).then(r => r.data);

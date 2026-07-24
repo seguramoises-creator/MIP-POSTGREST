@@ -138,11 +138,12 @@ export interface Catalogo { id: number; nombre: string; }
 
 // `lite=true` trae solo campos de lista (rendimiento). La ficha completa se pide con
 // obtenerMedico(id) al editar.
-export const listarMedicos = (vmId?: number, incluirInactivos = false, lite = false) =>
+// `paisCodigo` (aislamiento multipaís): sin `vmId`, acota el panel agregado a un país.
+export const listarMedicos = (vmId?: number, incluirInactivos = false, lite = false, paisCodigo?: string) =>
   api.get<MedicoVisita[]>('/visita/medicos', {
     params: {
       ...(vmId ? { vm_id: vmId } : {}), ...(incluirInactivos ? { incluir_inactivos: true } : {}),
-      ...(lite ? { lite: true } : {}),
+      ...(lite ? { lite: true } : {}), ...(paisCodigo ? { pais_codigo: paisCodigo } : {}),
     },
   }).then(r => r.data);
 
@@ -192,8 +193,8 @@ export const listarMunicipios = (provinciaId: number) =>
 export const listarCentros = (paisCodigo?: string) =>
   api.get<Catalogo[]>('/visita/centros', { params: paisCodigo ? { pais_codigo: paisCodigo } : {} }).then(r => r.data);
 
-export const listarVMs = () =>
-  api.get<Catalogo[]>('/visita/vms').then(r => r.data);
+export const listarVMs = (paisCodigo?: string) =>
+  api.get<Catalogo[]>('/visita/vms', { params: paisCodigo ? { pais_codigo: paisCodigo } : {} }).then(r => r.data);
 
 export interface MiGerente { gerente: string | null; gerente_tipo: string | null; linea: string | null; vm: string | null; }
 export const miGerente = (vmId?: number) =>
@@ -222,15 +223,21 @@ export interface RankingVM {
   metrica: string; objetivo: number | null; no_cumplen: number; total: number;
   items: { vm_id: number; nombre: string; zona: string | null; valor: number; cumple: boolean }[];
 }
-export interface CoberturaFiltros { vmId?: number; gerenteId?: number; lineaId?: number; soloRuptura?: boolean; }
+export interface CoberturaFiltros {
+  vmId?: number; gerenteId?: number; lineaId?: number; soloRuptura?: boolean; paisCodigo?: string;
+}
 export const coberturaResumen = (f: CoberturaFiltros = {}) =>
   api.get<CoberturaResumen>('/visita/cobertura/resumen', { params: {
     ...(f.vmId && { vm_id: f.vmId }), ...(f.gerenteId && { gerente_id: f.gerenteId }),
     ...(f.lineaId && { linea_id: f.lineaId }), ...(f.soloRuptura && { solo_ruptura: true }),
+    ...(f.paisCodigo && { pais_codigo: f.paisCodigo }),
   } }).then(r => r.data);
-export const listarGerentesVisita = () => api.get<Catalogo[]>('/visita/gerentes').then(r => r.data);
-export const coberturaRanking = (metrica: string) =>
-  api.get<RankingVM>('/visita/cobertura/ranking', { params: { metrica } }).then(r => r.data);
+export const listarGerentesVisita = (paisCodigo?: string) =>
+  api.get<Catalogo[]>('/visita/gerentes', { params: paisCodigo ? { pais_codigo: paisCodigo } : {} }).then(r => r.data);
+export const coberturaRanking = (metrica: string, paisCodigo?: string) =>
+  api.get<RankingVM>('/visita/cobertura/ranking', { params: {
+    metrica, ...(paisCodigo ? { pais_codigo: paisCodigo } : {}),
+  } }).then(r => r.data);
 
 // ── Registro de visita ────────────────────────────────────────────────
 export interface VisitaHoy {
@@ -326,10 +333,12 @@ export interface CierreHist {
   id: number; ciclo_id: number; ciclo_nombre: string; fecha_cierre: string | null;
   panel: number; visitados: number; sin_visitar: number; ruptura_nueva: number; ruptura_critica: number;
 }
-export const estadoRuptura = (f: { vmId?: number; gerenteId?: number; lineaId?: number } = {}) =>
+export const estadoRuptura = (
+  f: { vmId?: number; gerenteId?: number; lineaId?: number; paisCodigo?: string } = {},
+) =>
   api.get<RupturaEstado>('/visita/ruptura', { params: {
     ...(f.vmId && { vm_id: f.vmId }), ...(f.gerenteId && { gerente_id: f.gerenteId }),
-    ...(f.lineaId && { linea_id: f.lineaId }),
+    ...(f.lineaId && { linea_id: f.lineaId }), ...(f.paisCodigo && { pais_codigo: f.paisCodigo }),
   } }).then(r => r.data);
 export const previsualizarCierre = () =>
   api.get<CierrePreview>('/visita/cierre/previsualizar').then(r => r.data);
@@ -369,7 +378,8 @@ export interface MuestrasResumen {
   ciclo_id: number; total_entregadas: number; productos_con_muestras: number;
   productos: MuestraResumenProducto[];
 }
-export const listarLineasVisita = () => api.get<Catalogo[]>('/visita/lineas').then(r => r.data);
+export const listarLineasVisita = (paisCodigo?: string) =>
+  api.get<Catalogo[]>('/visita/lineas', { params: paisCodigo ? { pais_codigo: paisCodigo } : {} }).then(r => r.data);
 // Línea de la parrilla más reciente — para arrancar en el último registro, no en la 1ª línea.
 export const parrillaUltimaLinea = (cicloId?: number) =>
   api.get<{ linea_id: number | null }>('/visita/parrilla/ultima-linea', { params: cicloId ? { ciclo_id: cicloId } : {} })

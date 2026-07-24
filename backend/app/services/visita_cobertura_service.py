@@ -45,22 +45,29 @@ def _ciclo_abierto(db: Session, pais_codigo: str | None) -> Ciclo | None:
     return _elegir_ciclo(q.all(), hoy_local(db, pais_codigo))
 
 
-def ciclo_por_defecto(db: Session, vm_id: int | None = None) -> int | None:
+def ciclo_por_defecto(db: Session, vm_id: int | None = None, pais_codigo: str | None = None) -> int | None:
     """Ciclo de trabajo por defecto.
 
     Con `vm_id`: el ciclo abierto del PAÍS del VM que corresponde a hoy — es el ciclo al
     que se registran visitas/muestras y del que se lee la parrilla.
     FIX jul-2026: sin el filtro por país se tomaba el ciclo más reciente GLOBAL (de
     cualquier país, incluso cerrado), y los registros de un VM de DO caían en el ciclo de
-    otro país."""
+    otro país.
+
+    Sin `vm_id` pero con `pais_codigo` (aislamiento multipaís, vista agregada acotada a un
+    país): se usa el ciclo abierto de ESE país en vez del ciclo abierto global."""
     if vm_id:
         rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
         if rm and rm.pais_codigo:
             c = _ciclo_abierto(db, rm.pais_codigo)
             if c:
                 return c.id
-    # Sin vm_id (vista agregada): nunca un ciclo cerrado global (que dejaba el dashboard
-    # en blanco cuando el más reciente por (anio,numero) estaba cerrado).
+    elif pais_codigo:
+        c = _ciclo_abierto(db, pais_codigo)
+        if c:
+            return c.id
+    # Sin vm_id ni pais_codigo (vista agregada global): nunca un ciclo cerrado global (que
+    # dejaba el dashboard en blanco cuando el más reciente por (anio,numero) estaba cerrado).
     c = _ciclo_abierto(db, None)
     if c is None:  # si no hay ninguno abierto, cae al más reciente global
         c = db.query(Ciclo).order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).first()
@@ -87,30 +94,36 @@ def _mapa_visitas(db: Session, ciclo_id: int, vm_id: int | None):
     return mapa
 
 
-def _rm_ids_por(db: Session, gerente_id: int | None, linea_id: int | None) -> list[int] | None:
-    """IDs de RM (visitadores) que pertenecen al Gerente de Distrito y/o la Línea.
-    Devuelve None si no se pidió ningún filtro (no restringir)."""
-    if not gerente_id and not linea_id:
+def _rm_ids_por(db: Session, gerente_id: int | None, linea_id: int | None,
+                pais_codigo: str | None = None) -> list[int] | None:
+    """IDs de RM (visitadores) que pertenecen al Gerente de Distrito, la Línea y/o el País.
+    Devuelve None SOLO si no se pidió ningún filtro (no restringir); si CUALQUIERA de los
+    3 viene, arma la query con los filtros que apliquen y devuelve la lista de ids
+    (aislamiento multipaís, jul-2026: sin `pais_codigo` la vista agregada mezclaba VMs de
+    TODOS los países cuando no se filtraba por distrito/línea)."""
+    if not gerente_id and not linea_id and not pais_codigo:
         return None
     q = db.query(RepresentanteMedico.id)
     if gerente_id:
         q = q.filter(RepresentanteMedico.gerente_id == gerente_id)
     if linea_id:
         q = q.filter(RepresentanteMedico.linea_id == linea_id)
+    if pais_codigo:
+        q = q.filter(RepresentanteMedico.pais_codigo == pais_codigo)
     return [r[0] for r in q.all()]
 
 
 def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
                     gerente_id: int | None = None, linea_id: int | None = None,
-                    solo_ruptura: bool = False) -> dict:
+                    solo_ruptura: bool = False, pais_codigo: str | None = None) -> dict:
     """Calcula panel, visitados, completos, sin visitar y desglose por categoría.
 
     Solo incluye médicos VIGENTES para el ciclo: excluye altas pendientes/rechazadas
     y respeta el ciclo efectivo de alta/baja (aprobación del Gerente de Distrito).
 
-    Filtros: `vm_id` (un visitador) tiene prioridad; si no, `gerente_id`/`linea_id`
-    restringen a los médicos de ese distrito/línea; `solo_ruptura` deja solo los de
-    3+ ciclos sin visita."""
+    Filtros: `vm_id` (un visitador) tiene prioridad; si no, `gerente_id`/`linea_id`/
+    `pais_codigo` restringen a los médicos de ese distrito/línea/país; `solo_ruptura`
+    deja solo los de 3+ ciclos sin visita."""
     from app.services.visita_aprobacion_service import ordenes_ciclo, cuenta_en_ciclo
     ordenes = ordenes_ciclo(db)
     ciclo_orden = ordenes.get(ciclo_id)
@@ -119,7 +132,7 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
     if vm_id:
         mq = mq.filter(MedicoVisita.vm_id == vm_id)
     else:
-        rm_ids = _rm_ids_por(db, gerente_id, linea_id)
+        rm_ids = _rm_ids_por(db, gerente_id, linea_id, pais_codigo)
         if rm_ids is not None:
             mq = mq.filter(MedicoVisita.vm_id.in_(rm_ids or [-1]))  # [] => sin médicos
     if solo_ruptura:
@@ -163,23 +176,24 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
 
 def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | None = None,
                       gerente_id: int | None = None, linea_id: int | None = None,
-                      solo_ruptura: bool = False) -> dict:
+                      solo_ruptura: bool = False, pais_codigo: str | None = None) -> dict:
     """Datos del Dashboard de Cobertura: gauges, desglose A/B/C, listas y ruptura.
-    Filtrable por visitador (vm_id), Gerente de Distrito (gerente_id), Línea (linea_id)
-    y solo médicos en ruptura de secuencia (solo_ruptura)."""
-    ciclo_id = ciclo_id or ciclo_por_defecto(db)
+    Filtrable por visitador (vm_id), Gerente de Distrito (gerente_id), Línea (linea_id),
+    país (pais_codigo, aislamiento multipaís cuando no hay vm_id/gerente_id/linea_id) y
+    solo médicos en ruptura de secuencia (solo_ruptura)."""
+    ciclo_id = ciclo_id or ciclo_por_defecto(db, pais_codigo=pais_codigo)
     if ciclo_id is None:
         return {"ciclo_id": None, "panel": 0, "visitados": 0, "con_revisita": 0,
                 "sin_visitar": 0, "pct_cobertura": 0, "pct_completa": 0, "pct_gap": 0,
                 "categorias": {}, "sin_visita": [], "falta_revisita": [], "ruptura": []}
-    base = _cobertura_base(db, ciclo_id, vm_id, gerente_id, linea_id, solo_ruptura)
+    base = _cobertura_base(db, ciclo_id, vm_id, gerente_id, linea_id, solo_ruptura, pais_codigo)
     # Ruptura de secuencia (≥3 ciclos sin visita) — respeta los mismos filtros de scope.
     rq = db.query(MedicoVisita).filter(
         MedicoVisita.activo == True, MedicoVisita.ciclos_sin_visita >= 3)  # noqa: E712
     if vm_id:
         rq = rq.filter(MedicoVisita.vm_id == vm_id)
     else:
-        rm_ids = _rm_ids_por(db, gerente_id, linea_id)
+        rm_ids = _rm_ids_por(db, gerente_id, linea_id, pais_codigo)
         if rm_ids is not None:
             rq = rq.filter(MedicoVisita.vm_id.in_(rm_ids or [-1]))
     base["ruptura"] = [{"id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria,
@@ -195,7 +209,7 @@ def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | Non
         aq = aq.filter(VisitaRegistro.vm_id == vm_id)
         eq = eq.filter(VisitaRegistro.vm_id == vm_id)
     else:
-        rm_ids_a = _rm_ids_por(db, gerente_id, linea_id)
+        rm_ids_a = _rm_ids_por(db, gerente_id, linea_id, pais_codigo)
         if rm_ids_a is not None:
             aq = aq.filter(VisitaRegistro.vm_id.in_(rm_ids_a or [-1]))
             eq = eq.filter(VisitaRegistro.vm_id.in_(rm_ids_a or [-1]))
@@ -224,12 +238,17 @@ def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | Non
     return base
 
 
-def ranking_visitadores(db: Session, ciclo_id: int | None, metrica: str) -> dict:
+def ranking_visitadores(db: Session, ciclo_id: int | None, metrica: str,
+                        pais_codigo: str | None = None) -> dict:
     """Detalle desplegable: por cada VM con médicos en su panel, el valor de la
-    métrica y si cumple el objetivo. metrica: 'cobertura' | 'completa' | 'sin_visitar'."""
-    ciclo_id = ciclo_id or ciclo_por_defecto(db)
-    vm_ids = [r[0] for r in db.query(MedicoVisita.vm_id)
-              .filter(MedicoVisita.activo == True).distinct().all()]  # noqa: E712
+    métrica y si cumple el objetivo. metrica: 'cobertura' | 'completa' | 'sin_visitar'.
+    `pais_codigo` (aislamiento multipaís): sin filtro, mezclaba VMs de TODOS los países."""
+    ciclo_id = ciclo_id or ciclo_por_defecto(db, pais_codigo=pais_codigo)
+    vq = db.query(MedicoVisita.vm_id).filter(MedicoVisita.activo == True)  # noqa: E712
+    if pais_codigo:
+        rm_ids_pais = _rm_ids_por(db, None, None, pais_codigo) or []
+        vq = vq.filter(MedicoVisita.vm_id.in_(rm_ids_pais or [-1]))
+    vm_ids = [r[0] for r in vq.distinct().all()]
     if not vm_ids:
         return {"metrica": metrica, "objetivo": None, "items": [], "no_cumplen": 0, "total": 0}
     nombres = dict(db.query(RepresentanteMedico.id, RepresentanteMedico.nombre)

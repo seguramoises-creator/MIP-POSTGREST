@@ -5,6 +5,7 @@ import {
 } from '@mui/material';
 import { InfoOutlined, FilterList } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import { useCicloStore } from '../../store/ciclo.store';
 import SaludCiclo from '../../components/SaludCiclo';
 import {
   coberturaResumen, coberturaRanking, listarVMs, listarGerentesVisita, listarLineasVisita,
@@ -14,12 +15,12 @@ import {
 const CAT_COLOR: Record<string, string> = { A: '#1b5e20', B: '#0d47a1', C: '#e65100' };
 
 // ── Botón "i" + panel de ranking por visitador (detalle desplegable) ──
-function DetalleVisitador({ metrica, titulo }: { metrica: string; titulo: string }) {
+function DetalleVisitador({ metrica, titulo, paisCodigo }: { metrica: string; titulo: string; paisCodigo?: string }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [data, setData] = useState<RankingVM | null>(null);
   const abrir = (e: MouseEvent<HTMLElement>) => {
     setAnchor(e.currentTarget); setData(null);
-    coberturaRanking(metrica).then(setData).catch(() => setData(null));
+    coberturaRanking(metrica, paisCodigo).then(setData).catch(() => setData(null));
   };
   const open = Boolean(anchor);
   const unidad = metrica === 'sin_visitar' ? '' : '%';
@@ -59,7 +60,7 @@ function DetalleVisitador({ metrica, titulo }: { metrica: string; titulo: string
   );
 }
 
-function Gauge({ pct, color, label, metrica, titulo, sub }: { pct: number; color: string; label: string; metrica: string; titulo: string; sub: string }) {
+function Gauge({ pct, color, label, metrica, titulo, sub, paisCodigo }: { pct: number; color: string; label: string; metrica: string; titulo: string; sub: string; paisCodigo?: string }) {
   const r = 54, circ = 2 * Math.PI * r, off = circ - (Math.min(pct, 100) / 100) * circ;
   return (
     <Card variant="outlined">
@@ -76,7 +77,7 @@ function Gauge({ pct, color, label, metrica, titulo, sub }: { pct: number; color
           </Box>
         </Box>
         <Typography variant="body2" fontWeight={700} sx={{ mt: 1 }}>
-          {titulo} <DetalleVisitador metrica={metrica} titulo={titulo} />
+          {titulo} <DetalleVisitador metrica={metrica} titulo={titulo} paisCodigo={paisCodigo} />
         </Typography>
         <Typography variant="caption" color="text.secondary">{sub}</Typography>
       </CardContent>
@@ -87,6 +88,7 @@ function Gauge({ pct, color, label, metrica, titulo, sub }: { pct: number; color
 export default function CoberturaDashboard() {
   const rol = useAuthStore((s) => s.rol);
   const esVM = rol === 'REPRESENTANTE_MEDICO';
+  const paisCodigo = useCicloStore((s) => s.paisCodigo);
 
   const [data, setData] = useState<CoberturaResumen | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -101,18 +103,18 @@ export default function CoberturaDashboard() {
 
   useEffect(() => {
     if (esVM) return;
-    listarVMs().then(setVms).catch(() => {});
-    listarGerentesVisita().then(setGerentes).catch(() => {});
-    listarLineasVisita().then(setLineas).catch(() => {});
-  }, [esVM]);
+    listarVMs(paisCodigo).then(setVms).catch(() => {});
+    listarGerentesVisita(paisCodigo).then(setGerentes).catch(() => {});
+    listarLineasVisita(paisCodigo).then(setLineas).catch(() => {});
+  }, [esVM, paisCodigo]);
 
   const cargar = useCallback(() => {
     setCargando(true);
     coberturaResumen({
       vmId: vmId || undefined, gerenteId: gerenteId || undefined,
-      lineaId: lineaId || undefined, soloRuptura: soloRuptura || undefined,
+      lineaId: lineaId || undefined, soloRuptura: soloRuptura || undefined, paisCodigo,
     }).then(setData).catch(() => setData(null)).finally(() => setCargando(false));
-  }, [vmId, gerenteId, lineaId, soloRuptura]);
+  }, [vmId, gerenteId, lineaId, soloRuptura, paisCodigo]);
   useEffect(() => { cargar(); }, [cargar]);
 
   const hayFiltro = !!(vmId || gerenteId || lineaId || soloRuptura);
@@ -203,9 +205,9 @@ export default function CoberturaDashboard() {
 
       {/* Gauges */}
       <Grid container spacing={2} sx={{ mb: 1 }}>
-        <Grid item xs={12} md={4}><Gauge pct={data.pct_cobertura} color="#00897b" label="Cobertura" metrica="cobertura" titulo="Cobertura Total" sub="Médicos con al menos 1 visita" /></Grid>
-        <Grid item xs={12} md={4}><Gauge pct={data.pct_completa} color="#1a237e" label="V+R" metrica="completa" titulo="Vista + Revisita" sub="Médicos con ciclo completo (V+R)" /></Grid>
-        <Grid item xs={12} md={4}><Gauge pct={data.pct_gap} color="#c62828" label="Gap" metrica="sin_visitar" titulo="Gap de Cobertura" sub="Sin ninguna visita en el ciclo" /></Grid>
+        <Grid item xs={12} md={4}><Gauge pct={data.pct_cobertura} color="#00897b" label="Cobertura" metrica="cobertura" titulo="Cobertura Total" sub="Médicos con al menos 1 visita" paisCodigo={paisCodigo} /></Grid>
+        <Grid item xs={12} md={4}><Gauge pct={data.pct_completa} color="#1a237e" label="V+R" metrica="completa" titulo="Vista + Revisita" sub="Médicos con ciclo completo (V+R)" paisCodigo={paisCodigo} /></Grid>
+        <Grid item xs={12} md={4}><Gauge pct={data.pct_gap} color="#c62828" label="Gap" metrica="sin_visitar" titulo="Gap de Cobertura" sub="Sin ninguna visita en el ciclo" paisCodigo={paisCodigo} /></Grid>
       </Grid>
 
       {/* Categorías A/B/C */}
@@ -255,7 +257,7 @@ export default function CoberturaDashboard() {
           <Card variant="outlined">
             <CardContent>
               <Typography fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                🔴 Sin ninguna visita <DetalleVisitador metrica="sin_visitar" titulo="Médicos sin visita" />
+                🔴 Sin ninguna visita <DetalleVisitador metrica="sin_visitar" titulo="Médicos sin visita" paisCodigo={paisCodigo} />
                 <Chip size="small" color="error" label={`${data.sin_visita.length} médicos`} sx={{ ml: 'auto' }} />
               </Typography>
               <Stack sx={{ mt: 1, maxHeight: 220, overflow: 'auto' }}>

@@ -27,7 +27,7 @@ RequireSupervisor = Depends(require_roles(
     Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO, Rol.GERENTE_MARCA))
 
 
-def _filtrar(query, q, especialidad_id, provincia_id, estado, activo):
+def _filtrar(query, q, especialidad_id, provincia_id, estado, activo, pais_codigo=None):
     if q:
         like = f"%{q.upper()}%"
         query = query.filter(func.upper(Medico.nombre).like(like) |
@@ -37,29 +37,39 @@ def _filtrar(query, q, especialidad_id, provincia_id, estado, activo):
     if provincia_id:    query = query.filter(Medico.provincia_id == provincia_id)
     if estado:          query = query.filter(Medico.estado_validacion == estado)
     if activo is not None: query = query.filter(Medico.activo == activo)
+    if pais_codigo:     query = query.filter(Medico.pais_codigo == pais_codigo)
     return query.order_by(Medico.nombre)
 
 
 @router.get("/maestro", response_model=list[MaestroMedicoResponse])
 def listar(q: str | None = None, especialidad_id: int | None = None,
            provincia_id: int | None = None, estado: str | None = None,
-           activo: bool | None = None, skip: int = 0, limit: int = Query(100, le=500),
+           activo: bool | None = None, pais_codigo: str | None = None,
+           skip: int = 0, limit: int = Query(100, le=500),
            db: Session = Depends(get_db), _u: Usuario = RequireLectura):
-    return _filtrar(db.query(Medico), q, especialidad_id, provincia_id, estado, activo) \
+    return _filtrar(db.query(Medico), q, especialidad_id, provincia_id, estado, activo, pais_codigo) \
         .offset(skip).limit(limit).all()
 
 
 @router.get("/maestro/kpis")
-def kpis(db: Session = Depends(get_db), _u: Usuario = RequireLectura):
+def kpis(pais_codigo: str | None = None,
+         db: Session = Depends(get_db), _u: Usuario = RequireLectura):
     from app.models.visita import MedicoVisita
-    total = db.query(func.count(Medico.id)).scalar() or 0
-    activos = db.query(func.count(Medico.id)).filter(Medico.activo == True).scalar() or 0  # noqa: E712
+
+    def _q():
+        qy = db.query(func.count(Medico.id))
+        if pais_codigo:
+            qy = qy.filter(Medico.pais_codigo == pais_codigo)
+        return qy
+
+    total = _q().scalar() or 0
+    activos = _q().filter(Medico.activo == True).scalar() or 0  # noqa: E712
     ini_mes = datetime.now(timezone.utc).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    nuevos = db.query(func.count(Medico.id)).filter(Medico.created_at >= ini_mes).scalar() or 0
-    pendientes = db.query(func.count(Medico.id)).filter(Medico.estado_validacion == "PENDIENTE").scalar() or 0
+    nuevos = _q().filter(Medico.created_at >= ini_mes).scalar() or 0
+    pendientes = _q().filter(Medico.estado_validacion == "PENDIENTE").scalar() or 0
     asignados = {mid for (mid,) in db.query(MedicoVisita.maestro_medico_id)
                  .filter(MedicoVisita.maestro_medico_id.isnot(None)).distinct().all()}
-    sin_asig = db.query(func.count(Medico.id)).filter(
+    sin_asig = _q().filter(
         Medico.activo == True, ~Medico.id.in_(asignados or {-1})).scalar() or 0  # noqa: E712
     return {"total": total, "activos": activos, "nuevos_mes": nuevos,
             "sin_asignacion": sin_asig, "pendientes_validacion": pendientes}
