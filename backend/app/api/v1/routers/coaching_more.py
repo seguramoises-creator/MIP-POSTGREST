@@ -70,10 +70,15 @@ def catalogo(db: Session = Depends(get_db), _u: Usuario = ReadHoja):
 
 
 @router.get("/vms", summary="RMs que el usuario puede evaluar (selector)")
-def vms(db: Session = Depends(get_db), current_user: Usuario = RequireCrear):
+def vms(pais_codigo: str | None = None, db: Session = Depends(get_db), current_user: Usuario = RequireCrear):
+    """`pais_codigo` (aislamiento multipaís): sin filtro, listaba RMs de TODOS los países
+    para roles multipaís (ADMIN/GERENTE_PRODUCTIVIDAD); GERENTE_DISTRITO ya se acota a su
+    propio equipo, ambos filtros aplican juntos si vienen los dos."""
     q = db.query(RepresentanteMedico).filter(RepresentanteMedico.activo == True)  # noqa: E712
     if current_user.rol == Rol.GERENTE_DISTRITO:
         q = q.filter(RepresentanteMedico.gerente_id == (current_user.gerente_id or -1))
+    if pais_codigo:
+        q = q.filter(RepresentanteMedico.pais_codigo == pais_codigo)
     return [{"id": r.id, "nombre": r.nombre, "email": r.email,
              "coaching_min_dia": r.coaching_min_dia or 5}
             for r in q.order_by(RepresentanteMedico.nombre).all()]
