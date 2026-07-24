@@ -80,7 +80,7 @@ class DimClasificacionMedica(Base):
     )
 
     clasificacion_key: Mapped[int]  = mapped_column("ClasificacionKey", Integer, primary_key=True, autoincrement=True)
-    pais_key: Mapped[int]           = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False)
+    pais_key: Mapped[int]           = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False, index=True)
     clase: Mapped[str]              = mapped_column("Clase", String(1), nullable=False)
     puntaje_min_pct: Mapped[Decimal] = mapped_column("PuntajeMinPct", Numeric(9, 6), nullable=False)
     puntaje_max_pct: Mapped[Decimal] = mapped_column("PuntajeMaxPct", Numeric(9, 6), nullable=False)
@@ -100,7 +100,7 @@ class CatDimEspecialidad(Base):
     )
 
     especialidad_key: Mapped[int]   = mapped_column("EspecialidadKey", Integer, primary_key=True, autoincrement=True)
-    pais_key: Mapped[int]           = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False)
+    pais_key: Mapped[int]           = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False, index=True)
     especialidad: Mapped[str]       = mapped_column("Especialidad", String(150), nullable=False)
     activo: Mapped[bool]            = mapped_column("Activo", Boolean, nullable=False, default=True)
 
@@ -111,11 +111,11 @@ class CatDimMedico(Base):
     __table_args__ = {"schema": "cat"}
 
     medico_key: Mapped[int]         = mapped_column("MedicoKey", BigInteger, primary_key=True, autoincrement=True)
-    pais_key: Mapped[int]           = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False)
+    pais_key: Mapped[int]           = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False, index=True)
     medico_id: Mapped[Optional[int]] = mapped_column("MedicoId", Integer)          # ID numérico del Excel (llave de negocio)
     codigo_medico: Mapped[Optional[str]] = mapped_column("CodigoMedico", String(50))
     nombre_medico: Mapped[str]      = mapped_column("NombreMedico", String(200), nullable=False)
-    especialidad_key: Mapped[Optional[int]] = mapped_column("EspecialidadKey", Integer, ForeignKey("cat.DimEspecialidad.EspecialidadKey"))
+    especialidad_key: Mapped[Optional[int]] = mapped_column("EspecialidadKey", Integer, ForeignKey("cat.DimEspecialidad.EspecialidadKey"), index=True)
     activo: Mapped[bool]            = mapped_column("Activo", Boolean, nullable=False, default=True)
 
 
@@ -128,7 +128,7 @@ class CatDimRepresentante(Base):
     )
 
     representante_key: Mapped[int]  = mapped_column("RepresentanteKey", Integer, primary_key=True, autoincrement=True)
-    pais_key: Mapped[int]           = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False)
+    pais_key: Mapped[int]           = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False, index=True)
     representante_id_origen: Mapped[Optional[int]] = mapped_column("RepresentanteIdOrigen", Integer)
     codigo_representante: Mapped[str] = mapped_column("CodigoRepresentante", String(30), nullable=False)
     nombre_representante: Mapped[str] = mapped_column("NombreRepresentante", String(150), nullable=False)
@@ -149,11 +149,11 @@ class FactMedicoCategoriaSnapshot(Base):
     __table_args__ = {"schema": "cat"}
 
     medico_categoria_key: Mapped[int] = mapped_column("MedicoCategoriaKey", BigInteger, primary_key=True, autoincrement=True)
-    load_batch_key: Mapped[int]     = mapped_column("LoadBatchKey", BigInteger, ForeignKey("cat.LoadBatch.LoadBatchKey"), nullable=False)
+    load_batch_key: Mapped[int]     = mapped_column("LoadBatchKey", BigInteger, ForeignKey("cat.LoadBatch.LoadBatchKey"), nullable=False, index=True)
     row_number: Mapped[int]         = mapped_column("RowNumber", Integer, nullable=False)
     periodo: Mapped[str]            = mapped_column("Periodo", String(20), nullable=False)
-    pais_key: Mapped[int]           = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False)
-    medico_key: Mapped[int]         = mapped_column("MedicoKey", BigInteger, ForeignKey("cat.DimMedico.MedicoKey"), nullable=False)
+    pais_key: Mapped[int]           = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False, index=True)
+    medico_key: Mapped[int]         = mapped_column("MedicoKey", BigInteger, ForeignKey("cat.DimMedico.MedicoKey"), nullable=False, index=True)
     centro_medico_key: Mapped[Optional[int]] = mapped_column("CentroMedicoKey", Integer)
     geografia_key: Mapped[Optional[int]] = mapped_column("GeografiaKey", Integer)
     representante_key: Mapped[Optional[int]] = mapped_column("RepresentanteKey", Integer)
@@ -167,13 +167,13 @@ class FactMedicoCategoriaSnapshot(Base):
     ubicacion_territorial_cm: Mapped[Optional[str]] = mapped_column("UbicacionTerritorialCM", String(80))
     kol: Mapped[Optional[str]]      = mapped_column("KOL", String(150))
     puntaje_total_pct: Mapped[Optional[Decimal]] = mapped_column("PuntajeTotalPct", Numeric(9, 6))
-    clasificacion_key: Mapped[Optional[int]] = mapped_column("ClasificacionKey", Integer, ForeignKey("cat.DimClasificacionMedica.ClasificacionKey"))
+    clasificacion_key: Mapped[Optional[int]] = mapped_column("ClasificacionKey", Integer, ForeignKey("cat.DimClasificacionMedica.ClasificacionKey"), index=True)
     categoria_calculada: Mapped[Optional[str]] = mapped_column("CategoriaCalculada", String(1))
     categoria_excel: Mapped[Optional[str]] = mapped_column("CategoriaExcel", String(20))
     estado_conciliacion: Mapped[Optional[str]] = mapped_column("EstadoConciliacion", String(30))
     estado_calculo: Mapped[str]     = mapped_column("EstadoCalculo", String(20), nullable=False)
     mensaje_calculo: Mapped[Optional[str]] = mapped_column("MensajeCalculo", String(500))
-    load_batch_key: Mapped[Optional[int]] = mapped_column("LoadBatchKey", BigInteger, ForeignKey("cat.LoadBatch.LoadBatchKey"))
+    load_batch_key: Mapped[Optional[int]] = mapped_column("LoadBatchKey", BigInteger, ForeignKey("cat.LoadBatch.LoadBatchKey"), index=True)
     batch: Mapped[Optional["LoadBatch"]] = relationship("LoadBatch", back_populates="snapshots")
 
 
@@ -193,7 +193,7 @@ class CatDimCiclo(Base):
     )
 
     ciclo_key: Mapped[int]              = mapped_column("CicloKey", Integer, primary_key=True, autoincrement=True)
-    pais_key: Mapped[int]               = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False)
+    pais_key: Mapped[int]               = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False, index=True)
     codigo_ciclo: Mapped[str]           = mapped_column("CodigoCiclo", String(20), nullable=False)
     linea_id: Mapped[Optional[int]]     = mapped_column("LineaId", Integer)
     linea: Mapped[Optional[str]]        = mapped_column("Linea", String(100))
@@ -217,9 +217,9 @@ class CatDimCalendario(Base):
     )
 
     fecha_key: Mapped[int]              = mapped_column("FechaKey", Integer, primary_key=True, autoincrement=True)
-    pais_key: Mapped[int]               = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False)
+    pais_key: Mapped[int]               = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False, index=True)
     fecha: Mapped[date]                 = mapped_column("Fecha", Date, nullable=False)
-    ciclo_key: Mapped[Optional[int]]    = mapped_column("CicloKey", Integer, ForeignKey("cat.DimCiclo.CicloKey"))
+    ciclo_key: Mapped[Optional[int]]    = mapped_column("CicloKey", Integer, ForeignKey("cat.DimCiclo.CicloKey"), index=True)
     es_habil: Mapped[bool]              = mapped_column("EsHabil", Boolean, nullable=False, default=True)
     es_feriado: Mapped[bool]            = mapped_column("EsFeriado", Boolean, nullable=False, default=False)
     semana: Mapped[Optional[int]]       = mapped_column("Semana", Integer)
@@ -240,10 +240,10 @@ class CatFactTargetMedicoCiclo(Base):
     )
 
     target_medico_key: Mapped[int]      = mapped_column("TargetMedicoKey", BigInteger, primary_key=True, autoincrement=True)
-    ciclo_key: Mapped[int]              = mapped_column("CicloKey", Integer, ForeignKey("cat.DimCiclo.CicloKey"), nullable=False)
-    pais_key: Mapped[int]               = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False)
-    representante_key: Mapped[int]      = mapped_column("RepresentanteKey", Integer, ForeignKey("cat.DimRepresentanteMedico.RepresentanteKey"), nullable=False)
-    medico_key: Mapped[Optional[int]]   = mapped_column("MedicoKey", BigInteger, ForeignKey("cat.DimMedico.MedicoKey"))
+    ciclo_key: Mapped[int]              = mapped_column("CicloKey", Integer, ForeignKey("cat.DimCiclo.CicloKey"), nullable=False, index=True)
+    pais_key: Mapped[int]               = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False, index=True)
+    representante_key: Mapped[int]      = mapped_column("RepresentanteKey", Integer, ForeignKey("cat.DimRepresentanteMedico.RepresentanteKey"), nullable=False, index=True)
+    medico_key: Mapped[Optional[int]]   = mapped_column("MedicoKey", BigInteger, ForeignKey("cat.DimMedico.MedicoKey"), index=True)
     codigo_medico_origen: Mapped[str]   = mapped_column("CodigoMedicoOrigen", String(50), nullable=False)
     nombre_medico: Mapped[Optional[str]] = mapped_column("NombreMedico", String(200))
     especialidad_key: Mapped[Optional[int]] = mapped_column("EspecialidadKey", Integer)
@@ -265,9 +265,9 @@ class CatFactVisitaMedica(Base):
     visita_key: Mapped[int]             = mapped_column("VisitaKey", BigInteger, primary_key=True, autoincrement=True)
     visita_id_origen: Mapped[Optional[str]] = mapped_column("VisitaIdOrigen", String(50))
     fecha_visita: Mapped[date]          = mapped_column("FechaVisita", Date, nullable=False)
-    ciclo_key: Mapped[int]              = mapped_column("CicloKey", Integer, ForeignKey("cat.DimCiclo.CicloKey"), nullable=False)
-    pais_key: Mapped[int]               = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False)
-    representante_key: Mapped[int]      = mapped_column("RepresentanteKey", Integer, ForeignKey("cat.DimRepresentanteMedico.RepresentanteKey"), nullable=False)
+    ciclo_key: Mapped[int]              = mapped_column("CicloKey", Integer, ForeignKey("cat.DimCiclo.CicloKey"), nullable=False, index=True)
+    pais_key: Mapped[int]               = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False, index=True)
+    representante_key: Mapped[int]      = mapped_column("RepresentanteKey", Integer, ForeignKey("cat.DimRepresentanteMedico.RepresentanteKey"), nullable=False, index=True)
     codigo_medico_origen: Mapped[str]   = mapped_column("CodigoMedicoOrigen", String(50), nullable=False)
     medico_key: Mapped[Optional[int]]   = mapped_column("MedicoKey", BigInteger)
     tipo_contacto: Mapped[Optional[str]] = mapped_column("TipoContacto", String(50))
@@ -294,11 +294,11 @@ class CatKpiCoberturaPredictiva(Base):
 
     kpi_key: Mapped[int]                = mapped_column("KpiKey", BigInteger, primary_key=True, autoincrement=True)
     fecha_corte: Mapped[date]           = mapped_column("FechaCorte", Date, nullable=False)
-    ciclo_key: Mapped[int]              = mapped_column("CicloKey", Integer, ForeignKey("cat.DimCiclo.CicloKey"), nullable=False)
-    pais_key: Mapped[int]               = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False)
+    ciclo_key: Mapped[int]              = mapped_column("CicloKey", Integer, ForeignKey("cat.DimCiclo.CicloKey"), nullable=False, index=True)
+    pais_key: Mapped[int]               = mapped_column("PaisKey", Integer, ForeignKey("cat.DimPais.PaisKey"), nullable=False, index=True)
     linea: Mapped[Optional[str]]        = mapped_column("Linea", String(100))
     gd: Mapped[Optional[str]]           = mapped_column("GD", String(150))
-    representante_key: Mapped[int]      = mapped_column("RepresentanteKey", Integer, ForeignKey("cat.DimRepresentanteMedico.RepresentanteKey"), nullable=False)
+    representante_key: Mapped[int]      = mapped_column("RepresentanteKey", Integer, ForeignKey("cat.DimRepresentanteMedico.RepresentanteKey"), nullable=False, index=True)
     nombre_vm: Mapped[Optional[str]]    = mapped_column("NombreVM", String(150))
     medicos_programados: Mapped[int]    = mapped_column("MedicosProgramados", Integer, nullable=False, default=0)
     medicos_visitados_unicos: Mapped[int] = mapped_column("MedicosVisitadosUnicos", Integer, nullable=False, default=0)

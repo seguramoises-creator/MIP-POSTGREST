@@ -416,7 +416,7 @@ def recalcular_ciclo(db, ciclo_id, pais_codigo=None) -> dict:
 
 **Respuesta**: `{ciclo_id, abortado, motivo?, filas_kpi_actualizadas, rankings_generados}` — si `abortado=true` (ciclo cerrado), no se escribió nada.
 
-**Migraciones del motor**: las migraciones de la etapa SP (`e7a91f4c2b58`, `b8c4d2e1f5a9`, `e2f5b9c4a1d8`, `2c771e676bd7`, `e8f1a2c3d4b5`) están **archivadas** en `backend/alembic/versions/_mssql_archive/`; el cálculo actual es 100% Python y no depende de ellas.
+**Migraciones del motor**: las migraciones de la etapa SP (`e7a91f4c2b58`, `b8c4d2e1f5a9`, `e2f5b9c4a1d8`, `2c771e676bd7`, `e8f1a2c3d4b5`) pertenecían a la edición SQL Server y **no existen en este repo** (single-head desde `0001_baseline_postgres`, verificado jul-2026); el cálculo actual es 100% Python y no depende de ellas.
 
 ---
 
@@ -1001,7 +1001,7 @@ En producción, `CORS_ORIGINS` debe incluir `https://vista-mip.com`. El `field_v
 
 **Guía completa**: `backend/MIGRATIONS.md`. Hay aproximadamente 20 migraciones en `backend/alembic/versions/`. Migraciones confirmadas relevantes al rediseño (además de las 4 ya documentadas en v1.0 — baseline, `pais_id` en indicador, unique constraint, columnas faltantes):
 
-- Las migraciones de la etapa de stored procedures (`e7a91f4c2b58`, `b8c4d2e1f5a9`, `e2f5b9c4a1d8`, `2c771e676bd7`) están **archivadas** en `_mssql_archive/` — el motor actual es 100% Python (§8) y no las usa
+- Las migraciones de la etapa de stored procedures (`e7a91f4c2b58`, `b8c4d2e1f5a9`, `e2f5b9c4a1d8`, `2c771e676bd7`) pertenecen a la edición SQL Server y **no existen en este repo** (verificado jul-2026: cadena single-head desde `0001_baseline_postgres`) — el motor actual es 100% Python (§8) y no las usa
 - Migraciones adicionales asociadas a los modelos nuevos: `DIM_TargetMedico`/`DIM_Feriado`/`DIM_ParametroCobertura`/`FACT_Visita`/`Usuario.gerente_id` (Cobertura Predictiva) y las DIM/FACT de Categorización Médica (`DIM_Especialidad`, `DIM_Provincia`, `DIM_Municipio`, `DIM_CentroMedico`, `DIM_CategoriaMedica`, `DIM_CriterioCategoria`, `DIM_CriterioCategoriaTabla`, `DIM_Medico`, `FACT_CategorizacionMedica`)
 
 ### ⚠️ Regla crítica de Alembic
