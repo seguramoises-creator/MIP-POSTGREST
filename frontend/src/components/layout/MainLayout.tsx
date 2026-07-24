@@ -33,7 +33,9 @@ export default function MainLayout() {
     '/etl', '/reportes', '/usuarios', '/admin',
     // Médicos: la categorización NO depende del ciclo (la categoría del médico es estable
     // entre ciclos, jul-2026), así que la franja no afectaba nada de lo que se ve ahí.
-    '/medicos', '/categorizacion',
+    // Farmacias: mismo caso — el maestro es un catálogo país-level (Config.DIM_Farmacia)
+    // sin dependencia del ciclo; la franja duplicaba la píldora País+Ciclo de arriba.
+    '/medicos', '/categorizacion', '/farmacias/maestro',
     // Parrilla y Costo/ROI ya traen su PROPIO selector de ciclo: la franja los duplicaba.
     '/visita/parrilla', '/visita/costo-roi',
     // No leen el ciclo en absoluto: la franja solo sugeria que influia en algo.
