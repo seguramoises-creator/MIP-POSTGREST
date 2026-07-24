@@ -23,7 +23,7 @@ import operator as _op
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from app.models.dimensiones import Especialidad, Linea, RepresentanteMedico
+from app.models.dimensiones import Especialidad, Gerente, Linea, Medico, RepresentanteMedico
 from app.models.usuario import Rol
 from app.models.visita import MedicoVisita, VisitaRegistro
 from app.services import visita_cobertura_service as cob
@@ -31,6 +31,8 @@ from app.services import visita_parrilla_service as parrilla_svc
 from app.services import visita_service as vs
 from app.api.v1.routers import coaching_more as coaching_more_router
 from app.api.v1.routers import visita as visita_router
+from app.api.v1.routers import maestro_medicos as mm_router
+from app.api.v1.routers import examenes as examenes_router
 
 
 # ── Doble de Session.query() con filtrado REAL sobre las expresiones SQLAlchemy ───
@@ -104,6 +106,12 @@ class _FakeQuery:
                 salida.append(r)
         return _FakeQuery(salida, self._proj)
 
+    def offset(self, *a, **k):
+        return self
+
+    def limit(self, *a, **k):
+        return self
+
     def all(self):
         if self._proj:
             return [tuple(getattr(r, a) for a in self._proj) for r in self._records]
@@ -113,6 +121,10 @@ class _FakeQuery:
         return self._records[0] if self._records else None
 
     def count(self):
+        return len(self._records)
+
+    def scalar(self):
+        """Para queries `db.query(func.count(...))...scalar()`: el conteo tras filtrar."""
         return len(self._records)
 
 
@@ -126,6 +138,20 @@ def _rm(id, gerente_id=None, linea_id=None, pais_codigo=None, nombre=None, **ext
 
 def _linea(id, nombre, pais_codigo, activo=True):
     return SimpleNamespace(id=id, nombre=nombre, pais_codigo=pais_codigo, activo=activo)
+
+
+def _gerente(id, tipo="DISTRITO", pais_codigo=None, activo=True, nombre=None):
+    return SimpleNamespace(id=id, nombre=nombre or f"Gerente{id}", tipo=tipo,
+                           activo=activo, pais_codigo=pais_codigo)
+
+
+def _medico(id, pais_codigo, activo=True, estado_validacion="APROBADO", **extra):
+    from datetime import datetime, timezone
+    base = dict(id=id, pais_codigo=pais_codigo, nombre=f"Dr {id}", codigo=None, cedula=None,
+                especialidad_id=None, provincia_id=None, estado_validacion=estado_validacion,
+                activo=activo, created_at=datetime(2020, 1, 1, tzinfo=timezone.utc))
+    base.update(extra)
+    return SimpleNamespace(**base)
 
 
 def _med(id, vm_id, categoria="A"):
@@ -576,3 +602,105 @@ def test_router_cobertura_ranking_pasa_pais_codigo(monkeypatch):
     visita_router.cobertura_ranking(metrica="cobertura", pais_codigo="DO",
                                     db=MagicMock(), current_user=user)
     assert llamada["pais_codigo"] == "DO"
+
+
+# ── /visita/gerentes (Hallazgo 1) ────────────────────────────────────────────
+def test_router_visita_gerentes_filtra_por_pais():
+    gerentes = [_gerente(1, pais_codigo="DO"), _gerente(2, pais_codigo="GT")]
+    db = MagicMock()
+    db.query.return_value = _FakeQuery(gerentes)
+    out = visita_router.listar_gerentes(pais_codigo="DO", db=db, current_user=SimpleNamespace())
+    assert [g["id"] for g in out] == [1]
+
+
+def test_router_visita_gerentes_sin_pais_no_restringe():
+    """Compatibilidad: sin `pais_codigo` sigue viendo TODOS los gerentes."""
+    gerentes = [_gerente(1, pais_codigo="DO"), _gerente(2, pais_codigo="GT")]
+    db = MagicMock()
+    db.query.return_value = _FakeQuery(gerentes)
+    out = visita_router.listar_gerentes(pais_codigo=None, db=db, current_user=SimpleNamespace())
+    assert {g["id"] for g in out} == {1, 2}
+
+
+# ── /medicos/maestro y /medicos/maestro/kpis (Hallazgo 2) ───────────────────────
+def test_router_maestro_medicos_listar_filtra_por_pais():
+    medicos = [_medico(1, pais_codigo="DO"), _medico(2, pais_codigo="GT")]
+    db = MagicMock()
+    db.query.return_value = _FakeQuery(medicos)
+    out = mm_router.listar(pais_codigo="DO", skip=0, limit=300, db=db, _u=SimpleNamespace())
+    assert [m.id for m in out] == [1]
+
+
+def test_router_maestro_medicos_listar_sin_pais_no_restringe():
+    """Compatibilidad: sin `pais_codigo` sigue viendo médicos de TODOS los países."""
+    medicos = [_medico(1, pais_codigo="DO"), _medico(2, pais_codigo="GT")]
+    db = MagicMock()
+    db.query.return_value = _FakeQuery(medicos)
+    out = mm_router.listar(pais_codigo=None, skip=0, limit=300, db=db, _u=SimpleNamespace())
+    assert {m.id for m in out} == {1, 2}
+
+
+def _query_kpis(medicos):
+    """`kpis()` hace 2 tipos de consulta: `func.count(Medico.id)...` (varias veces,
+    filtradas) y `db.query(MedicoVisita.maestro_medico_id)...` (asignados, aquí vacía
+    a propósito para no tener que fabricar el operador `isnot(None)` en el doble)."""
+    def query(*args):
+        if _es(args, MedicoVisita.maestro_medico_id):
+            return _FakeQuery([], proj=("maestro_medico_id",))
+        return _FakeQuery(medicos)
+    return query
+
+
+def test_router_maestro_medicos_kpis_filtra_por_pais():
+    medicos = [_medico(1, pais_codigo="DO"), _medico(2, pais_codigo="GT")]
+    db = MagicMock()
+    db.query.side_effect = _query_kpis(medicos)
+    out = mm_router.kpis(pais_codigo="DO", db=db, _u=SimpleNamespace())
+    assert out["total"] == 1
+    assert out["activos"] == 1
+
+
+def test_router_maestro_medicos_kpis_sin_pais_no_restringe():
+    """Compatibilidad: sin `pais_codigo` los KPIs siguen contando TODOS los países."""
+    medicos = [_medico(1, pais_codigo="DO"), _medico(2, pais_codigo="GT")]
+    db = MagicMock()
+    db.query.side_effect = _query_kpis(medicos)
+    out = mm_router.kpis(pais_codigo=None, db=db, _u=SimpleNamespace())
+    assert out["total"] == 2
+
+
+# ── /examenes/evaluados (Hallazgo 6) ─────────────────────────────────────────────
+def test_router_examenes_evaluados_filtra_por_pais():
+    rms = [_rm(1, pais_codigo="DO", nombre="RM1"), _rm(2, pais_codigo="GT", nombre="RM2")]
+    gers = [_gerente(10, pais_codigo="DO"), _gerente(20, pais_codigo="GT")]
+
+    def query(*args):
+        if _es(args, RepresentanteMedico.id, RepresentanteMedico.nombre):
+            return _FakeQuery(rms)
+        if _es(args, Gerente.id, Gerente.nombre, Gerente.tipo):
+            return _FakeQuery(gers)
+        raise AssertionError(args)
+    db = MagicMock()
+    db.query.side_effect = query
+    out = examenes_router.listar_evaluados(pais_codigo="DO", db=db, current_user=SimpleNamespace())
+    assert [r["id"] for r in out["rms"]] == [1]
+    assert [g["id"] for g in out["gerentes"]] == [10]
+
+
+def test_router_examenes_evaluados_sin_pais_no_restringe():
+    """Compatibilidad: sin `pais_codigo` el selector de asignación sigue viendo
+    RM/gerentes de TODOS los países (comportamiento previo al fix)."""
+    rms = [_rm(1, pais_codigo="DO", nombre="RM1"), _rm(2, pais_codigo="GT", nombre="RM2")]
+    gers = [_gerente(10, pais_codigo="DO"), _gerente(20, pais_codigo="GT")]
+
+    def query(*args):
+        if _es(args, RepresentanteMedico.id, RepresentanteMedico.nombre):
+            return _FakeQuery(rms)
+        if _es(args, Gerente.id, Gerente.nombre, Gerente.tipo):
+            return _FakeQuery(gers)
+        raise AssertionError(args)
+    db = MagicMock()
+    db.query.side_effect = query
+    out = examenes_router.listar_evaluados(pais_codigo=None, db=db, current_user=SimpleNamespace())
+    assert {r["id"] for r in out["rms"]} == {1, 2}
+    assert {g["id"] for g in out["gerentes"]} == {10, 20}

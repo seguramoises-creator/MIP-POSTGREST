@@ -247,19 +247,24 @@ def resumen_capacitacion(
 
 @router.get("/evaluados", response_model=dict)
 def listar_evaluados(
+    pais_codigo: str | None = None,
     db: Session = Depends(get_db),
     current_user=ConfigExamen,
 ):
     """Catálogo para el selector de asignación: Representantes Médicos y Gerentes
     de Distrito activos (id + nombre), para elegir el evaluado por nombre en vez
-    de escribir 'tipo:id' a mano."""
+    de escribir 'tipo:id' a mano. `pais_codigo` (aislamiento multipaís, opcional/
+    retrocompatible): acota a los RM/gerentes de ese país."""
     from app.models.dimensiones import RepresentanteMedico, Gerente
-    rms = (db.query(RepresentanteMedico.id, RepresentanteMedico.nombre)
-           .filter(RepresentanteMedico.activo == True)  # noqa: E712
-           .order_by(RepresentanteMedico.nombre).all())
-    gers = (db.query(Gerente.id, Gerente.nombre, Gerente.tipo)
-            .filter(Gerente.activo == True)  # noqa: E712
-            .order_by(Gerente.nombre).all())
+    rms_q = db.query(RepresentanteMedico.id, RepresentanteMedico.nombre) \
+        .filter(RepresentanteMedico.activo == True)  # noqa: E712
+    gers_q = db.query(Gerente.id, Gerente.nombre, Gerente.tipo) \
+        .filter(Gerente.activo == True)  # noqa: E712
+    if pais_codigo:
+        rms_q = rms_q.filter(RepresentanteMedico.pais_codigo == pais_codigo)
+        gers_q = gers_q.filter(Gerente.pais_codigo == pais_codigo)
+    rms = rms_q.order_by(RepresentanteMedico.nombre).all()
+    gers = gers_q.order_by(Gerente.nombre).all()
     return {
         "rms": [{"id": r.id, "nombre": r.nombre} for r in rms],
         "gerentes": [{"id": g.id, "nombre": g.nombre, "tipo": g.tipo} for g in gers],

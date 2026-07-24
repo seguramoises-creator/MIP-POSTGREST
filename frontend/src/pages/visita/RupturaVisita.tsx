@@ -54,7 +54,7 @@ export default function RupturaVisita() {
   useEffect(() => {
     if (!esGestor) return;
     listarVMs(paisCodigo).then(setVms).catch(() => {});
-    listarGerentesVisita().then(setGerentes).catch(() => {});
+    listarGerentesVisita(paisCodigo).then(setGerentes).catch(() => {});
     listarLineasVisita(paisCodigo).then(setLineas).catch(() => {});
   }, [esGestor, paisCodigo]);
 

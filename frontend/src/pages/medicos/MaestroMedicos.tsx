@@ -75,12 +75,12 @@ export default function MaestroMedicos() {
     setMsg({ t, tipo }); setTimeout(() => setMsg(null), 5000);
   };
 
-  // Listado + KPIs
+  // Listado + KPIs. `pais_codigo` (aislamiento multipaís): acota al país del contexto global.
   const { data: medicos = [], isLoading } = useQuery({
-    queryKey: ['mm-listar', q, estado],
-    queryFn: () => mmListar({ q: q || undefined, estado: estado || undefined, limit: 300 }),
+    queryKey: ['mm-listar', q, estado, paisCodigo],
+    queryFn: () => mmListar({ q: q || undefined, estado: estado || undefined, pais_codigo: paisCodigo || undefined, limit: 300 }),
   });
-  const { data: kpis } = useQuery({ queryKey: ['mm-kpis'], queryFn: mmKpis });
+  const { data: kpis } = useQuery({ queryKey: ['mm-kpis', paisCodigo], queryFn: () => mmKpis(paisCodigo) });
 
   // Catálogos relacionales
   const { data: especialidades = [] } = useQuery<Cat[]>({

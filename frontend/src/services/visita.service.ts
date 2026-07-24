@@ -232,7 +232,8 @@ export const coberturaResumen = (f: CoberturaFiltros = {}) =>
     ...(f.lineaId && { linea_id: f.lineaId }), ...(f.soloRuptura && { solo_ruptura: true }),
     ...(f.paisCodigo && { pais_codigo: f.paisCodigo }),
   } }).then(r => r.data);
-export const listarGerentesVisita = () => api.get<Catalogo[]>('/visita/gerentes').then(r => r.data);
+export const listarGerentesVisita = (paisCodigo?: string) =>
+  api.get<Catalogo[]>('/visita/gerentes', { params: paisCodigo ? { pais_codigo: paisCodigo } : {} }).then(r => r.data);
 export const coberturaRanking = (metrica: string, paisCodigo?: string) =>
   api.get<RankingVM>('/visita/cobertura/ranking', { params: {
     metrica, ...(paisCodigo ? { pais_codigo: paisCodigo } : {}),

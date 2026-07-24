@@ -78,7 +78,7 @@ export default function Examenes() {
   useEffect(() => { cargar(); }, [cargar]);
 
   // Ciclo/país activos del control global — todo examen nuevo se crea contra el ciclo operativo actual.
-  const { cicloId, esSoloLectura } = useCicloStore();
+  const { cicloId, esSoloLectura, paisCodigo } = useCicloStore();
 
   // Crear examen
   const [nuevo, setNuevo] = useState({ nombre: '', producto: '', nota_minima: 70, tiempo_limite_min: '' as string });
@@ -233,13 +233,13 @@ export default function Examenes() {
   const [evalOpts, setEvalOpts] = useState<EvalOpt[]>([]);
   const [evalSel, setEvalSel] = useState<EvalOpt[]>([]);
   useEffect(() => {
-    listarEvaluados().then((cat) => {
+    listarEvaluados(paisCodigo).then((cat) => {
       setEvalOpts([
         ...cat.rms.map((r) => ({ tipo: 'RM' as const, id: r.id, nombre: r.nombre, grupo: 'Representantes Médicos' })),
         ...cat.gerentes.map((g) => ({ tipo: 'GERENTE' as const, id: g.id, nombre: g.nombre, grupo: 'Gerentes de Distrito' })),
       ]);
     }).catch(() => {});
-  }, []);
+  }, [paisCodigo]);
   async function handleAsignar() {
     if (!sel || evalSel.length === 0) return;
     const evaluados: EvaluadoRef[] = evalSel.map((o) => ({ tipo: o.tipo, id: o.id }));

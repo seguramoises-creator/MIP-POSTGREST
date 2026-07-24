@@ -90,7 +90,7 @@ function CostoRoiGerencia() {
   const puedeAprobar = puede('costoroi.configurar', 'approve') === true;
   const esAdmin = rol === 'ADMIN';
 
-  const { cicloId, esSoloLectura } = useCicloStore();
+  const { cicloId, esSoloLectura, paisCodigo } = useCicloStore();
 
   const [lineas, setLineas] = useState<Catalogo[]>([]);
   const [lineaId, setLineaId] = useState<number | ''>('');
@@ -119,8 +119,8 @@ function CostoRoiGerencia() {
   }, [cicloParam, lineaParam]);
 
   useEffect(() => {
-    if (esGestor) listarLineasVisita().then(setLineas).catch(() => {});
-  }, [esGestor]);   // eslint-disable-line react-hooks/exhaustive-deps
+    if (esGestor) listarLineasVisita(paisCodigo).then(setLineas).catch(() => {});
+  }, [esGestor, paisCodigo]);   // eslint-disable-line react-hooks/exhaustive-deps
   // Default de línea = la de la ÚLTIMA hoja de Costo/ROI con datos (no la 1ª del catálogo), para
   // que los roles de consulta no aterricen en una línea vacía. Solo mientras no haya línea elegida.
   useEffect(() => {

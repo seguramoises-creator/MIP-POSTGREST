@@ -131,8 +131,8 @@ export const eliminarExamen = (examenId: number) =>
 
 export interface EvaluadoOpcion { id: number; nombre: string; tipo?: string; }
 export interface EvaluadosCatalogo { rms: EvaluadoOpcion[]; gerentes: EvaluadoOpcion[]; }
-export const listarEvaluados = () =>
-  api.get<EvaluadosCatalogo>('/examenes/evaluados').then(r => r.data);
+export const listarEvaluados = (paisCodigo?: string) =>
+  api.get<EvaluadosCatalogo>('/examenes/evaluados', { params: paisCodigo ? { pais_codigo: paisCodigo } : {} }).then(r => r.data);
 
 // ── Generación con IA ─────────────────────────────────────────────────
 export interface GenerarIAParams {

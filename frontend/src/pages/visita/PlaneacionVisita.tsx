@@ -42,6 +42,8 @@ export default function PlaneacionVisita() {
   const puede = usePuede();
   const esVM = rol === 'REPRESENTANTE_MEDICO';
   const esSoloLectura = useCicloStore((s) => s.esSoloLectura);
+  // País del contexto global — aislamiento multipaís en el selector de VM (ADMIN/GERENTE).
+  const paisCodigo = useCicloStore((s) => s.paisCodigo);
   // Editar la planeación = REGISTRAR (matriz planeacion.ciclo): solo el representante (su panel)
   // y el ADMIN. Los demás (GD, CONSULTA, Analista, Dirección…) la ven en SOLO LECTURA.
   const puedeEditar = rol === 'ADMIN' || puede('planeacion.ciclo', 'register') === true;
@@ -96,8 +98,8 @@ export default function PlaneacionVisita() {
   // roles de consulta no aterricen en una pantalla vacía ("Selecciona un visitador").
   useEffect(() => {
     if (esVM) return;
-    listarVMs().then((vs) => { setVms(vs); if (vs.length && !vmId) setVmId(vs[0].id); }).catch(() => {});
-  }, [esVM]);   // eslint-disable-line react-hooks/exhaustive-deps
+    listarVMs(paisCodigo).then((vs) => { setVms(vs); if (vs.length && !vmId) setVmId(vs[0].id); }).catch(() => {});
+  }, [esVM, paisCodigo]);   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ficha del representante: el VM ve la suya; ADMIN/GERENTE la del VM seleccionado.
   useEffect(() => {

@@ -417,12 +417,15 @@ def importar_medicos_categorizacion(db: Session = Depends(get_db), current_user=
 
 
 @router.get("/gerentes", response_model=list[dict])
-def listar_gerentes(db: Session = Depends(get_db), current_user=RequireAnyAuth):
-    """Gerentes de Distrito (para el filtro de cobertura)."""
+def listar_gerentes(pais_codigo: str | None = None,
+                    db: Session = Depends(get_db), current_user=RequireAnyAuth):
+    """Gerentes de Distrito (para el filtro de cobertura). `pais_codigo` (aislamiento
+    multipaís, opcional/retrocompatible): acota a los gerentes de ese país."""
     from app.models.dimensiones import Gerente
-    return [{"id": g.id, "nombre": g.nombre}
-            for g in db.query(Gerente).filter(Gerente.tipo == "DISTRITO", Gerente.activo == True)  # noqa: E712
-            .order_by(Gerente.nombre).all()]
+    q = db.query(Gerente).filter(Gerente.tipo == "DISTRITO", Gerente.activo == True)  # noqa: E712
+    if pais_codigo:
+        q = q.filter(Gerente.pais_codigo == pais_codigo)
+    return [{"id": g.id, "nombre": g.nombre} for g in q.order_by(Gerente.nombre).all()]
 
 
 @router.get("/cobertura/resumen", response_model=dict)
