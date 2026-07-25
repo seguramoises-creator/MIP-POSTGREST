@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.models.usuario import Rol
+from app.core.authz.constantes import RECURSOS
 from app.core.deps import get_current_active_user
 from app.db.database import get_db
 from app.core.authz import runtime
@@ -79,7 +80,7 @@ def test_me_permisos_medico_sin_comercial():
 def test_matriz_solo_admin():
     # no-admin → 403
     assert _app(U(Rol.REPRESENTANTE_MEDICO)).get("/api/v1/authz/matriz").status_code == 403
-    # admin → 200 con 28 recursos
+    # admin → 200 con el catálogo completo de recursos
     r = _app(U(Rol.ADMIN)).get("/api/v1/authz/matriz")
     assert r.status_code == 200
-    assert len(r.json()["recursos"]) == 32
+    assert len(r.json()["recursos"]) == len(RECURSOS)

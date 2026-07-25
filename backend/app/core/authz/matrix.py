@@ -82,6 +82,20 @@ MATRIZ: dict[str, dict] = {
     Recurso.FARMACIA_PANEL:          _fila(REG_OWN, R_TEAM, R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.FARMACIA_APROBAR:        _fila(_N,      (Accion.APPROVE, Alcance.TEAM), _N, _N, _N, _N, _N, _N, _N,   ADMIN_CELL),
     Recurso.FARMACIA_MAESTRO:        _fila(_N,      _N,       _N,      _N,      CFG,     _N,      _N,      _N,      _N,      ADMIN_CELL),
+    # Categorización + Maestro de Médicos (jul-2026): filas calcadas del acceso que `categorizacion.py`
+    # y `maestro_medicos.py` ya concedían con `require_roles`, para que cablearlos a la matriz no le
+    # quite (ni le dé) acceso a nadie. Verificado endpoint por endpoint en `test_authz_wiring_calcado.py`.
+    #   - categorizacion.operacion: LEER lo podía cualquier autenticado; CONFIGURAR (params, geo,
+    #     carga Excel) solo ADMIN+GERENTE_PRODUCTIVIDAD. RM=own y GD=team calcan el filtro de datos
+    #     interno `_codigos_scope`; ANALISTA_DATOS va R_ALL porque de él se derivan DIR_COMERCIAL y
+    #     CONSULTA, que hoy sí ven todo (`_ROLES_VE_TODO`).
+    #   - medico.maestro / .editar: van separados porque el maestro CREA más restringido de lo que
+    #     EDITA (alta = ADMIN+GERPROD; edición = +GD+GERENTE_MARCA) y una celda no puede expresar
+    #     dos acciones distintas para el mismo rol.
+    #                                   RM       GD        MARCA    MKT      PROD     MED      PRES     ANAL     FIN      ADMIN
+    Recurso.CATEGORIZACION_OPERACION: _fila(R_OWN, R_TEAM,  R_ALL,   R_ALL,   CFG,     R_ALL,   R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
+    Recurso.MEDICO_MAESTRO:          _fila(R_ALL,   R_ALL,   R_ALL,   R_ALL,   CFG,     R_ALL,   R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
+    Recurso.MEDICO_MAESTRO_EDITAR:   _fila(_N,      CFG,      CFG,     _N,      CFG,     _N,      _N,      _N,      _N,      ADMIN_CELL),
 }
 
 # ── Roles legacy fuera de la matriz canónica de 10 columnas (Fase 2) ──────────────────────────
@@ -94,6 +108,13 @@ MATRIZ: dict[str, dict] = {
 _CAPACITACION_ROW = {
     Recurso.EXAMEN_CONFIGURAR: CFG,   # su función central (Exámenes)
     Recurso.EXAMEN_RENDIR: R_ALL,     # ve los resultados rendidos para consolidar
+    # Las 2 lecturas siguientes NO amplían nada: `categorizacion.py` y `maestro_medicos.py` ya
+    # dejaban leer a cualquier usuario autenticado, CAPACITACION incluido, cuando aún usaban
+    # `require_roles`. Se declaran aquí para que cablearlos a la matriz no se los quite (hay
+    # usuarios CAPACITACION reales en producción). Es lectura de datos de referencia, no acceso
+    # gerencial: sigue sin ranking, LSII, ETL, coaching ni configuración de ningún módulo.
+    Recurso.CATEGORIZACION_OPERACION: R_ALL,
+    Recurso.MEDICO_MAESTRO: R_ALL,
 }
 for _recurso, _fila_dict in MATRIZ.items():
     _fila_dict[Rol.CAPACITACION] = _CAPACITACION_ROW.get(_recurso)  # None por defecto (denegado)

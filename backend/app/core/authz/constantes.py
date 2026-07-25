@@ -75,6 +75,15 @@ class Recurso:
     FARMACIA_PANEL = "farmacia.panel"
     FARMACIA_APROBAR = "farmacia.aprobar"
     FARMACIA_MAESTRO = "farmacia.maestro"
+    # Categorización (pantallas operativas) y Maestro de Médicos (jul-2026). Estos 3 recursos
+    # NO son filas del spec §5: existen para poder gobernar desde la matriz dos routers que
+    # seguían con `require_roles`. Sus filas reproducen EXACTAMENTE el acceso que esos routers
+    # ya concedían (decisión: no cambiar permisos al cablear; el cliente los ajusta desde la UI).
+    # Se mantienen separados de `categorizacion.basica`/`detalle` y `medico.panel` —las filas del
+    # spec— porque esos ya los consumen `admin.py` y `visita.py`: tocarlos alteraría esos módulos.
+    CATEGORIZACION_OPERACION = "categorizacion.operacion"
+    MEDICO_MAESTRO = "medico.maestro"
+    MEDICO_MAESTRO_EDITAR = "medico.maestro.editar"
 
 
 # (slug, nombre legible, módulo) — orden = filas del spec §5
@@ -111,6 +120,9 @@ RECURSOS_META: dict[str, tuple[str, str]] = {
     Recurso.FARMACIA_PANEL: ("Panel de farmacias del VM", "Farmacias (maestro/panel)"),
     Recurso.FARMACIA_APROBAR: ("Aprobación de altas de farmacia (VM→GD)", "Farmacias (maestro/panel)"),
     Recurso.FARMACIA_MAESTRO: ("Maestro de farmacias: CRUD directo", "Farmacias (maestro/panel)"),
+    Recurso.CATEGORIZACION_OPERACION: ("Categorización: pantallas operativas y parámetros", "Panel médico"),
+    Recurso.MEDICO_MAESTRO: ("Maestro de médicos: consulta e importación", "Panel médico"),
+    Recurso.MEDICO_MAESTRO_EDITAR: ("Maestro de médicos: editar ficha existente", "Panel médico"),
 }
 
 RECURSOS: list[str] = list(RECURSOS_META.keys())

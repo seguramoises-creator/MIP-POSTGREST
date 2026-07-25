@@ -15,7 +15,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_active_user, require_roles
+from app.core.authz.deps import require as _require_authz
+from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
 from app.db.database import get_db
 from app.models.usuario import Rol, Usuario
 from app.models.dimensiones import RepresentanteMedico
@@ -23,10 +24,16 @@ from app.services import categorizacion_service as svc
 
 router = APIRouter(prefix="/categorizacion", tags=["Categorización Médica"])
 
-# ── RBAC ───────────────────────────────────────────────────────────────────────
-AdminOGerProd  = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
-RequireAdminCat = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
-RequireAuth    = Depends(get_current_active_user)
+# ── RBAC por matriz editable (jul-2026) ───────────────────────────────────────
+# La fila `categorizacion.operacion` se calcó del `require_roles` que había aquí, así que el
+# acceso efectivo NO cambia; ahora se ajusta desde Administración → Roles y Permisos. Es un
+# recurso propio, distinto de `categorizacion.detalle` (que `admin.py` usa para el motor de
+# criterios/pesos): tocar aquella fila habría alterado también ese otro módulo.
+# El filtro de DATOS por rol sigue siendo `_codigos_scope` más abajo — la matriz decide quién
+# entra al endpoint, no cuántas filas ve.
+AdminOGerProd  = Depends(_require_authz(_Acc.CONFIGURE, _Rec.CATEGORIZACION_OPERACION))
+RequireAdminCat = Depends(_require_authz(_Acc.CONFIGURE, _Rec.CATEGORIZACION_OPERACION))
+RequireAuth    = Depends(_require_authz(_Acc.READ, _Rec.CATEGORIZACION_OPERACION))
 
 # Item 5 (Mallén): visión de datos por rol. Producto/MKT/Dirección + gestión + CONSULTA ven
 # todo; el RM ve solo su panel; el GD solo su equipo.
@@ -98,7 +105,7 @@ async def cargar_excel(
 @router.get("/plantilla", summary="Opciones válidas de los 5 criterios (alta de médico)")
 def get_plantilla(
     pais_codigo: str = Query(..., min_length=1, max_length=10),
-    _current_user: Usuario = Depends(get_current_active_user),
+    _current_user: Usuario = RequireAuth,
     db: Session = Depends(get_db),
 ):
     """Alimenta el formulario de clasificación al dar de alta un médico.

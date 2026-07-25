@@ -62,11 +62,18 @@ ORACULO = {
     Recurso.FARMACIA_PANEL:          [GO, RT, RA, RA, RA, RA, RA, RA, _,  AD],
     Recurso.FARMACIA_APROBAR:        [_,  AT, _,  _,  _,  _,  _,  _,  _,  AD],
     Recurso.FARMACIA_MAESTRO:        [_,  _,  _,  _,  CF, _,  _,  _,  _,  AD],
+    # Categorización + Maestro de Médicos (jul-2026). No son filas del spec §5: se transcriben
+    # del acceso que `categorizacion.py` / `maestro_medicos.py` concedían con `require_roles`
+    # antes de cablearse (leer = cualquier autenticado; configurar = ADMIN+GERPROD; editar ficha
+    # = +GD+GERENTE_MARCA). El oráculo los cubre igual para atrapar cambios accidentales.
+    Recurso.CATEGORIZACION_OPERACION:[RO, RT, RA, RA, CF, RA, RA, RA, RA, AD],
+    Recurso.MEDICO_MAESTRO:          [RA, RA, RA, RA, CF, RA, RA, RA, RA, AD],
+    Recurso.MEDICO_MAESTRO_EDITAR:   [_,  CF, CF, _,  CF, _,  _,  _,  _,  AD],
 }
 
 
-def test_matriz_tiene_32_recursos():
-    assert len(RECURSOS) == 32
+def test_matriz_tiene_35_recursos():
+    assert len(RECURSOS) == 35
     assert set(MATRIZ) == set(RECURSOS)
     assert set(ORACULO) == set(RECURSOS)
 
@@ -84,15 +91,19 @@ def test_matriz_coincide_con_oraculo_del_spec():
 
 
 def test_roles_legacy_derivados_por_regla():
-    """Fase 2: DIR_COMERCIAL/CONSULTA derivados; CAPACITACION = fila propia (solo exámenes)."""
+    """Fase 2: DIR_COMERCIAL/CONSULTA derivados; CAPACITACION = fila propia (exámenes + 2 lecturas)."""
+    # CAPACITACION = fila propia estricta. Además de exámenes (su función central) conserva la
+    # LECTURA de Categorización y del Maestro de Médicos, que ya tenía cuando esos routers usaban
+    # `require_roles` (cualquier autenticado leía) — cablearlos a la matriz no debía quitársela.
+    # Sigue sin nada gerencial: ni ranking, ni LSII, ni ETL, ni coaching, ni configurar módulos.
+    CAPACITACION_ESPERADO = {
+        Recurso.EXAMEN_CONFIGURAR: (Accion.CONFIGURE, Alcance.ALL),
+        Recurso.EXAMEN_RENDIR: (Accion.READ, Alcance.ALL),
+        Recurso.CATEGORIZACION_OPERACION: (Accion.READ, Alcance.ALL),
+        Recurso.MEDICO_MAESTRO: (Accion.READ, Alcance.ALL),
+    }
     for recurso, fila in MATRIZ.items():
-        # CAPACITACION = fila propia estricta: solo examen.configurar (CFG) + examen.rendir (read all).
-        if recurso == Recurso.EXAMEN_CONFIGURAR:
-            assert fila[Rol.CAPACITACION] == (Accion.CONFIGURE, Alcance.ALL)
-        elif recurso == Recurso.EXAMEN_RENDIR:
-            assert fila[Rol.CAPACITACION] == (Accion.READ, Alcance.ALL)
-        else:
-            assert fila[Rol.CAPACITACION] is None
+        assert fila[Rol.CAPACITACION] == CAPACITACION_ESPERADO.get(recurso), recurso
         # DIR_COMERCIAL == ANALISTA_DATOS
         assert fila[Rol.DIR_COMERCIAL] == fila[Rol.ANALISTA_DATOS]
         # CONSULTA == ANALISTA_DATOS salvo en EXPORTACION (sin export)

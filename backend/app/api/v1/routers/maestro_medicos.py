@@ -12,8 +12,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, get_current_active_user, require_roles
-from app.models.usuario import Usuario, Rol
+from app.core.deps import get_db
+from app.core.authz.deps import require as _require_authz
+from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
+from app.models.usuario import Usuario
 from app.models.dimensiones import Medico
 from app.schemas.schemas import (MaestroMedicoCrear, MaestroMedicoActualizar,
                                  MaestroMedicoResponse)
@@ -21,10 +23,13 @@ from app.services import maestro_medico_service as svc
 
 router = APIRouter(prefix="/medicos", tags=["Maestro de Médicos"])
 
-RequireLectura = Depends(get_current_active_user)
-RequireEscritura = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
-RequireSupervisor = Depends(require_roles(
-    Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.GERENTE_DISTRITO, Rol.GERENTE_MARCA))
+# RBAC por matriz editable (jul-2026). Las filas `medico.maestro` / `medico.maestro.editar` se
+# calcaron del `require_roles` que había aquí, así que el acceso efectivo NO cambia; lo que cambia
+# es que ahora se ajusta desde Administración → Roles y Permisos. Van dos recursos porque el alta
+# es MÁS restringida que la edición (una celda no puede dar dos acciones distintas al mismo rol).
+RequireLectura = Depends(_require_authz(_Acc.READ, _Rec.MEDICO_MAESTRO))        # cualquier autenticado
+RequireEscritura = Depends(_require_authz(_Acc.CONFIGURE, _Rec.MEDICO_MAESTRO))  # ADMIN + GERENTE_PRODUCTIVIDAD
+RequireSupervisor = Depends(_require_authz(_Acc.CONFIGURE, _Rec.MEDICO_MAESTRO_EDITAR))  # + GD + GERENTE_MARCA
 
 
 def _filtrar(query, q, especialidad_id, provincia_id, estado, activo, pais_codigo=None):

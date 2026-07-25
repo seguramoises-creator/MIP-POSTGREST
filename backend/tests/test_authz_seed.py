@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from app.core.authz import seed
 from app.core.authz.audit import registrar_evento_seguridad
+from app.core.authz.constantes import RECURSOS
 from app.models.usuario import Rol
 from app.models.seguridad_rbac import Recurso, RolPermiso, AuditoriaSeguridad
 
@@ -39,11 +40,13 @@ class _FakeSession:
 def test_seed_idempotente():
     db = _FakeSession()
     r1 = seed.sembrar_todo(db)
-    assert r1["recursos_nuevos"] == 32
+    # Atado al catálogo (no a un número fijo): el conteo exacto lo verifica
+    # `test_authz_matriz.test_matriz_tiene_35_recursos`, que es su sitio.
+    assert r1["recursos_nuevos"] == len(RECURSOS)
     assert r1["permisos_cambios"] > 0
     n_rec = len(db._store[Recurso])
     n_perm = len(db._store[RolPermiso])
-    assert n_rec == 32
+    assert n_rec == len(RECURSOS)
 
     # segunda pasada: nada nuevo, nada cambia
     r2 = seed.sembrar_todo(db)
