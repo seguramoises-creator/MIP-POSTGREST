@@ -1,12 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Box, Typography, Card, CardContent,
   Table, TableBody, TableCell, TableContainer, TableFooter,
   TableHead, TableRow, Paper, Chip, CircularProgress,
   Alert, Tabs, Tab, Select, MenuItem, Button,
-  TablePagination, Divider,
+  TablePagination, Divider, Snackbar,
 } from '@mui/material';
-import { Download } from '@mui/icons-material';
+import { Download, Autorenew } from '@mui/icons-material';
 import { useMemo, useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
@@ -88,6 +88,14 @@ function RankingGerencia() {
   const [page,       setPage]       = useState(0);
   const [size,       setSize]       = useState(200);
   const [exportando, setExportando] = useState(false);
+  const [generando,  setGenerando]  = useState(false);
+  const [msgGenerar, setMsgGenerar] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const rol = useAuthStore((s) => s.rol);
+  // Solo Regional/Anual: Mensual ya se calcula automaticamente con el motor correcto
+  // (motor_calculo_service) -- exponer "generar" aqui para Mensual usaria el motor de
+  // 5 componentes (iup_service) y sobrescribiria el ranking real con datos distintos.
+  const puedeGenerar = (rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD') && (tab === 1 || tab === 2);
 
   // Al cambiar el país (aquí o desde la barra global), vuelve a la primera página.
   useEffect(() => { setPage(0); }, [paisCodigo]);
@@ -211,6 +219,26 @@ function RankingGerencia() {
     finally { setExportando(false); }
   };
 
+  const handleGenerar = async () => {
+    if (!paisId) { setMsgGenerar('Selecciona un país primero.'); return; }
+    setGenerando(true);
+    try {
+      await api.post('/ranking/generar', {
+        pais_codigo: paisId,
+        ...(cicloId && { ciclo_id: Number(cicloId) }),
+        tipo_ranking: tab === 1 ? 'REGIONAL' : 'ANUAL',
+      });
+      setMsgGenerar('Cálculo iniciado — puede tardar unos segundos. Esta pantalla se actualizará sola.');
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['ranking'] });
+      }, 8000);
+    } catch {
+      setMsgGenerar('No se pudo iniciar el cálculo.');
+    } finally {
+      setGenerando(false);
+    }
+  };
+
   return (
     <Box>
       {/* Encabezado */}
@@ -231,6 +259,12 @@ function RankingGerencia() {
           {elegibles > 0 && (
             <Chip label={elegibles + ' elegibles'} variant="outlined"
               sx={{ fontWeight: 700, fontSize: 13, color: '#00897b', borderColor: '#00897b' }} />
+          )}
+          {puedeGenerar && (
+            <Button variant="contained" size="small" startIcon={<Autorenew />}
+              onClick={handleGenerar} disabled={generando || !paisId}>
+              {generando ? 'Generando...' : 'Generar Ranking'}
+            </Button>
           )}
           <Button variant="outlined" size="small" startIcon={<Download />}
             onClick={handleExportar} disabled={exportando}>
@@ -476,6 +510,10 @@ function RankingGerencia() {
           </Table>
         </TableContainer>
       )}
+
+      <Snackbar open={!!msgGenerar} autoHideDuration={6000} onClose={() => setMsgGenerar(null)}>
+        <Alert severity="info" onClose={() => setMsgGenerar(null)}>{msgGenerar}</Alert>
+      </Snackbar>
     </Box>
   );
 }
