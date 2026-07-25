@@ -59,6 +59,14 @@ def _obtener_pesos(db: Session) -> dict:
 
     pesos = {r.modulo: Decimal(str(r.peso_total)) for r in rows}
 
+    # FIX (jul-2026): el dato real de DIM_Indicador.modulo usa "GESTION"/"RESULTADOS"
+    # (confirmado en DIMS_FACTS_V2/KPI GESTION/DIM_MIP_FINAL.xlsx), no "PRODUCTIVIDAD" —
+    # el resto del sistema (productividad.py) ya filtra por "GESTION" para ese mismo
+    # componente. Sin este remapeo, un peso_iup configurado para GESTION nunca llegaba
+    # a aplicarse (la fórmula de abajo siempre caía al default de PRODUCTIVIDAD).
+    if "GESTION" in pesos:
+        pesos["PRODUCTIVIDAD"] = pesos.pop("GESTION")
+
     # Normalizar para que sumen 1.0 (por si la configuración no está balanceada)
     total = sum(pesos.values()) or Decimal("1")
     pesos_norm = {k: v / total for k, v in pesos.items()}
@@ -132,6 +140,12 @@ def _get_puntaje_productividad(db: Session, rm_id: int, pais_codigo: str, ciclo_
     Promedio de puntos ya convertidos (vía DIM_IndicadorTabla en el recálculo)
     de todos los KPIs de Productividad del RM en el ciclo.
     Fuente: FACT_ResultadoIndicador.puntos_obtenidos (antes RendimientoComercial.puntaje).
+
+    FIX (jul-2026): el valor real de DIM_Indicador.modulo para estos indicadores
+    (COB_MD_F2/F1, PROM_DIARIO, COB_FARMACIAS) es "GESTION", no "PRODUCTIVIDAD"
+    (confirmado en el Excel maestro real; el filtro anterior nunca hacía match, así
+    que este componente del Score siempre daba 0). "GESTION" es la misma convención
+    que ya usa productividad.py para la pantalla equivalente.
     """
     result = (
         db.query(func.avg(ResultadoIndicador.puntos_obtenidos))
@@ -141,7 +155,7 @@ def _get_puntaje_productividad(db: Session, rm_id: int, pais_codigo: str, ciclo_
             ResultadoIndicador.pais_codigo   == pais_codigo,
             ResultadoIndicador.ciclo_id  == ciclo_id,
             ResultadoIndicador.activo    == True,
-            Indicador.modulo == "PRODUCTIVIDAD",
+            Indicador.modulo == "GESTION",
         )
         .scalar()
     )

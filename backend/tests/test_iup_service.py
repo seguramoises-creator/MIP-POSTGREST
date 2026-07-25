@@ -110,6 +110,24 @@ def test_obtener_pesos_garantiza_clave_consistencia_si_falta(fake_db):
     assert pesos["CONSISTENCIA"] == _PESOS_DEFECTO["CONSISTENCIA"]
 
 
+def test_obtener_pesos_remapea_gestion_a_productividad(fake_db):
+    """
+    FIX (jul-2026): DIM_Indicador.modulo en los datos reales usa "GESTION"
+    (confirmado en el Excel maestro), no "PRODUCTIVIDAD" — sin este remapeo,
+    un peso_iup configurado para el módulo de campo nunca llegaba a aplicarse
+    (calcular_iup siempre caía al default de PRODUCTIVIDAD, ver test de abajo).
+    """
+    filas = [
+        SimpleNamespace(modulo="GESTION", peso_total=Decimal("0.5")),
+        SimpleNamespace(modulo="RESULTADOS", peso_total=Decimal("0.5")),
+    ]
+    fake_db.query.return_value = FakeQuery(all_result=filas)
+    pesos = _obtener_pesos(fake_db)
+    assert "GESTION" not in pesos
+    assert "PRODUCTIVIDAD" in pesos
+    assert pesos["PRODUCTIVIDAD"] > 0
+
+
 # ---------------------------------------------------------------------------
 # calcular_iup — agregación ponderada y acotamiento a [0, 100]
 # ---------------------------------------------------------------------------
