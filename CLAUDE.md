@@ -230,7 +230,7 @@ PostgreSQL, base de datos `scgcpr`, múltiples esquemas.
 | `DIM_CriterioCategoriaTabla` | `CriterioCategoriaTabla` | Rangos/niveles por criterio (análogo a `DIM_IndicadorTabla`) |
 | `DIM_Medico` | `Medico` | Médicos, deduplicados por `(pais_id, nombre)` — el Excel fuente no trae código estable |
 
-**Nota**: `DIM_Indicador.modulo` está documentado en el modelo como `GESTION | RESULTADOS` (comentario heredado de v1.0), pero el motor de Score (`iup_service.py`) agrupa y filtra en la práctica por los valores `PRODUCTIVIDAD`, `COACHING`, `CAPACITACION` (ver §6-7) — el comentario del modelo quedó desactualizado tras el rediseño y no debe tomarse como la lista vigente de valores.
+**Nota (corregida jul-2026, hallazgo de auditoría)**: los valores REALES de `DIM_Indicador.modulo` en los datos importados son `GESTION` y `RESULTADOS` (confirmado directamente en `DIMS_FACTS_V2/KPI GESTION/DIM_MIP_FINAL.xlsx`) — `productividad.py` siempre filtró correctamente por `GESTION`. `iup_service.py` filtraba por `PRODUCTIVIDAD` (un valor que nunca existió en los datos reales): ese componente del Score Integral daba **0 para todo representante** hasta el fix de jul-2026, que hizo que `_get_puntaje_productividad` y `_obtener_pesos` usen/remapeen `GESTION`. Ver §7 para el alcance real de este motor.
 
 ### Esquema `DW` — Tablas de Hechos (REDISEÑADO jun-2026)
 
@@ -355,6 +355,20 @@ Nota: a diferencia de v1.0, `puntaje_service.convertir_a_puntaje()` ya **no** re
 
 ## 7. Motor de Score Integral (antes "Motor IUP")
 
+> ⚠️ **ALCANCE REAL DE ESTA FÓRMULA (verificado jul-2026, auditoría pre-lanzamiento).**
+> Este motor de 5 componentes (`iup_service.py`) **NO es el que calcula el Ranking Mensual
+> automático** (el que corre tras cada ETL / `POST /etl/recalcular/{ciclo_id}` y alimenta
+> Reconocimiento por defecto). Ese lo calcula `motor_calculo_service.generar_ranking` (§8)
+> con una fórmula mucho más simple: `SUM(puntos_obtenidos) × 100 / SUM(ponderacion_pct)`
+> sobre `FACT_ResultadoIndicador` únicamente — **sin** Comercial/Coaching/Capacitación/
+> Consistencia. Esto no es un bug de la migración a Python: un test de caracterización ya
+> retirado (`test_caracterizacion_motor.py`, comparaba contra el SP real de SQL Server byte
+> a byte) confirmó que el stored procedure original **ya usaba esta misma fórmula simple**.
+> El motor de 5 componentes de esta sección **sí corre**, vía `ranking_service.py`, cuando
+> se dispara `POST /ranking/generar` (botón manual, usado para tipos TRIMESTRAL/ANUAL/
+> REGIONAL). Si se necesita que el Ranking Mensual automático también use los 5
+> componentes, es un cambio de diseño explícito — no asumir que ya está así.
+
 **Archivo**: `app/services/iup_service.py`
 
 ```
@@ -374,7 +388,7 @@ Score ∈ [0, 100]
 **Función principal**: `calcular_iup(db, rm_id, pais_id, ciclo_id) → dict` — retorna `iup_productividad`, `iup_comercial`, `iup_coaching`, `iup_capacitacion`, `iup_consistencia`, `iup_total`, `score_total`, `pesos_aplicados`.
 
 **Cómo se calcula cada componente:**
-- **Productividad**: promedio de `FACT_ResultadoIndicador.puntos_obtenidos` para indicadores con `modulo == "PRODUCTIVIDAD"`.
+- **Productividad**: promedio de `FACT_ResultadoIndicador.puntos_obtenidos` para indicadores con `modulo == "GESTION"` (fix jul-2026 — antes filtraba por `"PRODUCTIVIDAD"`, un valor que nunca existió en los datos reales; el componente siempre daba 0). `_obtener_pesos` remapea la clave `GESTION`→`PRODUCTIVIDAD` para que un `peso_iup` configurado sí se aplique.
 - **Comercial** (FIX W-02): promedio de `FACT_Ventas.puntaje` y `FACT_EVOIR.puntaje`, **solo de los componentes que tengan datos cargados en el ciclo** — si falta uno, no penaliza al RM; si no hay ninguno, el componente es 0.
 - **Coaching** / **Capacitación**: promedio simple de `FACT_Coaching.puntaje` / `FACT_Capacitacion.puntaje` del ciclo.
 - **Consistencia** (FIX W-08, implementa el pendiente histórico "IUP consistencia completo" — **ya resuelto**): promedio de `FACT_ScoreIntegralRM.score_total` de hasta los **3 ciclos previos más recientes** del RM (ordenados por `DIM_Ciclo.anio/numero` descendente, excluyendo el ciclo actual). Si tiene 1-2 ciclos previos, usa los disponibles. Si no tiene historial (RM nuevo), usa **0** como base neutral — nunca 50 — para no darle ventaja artificial sobre RMs con trayectoria.
@@ -398,7 +412,7 @@ Categorización (`categorizacion_service.calcular_categorias_py`) y Cobertura
 (`cobertura_predictiva_service.calcular_cobertura_py`).
 
 - `motor_calculo_service.completar_puntajes(db, ciclo_id, pais_codigo)` — `resultado_porcentaje` + `puntos_obtenidos`.
-- `motor_calculo_service.generar_ranking(db, ciclo_id, pais_codigo)` — Score Integral + Ranking (**delete-then-insert**).
+- `motor_calculo_service.generar_ranking(db, ciclo_id, pais_codigo)` — Score Integral + Ranking **MENSUAL** (**delete-then-insert**). Fórmula: `SUM(FACT_ResultadoIndicador.puntos_obtenidos) × 100 / SUM(Indicador.ponderacion_pct)` — **no** es el motor de 5 componentes de §7 (confirmado idéntico al SP original de SQL Server vía caracterización, no es una simplificación introducida por la migración a Python).
 - `motor_calculo_service.recalcular_ciclo_py(db, ciclo_id, pais_codigo)` — orquestador (guard de ciclo abierto).
 
 `recalculo_service.recalcular_ciclo` delega en `motor_calculo_service.recalcular_ciclo_py`, conservando
