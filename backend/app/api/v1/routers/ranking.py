@@ -124,7 +124,14 @@ def get_ranking(
     db: Session = Depends(get_db),
     current_user=ReadRanking,
 ):
-    ciclo_efectivo = ciclo_id or _ultimo_ciclo(db, pais_codigo, tipo)
+    # FIX (jul-2026, bug latente hoy inalcanzable desde la UI): `_ultimo_ciclo`
+    # sin `pais_codigo` elegía el ciclo más reciente de CUALQUIER país (cada
+    # ciclo_id pertenece a uno solo), y el resultado terminaba siendo el de un
+    # país arbitrario disfrazado de "todos los países". Con ciclo_id explícito
+    # no hay bug (el país se resuelve del propio ciclo en `_ciclos_acumulados`);
+    # sin país NI ciclo_id, mejor dejarlo sin resolver — cae en el "sin datos"
+    # de abajo en vez de un resultado silenciosamente incorrecto.
+    ciclo_efectivo = ciclo_id or (_ultimo_ciclo(db, pais_codigo, tipo) if pais_codigo else None)
     if not ciclo_efectivo:
         return {"items": [], "total": 0, "page": 1, "size": params.size,
                 "pages": 1, "ciclo_efectivo": None}

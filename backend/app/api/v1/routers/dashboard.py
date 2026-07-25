@@ -126,12 +126,18 @@ def dashboard_ejecutivo(
     - Componentes del score integral para gráfico radar
     """
     # ── Ciclo efectivo: usa el más reciente si no se especifica ─────────────
+    # FIX (jul-2026, bug latente hoy inalcanzable desde la UI): cada ciclo_id
+    # pertenece a UN país. Sin `pais_codigo`, `MAX(ciclo_id)` sin filtro elegía
+    # un ciclo de un país arbitrario y el resto del dashboard terminaba
+    # mostrando solo ese país, disfrazado de "todos los países". Ahora solo se
+    # intenta resolver el "último ciclo" cuando hay un país indicado; si no,
+    # `ciclo_efectivo` queda sin resolver y el dashboard responde vacío en vez
+    # de un resultado silenciosamente incorrecto.
     ciclo_efectivo = ciclo_id
-    if not ciclo_efectivo:
+    if not ciclo_efectivo and pais_codigo:
         ultimo = (
             db.query(func.max(RankingRM.ciclo_id))
-            .filter(RankingRM.tipo_ranking == "MENSUAL")
-            .filter(*([ RankingRM.pais_codigo == pais_codigo ] if pais_codigo else []))
+            .filter(RankingRM.tipo_ranking == "MENSUAL", RankingRM.pais_codigo == pais_codigo)
             .scalar()
         )
         ciclo_efectivo = ultimo
@@ -177,15 +183,17 @@ def dashboard_ejecutivo(
             ciclo_nombre_actual = c_row.nombre
 
     # ── Ciclo anterior (para delta de KPIs) ─────────────────────────────────
+    # Mismo FIX de arriba: sin país, "el ciclo anterior" no está bien definido
+    # entre países distintos — solo se resuelve si hay país indicado.
     prev_ciclo_id = None
     prev_data: dict = {}
-    if ciclo_efectivo:
+    if ciclo_efectivo and pais_codigo:
         prev_row = (
             db.query(Ciclo.id)
             .join(RankingRM, RankingRM.ciclo_id == Ciclo.id)
             .filter(RankingRM.tipo_ranking == "MENSUAL")
             .filter(Ciclo.id < ciclo_efectivo)
-            .filter(*([ RankingRM.pais_codigo == pais_codigo ] if pais_codigo else []))
+            .filter(RankingRM.pais_codigo == pais_codigo)
             .group_by(Ciclo.id, Ciclo.anio, Ciclo.numero)
             .order_by(Ciclo.anio.desc(), Ciclo.numero.desc())
             .limit(1)

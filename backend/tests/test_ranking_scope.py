@@ -73,3 +73,13 @@ def test_regional_no_tiene_endpoint_generar_ni_anual():
     reaparecer como código muerto."""
     assert not hasattr(router_rk, "generar_ranking")
     assert not hasattr(router_rk, "get_ranking_anual")
+
+
+def test_ranking_actual_no_resuelve_ultimo_ciclo_sin_pais():
+    """Bug latente (jul-2026, hoy inalcanzable desde la UI): sin pais_codigo NI
+    ciclo_id, `_ultimo_ciclo` elegía el ciclo mas reciente de CUALQUIER país
+    (cada ciclo_id pertenece a uno solo) — el resultado terminaba siendo el de
+    un país arbitrario disfrazado de "todos los países". Ahora debe quedar sin
+    resolver (cae en el "sin datos" ya existente) en vez de adivinar mal."""
+    fuente = inspect.getsource(router_rk.get_ranking)
+    assert "_ultimo_ciclo(db, pais_codigo, tipo) if pais_codigo else None" in fuente
