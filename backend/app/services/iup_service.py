@@ -1,54 +1,64 @@
 """
-SCGCPR — Motor IUP / Score Integral del RM
+SCGCPR — Motor de Score Integral del RM (Ranking Regional / Histórico Anual)
 FIX C-02: Los pesos se leen desde DIM_Indicador.peso_iup en BD,
           NO desde constantes hardcodeadas.
-FIX W-02: Puntaje comercial pondera solo los componentes disponibles
-          (no penaliza si EVO IR no fue cargado en el ciclo).
 FIX W-08: Consistencia de RMs nuevos usa 0 como base neutral en lugar
           de 50, para evitar ventaja artificial sobre RMs con historial.
 
-REDISEÑO (jun-2026): la fuente de productividad pasó de
-FACT_RendimientoComercial (campo `puntaje`) a FACT_ResultadoIndicador
-(campo `puntos_obtenidos`) — ver app.models.hechos.ResultadoIndicador.
-El nombre "IUP" se conserva como métrica interna (módulos/pesos), aunque
-la salida consolidada ahora se persiste como FACT_ScoreIntegralRM.score_total
-en lugar de FACT_Ranking.iup_total.
+REDISEÑO (jul-2026, auditoría pre-lanzamiento): el diseño original de 5
+componentes (Productividad + Comercial + Coaching + Capacitación +
+Consistencia, cada uno ponderado por DIM_Indicador.peso_iup) asumía que
+Comercial/Coaching/Capacitación se cargaban por separado en FACT_Ventas/
+FACT_EVOIR/FACT_Coaching/FACT_Capacitacion. En la práctica esas 4 tablas están
+prácticamente vacías (la carga real entra por el Excel unificado KPI_RM, un
+solo FACT_ResultadoIndicador con los 8 KPIs reales) — confirmado con conteos
+reales (scripts/diagnostics/verificar_tablas_legacy_comercial.py: 9/0/2/0
+filas para RD). Eso hacía que 3 de los 5 componentes dieran 0 siempre, y el
+score real terminara en 18-28 en vez de una escala 0-100 con sentido.
 
-Fórmula configurable:
-  Score = Σ (puntaje_modulo × peso_modulo)
-  donde los pesos provienen de DIM_Indicador.peso_iup agrupados por módulo.
+Fórmula nueva (validada contra datos reales antes de aplicarse, ver
+scripts/diagnostics/probar_formula_propuesta.py):
+    score = kpi_score × (1 − peso_consistencia) + consistencia × peso_consistencia
+donde:
+  - kpi_score es EXACTAMENTE la misma fórmula que ya usa el Ranking Mensual real
+    (motor_calculo_service.generar_ranking): suma de puntos_obtenidos de los 8
+    KPIs reales (Gestión + Resultados juntos, sin separar en categorías),
+    ponderados por Indicador.ponderacion_pct ("Peso (pts)", la configuración que
+    de verdad se mantiene en Administración → Indicadores).
+  - consistencia sigue el mismo cálculo de siempre (promedio del score
+    consolidado de hasta los 3 ciclos previos).
+El nombre "IUP" se conserva como métrica interna, aunque la salida consolidada
+se persiste como FACT_ScoreIntegralRM.score_total.
 """
 from decimal import Decimal
-from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from loguru import logger
 
-from app.models.hechos import ResultadoIndicador, Ventas, EvoIR, Coaching, CapacitacionFact, ScoreIntegralRM
+from app.models.hechos import ResultadoIndicador, ScoreIntegralRM
 from app.models.dimensiones import Indicador, Ciclo
 
-# Pesos por defecto — solo usados si DIM_Indicador no tiene datos configurados
+# Peso de Consistencia por defecto — usado si DIM_Indicador no tiene un módulo
+# "CONSISTENCIA" configurado (nunca lo tiene en la práctica: no es un KPI real,
+# así que este default es efectivamente el valor vigente siempre).
 _PESOS_DEFECTO = {
-    "PRODUCTIVIDAD": Decimal("0.30"),
-    "COMERCIAL":     Decimal("0.30"),
-    "COACHING":      Decimal("0.15"),
-    "CAPACITACION":  Decimal("0.10"),
-    "CONSISTENCIA":  Decimal("0.15"),
+    "CONSISTENCIA": Decimal("0.15"),
 }
 
 
 def _obtener_pesos(db: Session) -> dict:
     """
-    FIX C-02: Lee los pesos configurados desde DIM_Indicador.peso_iup
-    agrupando por módulo (suma de pesos de indicadores del mismo módulo).
-    Si no hay datos configurados, usa los pesos por defecto.
+    Lee los pesos configurados desde DIM_Indicador.peso_iup agrupados por
+    módulo, normalizados a que sumen 1.0. `calcular_iup` solo usa la clave
+    CONSISTENCIA de este resultado — la ponderación real de los KPIs viene de
+    Indicador.ponderacion_pct (ver `_get_puntaje_kpis`), no de peso_iup.
     """
     rows = (
         db.query(
             Indicador.modulo,
             func.sum(Indicador.peso_iup).label("peso_total"),
         )
-        .filter(Indicador.activo == True, Indicador.peso_iup > 0)
+        .filter(Indicador.activo == True, Indicador.peso_iup > 0)  # noqa: E712
         .group_by(Indicador.modulo)
         .all()
     )
@@ -58,14 +68,6 @@ def _obtener_pesos(db: Session) -> dict:
         return _PESOS_DEFECTO.copy()
 
     pesos = {r.modulo: Decimal(str(r.peso_total)) for r in rows}
-
-    # FIX (jul-2026): el dato real de DIM_Indicador.modulo usa "GESTION"/"RESULTADOS"
-    # (confirmado en DIMS_FACTS_V2/KPI GESTION/DIM_MIP_FINAL.xlsx), no "PRODUCTIVIDAD" —
-    # el resto del sistema (productividad.py) ya filtra por "GESTION" para ese mismo
-    # componente. Sin este remapeo, un peso_iup configurado para GESTION nunca llegaba
-    # a aplicarse (la fórmula de abajo siempre caía al default de PRODUCTIVIDAD).
-    if "GESTION" in pesos:
-        pesos["PRODUCTIVIDAD"] = pesos.pop("GESTION")
 
     # Normalizar para que sumen 1.0 (por si la configuración no está balanceada)
     total = sum(pesos.values()) or Decimal("1")
@@ -92,130 +94,67 @@ def calcular_iup(
     ciclo_id: int,
 ) -> dict:
     """
-    Calcula el score integral completo (antes "IUP") para un RM en un ciclo dado.
-    Los pesos se obtienen desde DIM_Indicador en BD (FIX C-02).
-
-    Mantiene las claves iup_* en la respuesta por compatibilidad con el resto
-    del sistema (ranking_service, elegibilidad, dashboards): son los
-    componentes por módulo del score consolidado, no una tabla "FACT_IUP".
+    Calcula el score integral (antes "IUP") para un RM en un ciclo dado —
+    usado por el Ranking Regional/Histórico Anual (ver ranking_service).
     """
     logger.debug(f"Calculando score integral — rm_id={rm_id}, ciclo_id={ciclo_id}")
 
     pesos = _obtener_pesos(db)
+    peso_consistencia = pesos.get("CONSISTENCIA", _PESOS_DEFECTO["CONSISTENCIA"])
 
-    prod  = _get_puntaje_productividad(db, rm_id, pais_codigo, ciclo_id)
-    com   = _get_puntaje_comercial(db, rm_id, pais_codigo, ciclo_id)
-    coach = _get_puntaje_coaching(db, rm_id, pais_codigo, ciclo_id)
-    cap   = _get_puntaje_capacitacion(db, rm_id, pais_codigo, ciclo_id)
-    cons  = _get_puntaje_consistencia(db, rm_id, pais_codigo, ciclo_id)
+    kpis = _get_puntaje_kpis(db, rm_id, pais_codigo, ciclo_id)
+    cons = _get_puntaje_consistencia(db, rm_id, pais_codigo, ciclo_id)
 
-    score = (
-        prod  * pesos.get("PRODUCTIVIDAD", _PESOS_DEFECTO["PRODUCTIVIDAD"]) +
-        com   * pesos.get("COMERCIAL",     _PESOS_DEFECTO["COMERCIAL"])     +
-        coach * pesos.get("COACHING",      _PESOS_DEFECTO["COACHING"])      +
-        cap   * pesos.get("CAPACITACION",  _PESOS_DEFECTO["CAPACITACION"])  +
-        cons  * pesos.get("CONSISTENCIA",  _PESOS_DEFECTO["CONSISTENCIA"])
-    )
-
-    # Score acotado a [0, 100]
+    score = kpis * (Decimal("1") - peso_consistencia) + cons * peso_consistencia
     score = max(Decimal("0"), min(score, Decimal("100")))
 
     return {
         "rm_id":            rm_id,
-        "pais_codigo":          pais_codigo,
+        "pais_codigo":      pais_codigo,
         "ciclo_id":         ciclo_id,
-        "iup_productividad": round(prod, 4),
-        "iup_comercial":    round(com, 4),
-        "iup_coaching":     round(coach, 4),
-        "iup_capacitacion": round(cap, 4),
+        "iup_kpis":         round(kpis, 4),
         "iup_consistencia": round(cons, 4),
         "iup_total":        round(score, 4),
         "score_total":      round(score, 4),
-        "pesos_aplicados":  {k: float(v) for k, v in pesos.items()},
+        "pesos_aplicados":  {
+            "KPIS": float(Decimal("1") - peso_consistencia),
+            "CONSISTENCIA": float(peso_consistencia),
+        },
     }
 
 
-def _get_puntaje_productividad(db: Session, rm_id: int, pais_codigo: str, ciclo_id: int) -> Decimal:
+def _get_puntaje_kpis(db: Session, rm_id: int, pais_codigo: str, ciclo_id: int) -> Decimal:
     """
-    Promedio de puntos ya convertidos (vía DIM_IndicadorTabla en el recálculo)
-    de todos los KPIs de Productividad del RM en el ciclo.
-    Fuente: FACT_ResultadoIndicador.puntos_obtenidos (antes RendimientoComercial.puntaje).
-
-    FIX (jul-2026): el valor real de DIM_Indicador.modulo para estos indicadores
-    (COB_MD_F2/F1, PROM_DIARIO, COB_FARMACIAS) es "GESTION", no "PRODUCTIVIDAD"
-    (confirmado en el Excel maestro real; el filtro anterior nunca hacía match, así
-    que este componente del Score siempre daba 0). "GESTION" es la misma convención
-    que ya usa productividad.py para la pantalla equivalente.
+    Score de los KPIs reales del ciclo (los 8 de Administración → Indicadores,
+    Gestión + Resultados juntos) — misma fórmula que el Ranking Mensual real
+    (motor_calculo_service.generar_ranking):
+        SUM(puntos_obtenidos) × 100 / SUM(ponderacion_pct)
+    Fuente: FACT_ResultadoIndicador.puntos_obtenidos + Indicador.ponderacion_pct.
     """
-    result = (
-        db.query(func.avg(ResultadoIndicador.puntos_obtenidos))
+    puntos, pond = (
+        db.query(
+            func.sum(ResultadoIndicador.puntos_obtenidos),
+            func.sum(Indicador.ponderacion_pct),
+        )
         .join(Indicador, Indicador.id == ResultadoIndicador.indicador_id)
         .filter(
-            ResultadoIndicador.rm_id     == rm_id,
-            ResultadoIndicador.pais_codigo   == pais_codigo,
-            ResultadoIndicador.ciclo_id  == ciclo_id,
-            ResultadoIndicador.activo    == True,
-            Indicador.modulo == "GESTION",
+            ResultadoIndicador.rm_id == rm_id,
+            ResultadoIndicador.pais_codigo == pais_codigo,
+            ResultadoIndicador.ciclo_id == ciclo_id,
+            ResultadoIndicador.activo == True,  # noqa: E712
+            ResultadoIndicador.puntos_obtenidos.isnot(None),
         )
-        .scalar()
-    )
-    return Decimal(str(result or 0))
+        .first()
+    ) or (None, None)
 
-
-def _get_puntaje_comercial(db: Session, rm_id: int, pais_codigo: str, ciclo_id: int) -> Decimal:
-    """
-    FIX W-02: promedia solo los componentes comerciales que sí tienen datos
-    cargados en el ciclo (Ventas y/o EvoIR), sin penalizar al RM por
-    componentes ausentes.
-    """
-    componentes = []
-
-    venta = (
-        db.query(func.avg(Ventas.puntaje))
-        .filter(Ventas.rm_id == rm_id, Ventas.pais_codigo == pais_codigo, Ventas.ciclo_id == ciclo_id)
-        .scalar()
-    )
-    if venta is not None:
-        componentes.append(Decimal(str(venta)))
-
-    evoir = (
-        db.query(func.avg(EvoIR.puntaje))
-        .filter(EvoIR.rm_id == rm_id, EvoIR.pais_codigo == pais_codigo, EvoIR.ciclo_id == ciclo_id)
-        .scalar()
-    )
-    if evoir is not None:
-        componentes.append(Decimal(str(evoir)))
-
-    if not componentes:
+    if not puntos or not pond:
         return Decimal("0")
-    return sum(componentes) / Decimal(len(componentes))
-
-
-def _get_puntaje_coaching(db: Session, rm_id: int, pais_codigo: str, ciclo_id: int) -> Decimal:
-    result = (
-        db.query(func.avg(Coaching.puntaje))
-        .filter(Coaching.rm_id == rm_id, Coaching.pais_codigo == pais_codigo, Coaching.ciclo_id == ciclo_id)
-        .scalar()
-    )
-    return Decimal(str(result or 0))
-
-
-def _get_puntaje_capacitacion(db: Session, rm_id: int, pais_codigo: str, ciclo_id: int) -> Decimal:
-    result = (
-        db.query(func.avg(CapacitacionFact.puntaje))
-        .filter(
-            CapacitacionFact.rm_id == rm_id,
-            CapacitacionFact.pais_codigo == pais_codigo,
-            CapacitacionFact.ciclo_id == ciclo_id,
-        )
-        .scalar()
-    )
-    return Decimal(str(result or 0))
+    return Decimal(str(puntos)) * Decimal("100") / Decimal(str(pond))
 
 
 def _get_puntaje_consistencia(db: Session, rm_id: int, pais_codigo: str, ciclo_id: int) -> Decimal:
     """
-    CLAUDE.md §18 "IUP consistencia completo": componente de consistencia
+    CLAUDE.md §7 "IUP consistencia completo": componente de consistencia
     calculado como el promedio del score consolidado
     (FACT_ScoreIntegralRM.score_total) de los últimos 3 ciclos PREVIOS del
     RM — ordenados cronológicamente (DIM_Ciclo.anio/numero descendente),

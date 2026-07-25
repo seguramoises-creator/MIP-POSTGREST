@@ -353,51 +353,39 @@ Nota: a diferencia de v1.0, `puntaje_service.convertir_a_puntaje()` ya **no** re
 
 ---
 
-## 7. Motor de Score Integral (antes "Motor IUP")
+## 7. Motor de Score Integral — Ranking Regional / Histórico Anual (antes "Motor IUP")
 
-> ⚠️ **ALCANCE REAL DE ESTA FÓRMULA (verificado jul-2026, auditoría pre-lanzamiento).**
-> Este motor de 5 componentes (`iup_service.py`) **NO es el que calcula el Ranking Mensual
-> automático** (el que corre tras cada ETL / `POST /etl/recalcular/{ciclo_id}` y alimenta
-> Reconocimiento por defecto). Ese lo calcula `motor_calculo_service.generar_ranking` (§8)
-> con una fórmula mucho más simple: `SUM(puntos_obtenidos) × 100 / SUM(ponderacion_pct)`
-> sobre `FACT_ResultadoIndicador` únicamente — **sin** Comercial/Coaching/Capacitación/
-> Consistencia. Esto no es un bug de la migración a Python: un test de caracterización ya
-> retirado (`test_caracterizacion_motor.py`, comparaba contra el SP real de SQL Server byte
-> a byte) confirmó que el stored procedure original **ya usaba esta misma fórmula simple**.
-> El motor de 5 componentes de esta sección **sí corre**, vía `ranking_service.py`, cuando
-> se dispara `POST /ranking/generar` (botón manual, usado para tipos TRIMESTRAL/ANUAL/
-> REGIONAL). Si se necesita que el Ranking Mensual automático también use los 5
-> componentes, es un cambio de diseño explícito — no asumir que ya está así.
+> ⚠️ **REDISEÑO (jul-2026, auditoría pre-lanzamiento) — se retiró el diseño de 5 componentes.**
+> Este motor (`iup_service.py`) **NO es el que calcula el Ranking Mensual automático**
+> (el que corre tras cada ETL / `POST /etl/recalcular/{ciclo_id}` y alimenta Reconocimiento
+> por defecto) — ese lo calcula `motor_calculo_service.generar_ranking` (§8), y nunca tuvo
+> este problema. Este motor alimenta `ranking_service.py`, disparado por `POST /ranking/generar`
+> (botón "Generar Ranking" en las pestañas Regional/Histórico Anual — jul-2026, antes sin
+> disparador en la UI).
+>
+> El diseño original (Productividad + Comercial + Coaching + Capacitación + Consistencia,
+> 5 componentes ponderados por `DIM_Indicador.peso_iup`) asumía que Comercial/Coaching/
+> Capacitación se cargaban aparte en `FACT_Ventas`/`FACT_EVOIR`/`FACT_Coaching`/
+> `FACT_Capacitacion`. En la práctica esas tablas están casi vacías (la carga real entra por
+> el Excel unificado `KPI_RM` a un solo `FACT_ResultadoIndicador` con los 8 KPIs reales) —
+> confirmado con conteos reales para RD: 9/0/2/0 filas respectivamente, contra 172-176 filas
+> por cada uno de los 8 KPIs reales. Esos 3 componentes siempre daban 0, y el score real caía
+> muy por debajo de lo esperado (ej. 18-28 en vez de una escala 0-100 con sentido).
 
 **Archivo**: `app/services/iup_service.py`
 
 ```
-Score = Σ (puntaje_módulo × peso_módulo)
-Score ∈ [0, 100]
+score = kpi_score × (1 − peso_consistencia) + consistencia × peso_consistencia
+score ∈ [0, 100]
 ```
 
-**REDISEÑO**: la fuente de productividad pasó de `FACT_RendimientoComercial.puntaje` (v1.0) a `FACT_ResultadoIndicador.puntos_obtenidos`. El nombre "IUP" se conserva como métrica interna (claves `iup_productividad`, `iup_comercial`, etc., por compatibilidad con `ranking_service`/`elegibilidad_service`/dashboards), pero la salida consolidada se persiste en `FACT_ScoreIntegralRM.score_total`, no en `FACT_Ranking.iup_total`.
+- **`kpi_score`**: **la misma fórmula que ya usa el Ranking Mensual real** (`motor_calculo_service.generar_ranking`, §8) — `SUM(puntos_obtenidos) × 100 / SUM(ponderacion_pct)` sobre los 8 KPIs reales de `FACT_ResultadoIndicador` (Gestión + Resultados juntos, ponderados por `Indicador.ponderacion_pct` — la columna "Peso (pts)" que se configura en Administración → Indicadores, no `peso_iup`). Función `_get_puntaje_kpis`.
+- **`consistencia`** (FIX W-08, "IUP consistencia completo" — sin cambios): promedio de `FACT_ScoreIntegralRM.score_total` de hasta los **3 ciclos previos más recientes** del RM (ordenados por `DIM_Ciclo.anio/numero` descendente, excluyendo el ciclo actual). Si tiene 1-2 ciclos previos, usa los disponibles. Si no tiene historial (RM nuevo), usa **0** como base neutral — nunca 50. Función `_get_puntaje_consistencia`.
+- **`peso_consistencia`**: se lee de `DIM_Indicador.peso_iup` agrupado por módulo, vía `_obtener_pesos` (FIX C-02) — en la práctica siempre cae al default (**15%**, `_PESOS_DEFECTO["CONSISTENCIA"]`) porque ningún indicador real tiene `modulo == "CONSISTENCIA"` (no es un KPI). El resto del peso (85% por defecto) es siempre para `kpi_score`.
 
-**Módulos y pesos por defecto** (usados solo si `DIM_Indicador` no tiene `peso_iup` configurado):
-- PRODUCTIVIDAD: 30%
-- COMERCIAL: 30%
-- COACHING: 15%
-- CAPACITACION: 10%
-- CONSISTENCIA: 15%
+**Función principal**: `calcular_iup(db, rm_id, pais_id, ciclo_id) → dict` — retorna `iup_kpis`, `iup_consistencia`, `iup_total`, `score_total`, `pesos_aplicados`.
 
-**Función principal**: `calcular_iup(db, rm_id, pais_id, ciclo_id) → dict` — retorna `iup_productividad`, `iup_comercial`, `iup_coaching`, `iup_capacitacion`, `iup_consistencia`, `iup_total`, `score_total`, `pesos_aplicados`.
-
-**Cómo se calcula cada componente:**
-- **Productividad**: promedio de `FACT_ResultadoIndicador.puntos_obtenidos` para indicadores con `modulo == "GESTION"` (fix jul-2026 — antes filtraba por `"PRODUCTIVIDAD"`, un valor que nunca existió en los datos reales; el componente siempre daba 0). `_obtener_pesos` remapea la clave `GESTION`→`PRODUCTIVIDAD` para que un `peso_iup` configurado sí se aplique.
-- **Comercial** (FIX W-02): promedio de `FACT_Ventas.puntaje` y `FACT_EVOIR.puntaje`, **solo de los componentes que tengan datos cargados en el ciclo** — si falta uno, no penaliza al RM; si no hay ninguno, el componente es 0.
-- **Coaching** / **Capacitación**: promedio simple de `FACT_Coaching.puntaje` / `FACT_Capacitacion.puntaje` del ciclo.
-- **Consistencia** (FIX W-08, implementa el pendiente histórico "IUP consistencia completo" — **ya resuelto**): promedio de `FACT_ScoreIntegralRM.score_total` de hasta los **3 ciclos previos más recientes** del RM (ordenados por `DIM_Ciclo.anio/numero` descendente, excluyendo el ciclo actual). Si tiene 1-2 ciclos previos, usa los disponibles. Si no tiene historial (RM nuevo), usa **0** como base neutral — nunca 50 — para no darle ventaja artificial sobre RMs con trayectoria.
-
-**Reglas generales**:
-- Los pesos se leen dinámicamente desde `DIM_Indicador.peso_iup` agrupado por módulo (FIX C-02, sin constantes hardcodeadas).
-- Si no hay pesos configurados → usa los pesos por defecto.
-- Los pesos se normalizan para que sumen 1.0; `CONSISTENCIA` siempre tiene su clave garantizada (no es un módulo de indicadores).
-- El score final se acota a `[0, 100]`.
+**Validado con datos reales antes de aplicarse** (`scripts/diagnostics/probar_formula_propuesta.py`, corrido contra RD ciclos C01-C03-2026): distribución sana 45-97 en vez de 18-28, con la Consistencia premiando visiblemente a los representantes que sostienen desempeño ciclo tras ciclo.
 
 ---
 
