@@ -91,16 +91,13 @@ def test_matriz_coincide_con_oraculo_del_spec():
 
 
 def test_roles_legacy_derivados_por_regla():
-    """Fase 2: DIR_COMERCIAL/CONSULTA derivados; CAPACITACION = fila propia (exámenes + 2 lecturas)."""
-    # CAPACITACION = fila propia estricta. Además de exámenes (su función central) conserva la
-    # LECTURA de Categorización y del Maestro de Médicos, que ya tenía cuando esos routers usaban
-    # `require_roles` (cualquier autenticado leía) — cablearlos a la matriz no debía quitársela.
-    # Sigue sin nada gerencial: ni ranking, ni LSII, ni ETL, ni coaching, ni configurar módulos.
+    """Fase 2: DIR_COMERCIAL/CONSULTA derivados; CAPACITACION = fila propia (SOLO exámenes)."""
+    # CAPACITACION = fila propia estricta: exámenes y nada más. Se probó darle además la lectura
+    # de `categorizacion.operacion` y `medico.maestro` (la tenía de facto con `require_roles`),
+    # pero el cliente lo rechazó al ver que le aparecía el módulo "Médicos" en la navegación.
     CAPACITACION_ESPERADO = {
         Recurso.EXAMEN_CONFIGURAR: (Accion.CONFIGURE, Alcance.ALL),
         Recurso.EXAMEN_RENDIR: (Accion.READ, Alcance.ALL),
-        Recurso.CATEGORIZACION_OPERACION: (Accion.READ, Alcance.ALL),
-        Recurso.MEDICO_MAESTRO: (Accion.READ, Alcance.ALL),
     }
     for recurso, fila in MATRIZ.items():
         assert fila[Rol.CAPACITACION] == CAPACITACION_ESPERADO.get(recurso), recurso

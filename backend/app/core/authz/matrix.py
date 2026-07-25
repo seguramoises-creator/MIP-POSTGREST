@@ -108,13 +108,12 @@ MATRIZ: dict[str, dict] = {
 _CAPACITACION_ROW = {
     Recurso.EXAMEN_CONFIGURAR: CFG,   # su función central (Exámenes)
     Recurso.EXAMEN_RENDIR: R_ALL,     # ve los resultados rendidos para consolidar
-    # Las 2 lecturas siguientes NO amplían nada: `categorizacion.py` y `maestro_medicos.py` ya
-    # dejaban leer a cualquier usuario autenticado, CAPACITACION incluido, cuando aún usaban
-    # `require_roles`. Se declaran aquí para que cablearlos a la matriz no se los quite (hay
-    # usuarios CAPACITACION reales en producción). Es lectura de datos de referencia, no acceso
-    # gerencial: sigue sin ranking, LSII, ETL, coaching ni configuración de ningún módulo.
-    Recurso.CATEGORIZACION_OPERACION: R_ALL,
-    Recurso.MEDICO_MAESTRO: R_ALL,
+    # NADA más. Se probó (25-jul-2026) darle la lectura de `categorizacion.operacion` y
+    # `medico.maestro` para no quitarle lo que ya tenía —cuando esos routers usaban
+    # `require_roles`, leerlos solo exigía estar autenticado—, pero el cliente lo rechazó al
+    # verlo en pantalla: con la navegación alineada a esos recursos, a CAPACITACION le aparecía
+    # el módulo "Médicos" (Categorización + Maestro), que no le corresponde. Vuelve a exámenes y
+    # nada más, como decía el diseño original. Ver migración 0029.
 }
 for _recurso, _fila_dict in MATRIZ.items():
     _fila_dict[Rol.CAPACITACION] = _CAPACITACION_ROW.get(_recurso)  # None por defecto (denegado)
