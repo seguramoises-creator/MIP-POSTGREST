@@ -19,12 +19,12 @@ Si la tabla tuviera filas con NULL, PostgreSQL aborta con un error explícito y 
 nada (el DDL es transaccional) — verificar antes con:
     SELECT COUNT(*) FROM "cat"."FactMedicoCategoriaSnapshot" WHERE "LoadBatchKey" IS NULL;
 
-Revision ID: 0027_snapshot_loadbatchkey_not_null
+Revision ID: 0027_snapshot_loadbatch_notnull
 Revises: 0026_drop_tablas_fantasma_v2
 """
 from alembic import op
 
-revision = "0027_snapshot_loadbatchkey_not_null"
+revision = "0027_snapshot_loadbatch_notnull"
 down_revision = "0026_drop_tablas_fantasma_v2"
 branch_labels = None
 depends_on = None

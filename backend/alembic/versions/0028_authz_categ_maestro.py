@@ -16,14 +16,14 @@ Las filas reproducen exactamente el acceso que ambos routers ya concedían con `
 (contrato fijado en `tests/test_authz_wiring_calcado.py`): nadie gana ni pierde permisos aquí.
 Idempotente: `WHERE NOT EXISTS` deja intacto lo ya sembrado o editado.
 
-Revision ID: 0028_authz_categorizacion_maestro
-Revises: 0027_snapshot_loadbatchkey_not_null
+Revision ID: 0028_authz_categ_maestro
+Revises: 0027_snapshot_loadbatch_notnull
 """
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0028_authz_categorizacion_maestro"
-down_revision = "0027_snapshot_loadbatchkey_not_null"
+revision = "0028_authz_categ_maestro"
+down_revision = "0027_snapshot_loadbatch_notnull"
 branch_labels = None
 depends_on = None
 
