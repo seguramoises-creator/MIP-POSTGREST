@@ -26,7 +26,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from app.db.database import SessionLocal
-from app.models.visita import MedicoVisita
+from app.models.visita import MedicoVisita, CierreCicloVisita
 from app.models.dimensiones import Ciclo, RepresentanteMedico
 from app.services.visita_aprobacion_service import ordenes_ciclo, cuenta_en_ciclo
 from app.services.visita_cobertura_service import _mapa_visitas
@@ -36,12 +36,31 @@ def main():
     db = SessionLocal()
     try:
         ordenes = ordenes_ciclo(db)
-        ciclos = db.query(Ciclo).all()
+
+        # FIX: solo cuentan los ciclos que de verdad tuvieron un cierre real
+        # (CierreCicloVisita) — no "todos los ciclos que existen", que incluye
+        # ciclos futuros/nunca cerrados y habria inflado el calculo por igual
+        # para todo el mundo (bug detectado en la primera corrida de este script).
+        cierres = db.query(CierreCicloVisita).all()
+        ciclos_de_cierres = {
+            c.id: c for c in db.query(Ciclo).filter(
+                Ciclo.id.in_([cc.ciclo_id for cc in cierres])
+            ).all()
+        }
         ciclos_por_pais: dict[str, list] = {}
-        for c in ciclos:
-            ciclos_por_pais.setdefault(c.pais_codigo, []).append(c)
+        for cc in cierres:
+            ciclo = ciclos_de_cierres.get(cc.ciclo_id)
+            if not ciclo:
+                continue
+            ciclos_por_pais.setdefault(ciclo.pais_codigo, []).append(ciclo)
         for lista in ciclos_por_pais.values():
             lista.sort(key=lambda c: (c.anio, c.numero))
+
+        print("Cierres reales encontrados por pais:")
+        for pais, lista in sorted(ciclos_por_pais.items()):
+            nombres = ", ".join(c.nombre for c in lista)
+            print(f"  {pais}: {len(lista)} cierre(s) -> {nombres}")
+        print()
 
         rms_pais = dict(db.query(RepresentanteMedico.id, RepresentanteMedico.pais_codigo).all())
         medicos = db.query(MedicoVisita).all()
