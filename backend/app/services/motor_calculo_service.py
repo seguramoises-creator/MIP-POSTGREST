@@ -7,10 +7,11 @@ from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 from loguru import logger
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.hechos import ResultadoIndicador, ScoreIntegralRM, RankingRM
-from app.models.dimensiones import Indicador, MetaIndicador, RepresentanteMedico, CategoriaDesempeno
+from app.models.hechos import ResultadoIndicador, ScoreIntegralRM, RankingRM, RankingGerente
+from app.models.dimensiones import Indicador, MetaIndicador, RepresentanteMedico, CategoriaDesempeno, Gerente
 from app.services.recalculo_service import validar_ciclo_abierto, CicloCerradoError
 
 D100 = Decimal("100")
@@ -169,7 +170,58 @@ def generar_ranking(db: Session, ciclo_id: int, pais_codigo=None) -> int:
         n += 1
     db.commit()
     logger.info(f"Motor: ranking generado ciclo={ciclo_id} pais={pais_codigo} filas={n}")
+
+    # Ranking de Gerentes de Distrito (FACT_RankingGerente) — jul-2026: movido aqui desde
+    # ranking_service.generar_ranking_task (retirado junto con el motor de 5 componentes
+    # de iup_service, que solo alimentaba Regional/Anual). Antes solo se generaba al
+    # disparar manualmente ese botón; ahora sigue automáticamente al Ranking Mensual real.
+    for pc in {r["pais_codigo"] for r in rankeados}:
+        _consolidar_ranking_gerentes(db, pc, ciclo_id)
+
     return n
+
+
+def _consolidar_ranking_gerentes(db: Session, pais_codigo: str, ciclo_id: int) -> None:
+    """Genera FACT_RankingGerente promediando el score_total (MENSUAL) de los RMs de
+    cada Gerente de Distrito en el ciclo (delete-then-regenerate, scoped a ciclo+país)."""
+    filas = (
+        db.query(RankingRM.gerente_id, func.avg(RankingRM.score_total).label("score_prom"))
+        .join(Gerente, Gerente.id == RankingRM.gerente_id)
+        .filter(
+            RankingRM.pais_codigo == pais_codigo,
+            RankingRM.ciclo_id == ciclo_id,
+            RankingRM.tipo_ranking == "MENSUAL",
+            RankingRM.gerente_id.isnot(None),
+            Gerente.tipo == "DISTRITO",
+        )
+        .group_by(RankingRM.gerente_id)
+        .all()
+    )
+    if not filas:
+        logger.debug(f"Ranking gerentes: sin GD con equipo en ciclo={ciclo_id}, pais={pais_codigo}")
+        return
+
+    resultados = sorted(
+        [{"gerente_id": g, "score_total": Decimal(str(s or 0))} for g, s in filas],
+        key=lambda x: x["score_total"], reverse=True,
+    )
+    for pos, r in enumerate(resultados, start=1):
+        r["posicion"] = pos
+
+    db.query(RankingGerente).filter(
+        RankingGerente.pais_codigo == pais_codigo,
+        RankingGerente.ciclo_id == ciclo_id,
+    ).delete(synchronize_session=False)
+
+    ahora = datetime.now(timezone.utc)
+    for r in resultados:
+        db.add(RankingGerente(
+            pais_codigo=pais_codigo, gerente_id=r["gerente_id"], ciclo_id=ciclo_id,
+            score_total=r["score_total"], posicion=r["posicion"],
+            metodo_calculo="PROMEDIO_EQUIPO", fecha_generacion=ahora,
+        ))
+    db.commit()
+    logger.info(f"Motor: ranking gerentes generado ciclo={ciclo_id} pais={pais_codigo} filas={len(resultados)}")
 
 
 def recalcular_ciclo_py(db: Session, ciclo_id: int, pais_codigo=None) -> dict:

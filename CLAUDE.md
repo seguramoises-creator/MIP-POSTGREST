@@ -118,9 +118,7 @@ C:\Users\Lenovo\Proyecto\MSM\
 │   │   │   ├── schemas.py
 │   │   │   └── common.py
 │   │   └── services/
-│   │       ├── iup_service.py              ← Motor de Score Integral (Python, lectura)
 │   │       ├── puntaje_service.py          ← Conversión valor→puntos (utilidad Python puntual)
-│   │       ├── ranking_service.py
 │   │       ├── recalculo_service.py        ← Orquestador — delega el cálculo al motor Python (§8)
 │   │       ├── etl_service.py
 │   │       ├── elegibilidad_service.py
@@ -230,7 +228,7 @@ PostgreSQL, base de datos `scgcpr`, múltiples esquemas.
 | `DIM_CriterioCategoriaTabla` | `CriterioCategoriaTabla` | Rangos/niveles por criterio (análogo a `DIM_IndicadorTabla`) |
 | `DIM_Medico` | `Medico` | Médicos, deduplicados por `(pais_id, nombre)` — el Excel fuente no trae código estable |
 
-**Nota (corregida jul-2026, hallazgo de auditoría)**: los valores REALES de `DIM_Indicador.modulo` en los datos importados son `GESTION` y `RESULTADOS` (confirmado directamente en `DIMS_FACTS_V2/KPI GESTION/DIM_MIP_FINAL.xlsx`) — `productividad.py` siempre filtró correctamente por `GESTION`. `iup_service.py` filtraba por `PRODUCTIVIDAD` (un valor que nunca existió en los datos reales): ese componente del Score Integral daba **0 para todo representante** hasta el fix de jul-2026, que hizo que `_get_puntaje_productividad` y `_obtener_pesos` usen/remapeen `GESTION`. Ver §7 para el alcance real de este motor.
+**Nota (corregida jul-2026, hallazgo de auditoría)**: los valores REALES de `DIM_Indicador.modulo` en los datos importados son `GESTION` y `RESULTADOS` (confirmado directamente en `DIMS_FACTS_V2/KPI GESTION/DIM_MIP_FINAL.xlsx`) — `productividad.py` siempre filtró correctamente por `GESTION`. El motor de Score Integral de 5 componentes (que sí llegó a filtrar por el valor incorrecto `PRODUCTIVIDAD`) fue retirado por completo — ver §7 para el diseño final del Ranking Regional.
 
 ### Esquema `DW` — Tablas de Hechos (REDISEÑADO jun-2026)
 
@@ -353,39 +351,41 @@ Nota: a diferencia de v1.0, `puntaje_service.convertir_a_puntaje()` ya **no** re
 
 ---
 
-## 7. Motor de Score Integral — Ranking Regional / Histórico Anual (antes "Motor IUP")
+## 7. Ranking Regional (antes "Motor de Score Integral" / "Motor IUP")
 
-> ⚠️ **REDISEÑO (jul-2026, auditoría pre-lanzamiento) — se retiró el diseño de 5 componentes.**
-> Este motor (`iup_service.py`) **NO es el que calcula el Ranking Mensual automático**
-> (el que corre tras cada ETL / `POST /etl/recalcular/{ciclo_id}` y alimenta Reconocimiento
-> por defecto) — ese lo calcula `motor_calculo_service.generar_ranking` (§8), y nunca tuvo
-> este problema. Este motor alimenta `ranking_service.py`, disparado por `POST /ranking/generar`
-> (botón "Generar Ranking" en las pestañas Regional/Histórico Anual — jul-2026, antes sin
-> disparador en la UI).
+> ⚠️ **REDISEÑO FINAL (jul-2026, decisión del cliente) — ya no existe un motor de
+> score separado para Regional.** Recorrido completo de esta sección en un solo día:
+> 1. Se descubrió que el motor de 5 componentes (`iup_service.py`, Productividad +
+>    Comercial + Coaching + Capacitación + Consistencia) leía Comercial/Coaching/
+>    Capacitación de tablas (`FACT_Ventas`/`FACT_EVOIR`/`FACT_Coaching`/`FACT_Capacitacion`)
+>    casi vacías en la práctica (9/0/2/0 filas para RD, contra 172-176 por cada uno de los
+>    8 KPIs reales) — esos 3 componentes siempre daban 0 y el score cerraba en 18-28.
+> 2. Primer fix: reemplazarlo por `kpi_score × 0.85 + consistencia × 0.15`, con `kpi_score`
+>    calculado igual que el Ranking Mensual real — distribución sana 45-97, validada con
+>    datos reales antes de aplicarse.
+> 3. **Decisión final del cliente, tras ver el resultado**: ni siquiera hace falta ese
+>    cálculo aparte. El Ranking Mensual (§8) **ya calcula bien** el resultado acumulado
+>    (YTD) de cada representante en su propio país — Regional no debe recalcular nada,
+>    solo **tomar ese número ya correcto y ordenar/posicionar** a todos los representantes
+>    elegibles de todos los países juntos. **Histórico Anual se eliminó por completo**
+>    (pestaña + endpoint `/ranking/anual` + botón "Generar Ranking" — ya era redundante
+>    con el acumulado del Ranking Actual).
 >
-> El diseño original (Productividad + Comercial + Coaching + Capacitación + Consistencia,
-> 5 componentes ponderados por `DIM_Indicador.peso_iup`) asumía que Comercial/Coaching/
-> Capacitación se cargaban aparte en `FACT_Ventas`/`FACT_EVOIR`/`FACT_Coaching`/
-> `FACT_Capacitacion`. En la práctica esas tablas están casi vacías (la carga real entra por
-> el Excel unificado `KPI_RM` a un solo `FACT_ResultadoIndicador` con los 8 KPIs reales) —
-> confirmado con conteos reales para RD: 9/0/2/0 filas respectivamente, contra 172-176 filas
-> por cada uno de los 8 KPIs reales. Esos 3 componentes siempre daban 0, y el score real caía
-> muy por debajo de lo esperado (ej. 18-28 en vez de una escala 0-100 con sentido).
+> `iup_service.py` y `ranking_service.py` (y sus tests) se **borraron enteros** — sin
+> consumidores tras este cambio. La lógica de Regional vive ahora directo en
+> `app/api/v1/routers/ranking.py` (`_acumulado_por_pais` + `get_ranking_regional`).
 
-**Archivo**: `app/services/iup_service.py`
+**Cómo funciona Regional hoy**: `GET /ranking/regional?top=N` es una vista **en vivo**, sin
+tabla propia ni "generación" manual — para cada país, reutiliza `_ultimo_ciclo`/
+`_ciclos_acumulados` (§16, la misma función que usa `GET /ranking` para el "TOTAL ACUM"),
+junta a los representantes **elegibles** de todos los países, ordena por ese score
+acumulado y asigna posición. Nunca escribe en `FACT_RankingRM` — no hay "Regional" como
+`tipo_ranking` con fila propia.
 
-```
-score = kpi_score × (1 − peso_consistencia) + consistencia × peso_consistencia
-score ∈ [0, 100]
-```
-
-- **`kpi_score`**: **la misma fórmula que ya usa el Ranking Mensual real** (`motor_calculo_service.generar_ranking`, §8) — `SUM(puntos_obtenidos) × 100 / SUM(ponderacion_pct)` sobre los 8 KPIs reales de `FACT_ResultadoIndicador` (Gestión + Resultados juntos, ponderados por `Indicador.ponderacion_pct` — la columna "Peso (pts)" que se configura en Administración → Indicadores, no `peso_iup`). Función `_get_puntaje_kpis`.
-- **`consistencia`** (FIX W-08, "IUP consistencia completo" — sin cambios): promedio de `FACT_ScoreIntegralRM.score_total` de hasta los **3 ciclos previos más recientes** del RM (ordenados por `DIM_Ciclo.anio/numero` descendente, excluyendo el ciclo actual). Si tiene 1-2 ciclos previos, usa los disponibles. Si no tiene historial (RM nuevo), usa **0** como base neutral — nunca 50. Función `_get_puntaje_consistencia`.
-- **`peso_consistencia`**: se lee de `DIM_Indicador.peso_iup` agrupado por módulo, vía `_obtener_pesos` (FIX C-02) — en la práctica siempre cae al default (**15%**, `_PESOS_DEFECTO["CONSISTENCIA"]`) porque ningún indicador real tiene `modulo == "CONSISTENCIA"` (no es un KPI). El resto del peso (85% por defecto) es siempre para `kpi_score`.
-
-**Función principal**: `calcular_iup(db, rm_id, pais_id, ciclo_id) → dict` — retorna `iup_kpis`, `iup_consistencia`, `iup_total`, `score_total`, `pesos_aplicados`.
-
-**Validado con datos reales antes de aplicarse** (`scripts/diagnostics/probar_formula_propuesta.py`, corrido contra RD ciclos C01-C03-2026): distribución sana 45-97 en vez de 18-28, con la Consistencia premiando visiblemente a los representantes que sostienen desempeño ciclo tras ciclo.
+**Ranking de Gerentes de Distrito** (`FACT_RankingGerente`): la consolidación
+(`_consolidar_ranking_gerentes`) se movió a `motor_calculo_service.generar_ranking` (§8) —
+antes solo corría dentro del motor de 5 componentes retirado (es decir, nunca se generaba
+automáticamente). Ahora corre sola, cada vez que se recalcula el Ranking Mensual real.
 
 ---
 
@@ -400,7 +400,7 @@ Categorización (`categorizacion_service.calcular_categorias_py`) y Cobertura
 (`cobertura_predictiva_service.calcular_cobertura_py`).
 
 - `motor_calculo_service.completar_puntajes(db, ciclo_id, pais_codigo)` — `resultado_porcentaje` + `puntos_obtenidos`.
-- `motor_calculo_service.generar_ranking(db, ciclo_id, pais_codigo)` — Score Integral + Ranking **MENSUAL** (**delete-then-insert**). Fórmula: `SUM(FACT_ResultadoIndicador.puntos_obtenidos) × 100 / SUM(Indicador.ponderacion_pct)` — **no** es el motor de 5 componentes de §7 (confirmado idéntico al SP original de SQL Server vía caracterización, no es una simplificación introducida por la migración a Python).
+- `motor_calculo_service.generar_ranking(db, ciclo_id, pais_codigo)` — Score Integral + Ranking **MENSUAL** (**delete-then-insert**). Fórmula: `SUM(FACT_ResultadoIndicador.puntos_obtenidos) × 100 / SUM(Indicador.ponderacion_pct)` — confirmado idéntico al SP original de SQL Server vía caracterización, no es una simplificación introducida por la migración a Python. Al final, para cada país presente en la corrida, dispara `_consolidar_ranking_gerentes` (jul-2026, movido aquí desde el motor de Regional retirado, §7) — genera `FACT_RankingGerente` promediando el score MENSUAL de los RM de cada Gerente de Distrito.
 - `motor_calculo_service.recalcular_ciclo_py(db, ciclo_id, pais_codigo)` — orquestador (guard de ciclo abierto).
 
 `recalculo_service.recalcular_ciclo` delega en `motor_calculo_service.recalcular_ciclo_py`, conservando
@@ -412,7 +412,7 @@ def recalcular_ciclo(db, ciclo_id, pais_codigo=None) -> dict:
     return motor_calculo_service.recalcular_ciclo_py(db, ciclo_id, pais_codigo)
 ```
 
-**REGLA DE NEGOCIO CRÍTICA**: el recálculo **solo opera sobre el ciclo ABIERTO** de cada país (`DIM_Ciclo.cerrado == False`). Los ciclos cerrados son snapshots históricos inmutables — el motor nunca los toca, ni siquiera si llegan datos nuevos o correcciones. `validar_ciclo_abierto(db, ciclo_id)` es el guard central, reutilizado por `ranking_service` y `reconocimiento_service` para garantizar que ningún camino de cálculo pueda escribir sobre un ciclo cerrado; levanta `CicloCerradoError` si el ciclo está cerrado.
+**REGLA DE NEGOCIO CRÍTICA**: el recálculo **solo opera sobre el ciclo ABIERTO** de cada país (`DIM_Ciclo.cerrado == False`). Los ciclos cerrados son snapshots históricos inmutables — el motor nunca los toca, ni siquiera si llegan datos nuevos o correcciones. `validar_ciclo_abierto(db, ciclo_id)` es el guard central, reutilizado por `reconocimiento_service` para garantizar que ningún camino de cálculo pueda escribir sobre un ciclo cerrado; levanta `CicloCerradoError` si el ciclo está cerrado.
 
 **Disparadores**: automáticamente al final de un ETL en modo `PRODUCCION`, o manualmente vía `POST /etl/recalcular/{ciclo_id}` (pantalla "Calcular IUP y Ranking").
 
@@ -734,7 +734,7 @@ hace, sin universo planeado ni ruptura de secuencia programada. La UI vive en la
 **Cobertura interna simple — COEXISTE con el SFA, no pisa el score**: `cobertura_farmacia_service.py`
 calcula `visitadas / universo` sobre el panel `APROBADO`+activo del VM, **sin F1/F2** (a diferencia de
 Médicos: solo visitada/no-visitada, decisión aprobada en el spec). Es puramente informativo/operativo —
-**nunca** toca `motor_calculo_service`/`iup_service`: `COB_FARMACIAS` del Score/Ranking (§6-7) sigue
+**nunca** toca `motor_calculo_service`: `COB_FARMACIAS` del Score/Ranking (§6-7) sigue
 viniendo del SFA externo. `GET /farmacias/cobertura` (auto-scope VM/GD igual que el resto del módulo).
 
 **Endpoints** (verificados en `farmacias.py`):
@@ -857,12 +857,15 @@ GET `/coaching`, `/coaching/resumen`.
 ### Ranking (`/ranking`)
 | Método | Ruta | Roles | Descripción |
 |--------|------|-------|-------------|
-| GET | `/ranking` | Autenticado | Ranking de RM (`?pais_id=&ciclo_id=&tipo=&top=`) |
-| GET | `/ranking/regional` | Autenticado | Ranking multipaís |
-| GET | `/ranking/anual` | Autenticado | Histórico anual |
-| POST | `/ranking/generar` | ADMIN | Dispara cálculo en background |
+| GET | `/ranking` | Autenticado | Ranking de RM (`?pais_codigo=&ciclo_id=&tipo=&top=`), incluye el acumulado YTD |
+| GET | `/ranking/regional` | Autenticado | Vista en vivo, sin filtro de país — ver §7 |
+| GET | `/ranking/mi-posicion` | REPRESENTANTE_MEDICO | Su posición y conteos, nunca filas ajenas |
 
-> Nota: el ranking de Gerentes de Distrito ahora se persiste en `FACT_RankingGerente` (ver §4). Confirmar el endpoint exacto en `ranking.py` antes de invocarlo si no aparece arriba — esta tabla no fue releída línea por línea en la última verificación.
+> `/ranking/anual` y `POST /ranking/generar` **se eliminaron** (jul-2026, ver §7) — Histórico
+> Anual era redundante con el acumulado de `GET /ranking`, y nada queda por "generar"
+> manualmente (Mensual es automático, Regional es en vivo). El ranking de Gerentes de
+> Distrito (`FACT_RankingGerente`) se genera automáticamente dentro de
+> `motor_calculo_service.generar_ranking` (§8).
 
 ### Reconocimiento (`/reconocimiento`)
 GET `/reconocimiento`, POST `/reconocimiento`.
@@ -1085,9 +1088,6 @@ python scripts/setup/crear_admin_pg.py
 ### Alembic propone recrear tablas existentes
 **Causa**: `include_schemas=True` falta en `env.py`. **Verificación**: revisar que esté en `run_migrations_offline` y `run_migrations_online`.
 
-### Comentario desactualizado en `DIM_Indicador.modulo`
-El modelo documenta `modulo` como `GESTION | RESULTADOS`, pero el código de `iup_service.py` opera con `PRODUCTIVIDAD | COACHING | CAPACITACION` (y `COMERCIAL` se deriva de `FACT_Ventas`/`FACT_EVOIR`, no de `Indicador.modulo`). Si se va a tocar este campo, verificar los valores reales en la BD antes de asumir cualquiera de las dos documentaciones.
-
 ### web.config / caché de IIS
 Después de cambios al `web.config` de producción, IIS y el navegador pueden servir una versión cacheada. Redesplegar y purgar caché del navegador tras cualquier cambio de configuración (tarea abierta, ver §22).
 
@@ -1107,7 +1107,7 @@ Después de cambios al `web.config` de producción, IIS y el navegador pueden se
 | Redesplegar web.config corregido y purgar caché | Pendiente | Ver nota en §21/§20 |
 | Capturar screenshots reales de la app MSM | Pendiente / en curso | Para materiales comerciales |
 | Módulo de Exámenes v2.0 | **Resuelto** | Esquema `exam` (autocontenido). **Gate de integración al KPI**: la entrega de un examen ya NO alimenta `DW.FACT_ResultadoIndicador`; la nota EVAL_CONOCIMIENTOS de los RM entra **solo** cuando Capacitación consolida el (ciclo, país) vía `examen_consolidacion_service.consolidar_ciclo` (tabla `exam.FactConsolidacionCiclo`, migración `c1e7a2f4b9d0`; guard de ciclo abierto; re-ejecutable; 1 recálculo). Endpoints `GET/POST /examenes/consolidacion`; panel `ConsolidacionPanel.tsx`. **4 mejoras**: (1) nota real + banner Aprobado/No Aprobado/Provisional + flag `provisional` en el reporte; (2) correo de correcciones a `fecha_limite+30min` (`notification_service.notificar_correcciones_examen` + `app/core/scheduler.py` APScheduler + botón demo `POST /examenes/{id}/correcciones/enviar`); (3) `analisis_preguntas` con `acierto_pct`/`fallan`/`aciertan`/`etiqueta` + tooltip de nombres + recomendaciones ≥40%; (4) tipo de pregunta `objecion` (Objeción de Producto, reusa `Pregunta.escenario`, banner naranja). |
-| Notificaciones email | **Resuelto** | `notification_service.py` (smtplib, best-effort, no-op si `MAIL_SERVER=""`) cableado a: `ranking_service` (`notificar_ranking_generado`), `reconocimiento_service` (`notificar_reconocimiento_otorgado`), `examen_intento_service` (`notificar_resultado_examen`) y `notificar_correcciones_examen` (correcciones de examen, T+30min vía APScheduler). Gmail SMTP configurado en `.env`; envío real verificado. |
+| Notificaciones email | **Resuelto, con 1 pendiente menor** | `notification_service.py` (smtplib, best-effort, no-op si `MAIL_SERVER=""`) cableado a: `reconocimiento_service` (`notificar_reconocimiento_otorgado`), `examen_intento_service` (`notificar_resultado_examen`) y `notificar_correcciones_examen` (correcciones de examen, T+30min vía APScheduler). Gmail SMTP configurado en `.env`; envío real verificado. ⚠️ `notificar_ranking_generado` quedó **huérfana** (jul-2026): su único invocador era `ranking_service.py`, retirado junto con el motor de 5 componentes (§7) — hoy nadie la llama. Si se quiere una notificación de "ranking recalculado", hay que decidir dónde engancharla (¿cada corrida automática de `motor_calculo_service`, o solo bajo demanda?) antes de revivirla. |
 | Tests unitarios | **Resuelto (en curso)** | Suite `pytest` con **756 tests** (`backend/tests/test_*.py`): IUP, puntaje, elegibilidad, token_store, RBAC/authz, módulo Exámenes (incl. `test_examen_consolidacion_service.py`), módulo Visita (`test_visita_service.py`, incl. guards de ciclo cerrado, foto/GPS y el flujo de alta+aprobación del Bloque B) y el motor de categorización de un médico (`test_categorizacion_un_medico.py`). CI de GitHub Actions corre pytest+build. Cobertura ampliable a routers/ETL. |
 | Refresh token en BD | **Resuelto** (FIX W-04 v2) | La blacklist vive en la base de datos (`Security.FACT_TokenRevocado`, modelo `TokenRevocado`). `token_store.revocar_token`/`token_esta_revocado` reciben `db`; revocación consistente entre workers y duradera tras reinicio. Purga oportuna de expirados con `purgar_expirados`. |
 | Dashboard Power BI | **DESCARTADO** | Decisión del cliente (jul-2026): *"nunca voy a trabajar con Dashboard Power BI"*. No proponerlo ni retomarlo. Los dashboards del sistema (ejecutivo, cobertura, LSII, categorización) se construyen dentro de la app con recharts — esa es la vía definitiva, no un paso intermedio. |
@@ -1161,7 +1161,7 @@ Para pedir mejoras, referencia sección y archivo. Ejemplos:
 > "En MSM (sección 16 - API Endpoints), agrega un endpoint GET `/ranking/gerentes` si no existe ya un equivalente para `FACT_RankingGerente` (sección 4). Usa el patrón de `ranking.py` existente."
 
 **Modificar el motor de Score**:
-> "En MSM (sección 7 - Motor de Score Integral), modifica `iup_service.py` para que el componente de Comercial también considere [...]. Recuerda que el cálculo masivo por ciclo vive en `motor_calculo_service` (sección 8, 100% Python) — si el cambio debe aplicar al recálculo masivo, también hay que tocarlo ahí."
+> "En MSM (sección 8 - Servicio de Recálculo), modifica `motor_calculo_service.generar_ranking` para que el cálculo también considere [...]. Recuerda que es el único motor de Score/Ranking que existe — Regional (sección 7) reutiliza su resultado, no tiene cálculo propio."
 
 **Agregar migración**:
 > "En MSM (sección 19 - Migraciones), genera una migración Alembic para [...]. Usa la plantilla de columna NOT NULL segura de MIGRATIONS.md."

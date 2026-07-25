@@ -358,21 +358,6 @@ class KPIProductividadResponse(BaseModel):
     puntaje_productividad: Optional[Decimal] = None
 
 
-# ── IUP ──────────────────────────────────────────────────────────────────────
-
-class IUPResponse(BaseModel):
-    rm_id: int
-    rm_nombre: str
-    iup_total: Decimal
-    iup_productividad: Decimal
-    iup_comercial: Decimal
-    iup_coaching: Decimal
-    iup_capacitacion: Decimal
-    iup_consistencia: Decimal
-    ciclo_id: int
-    elegible: bool
-
-
 # ── Coaching ─────────────────────────────────────────────────────────────────
 
 class CoachingCreate(BaseModel):
@@ -494,31 +479,6 @@ class CriterioCategoriaTablaResponse(BaseModel):
     activo: bool
 
 
-# ── Ranking ───────────────────────────────────────────────────────────────────
-
-class RankingResponse(BaseModel):
-    """Refleja FACT_RankingRM (rediseño jun-2026, antes FACT_Ranking).
-    Los componentes iup_* por módulo ya no se persisten aquí — se
-    calculan dinámicamente desde FACT_ResultadoIndicador (ver iup_service)."""
-    model_config = ConfigDict(from_attributes=True)
-    id: int
-    rm_id: int
-    pais_codigo: str
-    tipo_ranking: str
-    score_total: Decimal
-    categoria_id: Optional[int]
-    posicion_global: int
-    posicion_linea: Optional[int]
-    posicion_anterior: Optional[int]
-    elegible: bool
-    fecha_generacion: datetime
-
-class RankingRequest(BaseModel):
-    pais_codigo: str
-    ciclo_id: Optional[int] = None
-    tipo_ranking: str = "MENSUAL"  # MENSUAL | TRIMESTRAL | ANUAL | REGIONAL
-
-
 # ── Reconocimiento ────────────────────────────────────────────────────────────
 
 class ReconocimientoCreate(BaseModel):
@@ -577,20 +537,6 @@ class ElegibilidadResponse(BaseModel):
 
 
 # ── Dashboard ─────────────────────────────────────────────────────────────────
-
-class KPIEjecutivoResponse(BaseModel):
-    pais_codigo: Optional[str]
-    iup_regional: Decimal
-    total_rms: int
-    rms_elegibles: int
-    pct_elegibles: Decimal
-    top_rm: Optional[dict]
-    top_pais: Optional[dict]
-    iup_productividad_promedio: Decimal
-    iup_comercial_promedio: Decimal
-    iup_coaching_promedio: Decimal
-    iup_capacitacion_promedio: Decimal
-    periodo: str
 
 
 # ── ETL ───────────────────────────────────────────────────────────────────────

@@ -43,3 +43,33 @@ def test_percentil_no_revienta_con_un_solo_participante():
     """`(total - pos) / (total - 1)` dividiría por cero con total=1."""
     fuente = inspect.getsource(router_rk.get_mi_posicion)
     assert "if total > 1 else None" in fuente
+
+
+# ---------------------------------------------------------------------------
+# Regional — jul-2026: ya NO recalcula ningún score, reutiliza el acumulado
+# (decisión del cliente: "el Ranking Regional no cambia los resultados, es
+# solo recalcular las posiciones... esto no altera su resultado acumulado").
+# ---------------------------------------------------------------------------
+
+def test_regional_reutiliza_ciclos_acumulados_no_recalcula():
+    """Regional debe usar EXACTAMENTE la misma función de acumulado que
+    GET /ranking (`_ciclos_acumulados`/`_ultimo_ciclo`), nunca un motor de
+    score aparte."""
+    fuente = inspect.getsource(router_rk._acumulado_por_pais)
+    assert "_ultimo_ciclo(" in fuente
+    assert "_ciclos_acumulados(" in fuente
+    assert "calcular_iup" not in fuente
+    assert "iup_service" not in fuente
+
+
+def test_regional_solo_incluye_elegibles():
+    fuente = inspect.getsource(router_rk.get_ranking_regional)
+    assert "if elegible" in fuente
+
+
+def test_regional_no_tiene_endpoint_generar_ni_anual():
+    """El botón/endpoint de generar y la pestaña Anual se retiraron por
+    completo (redundantes con el acumulado, que ya funciona bien) — no deben
+    reaparecer como código muerto."""
+    assert not hasattr(router_rk, "generar_ranking")
+    assert not hasattr(router_rk, "get_ranking_anual")

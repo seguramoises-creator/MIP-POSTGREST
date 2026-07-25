@@ -4,18 +4,17 @@ GET /api/v1/ranking  — Ranking acumulado ciclo 1..N, score = AVG (igual al das
 Tendencia: compara score del ciclo N vs ciclo N-1 para cada RM.
 """
 from typing import List, Optional
-from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, Integer
 
-from app.core.deps import get_db, get_current_active_user, require_roles
+from app.core.deps import get_db, get_current_active_user
 from app.core.authz.deps import require
 from app.core.authz.constantes import Accion, Recurso
-from app.core.pagination import PaginationParams
 from app.models.usuario import Rol
 from app.models.hechos import RankingRM
 from app.models.dimensiones import RepresentanteMedico, Linea, Gerente, Pais, Ciclo
-from app.schemas.schemas import RankingResponse, RankingRequest
+from app.core.pagination import PaginationParams
 
 router = APIRouter(prefix="/ranking", tags=["Ranking"])
 AnyAuth = Depends(get_current_active_user)
@@ -265,94 +264,75 @@ def get_ranking(
     }
 
 
+def _acumulado_por_pais(db: Session, pais_codigo: str, tipo: str = "MENSUAL") -> dict:
+    """rm_id -> (score_acumulado, elegible) para un país, con la MISMA lógica de
+    acumulado que usa GET /ranking (ciclo más reciente del país + promedio de los
+    ciclos 1..N del mismo año, ver `_ultimo_ciclo`/`_ciclos_acumulados`)."""
+    ciclo_efectivo = _ultimo_ciclo(db, pais_codigo, tipo)
+    if not ciclo_efectivo:
+        return {}
+    ciclo_ids, _ = _ciclos_acumulados(db, ciclo_efectivo)
+    rows = (
+        db.query(
+            RankingRM.rm_id,
+            func.avg(RankingRM.score_total).label("score_acumulado"),
+            func.max(RankingRM.elegible.cast(Integer)).label("elegible_max"),
+        )
+        .filter(
+            RankingRM.tipo_ranking == tipo.upper(),
+            RankingRM.ciclo_id.in_(ciclo_ids),
+            RankingRM.pais_codigo == pais_codigo,
+        )
+        .group_by(RankingRM.rm_id)
+        .all()
+    )
+    return {r.rm_id: (float(r.score_acumulado or 0), bool(r.elegible_max)) for r in rows}
+
+
 @router.get("/regional", response_model=List[dict])
 def get_ranking_regional(
-    ciclo_id: Optional[int] = None,
     top: int = 10,
     db: Session = Depends(get_db),
     current_user=ReadRanking,
 ):
-    q = (
-        db.query(
-            RankingRM,
-            RepresentanteMedico.nombre.label("rm_nombre"),
-            RepresentanteMedico.codigo.label("rm_codigo"),
-            Pais.nombre.label("pais_nombre"),
-            Linea.nombre.label("linea_nombre"),
-            Gerente.nombre.label("gerente_nombre"),
-        )
-        .join(RepresentanteMedico, RepresentanteMedico.id == RankingRM.rm_id)
-        .join(Pais, Pais.codigo == RankingRM.pais_codigo)
-        .outerjoin(Linea,   Linea.id   == RepresentanteMedico.linea_id)
-        .outerjoin(Gerente, Gerente.id == RepresentanteMedico.gerente_id)
-        .filter(RankingRM.tipo_ranking == "REGIONAL", RankingRM.elegible == True)
+    """
+    Ranking Regional: NO recalcula ningún score. Toma el resultado acumulado
+    (YTD) que ya calcula correctamente GET /ranking para cada representante
+    en su propio país (misma fórmula, mismos datos) y solo ordena/posiciona a
+    todos los representantes elegibles de todos los países juntos por ese
+    mismo número — es una vista en vivo, no requiere "generar" nada.
+    """
+    paises = [p for (p,) in db.query(Pais.codigo).filter(Pais.activo == True).all()]  # noqa: E712
+    combinado: list = []
+    for pais_codigo in paises:
+        for rm_id, (score, elegible) in _acumulado_por_pais(db, pais_codigo).items():
+            if elegible:
+                combinado.append((rm_id, pais_codigo, score))
+
+    combinado.sort(key=lambda x: x[2], reverse=True)
+    combinado = combinado[:top]
+
+    rm_ids = [c[0] for c in combinado]
+    rms = (
+        {r.id: r for r in db.query(RepresentanteMedico).filter(RepresentanteMedico.id.in_(rm_ids)).all()}
+        if rm_ids else {}
     )
-    if ciclo_id:
-        q = q.filter(RankingRM.ciclo_id == ciclo_id)
-    rows = q.order_by(RankingRM.posicion_global.asc()).limit(top).all()
-    return [
-        {
-            "posicion":       r.RankingRM.posicion_global,
-            "rm_id":          r.RankingRM.rm_id,
-            "rm_codigo":      r.rm_codigo,
-            "rm_nombre":      r.rm_nombre,
-            "pais_nombre":    r.pais_nombre,
-            "linea_nombre":   r.linea_nombre  or "—",
-            "gerente_nombre": r.gerente_nombre or "—",
-            "score_total":    float(r.RankingRM.score_total or 0),
-            "elegible":       r.RankingRM.elegible,
-        }
-        for r in rows
-    ]
+    lineas = {l.id: l.nombre for l in db.query(Linea).all()}
+    gerentes = {g.id: g.nombre for g in db.query(Gerente).all()}
+    nombres_pais = dict(db.query(Pais.codigo, Pais.nombre).all())
 
-
-@router.get("/anual", response_model=List[dict])
-def get_ranking_anual(
-    pais_codigo: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user=ReadRanking,
-):
-    q = (
-        db.query(
-            RankingRM,
-            RepresentanteMedico.nombre.label("rm_nombre"),
-            Linea.nombre.label("linea_nombre"),
-            Gerente.nombre.label("gerente_nombre"),
-        )
-        .join(RepresentanteMedico, RepresentanteMedico.id == RankingRM.rm_id)
-        .outerjoin(Linea,   Linea.id   == RepresentanteMedico.linea_id)
-        .outerjoin(Gerente, Gerente.id == RepresentanteMedico.gerente_id)
-        .filter(RankingRM.tipo_ranking == "ANUAL")
-    )
-    if pais_codigo:
-        q = q.filter(RankingRM.pais_codigo == pais_codigo)
-    rows = q.order_by(RankingRM.posicion_global.asc()).all()
-    return [
-        {
-            "posicion":       r.RankingRM.posicion_global,
-            "rm_id":          r.RankingRM.rm_id,
-            "rm_nombre":      r.rm_nombre,
-            "linea_nombre":   r.linea_nombre  or "—",
-            "gerente_nombre": r.gerente_nombre or "—",
-            "score_total":    float(r.RankingRM.score_total or 0),
-            "elegible":       r.RankingRM.elegible,
-        }
-        for r in rows
-    ]
-
-
-@router.post("/generar", response_model=dict)
-def generar_ranking(
-    request: RankingRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    current_user=Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD)),
-):
-    from app.services.ranking_service import generar_ranking_task
-    background_tasks.add_task(
-        generar_ranking_task,
-        pais_codigo=request.pais_codigo,
-        ciclo_id=request.ciclo_id,
-        tipo_ranking=request.tipo_ranking,
-    )
-    return {"message": "Calculo iniciado", "pais_codigo": request.pais_codigo, "ciclo_id": request.ciclo_id}
+    resultado = []
+    for pos, (rm_id, pais_codigo, score) in enumerate(combinado, start=1):
+        rm = rms.get(rm_id)
+        resultado.append({
+            "posicion":       pos,
+            "rm_id":          rm_id,
+            "rm_codigo":      rm.codigo if rm else None,
+            "rm_nombre":      rm.nombre if rm else f"RM #{rm_id}",
+            "pais_nombre":    nombres_pais.get(pais_codigo, pais_codigo),
+            "linea_nombre":   lineas.get(rm.linea_id, "—") if rm and rm.linea_id else "—",
+            "gerente_nombre": gerentes.get(rm.gerente_id, "—") if rm and rm.gerente_id else "—",
+            "score_total":    round(score, 2),
+            "elegible":       True,
+        })
+    return resultado

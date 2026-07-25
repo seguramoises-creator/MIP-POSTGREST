@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from app.services import motor_calculo_service as mc
+from tests.conftest import FakeQuery
 
 
 def test_clamp():
@@ -58,6 +59,32 @@ def test_categoria_de_rangos():
     assert mc._categoria_de(cats, Decimal("95")) == 1
     assert mc._categoria_de(cats, Decimal("80")) == 2
     assert mc._categoria_de(cats, Decimal("50")) == 3
+
+
+def test_consolidar_ranking_gerentes_ordena_por_score_desc(fake_db):
+    """
+    FIX (jul-2026): _consolidar_ranking_gerentes se movio aqui desde
+    ranking_service.py (retirado) -- ahora corre automaticamente al final del
+    Ranking Mensual real, no solo cuando alguien disparaba manualmente el
+    boton de Regional/Anual.
+    """
+    filas = [(10, Decimal("70")), (20, Decimal("90")), (30, Decimal("80"))]
+    query_scores = FakeQuery(all_result=filas)
+    query_delete = MagicMock()  # db.query(RankingGerente).filter(...).delete(...)
+    fake_db.query.side_effect = [query_scores, query_delete]
+
+    mc._consolidar_ranking_gerentes(fake_db, pais_codigo="DO", ciclo_id=5)
+
+    added = [c.args[0] for c in fake_db.add.call_args_list]
+    assert [a.gerente_id for a in added] == [20, 30, 10]
+    assert [a.posicion for a in added] == [1, 2, 3]
+    assert all(a.pais_codigo == "DO" and a.ciclo_id == 5 for a in added)
+
+
+def test_consolidar_ranking_gerentes_sin_gd_no_hace_nada(fake_db):
+    fake_db.query.return_value = FakeQuery(all_result=[])
+    mc._consolidar_ranking_gerentes(fake_db, pais_codigo="DO", ciclo_id=5)
+    fake_db.add.assert_not_called()
 
 
 def test_recalcular_aborta_ciclo_cerrado(monkeypatch):

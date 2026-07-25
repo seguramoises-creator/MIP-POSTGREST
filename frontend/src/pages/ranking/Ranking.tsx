@@ -1,12 +1,12 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Box, Typography, Card, CardContent,
   Table, TableBody, TableCell, TableContainer, TableFooter,
   TableHead, TableRow, Paper, Chip, CircularProgress,
   Alert, Tabs, Tab, Select, MenuItem, Button,
-  TablePagination, Divider, Snackbar,
+  TablePagination, Divider,
 } from '@mui/material';
-import { Download, Autorenew } from '@mui/icons-material';
+import { Download } from '@mui/icons-material';
 import { useMemo, useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
@@ -88,14 +88,6 @@ function RankingGerencia() {
   const [page,       setPage]       = useState(0);
   const [size,       setSize]       = useState(200);
   const [exportando, setExportando] = useState(false);
-  const [generando,  setGenerando]  = useState(false);
-  const [msgGenerar, setMsgGenerar] = useState<string | null>(null);
-  const queryClient = useQueryClient();
-  const rol = useAuthStore((s) => s.rol);
-  // Solo Regional/Anual: Mensual ya se calcula automaticamente con el motor correcto
-  // (motor_calculo_service) -- exponer "generar" aqui para Mensual usaria el motor de
-  // 5 componentes (iup_service) y sobrescribiria el ranking real con datos distintos.
-  const puedeGenerar = (rol === 'ADMIN' || rol === 'GERENTE_PRODUCTIVIDAD') && (tab === 1 || tab === 2);
 
   // Al cambiar el país (aquí o desde la barra global), vuelve a la primera página.
   useEffect(() => { setPage(0); }, [paisCodigo]);
@@ -113,14 +105,17 @@ function RankingGerencia() {
   // País y ciclo por defecto los fija el contexto global (store.init) — sin auto-selección local.
 
 
-  const endpoints  = ['/ranking', '/ranking/regional', '/ranking/anual'];
-  const tabLabels  = ['Ranking Actual', 'Regional', 'Histórico Anual'];
+  const endpoints  = ['/ranking', '/ranking/regional'];
+  const tabLabels  = ['Ranking Actual', 'Regional'];
   const esPaginado = tab === 0;
+  // Regional es una vista en vivo global (no se filtra por país/ciclo — combina
+  // el resultado acumulado, ya correcto, de cada representante en su propio país).
+  const esRegional = tab === 1;
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['ranking', tab, paisId, cicloId, page, size],
     queryFn: () => api.get(endpoints[tab], {
-      params: {
+      params: esRegional ? { top: 100 } : {
         ...(paisId  && { pais_codigo: paisId }),
         ...(cicloId && { ciclo_id: Number(cicloId) }),
         ...(esPaginado && { page: page + 1, size }),
@@ -206,7 +201,7 @@ function RankingGerencia() {
         params: {
           ...(paisId  && { pais_codigo: paisId }),
           ...(cicloId && { ciclo_id: Number(cicloId) }),
-          tipo_ranking: tab === 1 ? 'REGIONAL' : tab === 2 ? 'ANUAL' : 'MENSUAL',
+          tipo_ranking: tab === 1 ? 'REGIONAL' : 'MENSUAL',
         },
       });
       const url = URL.createObjectURL(r.data);
@@ -217,26 +212,6 @@ function RankingGerencia() {
       URL.revokeObjectURL(url);
     } catch { alert('No se pudo generar el archivo.'); }
     finally { setExportando(false); }
-  };
-
-  const handleGenerar = async () => {
-    if (!paisId) { setMsgGenerar('Selecciona un país primero.'); return; }
-    setGenerando(true);
-    try {
-      await api.post('/ranking/generar', {
-        pais_codigo: paisId,
-        ...(cicloId && { ciclo_id: Number(cicloId) }),
-        tipo_ranking: tab === 1 ? 'REGIONAL' : 'ANUAL',
-      });
-      setMsgGenerar('Cálculo iniciado — puede tardar unos segundos. Esta pantalla se actualizará sola.');
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['ranking'] });
-      }, 8000);
-    } catch {
-      setMsgGenerar('No se pudo iniciar el cálculo.');
-    } finally {
-      setGenerando(false);
-    }
   };
 
   return (
@@ -260,12 +235,6 @@ function RankingGerencia() {
             <Chip label={elegibles + ' elegibles'} variant="outlined"
               sx={{ fontWeight: 700, fontSize: 13, color: '#00897b', borderColor: '#00897b' }} />
           )}
-          {puedeGenerar && (
-            <Button variant="contained" size="small" startIcon={<Autorenew />}
-              onClick={handleGenerar} disabled={generando || !paisId}>
-              {generando ? 'Generando...' : 'Generar Ranking'}
-            </Button>
-          )}
           <Button variant="outlined" size="small" startIcon={<Download />}
             onClick={handleExportar} disabled={exportando}>
             {exportando ? 'Generando...' : 'Exportar'}
@@ -283,51 +252,60 @@ function RankingGerencia() {
       <Card elevation={1} sx={{ mb: 2.5, borderRadius: 2 }}>
         <CardContent sx={{ py: '12px !important' }}>
           <Box sx={{ display: 'flex', gap: 3, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Box sx={{ width: 200 }}>
-              <FilterLabel>País</FilterLabel>
-              <Select size="small" fullWidth value={paisId}
-                onChange={(e) => handlePaisChange(e.target.value as string | '')} displayEmpty>
-                <MenuItem value=""><em>Todos los países</em></MenuItem>
-                {paises.map((p: any) => <MenuItem key={p.id} value={p.codigo}>{p.nombre}</MenuItem>)}
-              </Select>
-            </Box>
-            <Box sx={{ width: 200 }}>
-              <FilterLabel>Ciclo</FilterLabel>
-              <Select size="small" fullWidth value={cicloId}
-                onChange={(e) => { const v = e.target.value; if (v !== '') setCicloVer(Number(v)); setPage(0); }}
-                displayEmpty disabled={!paisId}>
-                <MenuItem value="">
-                  <em>{paisId ? 'Último ciclo con datos' : 'Seleccione un país'}</em>
-                </MenuItem>
-                {ciclos.map((c: any) => (
-                  <MenuItem key={c.id} value={c.id}>{c.nombre_canonico || c.nombre}</MenuItem>
-                ))}
-              </Select>
-            </Box>
-            {tab === 0 && (
-              <Box sx={{ flex: 1, minWidth: 180 }}>
-                <FilterLabel>Buscar representante</FilterLabel>
-                <input
-                  style={{ width: '100%', height: 40, padding: '0 12px',
-                    border: '1px solid rgba(0,0,0,0.23)', borderRadius: 4,
-                    fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' }}
-                  placeholder="Nombre o código"
-                  value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
-                />
-              </Box>
-            )}
-            {/* Item 8 (Mallén): alterna entre todos los RM y solo los que tienen registro. */}
-            <Chip label={soloConRegistro ? 'Solo con registro' : 'Todos'} clickable
-                  color={soloConRegistro ? 'primary' : 'default'}
-                  variant={soloConRegistro ? 'filled' : 'outlined'}
-                  onClick={() => setSoloConRegistro((v) => !v)}
-                  sx={{ ml: 1, fontWeight: 700, height: 32 }} />
-            {cicloNombre && (
-              <Box sx={{ ml: 'auto' }}>
-                <Chip label={'Mostrando: ' + cicloNombre}
-                  sx={{ bgcolor: '#1a237e', color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
-              </Box>
+            {esRegional ? (
+              <Typography variant="body2" color="text.secondary">
+                Vista en vivo: combina el resultado acumulado de todos los representantes
+                elegibles de todos los países, sin filtro de país/ciclo.
+              </Typography>
+            ) : (
+              <>
+                <Box sx={{ width: 200 }}>
+                  <FilterLabel>País</FilterLabel>
+                  <Select size="small" fullWidth value={paisId}
+                    onChange={(e) => handlePaisChange(e.target.value as string | '')} displayEmpty>
+                    <MenuItem value=""><em>Todos los países</em></MenuItem>
+                    {paises.map((p: any) => <MenuItem key={p.id} value={p.codigo}>{p.nombre}</MenuItem>)}
+                  </Select>
+                </Box>
+                <Box sx={{ width: 200 }}>
+                  <FilterLabel>Ciclo</FilterLabel>
+                  <Select size="small" fullWidth value={cicloId}
+                    onChange={(e) => { const v = e.target.value; if (v !== '') setCicloVer(Number(v)); setPage(0); }}
+                    displayEmpty disabled={!paisId}>
+                    <MenuItem value="">
+                      <em>{paisId ? 'Último ciclo con datos' : 'Seleccione un país'}</em>
+                    </MenuItem>
+                    {ciclos.map((c: any) => (
+                      <MenuItem key={c.id} value={c.id}>{c.nombre_canonico || c.nombre}</MenuItem>
+                    ))}
+                  </Select>
+                </Box>
+                {tab === 0 && (
+                  <Box sx={{ flex: 1, minWidth: 180 }}>
+                    <FilterLabel>Buscar representante</FilterLabel>
+                    <input
+                      style={{ width: '100%', height: 40, padding: '0 12px',
+                        border: '1px solid rgba(0,0,0,0.23)', borderRadius: 4,
+                        fontSize: 14, fontFamily: 'inherit', boxSizing: 'border-box' }}
+                      placeholder="Nombre o código"
+                      value={busqueda}
+                      onChange={(e) => setBusqueda(e.target.value)}
+                    />
+                  </Box>
+                )}
+                {/* Item 8 (Mallén): alterna entre todos los RM y solo los que tienen registro. */}
+                <Chip label={soloConRegistro ? 'Solo con registro' : 'Todos'} clickable
+                      color={soloConRegistro ? 'primary' : 'default'}
+                      variant={soloConRegistro ? 'filled' : 'outlined'}
+                      onClick={() => setSoloConRegistro((v) => !v)}
+                      sx={{ ml: 1, fontWeight: 700, height: 32 }} />
+                {cicloNombre && (
+                  <Box sx={{ ml: 'auto' }}>
+                    <Chip label={'Mostrando: ' + cicloNombre}
+                      sx={{ bgcolor: '#1a237e', color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
+                  </Box>
+                )}
+              </>
             )}
           </Box>
         </CardContent>
@@ -510,10 +488,6 @@ function RankingGerencia() {
           </Table>
         </TableContainer>
       )}
-
-      <Snackbar open={!!msgGenerar} autoHideDuration={6000} onClose={() => setMsgGenerar(null)}>
-        <Alert severity="info" onClose={() => setMsgGenerar(null)}>{msgGenerar}</Alert>
-      </Snackbar>
     </Box>
   );
 }
