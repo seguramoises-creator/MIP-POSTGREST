@@ -994,11 +994,17 @@ JWT_REFRESH_TOKEN_EXPIRE_DAYS=7
 # CORS: puede ser JSON array o CSV
 CORS_ORIGINS=["http://localhost:3000","http://localhost:5173"]
 
+# Seguridad / superficie de API (fix informe 2026-07-21, ver §21)
+ENABLE_API_DOCS=false     # true solo en dev/staging — expone Swagger/ReDoc/openapi.json
+SETUP_ENABLED=false       # true solo mientras se corre /setup/inicializar la primera vez
+
 LOG_LEVEL=INFO
 LOG_FILE=logs/scgcpr.log
 ```
 
 En producción, `CORS_ORIGINS` debe incluir `https://vista-mip.com`. El `field_validator("CORS_ORIGINS", mode="before")` en `config.py` acepta tanto JSON array como string CSV (sin cambios respecto a v1.0).
+
+**`ENABLE_API_DOCS`** (default `false`): si es falso, `docs_url`/`redoc_url`/`openapi_url` en `app/main.py` quedan en `None` (FastAPI responde 404) — evita publicar el mapa completo de endpoints a cualquier visitante. **`SETUP_ENABLED`** (default `false`): control independiente del conteo de usuarios en `POST /setup/inicializar` (`setup.py`) — aunque la tabla `DIM_Usuario` quedara vacía por cualquier motivo, el endpoint no re-crea un ADMIN sin este flag explícito en el entorno.
 
 ---
 
@@ -1090,6 +1096,9 @@ python scripts/setup/crear_admin_pg.py
 
 ### web.config / caché de IIS
 Después de cambios al `web.config` de producción, IIS y el navegador pueden servir una versión cacheada. Redesplegar y purgar caché del navegador tras cualquier cambio de configuración (tarea abierta, ver §22).
+
+### Commits hechos directo en el servidor sin `git push` (resuelto jul-2026)
+**Síntoma observado**: `/api/v1/docs` devolvía 404 en producción sin que el código (local ni en GitHub) mostrara ningún bloqueo — `app/main.py` no tenía ningún condicional sobre `docs_url`. **Causa real**: un fix de seguridad legítimo (`43145c6`, ver `ENABLE_API_DOCS`/`SETUP_ENABLED` arriba) se había commiteado directo en el working directory del servidor (`/opt/msm-pg`) sin nunca hacer `git push`; cada `git pull` posterior generaba un commit de merge local nuevo (17 acumulados) que mantenía vivo el fix ahí, pero `origin/master` en GitHub nunca lo recibió. **Lección**: si el comportamiento en producción no coincide con lo que muestra el repo de GitHub/local, antes de asumir un bug de código correr en el servidor `git log origin/master..HEAD --oneline` — puede haber commits locales nunca sincronizados. **Solución aplicada**: `git push origin master` desde el servidor (fast-forward limpio, sin conflictos).
 
 ---
 
