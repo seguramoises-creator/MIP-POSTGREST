@@ -17,6 +17,7 @@ import pytest
 from app.services import iup_service
 from app.services.iup_service import (
     _get_puntaje_consistencia,
+    _get_puntaje_kpis,
     _obtener_pesos,
     calcular_iup,
     _PESOS_DEFECTO,
@@ -110,72 +111,69 @@ def test_obtener_pesos_garantiza_clave_consistencia_si_falta(fake_db):
     assert pesos["CONSISTENCIA"] == _PESOS_DEFECTO["CONSISTENCIA"]
 
 
-def test_obtener_pesos_remapea_gestion_a_productividad(fake_db):
-    """
-    FIX (jul-2026): DIM_Indicador.modulo en los datos reales usa "GESTION"
-    (confirmado en el Excel maestro), no "PRODUCTIVIDAD" — sin este remapeo,
-    un peso_iup configurado para el módulo de campo nunca llegaba a aplicarse
-    (calcular_iup siempre caía al default de PRODUCTIVIDAD, ver test de abajo).
-    """
-    filas = [
-        SimpleNamespace(modulo="GESTION", peso_total=Decimal("0.5")),
-        SimpleNamespace(modulo="RESULTADOS", peso_total=Decimal("0.5")),
-    ]
-    fake_db.query.return_value = FakeQuery(all_result=filas)
-    pesos = _obtener_pesos(fake_db)
-    assert "GESTION" not in pesos
-    assert "PRODUCTIVIDAD" in pesos
-    assert pesos["PRODUCTIVIDAD"] > 0
+# ---------------------------------------------------------------------------
+# _get_puntaje_kpis — FIX (jul-2026): reemplaza Productividad/Comercial/
+# Coaching/Capacitacion por una sola formula sobre los 8 KPIs reales,
+# ponderada por Indicador.ponderacion_pct (misma formula que el Ranking
+# Mensual real, motor_calculo_service.generar_ranking).
+# ---------------------------------------------------------------------------
+
+def test_puntaje_kpis_calcula_suma_ponderada(fake_db):
+    fake_db.query.return_value = FakeQuery(first_result=(Decimal("85"), Decimal("100")))
+    resultado = _get_puntaje_kpis(fake_db, rm_id=1, pais_codigo="DO", ciclo_id=5)
+    assert resultado == Decimal("85")
+
+
+def test_puntaje_kpis_sin_datos_retorna_cero(fake_db):
+    fake_db.query.return_value = FakeQuery(first_result=(None, None))
+    resultado = _get_puntaje_kpis(fake_db, rm_id=1, pais_codigo="DO", ciclo_id=5)
+    assert resultado == Decimal("0")
 
 
 # ---------------------------------------------------------------------------
 # calcular_iup — agregación ponderada y acotamiento a [0, 100]
 # ---------------------------------------------------------------------------
 
-def test_calcular_iup_agrega_componentes_ponderados_y_acota(fake_db):
+def test_calcular_iup_combina_kpis_y_consistencia_y_acota(fake_db):
     """
-    Reemplaza los componentes por valores fijos y verifica que:
-      - se agreguen ponderando según los pesos
+    Reemplaza kpi_score y consistencia por valores fijos y verifica que:
+      - se combinen ponderando según el peso de Consistencia
       - el resultado quede acotado a [0, 100]
-      - todas las claves iup_* / score_total estén presentes
+      - las claves iup_* / score_total estén presentes
     """
-    pesos_fijos = {
-        "PRODUCTIVIDAD": Decimal("0.30"),
-        "COMERCIAL": Decimal("0.30"),
-        "COACHING": Decimal("0.15"),
-        "CAPACITACION": Decimal("0.10"),
-        "CONSISTENCIA": Decimal("0.15"),
-    }
+    pesos_fijos = {"CONSISTENCIA": Decimal("0.15")}
     with patch.object(iup_service, "_obtener_pesos", return_value=pesos_fijos), \
-         patch.object(iup_service, "_get_puntaje_productividad", return_value=Decimal("100")), \
-         patch.object(iup_service, "_get_puntaje_comercial", return_value=Decimal("100")), \
-         patch.object(iup_service, "_get_puntaje_coaching", return_value=Decimal("100")), \
-         patch.object(iup_service, "_get_puntaje_capacitacion", return_value=Decimal("100")), \
+         patch.object(iup_service, "_get_puntaje_kpis", return_value=Decimal("100")), \
          patch.object(iup_service, "_get_puntaje_consistencia", return_value=Decimal("100")):
         resultado = calcular_iup(fake_db, rm_id=1, pais_codigo="PA", ciclo_id=5)
 
-    # Todos los componentes en 100 con pesos que suman 1.0 → score = 100
+    # KPIs y consistencia ambos en 100, pesos que suman 1.0 → score = 100
     assert resultado["score_total"] == Decimal("100.0000")
     assert resultado["iup_total"] == resultado["score_total"]
     assert resultado["rm_id"] == 1
     assert resultado["ciclo_id"] == 5
-    for clave in ("iup_productividad", "iup_comercial", "iup_coaching",
-                  "iup_capacitacion", "iup_consistencia"):
-        assert resultado[clave] == Decimal("100")
+    assert resultado["iup_kpis"] == Decimal("100")
+    assert resultado["iup_consistencia"] == Decimal("100")
 
 
 def test_calcular_iup_nunca_excede_100_ni_baja_de_0(fake_db):
-    pesos_fijos = {"PRODUCTIVIDAD": Decimal("1.0"), "COMERCIAL": Decimal("0"),
-                   "COACHING": Decimal("0"), "CAPACITACION": Decimal("0"),
-                   "CONSISTENCIA": Decimal("0")}
+    pesos_fijos = {"CONSISTENCIA": Decimal("0")}
     with patch.object(iup_service, "_obtener_pesos", return_value=pesos_fijos), \
-         patch.object(iup_service, "_get_puntaje_productividad", return_value=Decimal("9999")), \
-         patch.object(iup_service, "_get_puntaje_comercial", return_value=Decimal("0")), \
-         patch.object(iup_service, "_get_puntaje_coaching", return_value=Decimal("0")), \
-         patch.object(iup_service, "_get_puntaje_capacitacion", return_value=Decimal("0")), \
+         patch.object(iup_service, "_get_puntaje_kpis", return_value=Decimal("9999")), \
          patch.object(iup_service, "_get_puntaje_consistencia", return_value=Decimal("0")):
         resultado = calcular_iup(fake_db, rm_id=1, pais_codigo="PA", ciclo_id=5)
 
     assert resultado["score_total"] == Decimal("100")
     assert resultado["score_total"] <= Decimal("100")
     assert resultado["score_total"] >= Decimal("0")
+
+
+def test_calcular_iup_pondera_kpis_y_consistencia_segun_peso(fake_db):
+    """kpi_score=80, consistencia=60, peso_consistencia=0.15 -> 80*0.85+60*0.15=77."""
+    pesos_fijos = {"CONSISTENCIA": Decimal("0.15")}
+    with patch.object(iup_service, "_obtener_pesos", return_value=pesos_fijos), \
+         patch.object(iup_service, "_get_puntaje_kpis", return_value=Decimal("80")), \
+         patch.object(iup_service, "_get_puntaje_consistencia", return_value=Decimal("60")):
+        resultado = calcular_iup(fake_db, rm_id=1, pais_codigo="PA", ciclo_id=5)
+
+    assert resultado["score_total"] == Decimal("77.0000")
