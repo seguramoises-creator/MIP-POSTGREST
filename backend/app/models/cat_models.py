@@ -173,7 +173,6 @@ class FactMedicoCategoriaSnapshot(Base):
     estado_conciliacion: Mapped[Optional[str]] = mapped_column("EstadoConciliacion", String(30))
     estado_calculo: Mapped[str]     = mapped_column("EstadoCalculo", String(20), nullable=False)
     mensaje_calculo: Mapped[Optional[str]] = mapped_column("MensajeCalculo", String(500))
-    load_batch_key: Mapped[Optional[int]] = mapped_column("LoadBatchKey", BigInteger, ForeignKey("cat.LoadBatch.LoadBatchKey"), index=True)
     batch: Mapped[Optional["LoadBatch"]] = relationship("LoadBatch", back_populates="snapshots")
 
 
