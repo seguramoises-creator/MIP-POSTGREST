@@ -36,8 +36,9 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_db, require_roles
-from app.models.usuario import Rol
+from app.core.deps import get_db
+from app.core.authz.deps import require as _require_authz
+from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
 from app.models.dimensiones import (
     Pais, Linea, Gerente, RepresentanteMedico,
     Indicador, IndicadorTabla, MetaIndicador, CategoriaDesempeno, KpiDashboard,
@@ -67,7 +68,13 @@ def _ids_explicitos_off(db: Session, tabla: str, pk: str = "id") -> None:
     )
 
 
-AdminOGerProd = Depends(require_roles(Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD))
+# Importar catálogos maestros ES carga de datos → mismo recurso que el ETL (`etl.cargar`),
+# gobernado por la matriz editable en vez de constantes de rol. La matriz concede ese recurso
+# exactamente a GERENTE_PRODUCTIVIDAD (configure) + ADMIN, el mismo par que exigía el
+# `require_roles` anterior: el acceso efectivo no cambia, ahora es ajustable desde la UI.
+# CONFIGURE también en `/preview`: es el primer paso de la importación (sube el archivo), no
+# una consulta — con READ, un rol al que se le diera solo lectura del módulo podría subir Excel.
+ConfigDims = Depends(_require_authz(_Acc.CONFIGURE, _Rec.ETL_CARGAR))
 
 # ── Mapeo canónico (nombre normalizado → info) ─────────────────────────
 HOJAS_CONOCIDAS: dict[str, dict] = {
@@ -347,7 +354,7 @@ def _leer_tablas_rm(ws) -> list[dict]:
              summary="Leer Excel y detectar hojas disponibles")
 async def preview_dims(
     file: UploadFile = File(..., description="Archivo Excel (.xlsx) con hojas DIM_*"),
-    _=AdminOGerProd,
+    _=ConfigDims,
 ):
     if not file.filename.endswith((".xlsx", ".xls")):
         raise HTTPException(400, "Solo se aceptan archivos .xlsx o .xls")
@@ -396,7 +403,7 @@ async def importar_dims(
     file: UploadFile = File(..., description="Archivo Excel (.xlsx) con hojas DIM_*"),
     hojas: str = Form(..., description="JSON con lista de nombres de hojas a importar"),
     db: Session = Depends(get_db),
-    _=AdminOGerProd,
+    _=ConfigDims,
 ):
     import json
     hojas_seleccionadas: List[str] = []
