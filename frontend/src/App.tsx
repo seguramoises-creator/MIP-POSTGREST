@@ -134,8 +134,15 @@ function AppRoutes() {
         <Route path="cobertura-predictiva" element={<ProtectedRoute recurso="cobertura.predictiva"><CoberturaPredictiva /></ProtectedRoute>} />
         <Route path="coaching" element={<ProtectedRoute recurso="coaching.kpi" allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO']}><Coaching /></ProtectedRoute>} />
         <Route path="coaching-more" element={<ProtectedRoute recurso="coaching.hoja" allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><CoachingMore /></ProtectedRoute>} />
-        <Route path="categorizacion" element={<ProtectedRoute recurso="categorizacion.basica" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_MARCA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO','CONSULTA']}><Categorizacion /></ProtectedRoute>} />
-        <Route path="medicos" element={<ProtectedRoute recurso="medico.panel" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_MARCA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO','CONSULTA']}><Medicos /></ProtectedRoute>} />
+        {/* jul-2026: estas 2 rutas usan el MISMO recurso que gobierna su API (`categorizacion.py`
+            y `maestro_medicos.py`, ahora en la matriz). Antes miraban `categorizacion.basica` /
+            `medico.panel` —filas del spec que consumen otros módulos—, así que la pantalla podía
+            negarse a un rol al que la API sí respondía: GERENTE_PRODUCTIVIDAD importaba y daba de
+            alta médicos sin poder abrir el maestro. Alineado, lo que el cliente edite en Roles y
+            Permisos se refleja también en la navegación. OJO: `/visita/panel-medico` es otra
+            pantalla y sigue con `medico.panel`, que es su recurso correcto. */}
+        <Route path="categorizacion" element={<ProtectedRoute recurso="categorizacion.operacion" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_MARCA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO','CONSULTA']}><Categorizacion /></ProtectedRoute>} />
+        <Route path="medicos" element={<ProtectedRoute recurso="medico.maestro" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_MARCA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO','CONSULTA']}><Medicos /></ProtectedRoute>} />
         <Route path="ranking" element={<ProtectedRoute recurso="ranking.rkt"><Ranking /></ProtectedRoute>} />
         <Route path="reconocimiento" element={<ProtectedRoute recurso="reconocimiento"><Reconocimiento /></ProtectedRoute>} />
         <Route path="lsii" element={<ProtectedRoute recurso="lsii.evaluar" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','GERENTE_MARCA','CONSULTA']}><Lsii /></ProtectedRoute>} />

@@ -64,7 +64,10 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'Maestros y planeación',
     items: [
       { label: 'Panel Médico',          path: '/visita/panel-medico', icon: <MedicalServices />, recurso: 'medico.panel', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
-      { label: 'Médicos',               path: '/medicos',             icon: <LocalHospital />,   recurso: 'medico.panel', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_MARCA', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
+      // `medico.maestro` (no `medico.panel`): es el recurso que gobierna la API del maestro, así el
+      // ítem se ve exactamente si el rol puede usar la pantalla. El de arriba, Panel Médico, es otra
+      // pantalla y sí corresponde a `medico.panel`.
+      { label: 'Médicos',               path: '/medicos',             icon: <LocalHospital />,   recurso: 'medico.maestro', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_MARCA', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO', 'CONSULTA'] },
       { label: 'Panel Farmacia',        path: '/visita/panel-farmacia', icon: <LocalPharmacy />, recurso: 'farmacia.panel', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
       { label: 'Maestro de Farmacias',  path: '/farmacias/maestro', icon: <Storefront />, recurso: 'farmacia.maestro', accion: 'configure', roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
       { label: 'Planeación Ciclo',      path: '/visita/planeacion',   icon: <EventNote />,       recurso: 'planeacion.ciclo', roles: ['ADMIN', 'REPRESENTANTE_MEDICO'] },
