@@ -10,6 +10,7 @@ from io import BytesIO
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
+from email.utils import formataddr
 
 from loguru import logger
 
@@ -107,16 +108,25 @@ def _enviar_pdf(destinatario: str, asunto: str, cuerpo_html: str, pdf: bytes, no
     no-op y la hoja de coaching NUNCA se enviaba, mientras todos los demás correos sí
     llegaban. Divergencia silenciosa: no dejaba error, solo un log en debug.
     """
-    from app.services.notification_service import mail_config
+    from app.services.notification_service import mail_config, _html_a_texto
     cfg = mail_config()
     if not cfg["server"]:
         logger.debug(f"Coaching PDF: correo omitido (sin servidor SMTP configurado) — {destinatario!r}")
         return False
     msg = MIMEMultipart("mixed")
     msg["Subject"] = asunto
-    msg["From"] = f"{cfg['from_name']} <{cfg['from']}>"
+    # Igual que en notification_service._enviar: nunca interpolar el nombre con la
+    # dirección (un acento en el nombre sepulta la dirección en un encoded-word RFC 2047
+    # y Google rechaza el mensaje con 550 5.7.1).
+    msg["From"] = formataddr((cfg["from_name"], cfg["from"]))
     msg["To"] = destinatario
-    msg.attach(MIMEText(cuerpo_html, "html", "utf-8"))
+    # Estructura mixed[ alternative[texto, html], pdf ]: el cuerpo y sus dos alternativas
+    # van ANIDADOS en su propio `alternative`. Si se cuelgan sueltos del `mixed`, el cliente
+    # los trata como tres adjuntos hermanos y puede mostrar el texto y el HTML seguidos.
+    alternativas = MIMEMultipart("alternative")
+    alternativas.attach(MIMEText(_html_a_texto(cuerpo_html), "plain", "utf-8"))
+    alternativas.attach(MIMEText(cuerpo_html, "html", "utf-8"))
+    msg.attach(alternativas)
     adj = MIMEApplication(pdf, _subtype="pdf")
     adj.add_header("Content-Disposition", "attachment", filename=nombre)
     msg.attach(adj)

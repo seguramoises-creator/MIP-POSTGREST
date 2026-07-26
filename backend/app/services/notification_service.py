@@ -18,9 +18,12 @@ reconocimientos (son procesos independientes del canal de notificación).
 Por eso ninguna función de este módulo lanza excepciones hacia el
 llamador — los errores se registran con `logger` y se continúa.
 """
+import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
+from html import unescape
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -88,6 +91,33 @@ def _habilitado() -> bool:
     return bool(mail_config().get("server"))
 
 
+def _html_a_texto(html: str) -> str:
+    """Versión en texto plano de un cuerpo HTML, para la parte `text/plain` del correo.
+
+    No es un renderizador de HTML ni pretende serlo: los cuerpos de este módulo son
+    plantillas propias con un puñado de etiquetas (h2/h3, p, ul/li, br, hr, strong/b/em/
+    span, a). Lo único que importa es que no se pierda información accionable — de ahí que
+    los enlaces conserven la URL entre paréntesis: el correo de activación no sirve de nada
+    sin ella, y es justo el que un usuario nuevo necesita poder leer aunque su cliente
+    tenga el HTML desactivado.
+    """
+    t = re.sub(r"(?is)<(script|style)\b.*?</\1>", "", html)
+    # Enlaces → "etiqueta ( url )", antes de borrar etiquetas: después la URL ya no existe.
+    t = re.sub(r"""(?is)<a\b[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>""",
+               lambda m: f"{re.sub(r'(?s)<[^>]+>', '', m.group(2)).strip()} ( {m.group(1)} )",
+               t)
+    t = re.sub(r"(?i)<br\s*/?>", "\n", t)
+    t = re.sub(r"(?i)<hr\s*/?>", "\n" + "-" * 48 + "\n", t)
+    t = re.sub(r"(?i)<li\b[^>]*>", "\n  - ", t)
+    t = re.sub(r"(?i)</(p|h1|h2|h3|h4|ul|ol|div|tr|table)>", "\n\n", t)
+    t = re.sub(r"(?s)<[^>]+>", "", t)
+    t = unescape(t)
+    t = re.sub(r"[ \t\r\f\v]+", " ", t)
+    t = re.sub(r" *\n *", "\n", t)
+    t = re.sub(r"\n{3,}", "\n\n", t)
+    return t.strip()
+
+
 def _enviar(destinatario: str, asunto: str, cuerpo_html: str) -> bool:
     """
     Envía un correo HTML vía SMTP. Retorna True/False según éxito — nunca
@@ -102,8 +132,18 @@ def _enviar(destinatario: str, asunto: str, cuerpo_html: str) -> bool:
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = asunto
-    msg["From"] = f"{cfg['from_name']} <{cfg['from']}>"
+    # `formataddr` codifica SOLO el nombre y deja la dirección como angle-addr aparte.
+    # Interpolar `f"{nombre} <{dir}>"` rompe el correo EXTERNO en cuanto el nombre lleva un
+    # acento: la política compat32 no puede codificarlo en us-ascii y recodifica TODO el
+    # header como una palabra RFC 2047, con la dirección adentro ('<' → =3C, '@' → =40).
+    # El From queda sin dirección válida y Google lo rechaza con 550 5.7.1 (RFC 5322),
+    # mientras el correo del propio dominio sigue llegando y disimula la falla.
+    msg["From"] = formataddr((cfg["from_name"], cfg["from"]))
     msg["To"] = destinatario
+    # Las dos alternativas, de MENOR a MAYOR fidelidad (RFC 2046 §5.1.4): el orden no es
+    # cosmético — invertido, muchos clientes muestran el texto pelado en vez del HTML.
+    # Un `alternative` con la HTML como única parte además puntúa como spam.
+    msg.attach(MIMEText(_html_a_texto(cuerpo_html), "plain", "utf-8"))
     msg.attach(MIMEText(cuerpo_html, "html", "utf-8"))
 
     servidor = None
