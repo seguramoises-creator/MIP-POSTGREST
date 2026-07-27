@@ -38,8 +38,11 @@ Verificarlo antes de confiar en él — un paquete corrupto solo se descubre al
 necesitarlo, que es el peor momento posible:
 
 ```bash
-cd ~/respaldos-vista && tar xzf vista-respaldo-*.tar.gz && cd vista-respaldo-* && ./verificar_respaldo.sh
+cd ~/respaldos-vista && tar xzf vista-respaldo-*.tar.gz && cd "$(ls -d vista-respaldo-*/ | tail -1)" && ./verificar_respaldo.sh
 ```
+
+> La barra final en `vista-respaldo-*/` no es un adorno: sin ella el patrón también
+> empata el `.tar.gz` y el `.sha256`, y `cd` falla con *too many arguments*.
 
 ---
 
