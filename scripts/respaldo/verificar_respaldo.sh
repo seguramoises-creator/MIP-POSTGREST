@@ -54,6 +54,14 @@ paso "5. Las imagenes estan completas"
 IMG="$(gunzip -c "$RESPALDO/imagenes/imagenes.tar.gz" 2>/dev/null | tar t 2>/dev/null | grep -c 'manifest.json' || true)"
 [ "${IMG:-0}" -ge 1 ] && verde "archivo de imagenes descomprime y trae manifiesto" \
                       || rojo "el archivo de imagenes esta corrupto"
+# Las tres tienen que estar. La de PostgreSQL es la que mas facil se escapa:
+# el servicio 'db' vive en un perfil de compose y no aparece en la lista de
+# imagenes si el perfil no se activa al armar el respaldo.
+for esperada in backend frontend postgres; do
+    grep -q "$esperada" "$RESPALDO/imagenes/lista.txt" 2>/dev/null \
+        && verde "imagen de $esperada incluida" \
+        || rojo "FALTA la imagen de $esperada — el respaldo no podria levantar el sistema"
+done
 
 paso "6. Los secretos que hacen falta estan"
 for clave in DB_NAME DB_USER DB_PASSWORD JWT_SECRET_KEY; do

@@ -42,6 +42,16 @@ docker compose version >/dev/null 2>&1 || { rojo "No hay 'docker compose' v2."; 
 
 cd "$PROYECTO"
 
+# Sin POSTGRES_PASSWORD, TODO subcomando de compose falla al interpolar el
+# docker-compose.yml (hasta 'ps'), con un error que no explica que el problema
+# es del entorno y no del respaldo. Normalmente viene del .env de la raiz.
+if ! docker compose ps >/dev/null 2>&1; then
+    rojo "Los comandos de compose no corren en $PROYECTO."
+    rojo "Casi siempre falta POSTGRES_PASSWORD (deberia estar en $PROYECTO/.env)."
+    rojo "Diagnostico:  cd $PROYECTO && docker compose ps"
+    exit 1
+fi
+
 # El nombre de proyecto de compose prefija los volumenes. Por defecto es el
 # nombre del directorio, pero puede haberse fijado a mano: en vez de deducirlo,
 # se DESCUBRE del volumen de datos, que siempre existe si el stack corrio.
@@ -118,8 +128,14 @@ paso "4. Imagenes Docker"
 # Guardarlas es lo que hace el respaldo portable de verdad: el destino levanta
 # EXACTAMENTE lo mismo que estaba corriendo, sin reconstruir (sin internet, sin
 # npm/pip, sin riesgo de que una dependencia haya cambiado de version).
-IMAGENES="$(docker compose config --images 2>/dev/null | sort -u | tr '\n' ' ')"
+# OJO con el perfil: 'db' vive en el perfil "with-db", y sin activarlo compose
+# lo trata como si no existiera — 'config --images' devuelve solo backend y
+# frontend, y el respaldo quedaria SIN la imagen de PostgreSQL. Se veria
+# completo (trae imagenes) pero no podria restaurar la base.
+IMAGENES="$(docker compose --profile with-db config --images 2>/dev/null | sort -u | tr '\n' ' ')"
 [ -z "$IMAGENES" ] && IMAGENES="msm-backend:latest msm-frontend:latest postgres:17"
+# Red de seguridad por si el compose cambia y la base deja de listarse.
+case "$IMAGENES" in *postgres*) ;; *) IMAGENES="$IMAGENES postgres:17" ;; esac
 echo "    $IMAGENES"
 # shellcheck disable=SC2086
 docker save $IMAGENES | gzip -1 > "$TRABAJO/imagenes/imagenes.tar.gz"
