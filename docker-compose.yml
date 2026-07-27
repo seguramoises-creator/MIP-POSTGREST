@@ -42,7 +42,10 @@ services:
       # Puerto del host → 80 del contenedor. Configurable para NO chocar con otros
       # stacks en el mismo servidor (p.ej. srv1772225 con DW/Odoo). El nginx del host
       # (TLS/certbot) hace proxy 443 → 127.0.0.1:${FRONTEND_PORT}. Ver DEPLOY-POSTGRES.md.
-      - "${FRONTEND_PORT:-8090}:80"
+      # El prefijo 127.0.0.1 es DELIBERADO: sin él Docker publica el puerto en TODAS las
+      # interfaces y el frontend queda alcanzable desde internet por ese puerto, saltándose
+      # el nginx del host y con él el TLS. Atado a loopback, el único que llega es el proxy.
+      - "127.0.0.1:${FRONTEND_PORT:-8090}:80"
     depends_on:
       - backend
     restart: unless-stopped
