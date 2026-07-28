@@ -32,9 +32,21 @@ paso "2. Sumas de verificacion"
     || rojo "hay archivos alterados o truncados"
 
 paso "3. El repositorio se puede leer"
-git bundle verify "$RESPALDO/codigo/repositorio.bundle" >/dev/null 2>&1 \
-    && verde "repositorio.bundle integro" \
-    || rojo "repositorio.bundle corrupto"
+# 'git bundle verify' EXIGE estar dentro de un repositorio: comprueba los
+# prerequisitos del bundle contra el repo actual. Corrida desde la carpeta del
+# respaldo —que no es un repo— falla con "need a repository to verify a
+# bundle", que parece corrupcion sin serlo. De ahi el repo vacio desechable.
+# Y por eso el error se IMPRIME en vez de silenciarse: un mensaje tragado
+# convierte un problema de contexto en un falso "respaldo corrupto".
+TMPGIT="$(mktemp -d)"
+git init -q --bare "$TMPGIT/repo.git"
+if SALIDA="$(git -C "$TMPGIT/repo.git" bundle verify "$RESPALDO/codigo/repositorio.bundle" 2>&1)"; then
+    verde "repositorio.bundle integro e historia completa"
+else
+    rojo "repositorio.bundle NO se pudo leer:"
+    echo "$SALIDA" | sed 's/^/           /'
+fi
+rm -rf "$TMPGIT"
 
 paso "4. El volcado se puede leer"
 # pg_restore --list lee el indice del volcado sin escribir nada: si responde,
