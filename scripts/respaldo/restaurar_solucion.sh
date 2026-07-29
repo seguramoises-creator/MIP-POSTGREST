@@ -168,12 +168,20 @@ Falta ajustar a mano lo que es propio de CADA ambiente y no debe heredarse:
 
   1. JWT_SECRET_KEY en backend/.env  — cada ambiente lleva la suya. Compartirla
      hace que un token emitido en uno sea valido en el otro.
-  2. CORS_ORIGINS en backend/.env    — el dominio nuevo.
-  3. Credenciales SMTP               — viven en la BASE (Admin > Correo), asi
+  2. ALLOWED_HOSTS en backend/.env   — EL QUE MAS DUELE OLVIDAR. En produccion
+     esta activo TrustedHostMiddleware: toda peticion cuyo encabezado Host no
+     figure en la lista se rechaza con 400 ANTES de llegar a la aplicacion. Con
+     el dominio nuevo fuera de la lista, el sitio carga pero el login responde
+     "Credenciales incorrectas" —el frontend muestra eso ante cualquier fallo—,
+     y se pierde el rato buscando el problema en los usuarios. Ojo: por un tunel
+     SSH a localhost SI funciona, porque localhost esta permitido; el fallo solo
+     aparece al poner el servidor web del host delante.
+  3. CORS_ORIGINS en backend/.env    — el dominio nuevo.
+  4. Credenciales SMTP               — viven en la BASE (Admin > Correo), asi
      que viajaron en el volcado: apuntan al buzon del origen. Cambiarlas ANTES
      del primer correo o el sistema escribira desde la cuenta equivocada.
-  4. nginx del host + certificado TLS del dominio nuevo (en configuracion/ hay
+  5. nginx del host + certificado TLS del dominio nuevo (en configuracion/ hay
      una copia del original, solo como referencia).
-  5. Contrasenas de los usuarios: viajaron hasheadas y siguen siendo validas.
+  6. Contrasenas de los usuarios: viajaron hasheadas y siguen siendo validas.
      Si el ambiente nuevo es de otro cliente, revisar que corresponda.
 PENDIENTES
