@@ -176,6 +176,15 @@ Falta ajustar a mano lo que es propio de CADA ambiente y no debe heredarse:
      y se pierde el rato buscando el problema en los usuarios. Ojo: por un tunel
      SSH a localhost SI funciona, porque localhost esta permitido; el fallo solo
      aparece al poner el servidor web del host delante.
+     ESCRIBIRLO COMO ARRAY JSON, no separado por comas:
+         ALLOWED_HOSTS=["dominio.com","*.dominio.com","localhost","127.0.0.1"]
+     pydantic-settings interpreta como JSON los campos de tipo lista que vienen
+     del entorno, ANTES de que corra el validador que aceptaria comas: con el
+     formato CSV el backend no arranca (SettingsError) y el sitio devuelve 502.
+     Y tras tocar el .env hay que RECREAR el contenedor, no reiniciarlo:
+         docker compose --profile with-db up -d --force-recreate backend
+     'restart' relanza el mismo contenedor con el entorno viejo, asi que el
+     cambio parece no tener efecto.
   3. CORS_ORIGINS en backend/.env    — el dominio nuevo.
   4. Credenciales SMTP               — viven en la BASE (Admin > Correo), asi
      que viajaron en el volcado: apuntan al buzon del origen. Cambiarlas ANTES
