@@ -163,6 +163,12 @@ class Settings(BaseSettings):
 
     # ── Módulo de Exámenes — IA (Fase 3)
     ANTHROPIC_API_KEY: str = ""
+    # Llave de cifrado de las credenciales de IA (seccion 20.6). Propia de cada
+    # ambiente y con ciclo de vida independiente de JWT_SECRET_KEY: rotar el
+    # secreto JWT es normal al clonar un ambiente, y si de el dependieran las
+    # credenciales quedarian ilegibles sin aviso. Generar con:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    IA_CRED_KEY: str = ""
     EXAM_AI_MODEL: str = "claude-sonnet-5"
     # Modo DEMO: genera preguntas localmente (sin llamar a Claude ni gastar API).
     # Útil para probar el flujo completo sin créditos. Apagar (false) en producción.

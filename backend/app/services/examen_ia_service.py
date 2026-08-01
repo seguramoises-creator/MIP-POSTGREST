@@ -230,41 +230,42 @@ def _generar_demo(texto: str, n_multi: int, n_casos: int, producto: str | None =
 def generar_preguntas_ia(texto: str, n_multi: int, n_casos: int,
                          client=None, model: str | None = None,
                          producto: str | None = None, n_vf: int = 0,
-                         demo: bool | None = None, n_objeciones: int = 0) -> list[dict]:
-    """Genera preguntas llamando a Claude. El cliente se inyecta para testing.
+                         demo: bool | None = None, n_objeciones: int = 0,
+                         db=None) -> list[dict]:
+    """Genera preguntas con IA. El cliente se inyecta para testing.
 
     `producto` ancla las preguntas al producto/tema (en vez de a "el documento").
 
     Si EXAMEN_IA_DEMO está activo y no se inyectó cliente, usa el generador local
     (sin consumir API) — permite probar el flujo completo sin créditos.
+
+    PROVEEDOR CONFIGURABLE (§20): cuando no se inyecta cliente, la llamada pasa
+    por la capa de abstracción y NO por el SDK de un proveedor concreto, para
+    que el cliente pueda cambiar de proveedor desde la configuración sin tocar
+    código. Los detalles propios de cada proveedor —como desactivar el
+    razonamiento extendido en Claude— viven dentro de su adaptador.
     """
     usar_demo = settings.EXAMEN_IA_DEMO if demo is None else demo
     if client is None and usar_demo:
         logger.info("generar_preguntas_ia: MODO DEMO activo — generación local sin Claude")
         return _generar_demo(texto, n_multi, n_casos, producto, n_vf, n_objeciones)
-    if client is None:
-        import anthropic
-        client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-    model = model or settings.EXAM_AI_MODEL
     prompt = construir_prompt(texto, n_multi, n_casos, producto, n_vf, n_objeciones)
     # max_tokens proporcional a la cantidad pedida: cada pregunta en JSON ocupa
     # ~600-800 tokens. Con un tope fijo bajo (4096) los exámenes grandes se truncaban
     # y devolvían JSON inválido. Escalamos con un techo de seguridad.
     total = max(1, n_multi + n_casos + n_vf + n_objeciones)
     max_tokens = min(16000, 2000 + total * 800)
-    respuesta = client.messages.create(
-        model=model, max_tokens=max_tokens,
-        messages=[{"role": "user", "content": prompt}],
-        # Desactiva el "extended thinking" (activo por defecto en modelos Claude
-        # nuevos como sonnet-5): de lo contrario el razonamiento consume el
-        # presupuesto de tokens y el bloque de texto (el JSON) puede llegar
-        # vacío/truncado ("Expecting value: line 1 column 1"). Se pasa por
-        # extra_body porque el SDK instalado no acepta el kwarg `thinking` nativo.
-        extra_body={"thinking": {"type": "disabled"}})
-    # Une solo el texto de bloques de tipo texto. Algunos modelos/SDK devuelven
-    # bloques cuyo `.text` es None (p. ej. bloques de razonamiento): `or ""` evita
-    # el TypeError de join ("expected str instance, NoneType found") y los ignora.
-    texto_resp = "".join((getattr(b, "text", "") or "") for b in respuesta.content)
+    if client is None:
+        from app.services.ia import conexion_service
+        texto_resp = conexion_service.adaptador_texto(db).generar_texto(prompt, max_tokens)
+    else:
+        # Camino con cliente inyectado: se conserva para las pruebas, que usan un
+        # doble del SDK.
+        respuesta = client.messages.create(
+            model=model or settings.EXAM_AI_MODEL, max_tokens=max_tokens,
+            messages=[{"role": "user", "content": prompt}],
+            extra_body={"thinking": {"type": "disabled"}})
+        texto_resp = "".join((getattr(b, "text", "") or "") for b in respuesta.content)
     # Red de seguridad: si el modelo responde en prosa (p. ej. negándose porque el
     # material no coincide con el producto) en vez de JSON, damos un error claro y
     # accionable en lugar del críptico "Expecting value: line 1 column 1 (char 0)".
@@ -398,7 +399,7 @@ def procesar_generacion_ia(fuente_id: int) -> None:
             from app.services import config_service
             demo = config_service.obtener_bool(db, "EXAMEN_IA_DEMO", settings.EXAMEN_IA_DEMO)
             preguntas = generar_preguntas_ia(texto, n_multi, n_casos, producto=producto, n_vf=n_vf,
-                                              demo=demo, n_objeciones=n_objeciones)
+                                              demo=demo, n_objeciones=n_objeciones, db=db)
             persistir_preguntas(db, fuente.examen_id, preguntas)
 
             fuente.estado_generacion = "exitoso"
