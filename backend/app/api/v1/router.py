@@ -19,6 +19,7 @@ from app.api.v1.routers.cobertura_predictiva import router as cobertura_predicti
 from app.api.v1.routers.categorizacion import router as categorizacion_router
 from app.api.v1.routers.examenes      import router as examenes_router
 from app.api.v1.routers.ia_conexiones import router as ia_conexiones_router
+from app.api.v1.routers.formacion     import router as formacion_router
 from app.api.v1.routers.examenes      import intentos_router
 from app.api.v1.routers.visita        import router as visita_router
 from app.api.v1.routers.coaching_more import router as coaching_more_router
@@ -48,5 +49,6 @@ api_router.include_router(visita_router)  # Módulo de Visita Médica (esquema V
 api_router.include_router(coaching_more_router)  # Coaching MORE (esquema coaching)
 api_router.include_router(maestro_medicos_router)  # Maestro de Médicos (Config.DIM_Medico)
 api_router.include_router(authz_router)  # RBAC Fase 1: contrato de autorizacion (/authz/me/permisos)
+api_router.include_router(formacion_router)  # Onboarding + Biblioteca (secciones 4 y 5)
 api_router.include_router(ia_conexiones_router)  # Conexiones de IA configurables (seccion 20)
 api_router.include_router(farmacias_router)  # Módulo de Farmacias (Config.DIM_Farmacia / Visita.*)

@@ -109,7 +109,7 @@ def crear(db: Session, datos: dict, actor=None) -> IAConexion:
 
 
 def actualizar(db: Session, conexion_id: int, datos: dict, actor=None) -> IAConexion:
-    c = db.query(IAConexion).get(conexion_id)
+    c = db.get(IAConexion, conexion_id)
     if c is None:
         raise ValueError("Conexión no encontrada")
     cambios = []
@@ -146,7 +146,7 @@ def actualizar(db: Session, conexion_id: int, datos: dict, actor=None) -> IACone
 
 
 def eliminar(db: Session, conexion_id: int, actor=None) -> None:
-    c = db.query(IAConexion).get(conexion_id)
+    c = db.get(IAConexion, conexion_id)
     if c is None:
         return
     nombre = c.nombre
@@ -163,7 +163,7 @@ def probar(db: Session, conexion_id: int, actor=None) -> tuple[bool, str]:
     que quien configure vea qué falló y no solo que falló.
     """
     from datetime import datetime, timezone
-    c = db.query(IAConexion).get(conexion_id)
+    c = db.get(IAConexion, conexion_id)
     if c is None:
         raise ValueError("Conexión no encontrada")
     try:
@@ -189,7 +189,7 @@ def activar(db: Session, conexion_id: int, actor=None) -> IAConexion:
     dejarían indeterminado cuál se usa, y el resultado dependería del orden de
     las filas.
     """
-    c = db.query(IAConexion).get(conexion_id)
+    c = db.get(IAConexion, conexion_id)
     if c is None:
         raise ValueError("Conexión no encontrada")
     if not c.verificada:
