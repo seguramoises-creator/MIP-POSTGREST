@@ -255,6 +255,33 @@ def _resultado(capsula: RefuerzoCapsula, r: RefuerzoRespuesta, repetida: bool) -
     }
 
 
+def capsulas_pendientes(db: Session, rm_id: int) -> list[dict]:
+    """Lo que el representante tiene por responder.
+
+    Solo de rondas PUBLICADAS: una ronda programada pero no publicada todavía no
+    existe para él (§10.3). Y nunca se devuelve `opcion_correcta` — enviarla
+    junto al enunciado permitiría leerla antes de contestar y volvería inútil el
+    indicador de aciertos. La correcta llega al responder (§10.7).
+    """
+    respondidas = {r.capsula_id for r in
+                   db.query(RefuerzoRespuesta)
+                   .filter(RefuerzoRespuesta.rm_id == rm_id).all()}
+    filas = (db.query(RefuerzoCapsula, RefuerzoRondaProgramada, RefuerzoCampana)
+             .join(RefuerzoRondaProgramada,
+                   RefuerzoCapsula.ronda_id == RefuerzoRondaProgramada.id)
+             .join(RefuerzoCampana,
+                   RefuerzoRondaProgramada.campana_id == RefuerzoCampana.id)
+             .filter(RefuerzoRondaProgramada.publicada.is_(True))
+             .order_by(RefuerzoRondaProgramada.numero_ronda, RefuerzoCapsula.orden)
+             .all())
+    return [{
+        "capsula_id": c.id, "formato": c.formato, "enunciado": c.enunciado,
+        "opciones": c.opciones, "orden": c.orden,
+        "ronda": r.numero_ronda, "campana": campana.nombre,
+        "recibida_en": r.notificada_en or r.fecha_hora_programada,
+    } for c, r, campana in filas if c.id not in respondidas]
+
+
 def puntos_de_refuerzo(db: Session, rm_id: int, campana_id: int | None = None) -> int:
     """Lo que este módulo aporta al Ranking gamificado (§8.2)."""
     q = db.query(RefuerzoRespuesta).filter(RefuerzoRespuesta.rm_id == rm_id)

@@ -276,6 +276,50 @@ def test_una_ronda_sin_capsulas_no_se_publica(escenario):
 
 
 # ---------------------------------------------------------------------------
+# Lo que ve el representante antes de responder
+# ---------------------------------------------------------------------------
+
+def test_las_capsulas_pendientes_nunca_traen_la_respuesta_correcta(escenario):
+    """Si el enunciado viajara con su opción correcta, bastaría mirar la
+    respuesta de la API para acertar siempre y el % de aciertos dejaría de medir
+    nada. La correcta solo llega AL RESPONDER (§10.7) — mismo criterio que el
+    `score_oculto` de LSII."""
+    pendientes = refuerzo.capsulas_pendientes(escenario["db"], escenario["rm_a"].id)
+    assert pendientes, "debería haber cápsulas por responder"
+    serializado = str(pendientes)
+    assert "opcion_correcta" not in serializado
+    assert "explicacion" not in serializado
+    # Las opciones sí viajan: sin ellas no hay nada que elegir.
+    reto = next(c for c in pendientes if c["formato"] == "reto")
+    assert set(reto["opciones"]) == {"A", "B", "C", "D"}
+
+
+def test_lo_ya_respondido_desaparece_de_los_pendientes(escenario):
+    db = escenario["db"]
+    antes = len(refuerzo.capsulas_pendientes(db, escenario["rm_a"].id))
+    refuerzo.registrar_respuesta(db, escenario["reto"].id, escenario["rm_a"].id, opcion="B")
+    despues = refuerzo.capsulas_pendientes(db, escenario["rm_a"].id)
+    assert len(despues) == antes - 1
+    assert all(c["capsula_id"] != escenario["reto"].id for c in despues)
+
+
+def test_una_ronda_no_publicada_no_aparece_en_pendientes(escenario):
+    """§10.3: una ronda programada pero sin publicar todavía no existe para el
+    representante. Adelantársela le daría tiempo extra y falsearía su
+    participación."""
+    db = escenario["db"]
+    otra = db.query(RefuerzoRondaProgramada).filter(
+        RefuerzoRondaProgramada.campana_id == escenario["campana"].id,
+        RefuerzoRondaProgramada.numero_ronda == 2).first()
+    db.add(RefuerzoCapsula(ronda_id=otra.id, formato="microlectura",
+                           enunciado="Todavía no toca"))
+    db.commit()
+    enunciados = [c["enunciado"] for c in
+                  refuerzo.capsulas_pendientes(db, escenario["rm_a"].id)]
+    assert "Todavía no toca" not in enunciados
+
+
+# ---------------------------------------------------------------------------
 # §11 — el reporte de KPI
 # ---------------------------------------------------------------------------
 
