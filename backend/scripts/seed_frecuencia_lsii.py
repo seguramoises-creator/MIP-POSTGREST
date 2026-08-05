@@ -1,10 +1,19 @@
 """Seed idempotente de ParametroFrecuenciaLSII: carga la frecuencia de arranque
-por país si aún no existe. Ejecutar: python scripts/seed_frecuencia_lsii.py"""
+por país si aún no existe.
+
+Uso local:      cd backend && python scripts/seed_frecuencia_lsii.py
+Uso contenedor: docker compose exec backend python scripts/seed_frecuencia_lsii.py
+
+Vive en backend/scripts/ (no en la raíz) porque el contenedor solo copia backend/
+a /app — igual que los demás seeds ejecutables (p.ej. seed_costo_visita.py)."""
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+# parents[1] = el directorio backend/ (en el contenedor, /app), como los seeds hermanos.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+# Importar todos los modelos para resolver las relaciones ORM entre esquemas.
+from app.models import usuario, dimensiones, hechos, formacion, visita  # noqa: F401
 from app.db.database import SessionLocal
 from app.models.dimensiones import Pais
 from app.models.formacion import ParametroFrecuenciaLSII
