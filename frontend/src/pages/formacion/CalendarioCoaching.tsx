@@ -24,6 +24,10 @@ import { api } from '../../services/api';
 
 const DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
 const ROLES_ESCRITURA = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO'];
+// PUT /formacion/calendario-coaching/frecuencias está gateado en backend a
+// ADMIN y GERENTE_PRODUCTIVIDAD (RequireConfig) — el GD NO puede fijar frecuencias,
+// solo consultarlas (GET, RequireLectura).
+const ROLES_CONFIG = ['ADMIN', 'GERENTE_PRODUCTIVIDAD'];
 const CUAD_COLOR: Record<string, string> = {
   D1: '#c62828', D2: '#e65100', D3: '#1565c0', D4: '#2e7d32',
 };
@@ -35,6 +39,7 @@ export default function CalendarioCoaching() {
   const rol = useAuthStore((s) => s.rol);
   const esGD = rol === 'GERENTE_DISTRITO';
   const puedeEscribir = !!rol && ROLES_ESCRITURA.includes(rol) && !soloLectura;
+  const puedeConfig = !!rol && ROLES_CONFIG.includes(rol) && !soloLectura;
   const qc = useQueryClient();
 
   const [gdId, setGdId] = useState<number | ''>('');
@@ -91,7 +96,11 @@ export default function CalendarioCoaching() {
         <Stack direction="row" spacing={1} alignItems="center">
           {!esGD && (
             <TextField select size="small" label="Gerente de Distrito" value={gdId}
-              onChange={(e) => setGdId(e.target.value === '' ? '' : Number(e.target.value))} sx={{ minWidth: 200 }}>
+              onChange={(e) => {
+                setGdId(e.target.value === '' ? '' : Number(e.target.value));
+                setPrevia(null);
+                generar.reset();
+              }} sx={{ minWidth: 200 }}>
               <MenuItem value="">—</MenuItem>
               {(gerentes || []).filter((g: any) => g.tipo === 'DISTRITO').map((g: any) => (
                 <MenuItem key={g.id} value={g.id}>{g.nombre}</MenuItem>
@@ -115,6 +124,16 @@ export default function CalendarioCoaching() {
           Calendario generado sobre {previa.semanas} semanas.
           {previa.sin_evaluar.length > 0 &&
             ` ${previa.sin_evaluar.length} RM sin evaluación LSII no se agendaron.`}
+        </Alert>
+      )}
+      {generar.isError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => generar.reset()}>
+          No se pudo generar el calendario. Revisa que el ciclo esté abierto.
+        </Alert>
+      )}
+      {publicar.isError && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => publicar.reset()}>
+          No se pudo publicar.
         </Alert>
       )}
 
@@ -172,7 +191,7 @@ export default function CalendarioCoaching() {
       )}
 
       {frecAbierto && paisCodigo && (
-        <DialogoFrecuencias paisCodigo={paisCodigo} puedeEscribir={puedeEscribir}
+        <DialogoFrecuencias paisCodigo={paisCodigo} puedeEscribir={puedeConfig}
           onCerrar={() => setFrecAbierto(false)} />
       )}
     </Box>
@@ -182,6 +201,9 @@ export default function CalendarioCoaching() {
 function DialogoFrecuencias({ paisCodigo, puedeEscribir, onCerrar }: {
   paisCodigo: string; puedeEscribir: boolean; onCerrar: () => void;
 }) {
+  // `puedeEscribir` aquí gobierna SOLO el formulario de "Fijar" (PUT /frecuencias,
+  // ADMIN/GERENTE_PRODUCTIVIDAD). El GET de valores vigentes es lectura y ya
+  // llegó a este diálogo para cualquier rol con RequireLectura en el backend.
   const qc = useQueryClient();
   const { data } = useQuery({
     queryKey: ['frecuencias-lsii', paisCodigo],
@@ -218,6 +240,12 @@ function DialogoFrecuencias({ paisCodigo, puedeEscribir, onCerrar }: {
               <Button variant="contained" disabled={!cuadrante || valor === '' || fijar.isPending}
                 onClick={() => fijar.mutate()}>Fijar</Button>
             </Stack>
+            {fijar.isError && (
+              <Alert severity="error" sx={{ mt: 1 }}>No se pudo fijar la frecuencia.</Alert>
+            )}
+            {fijar.isSuccess && (
+              <Alert severity="success" sx={{ mt: 1 }}>Frecuencia actualizada.</Alert>
+            )}
           </>
         )}
       </DialogContent>
