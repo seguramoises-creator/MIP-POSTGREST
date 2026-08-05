@@ -4,6 +4,7 @@ Consume el cuadrante LSII vigente (FACT_EvaluacionReceptividad) — NO lo recalc
 y sugiere una frecuencia de acompañamiento por RM, repartida en el ciclo. El GD
 edita y publica. Es planeación; la ejecución del coaching vive en Coaching MORE.
 """
+from datetime import datetime, timezone
 from math import ceil
 
 from sqlalchemy.orm import Session
@@ -171,3 +172,40 @@ def generar(db: Session, gd_id: int, ciclo_id: int, persistir: bool = True) -> d
         db.commit()
 
     return {"semanas": semanas, "celdas": celdas, "sin_evaluar": sin_evaluar}
+
+
+def listar(db: Session, gd_id: int, ciclo_id: int) -> list[CalendarioCoachingSugerido]:
+    return (db.query(CalendarioCoachingSugerido)
+            .filter(CalendarioCoachingSugerido.gd_id == gd_id,
+                    CalendarioCoachingSugerido.ciclo_id == ciclo_id)
+            .order_by(CalendarioCoachingSugerido.rm_id, CalendarioCoachingSugerido.semana)
+            .all())
+
+
+def mover_celda(db: Session, celda_id: int, semana: int,
+                dia_semana: str) -> CalendarioCoachingSugerido:
+    c = db.get(CalendarioCoachingSugerido, celda_id)
+    if c is None:
+        raise ValueError("Celda no encontrada")
+    validar_ciclo_abierto(db, c.ciclo_id)
+    if dia_semana not in DIAS:
+        raise ValueError(f"Día inválido: {dia_semana}. Válidos: {', '.join(DIAS)}.")
+    c.semana = semana
+    c.dia_semana = dia_semana
+    c.editado_manualmente = True
+    db.commit()
+    db.refresh(c)
+    return c
+
+
+def publicar(db: Session, gd_id: int, ciclo_id: int) -> int:
+    validar_ciclo_abierto(db, ciclo_id)
+    ahora = datetime.now(timezone.utc)
+    filas = (db.query(CalendarioCoachingSugerido)
+             .filter(CalendarioCoachingSugerido.gd_id == gd_id,
+                     CalendarioCoachingSugerido.ciclo_id == ciclo_id).all())
+    for c in filas:
+        c.publicado = True
+        c.publicado_en = ahora
+    db.commit()
+    return len(filas)

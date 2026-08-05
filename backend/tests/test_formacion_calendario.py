@@ -210,3 +210,31 @@ def test_generar_sobre_ciclo_cerrado_aborta(equipo):
     ciclo.cerrado = True; db.commit()
     with pytest.raises(CicloCerradoError):
         cal.generar(db, gd.id, ciclo.id, persistir=True)
+
+
+def test_mover_celda_la_marca_editada(equipo):
+    db, gd, a, ciclo = equipo["db"], equipo["gd"], equipo["rm_a"], equipo["ciclo"]
+    _eval(db, a.id, ciclo.id, "D4")
+    cal.generar(db, gd.id, ciclo.id, persistir=True)
+    celda = cal.listar(db, gd.id, ciclo.id)[0]
+    m = cal.mover_celda(db, celda.id, semana=2, dia_semana="viernes")
+    assert m.semana == 2 and m.dia_semana == "viernes" and m.editado_manualmente is True
+
+
+def test_publicar_marca_todas_las_celdas(equipo):
+    db, gd, a, ciclo = equipo["db"], equipo["gd"], equipo["rm_a"], equipo["ciclo"]
+    _eval(db, a.id, ciclo.id, "D1")
+    cal.generar(db, gd.id, ciclo.id, persistir=True)
+    n = cal.publicar(db, gd.id, ciclo.id)
+    assert n == 4
+    assert all(c.publicado for c in cal.listar(db, gd.id, ciclo.id))
+
+
+def test_publicar_sobre_ciclo_cerrado_aborta(equipo):
+    from app.services.recalculo_service import CicloCerradoError
+    db, gd, a, ciclo = equipo["db"], equipo["gd"], equipo["rm_a"], equipo["ciclo"]
+    _eval(db, a.id, ciclo.id, "D1")
+    cal.generar(db, gd.id, ciclo.id, persistir=True)
+    ciclo.cerrado = True; db.commit()
+    with pytest.raises(CicloCerradoError):
+        cal.publicar(db, gd.id, ciclo.id)
