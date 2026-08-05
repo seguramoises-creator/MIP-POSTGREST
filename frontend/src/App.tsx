@@ -50,6 +50,7 @@ const PlaneacionVisita = lazyWithReload(() => import('./pages/visita/PlaneacionV
 const RupturaVisita = lazyWithReload(() => import('./pages/visita/RupturaVisita'));
 const ParrillaVisita = lazyWithReload(() => import('./pages/visita/ParrillaVisita'));
 const CostoRoiVisita = lazyWithReload(() => import('./pages/visita/CostoRoiVisita'));
+const PlanBrechas = lazyWithReload(() => import('./pages/formacion/PlanBrechas'));
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
 
@@ -165,6 +166,9 @@ function AppRoutes() {
         <Route path="admin" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><Admin /></ProtectedRoute>} />
         <Route path="usuarios" element={<ProtectedRoute recurso="config.usuarios" allowedRoles={['ADMIN']}><Administracion /></ProtectedRoute>} />
         <Route path="reportes" element={<ProtectedRoute recurso="exportacion" accion="export" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','CONSULTA']}><Reportes /></ProtectedRoute>} />
+        {/* Plan de Cierre de Brechas (Formación §12). Sin `recurso`: el router backend gatea
+            por rol (require_roles), no por la matriz RBAC — un recurso inexistente denegaría a todos. */}
+        <Route path="formacion/brechas" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','CAPACITACION','PRESIDENCIA','GERENTE_MEDICO']}><PlanBrechas /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to={inicio} />} />
     </Routes>
