@@ -175,3 +175,38 @@ def test_ciclo_anterior_es_el_previo_del_mismo_pais(equipo):
                  fecha_inicio=date(2026, 4, 1), fecha_fin=date(2026, 5, 26))
     db.add(prev); db.commit()
     assert cal.ciclo_anterior_id(db, ciclo) == prev.id
+
+
+def test_generar_agenda_segun_frecuencia_y_separa_sin_evaluar(equipo):
+    db, gd, a, b, ciclo = (equipo["db"], equipo["gd"], equipo["rm_a"],
+                           equipo["rm_b"], equipo["ciclo"])
+    _eval(db, a.id, ciclo.id, "D1")   # D1 → 4 visitas
+    # b queda sin evaluación LSII
+    r = cal.generar(db, gd.id, ciclo.id, persistir=False)
+    assert r["semanas"] == 8
+    celdas_a = [c for c in r["celdas"] if c["rm_id"] == a.id]
+    assert len(celdas_a) == 4
+    assert {c["semana"] for c in celdas_a} == {1, 3, 5, 7}
+    assert all(c["cuadrante"] == "D1" for c in celdas_a)
+    assert [s["rm_id"] for s in r["sin_evaluar"]] == [b.id]
+
+
+def test_generar_persiste_y_regenerar_conserva_lo_publicado(equipo):
+    db, gd, a, ciclo = equipo["db"], equipo["gd"], equipo["rm_a"], equipo["ciclo"]
+    _eval(db, a.id, ciclo.id, "D4")   # D4 → 1 visita
+    cal.generar(db, gd.id, ciclo.id, persistir=True)
+    from app.models.formacion import CalendarioCoachingSugerido as CC
+    celda = db.query(CC).filter(CC.gd_id == gd.id).one()
+    celda.publicado = True; db.commit()
+    # Regenerar no debe borrar la celda publicada NI duplicar al RM ya agendado.
+    cal.generar(db, gd.id, ciclo.id, persistir=True)
+    assert db.query(CC).filter(CC.gd_id == gd.id, CC.publicado.is_(True)).count() == 1
+    assert db.query(CC).filter(CC.gd_id == gd.id).count() == 1, "no se duplica el RM preservado"
+
+
+def test_generar_sobre_ciclo_cerrado_aborta(equipo):
+    from app.services.recalculo_service import CicloCerradoError
+    db, gd, ciclo = equipo["db"], equipo["gd"], equipo["ciclo"]
+    ciclo.cerrado = True; db.commit()
+    with pytest.raises(CicloCerradoError):
+        cal.generar(db, gd.id, ciclo.id, persistir=True)

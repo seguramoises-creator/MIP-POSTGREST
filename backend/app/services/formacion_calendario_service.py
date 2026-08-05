@@ -8,10 +8,11 @@ from math import ceil
 
 from sqlalchemy.orm import Session
 
-from app.models.dimensiones import Ciclo
-from app.models.formacion import ParametroFrecuenciaLSII
+from app.models.dimensiones import Ciclo, RepresentanteMedico
+from app.models.formacion import CalendarioCoachingSugerido, ParametroFrecuenciaLSII
 from app.models.hechos import EvaluacionReceptividad
 from app.services import visita_costo_service
+from app.services.recalculo_service import validar_ciclo_abierto
 
 CUADRANTES: tuple[str, ...] = ("D1", "D2", "D3", "D4")
 
@@ -107,3 +108,66 @@ def fijar_frecuencia(db: Session, pais_codigo: str, cuadrante: str, visitas: int
     db.commit()
     db.refresh(p)
     return p
+
+
+DIAS: list[str] = ["lunes", "martes", "miercoles", "jueves", "viernes"]
+
+
+def generar(db: Session, gd_id: int, ciclo_id: int, persistir: bool = True) -> dict:
+    """Sugiere el calendario del GD para el ciclo. persistir=False = previa.
+
+    Persistir hace delete-then-insert SELECTIVO: borra solo las celdas sugeridas
+    (no publicadas ni editadas a mano) y reinserta; conserva el trabajo del GD."""
+    ciclo = validar_ciclo_abierto(db, ciclo_id)   # levanta CicloCerradoError si está cerrado
+    semanas = semanas_ciclo(ciclo)
+    frec = frecuencias(db, ciclo.pais_codigo)
+    rms = (db.query(RepresentanteMedico)
+           .filter(RepresentanteMedico.gerente_id == gd_id).all())
+    nombre = {rm.id: rm.nombre for rm in rms}
+
+    con_cuadrante: list[tuple[int, str]] = []
+    sin_evaluar: list[dict] = []
+    for rm in rms:
+        q = cuadrante_vigente(db, rm.id, ciclo_id)
+        if q is None:
+            sin_evaluar.append({"rm_id": rm.id, "rm_nombre": rm.nombre})
+        else:
+            con_cuadrante.append((rm.id, q))
+
+    orden = orden_por_roi(db, [rm_id for rm_id, _ in con_cuadrante],
+                          ciclo_anterior_id(db, ciclo))
+    quad = dict(con_cuadrante)
+
+    celdas: list[dict] = []
+    for idx, rm_id in enumerate(orden):
+        q = quad[rm_id]
+        dia = DIAS[idx % len(DIAS)]          # reparte los RM entre los días
+        for semana in distribuir_semanas(frec.get(q, 0), semanas):
+            celdas.append({"rm_id": rm_id, "rm_nombre": nombre[rm_id],
+                           "semana": semana, "dia_semana": dia, "cuadrante": q})
+
+    if persistir:
+        # Borra solo lo sugerido (no publicado ni editado); conserva el trabajo del GD.
+        (db.query(CalendarioCoachingSugerido)
+         .filter(CalendarioCoachingSugerido.gd_id == gd_id,
+                 CalendarioCoachingSugerido.ciclo_id == ciclo_id,
+                 CalendarioCoachingSugerido.publicado.is_(False),
+                 CalendarioCoachingSugerido.editado_manualmente.is_(False))
+         .delete(synchronize_session=False))
+        db.flush()
+        # RMs con celdas preservadas (publicadas/editadas): NO se re-agendan, o se
+        # duplicarían con la nueva sugerencia.
+        preservados = {rm_id for (rm_id,) in
+                       db.query(CalendarioCoachingSugerido.rm_id)
+                       .filter(CalendarioCoachingSugerido.gd_id == gd_id,
+                               CalendarioCoachingSugerido.ciclo_id == ciclo_id)
+                       .distinct().all()}
+        for c in celdas:
+            if c["rm_id"] in preservados:
+                continue
+            db.add(CalendarioCoachingSugerido(
+                gd_id=gd_id, ciclo_id=ciclo_id, rm_id=c["rm_id"], semana=c["semana"],
+                dia_semana=c["dia_semana"], cuadrante_al_generar=c["cuadrante"]))
+        db.commit()
+
+    return {"semanas": semanas, "celdas": celdas, "sin_evaluar": sin_evaluar}
