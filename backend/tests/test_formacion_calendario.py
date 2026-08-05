@@ -16,6 +16,29 @@ from app.services import formacion_calendario_service as cal
 BD_PRUEBA = "vista_test_calcoach"
 
 
+def test_reparto_de_una_visita_cae_a_mitad_del_ciclo():
+    assert cal.distribuir_semanas(1, 8) == [4]
+
+
+def test_reparto_de_cuatro_visitas_queda_espaciado():
+    assert cal.distribuir_semanas(4, 8) == [1, 3, 5, 7]
+
+
+def test_reparto_de_dos_visitas():
+    assert cal.distribuir_semanas(2, 8) == [2, 6]
+
+
+def test_cero_visitas_no_agenda_nada():
+    assert cal.distribuir_semanas(0, 8) == []
+
+
+def test_mas_visitas_que_semanas_se_acota_al_rango():
+    # Nunca propone una semana fuera de [1, semanas]; puede repetir semana.
+    r = cal.distribuir_semanas(10, 4)
+    assert len(r) == 10
+    assert all(1 <= s <= 4 for s in r)
+
+
 def test_frecuencia_arranca_en_los_valores_por_defecto(db):
     f = cal.frecuencias(db, "DO")
     assert f == {"D1": 4, "D2": 3, "D3": 2, "D4": 1}
