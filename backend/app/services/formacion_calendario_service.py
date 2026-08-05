@@ -8,8 +8,10 @@ from math import ceil
 
 from sqlalchemy.orm import Session
 
+from app.models.dimensiones import Ciclo
 from app.models.formacion import ParametroFrecuenciaLSII
 from app.models.hechos import EvaluacionReceptividad
+from app.services import visita_costo_service
 
 CUADRANTES: tuple[str, ...] = ("D1", "D2", "D3", "D4")
 
@@ -60,6 +62,29 @@ def cuadrante_vigente(db: Session, rm_id: int, ciclo_id: int) -> str | None:
          .order_by(EvaluacionReceptividad.id.desc())
          .first())
     return e.nivel_lsii if e else None
+
+
+def ciclo_anterior_id(db: Session, ciclo) -> int | None:
+    """El ciclo inmediatamente anterior del mismo país (por anio, numero)."""
+    prev = (db.query(Ciclo)
+            .filter(Ciclo.pais_codigo == ciclo.pais_codigo,
+                    (Ciclo.anio < ciclo.anio) |
+                    ((Ciclo.anio == ciclo.anio) & (Ciclo.numero < ciclo.numero)))
+            .order_by(Ciclo.anio.desc(), Ciclo.numero.desc())
+            .first())
+    return prev.id if prev else None
+
+
+def orden_por_roi(db: Session, rm_ids: list[int], ciclo_anterior_id: int | None) -> list[int]:
+    """Ordena los RM por ROI ASCENDENTE del ciclo anterior (menor ROI = más
+    atención = primero). RM sin ROI previo o sin ciclo anterior → al final,
+    conservando el orden de entrada (estable)."""
+    roi_map: dict[int, float] = {}
+    if ciclo_anterior_id is not None:
+        rk = visita_costo_service.roi_ranking(db, ciclo_anterior_id)
+        roi_map = {it["vm_id"]: it["valor"] for it in rk.get("items", [])}
+    orden_entrada = {rm: i for i, rm in enumerate(rm_ids)}
+    return sorted(rm_ids, key=lambda rm: (roi_map.get(rm, float("inf")), orden_entrada[rm]))
 
 
 def fijar_frecuencia(db: Session, pais_codigo: str, cuadrante: str, visitas: int,

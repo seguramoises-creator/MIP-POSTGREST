@@ -145,3 +145,33 @@ def test_cuadrante_vigente_toma_la_ultima_evaluacion(equipo):
 def test_rm_sin_evaluacion_no_tiene_cuadrante(equipo):
     db, rm, ciclo = equipo["db"], equipo["rm_b"], equipo["ciclo"]
     assert cal.cuadrante_vigente(db, rm.id, ciclo.id) is None
+
+
+def test_orden_por_roi_pone_primero_el_de_menor_roi(equipo, monkeypatch):
+    db, a, b = equipo["db"], equipo["rm_a"], equipo["rm_b"]
+    monkeypatch.setattr(cal.visita_costo_service, "roi_ranking",
+                        lambda _db, _c: {"items": [{"vm_id": b.id, "valor": -10.0},
+                                                   {"vm_id": a.id, "valor": 30.0}]})
+    assert cal.orden_por_roi(db, [a.id, b.id], 999) == [b.id, a.id]
+
+
+def test_rm_sin_roi_previo_queda_al_final(equipo, monkeypatch):
+    db, a, b = equipo["db"], equipo["rm_a"], equipo["rm_b"]
+    monkeypatch.setattr(cal.visita_costo_service, "roi_ranking",
+                        lambda _db, _c: {"items": [{"vm_id": a.id, "valor": 5.0}]})
+    # b no tiene ROI previo → al final; a primero.
+    assert cal.orden_por_roi(db, [a.id, b.id], 999) == [a.id, b.id]
+
+
+def test_sin_ciclo_anterior_conserva_orden_estable(equipo):
+    db, a, b = equipo["db"], equipo["rm_a"], equipo["rm_b"]
+    assert cal.orden_por_roi(db, [a.id, b.id], None) == [a.id, b.id]
+
+
+def test_ciclo_anterior_es_el_previo_del_mismo_pais(equipo):
+    db, ciclo = equipo["db"], equipo["ciclo"]
+    # fecha_inicio/fecha_fin son NOT NULL en DIM_Ciclo — hay que darlas.
+    prev = Ciclo(pais_codigo="DO", nombre="C06-2026", anio=2026, numero=6, cerrado=True,
+                 fecha_inicio=date(2026, 4, 1), fecha_fin=date(2026, 5, 26))
+    db.add(prev); db.commit()
+    assert cal.ciclo_anterior_id(db, ciclo) == prev.id
