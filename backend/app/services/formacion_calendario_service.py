@@ -163,15 +163,16 @@ def generar(db: Session, gd_id: int, ciclo_id: int, persistir: bool = True) -> d
                        .filter(CalendarioCoachingSugerido.gd_id == gd_id,
                                CalendarioCoachingSugerido.ciclo_id == ciclo_id)
                        .distinct().all()}
-        for c in celdas:
-            if c["rm_id"] in preservados:
-                continue
+        insertadas = [c for c in celdas if c["rm_id"] not in preservados]
+        for c in insertadas:
             db.add(CalendarioCoachingSugerido(
                 gd_id=gd_id, ciclo_id=ciclo_id, rm_id=c["rm_id"], semana=c["semana"],
                 dia_semana=c["dia_semana"], cuadrante_al_generar=c["cuadrante"]))
         db.commit()
+    else:
+        insertadas = celdas
 
-    return {"semanas": semanas, "celdas": celdas, "sin_evaluar": sin_evaluar}
+    return {"semanas": semanas, "celdas": insertadas, "sin_evaluar": sin_evaluar}
 
 
 def listar(db: Session, gd_id: int, ciclo_id: int) -> list[CalendarioCoachingSugerido]:

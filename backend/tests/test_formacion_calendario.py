@@ -204,6 +204,19 @@ def test_generar_persiste_y_regenerar_conserva_lo_publicado(equipo):
     assert db.query(CC).filter(CC.gd_id == gd.id).count() == 1, "no se duplica el RM preservado"
 
 
+def test_generar_persiste_devuelve_solo_lo_insertado_no_lo_preservado(equipo):
+    db, gd, a, ciclo = equipo["db"], equipo["gd"], equipo["rm_a"], equipo["ciclo"]
+    _eval(db, a.id, ciclo.id, "D4")   # D4 → 1 visita
+    cal.generar(db, gd.id, ciclo.id, persistir=True)
+    from app.models.formacion import CalendarioCoachingSugerido as CC
+    celda = db.query(CC).filter(CC.gd_id == gd.id).one()
+    celda.publicado = True; db.commit()
+    # Regenerar: la celda de "a" está preservada (publicada), por lo tanto no se
+    # reinserta. El dict devuelto debe reflejar eso — no debe traer al RM preservado.
+    r = cal.generar(db, gd.id, ciclo.id, persistir=True)
+    assert [c for c in r["celdas"] if c["rm_id"] == a.id] == []
+
+
 def test_generar_sobre_ciclo_cerrado_aborta(equipo):
     from app.services.recalculo_service import CicloCerradoError
     db, gd, ciclo = equipo["db"], equipo["gd"], equipo["ciclo"]
