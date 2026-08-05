@@ -1,4 +1,6 @@
 """Calendario de Coaching (Fase 4) — motor de reglas sobre el cuadrante LSII."""
+from datetime import date
+
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
@@ -9,8 +11,9 @@ from app.models import (  # noqa: F401
     cat_models, coaching_more_models, dimensiones, exam_models, formacion,
     hechos, ia_conexion, integracion_ext, seguridad_rbac, usuario, visita,
 )
-from app.models.dimensiones import Pais
+from app.models.dimensiones import Ciclo, Gerente, Linea, Pais, RepresentanteMedico
 from app.models.formacion import ParametroFrecuenciaLSII
+from app.models.hechos import EvaluacionReceptividad
 from app.services import formacion_calendario_service as cal
 
 BD_PRUEBA = "vista_test_calcoach"
@@ -105,3 +108,40 @@ def db(motor):
     s.commit()
     yield s
     s.close()
+
+
+@pytest.fixture
+def equipo(db):
+    """Un GD con dos RM y un ciclo con fechas de 8 semanas."""
+    linea = Linea(pais_codigo="DO", codigo="CARD", nombre="Cardiología")
+    db.add(linea); db.flush()
+    gd = Gerente(pais_codigo="DO", codigo="GD-1", nombre="GD Uno", tipo="DISTRITO")
+    db.add(gd); db.flush()
+    rm_a = RepresentanteMedico(pais_codigo="DO", linea_id=linea.id, gerente_id=gd.id,
+                               codigo="VM01", nombre="Ana")
+    rm_b = RepresentanteMedico(pais_codigo="DO", linea_id=linea.id, gerente_id=gd.id,
+                               codigo="VM02", nombre="Beto")
+    db.add_all([rm_a, rm_b])
+    ciclo = Ciclo(pais_codigo="DO", nombre="C07-2026", anio=2026, numero=7,
+                  cerrado=False, fecha_inicio=date(2026, 6, 1), fecha_fin=date(2026, 7, 26))
+    db.add(ciclo); db.commit()
+    return {"db": db, "gd": gd, "rm_a": rm_a, "rm_b": rm_b, "ciclo": ciclo, "linea": linea}
+
+
+def _eval(db, rm_id, ciclo_id, nivel):
+    e = EvaluacionReceptividad(pais_codigo="DO", rm_id=rm_id, ciclo_id=ciclo_id,
+                               score_receptividad=50, nivel_lsii=nivel,
+                               estilo_liderazgo="X", activo=True)
+    db.add(e); db.commit(); return e
+
+
+def test_cuadrante_vigente_toma_la_ultima_evaluacion(equipo):
+    db, rm, ciclo = equipo["db"], equipo["rm_a"], equipo["ciclo"]
+    _eval(db, rm.id, ciclo.id, "D3")
+    _eval(db, rm.id, ciclo.id, "D1")   # más reciente
+    assert cal.cuadrante_vigente(db, rm.id, ciclo.id) == "D1"
+
+
+def test_rm_sin_evaluacion_no_tiene_cuadrante(equipo):
+    db, rm, ciclo = equipo["db"], equipo["rm_b"], equipo["ciclo"]
+    assert cal.cuadrante_vigente(db, rm.id, ciclo.id) is None

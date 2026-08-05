@@ -9,6 +9,7 @@ from math import ceil
 from sqlalchemy.orm import Session
 
 from app.models.formacion import ParametroFrecuenciaLSII
+from app.models.hechos import EvaluacionReceptividad
 
 CUADRANTES: tuple[str, ...] = ("D1", "D2", "D3", "D4")
 
@@ -46,6 +47,19 @@ def frecuencias(db: Session, pais_codigo: str) -> dict[str, int]:
         if p.cuadrante in valores:
             valores[p.cuadrante] = int(p.visitas_por_ciclo)
     return valores
+
+
+def cuadrante_vigente(db: Session, rm_id: int, ciclo_id: int) -> str | None:
+    """Cuadrante D1-D4 de la última evaluación LSII activa del RM en el ciclo.
+
+    Solo lee: el cálculo del cuadrante es del módulo LSII, no de aquí."""
+    e = (db.query(EvaluacionReceptividad)
+         .filter(EvaluacionReceptividad.rm_id == rm_id,
+                 EvaluacionReceptividad.ciclo_id == ciclo_id,
+                 EvaluacionReceptividad.activo.is_(True))
+         .order_by(EvaluacionReceptividad.id.desc())
+         .first())
+    return e.nivel_lsii if e else None
 
 
 def fijar_frecuencia(db: Session, pais_codigo: str, cuadrante: str, visitas: int,
