@@ -68,6 +68,8 @@ def generar(datos: GenerarEntrada, db: Session = Depends(get_db),
         return cal.generar(db, gd, datos.ciclo_id, persistir=datos.persistir)
     except CicloCerradoError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
 
 @router.get("", summary="Calendario del GD/ciclo")
@@ -99,6 +101,8 @@ def publicar(datos: GenerarEntrada, db: Session = Depends(get_db),
         return {"publicadas": cal.publicar(db, gd, datos.ciclo_id)}
     except CicloCerradoError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
 
 
 @router.get("/frecuencias", summary="Tabla de frecuencia vigente del país")

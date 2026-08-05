@@ -5,7 +5,7 @@
  * ciclo está cerrado. La config de frecuencias va en un diálogo (patrón Umbrales
  * de la Fase 7).
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Box, Typography, Card, CardContent, Chip, Button, Stack, Alert, CircularProgress,
@@ -74,6 +74,9 @@ export default function CalendarioCoaching() {
     mutationFn: (v: { id: number; semana: number; dia: string }) => moverCelda(v.id, v.semana, v.dia),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['calendario', cicloId] }),
   });
+
+  useEffect(() => { setPrevia(null); generar.reset(); }, [cicloId]);
+  useEffect(() => { setGdId(''); setPrevia(null); generar.reset(); }, [paisCodigo]);
 
   const semanas = previa?.semanas ?? Math.max(8, ...(celdas || []).map((c) => c.semana));
   const porRm = useMemo(() => {
