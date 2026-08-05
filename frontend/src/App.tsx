@@ -51,6 +51,7 @@ const RupturaVisita = lazyWithReload(() => import('./pages/visita/RupturaVisita'
 const ParrillaVisita = lazyWithReload(() => import('./pages/visita/ParrillaVisita'));
 const CostoRoiVisita = lazyWithReload(() => import('./pages/visita/CostoRoiVisita'));
 const PlanBrechas = lazyWithReload(() => import('./pages/formacion/PlanBrechas'));
+const CalendarioCoaching = lazyWithReload(() => import('./pages/formacion/CalendarioCoaching'));
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
 
@@ -169,6 +170,9 @@ function AppRoutes() {
         {/* Plan de Cierre de Brechas (Formación §12). Sin `recurso`: el router backend gatea
             por rol (require_roles), no por la matriz RBAC — un recurso inexistente denegaría a todos. */}
         <Route path="formacion/brechas" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','CAPACITACION','PRESIDENCIA','GERENTE_MEDICO']}><PlanBrechas /></ProtectedRoute>} />
+        {/* Calendario de Coaching (Formación §7). Sin `recurso`: el router backend gatea
+            por rol (require_roles), no por la matriz RBAC — un recurso inexistente denegaría a todos. */}
+        <Route path="formacion/calendario" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','PRESIDENCIA','GERENTE_MEDICO','CAPACITACION']}><CalendarioCoaching /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to={inicio} />} />
     </Routes>
