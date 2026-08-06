@@ -164,6 +164,33 @@ def test_iniciar_reintenta_una_vez_y_luego_falla(db, monkeypatch):
         sim.iniciar(s, rm.id, estilo="Directivo", medico="Dra. Reyes", genero="F")
 
 
+def test_iniciar_trunca_tecnica_objecion_larga_de_la_ia(db, monkeypatch):
+    """Bug real (verificación en vivo con IA real): la IA a veces devuelve un
+    nombre de técnica de más de 40 caracteres (columna String(40)) y el INSERT
+    reventaba con StringDataRightTruncation (500). Se debe truncar, no rechazar
+    el escenario."""
+    tecnica_larga = ("Tecnica de manejo de objeciones extremadamente larga "
+                      "que supera los cuarenta caracteres")
+    assert len(tecnica_larga) > 40
+    escenario_tecnica_larga = json.loads(json.dumps(ESCENARIO_OK))
+    ronda_desarrollo = next(r for r in escenario_tecnica_larga["rondas"]
+                            if r["fase_more"] == "Desarrollo")
+    ronda_desarrollo["tecnica_objecion"] = tecnica_larga
+
+    s, rm, _ = db
+    monkeypatch.setattr(sim.conexion_service, "adaptador_texto",
+                        lambda _db=None: _TextoStub(json.dumps(escenario_tecnica_larga)))
+    r = sim.iniciar(s, rm.id, estilo="Analitico", medico="Dr. Peralta", genero="M")
+
+    from app.models.formacion import SimulacroRonda
+    ronda_bd = (s.query(SimulacroRonda)
+                .filter(SimulacroRonda.sesion_id == r["sesion"]["id"],
+                        SimulacroRonda.fase_more == "Desarrollo").one())
+    assert ronda_bd.tecnica_objecion is not None
+    assert len(ronda_bd.tecnica_objecion) <= 40
+    assert ronda_bd.tecnica_objecion == tecnica_larga[:40]
+
+
 def _iniciar_ok(s, rm, monkeypatch):
     monkeypatch.setattr(sim.conexion_service, "adaptador_texto",
                         lambda _db=None: _TextoStub(json.dumps(ESCENARIO_OK)))

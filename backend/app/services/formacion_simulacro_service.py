@@ -145,9 +145,13 @@ def iniciar(db: Session, rm_id: int, estilo: str | None = None,
     db.add(sesion)
     db.flush()
     for r in rondas_datos:
+        # SimulacroRonda.tecnica_objecion es String(40): es un metadato
+        # descriptivo (no una clave), así que truncamos en vez de rechazar el
+        # escenario si la IA devuelve un nombre de técnica más largo.
+        _tecnica = r.get("tecnica_objecion")
         db.add(SimulacroRonda(
             sesion_id=sesion.id, fase_more=r["fase_more"],
-            tecnica_objecion=r.get("tecnica_objecion"),
+            tecnica_objecion=(_tecnica[:40] if _tecnica else None),
             objecion_texto=r["objecion_texto"], opciones=r["opciones"],
             opcion_correcta=r["opcion_correcta"],
             retroalimentacion=r.get("retroalimentacion")))
