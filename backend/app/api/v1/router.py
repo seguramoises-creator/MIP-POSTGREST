@@ -23,6 +23,7 @@ from app.api.v1.routers.formacion     import router as formacion_router
 from app.api.v1.routers.formacion_refuerzo import router as formacion_refuerzo_router
 from app.api.v1.routers.formacion_brechas import router as formacion_brechas_router
 from app.api.v1.routers.formacion_calendario import router as formacion_calendario_router
+from app.api.v1.routers.formacion_simulacro import router as formacion_simulacro_router
 from app.api.v1.routers.examenes      import intentos_router
 from app.api.v1.routers.visita        import router as visita_router
 from app.api.v1.routers.coaching_more import router as coaching_more_router
@@ -56,5 +57,6 @@ api_router.include_router(formacion_router)
 api_router.include_router(formacion_refuerzo_router)  # Refuerzo de Memoria + KPI (10 y 11)  # Onboarding + Biblioteca (secciones 4 y 5)
 api_router.include_router(formacion_brechas_router)  # Plan de Cierre de Brechas (12) — motor de reglas sobre el KPI
 api_router.include_router(formacion_calendario_router)  # Calendario de Coaching (7) — consume el cuadrante LSII
+api_router.include_router(formacion_simulacro_router)  # Simulacro de Venta con IA (9)
 api_router.include_router(ia_conexiones_router)  # Conexiones de IA configurables (seccion 20)
 api_router.include_router(farmacias_router)  # Módulo de Farmacias (Config.DIM_Farmacia / Visita.*)
