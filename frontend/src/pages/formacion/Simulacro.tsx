@@ -181,7 +181,7 @@ export default function Simulacro() {
 // gerenciales). Reutiliza los endpoints /mis-sesiones y /resumen ya existentes.
 function PantallaInicio({ iniciar, abrir }: {
   iniciar: { isPending: boolean; isError: boolean; mutate: () => void };
-  abrir: { isPending: boolean; isError: boolean; variables?: number; mutate: (id: number) => void };
+  abrir: { isPending: boolean; isError: boolean; variables?: number; mutate: (id: number) => void; reset: () => void };
 }) {
   const rol = useAuthStore((s) => s.rol);
   const esRM = rol === 'REPRESENTANTE_MEDICO';
@@ -201,7 +201,7 @@ function PantallaInicio({ iniciar, abrir }: {
           </Alert>
         )}
         <Button variant="contained" size="large" startIcon={<RecordVoiceOver />}
-          disabled={iniciar.isPending} onClick={() => iniciar.mutate()}>
+          disabled={iniciar.isPending} onClick={() => { abrir.reset(); iniciar.mutate(); }}>
           {iniciar.isPending ? 'Generando escenario…' : 'Nueva práctica'}
         </Button>
         {iniciar.isPending && <LinearProgress sx={{ mt: 2 }} />}
@@ -218,8 +218,14 @@ function PantallaInicio({ iniciar, abrir }: {
           ) : (historial.data || []).map((s) => {
             const abriendoEsta = abrir.isPending && abrir.variables === s.id;
             return (
-              <Card key={s.id} elevation={0} role="button"
+              <Card key={s.id} elevation={0} role="button" tabIndex={0}
                 onClick={() => { if (!abrir.isPending) abrir.mutate(s.id); }}
+                onKeyDown={(e) => {
+                  if ((e.key === 'Enter' || e.key === ' ') && !abrir.isPending) {
+                    e.preventDefault();
+                    abrir.mutate(s.id);
+                  }
+                }}
                 sx={{
                   border: '1px solid #e0e7ef', borderRadius: 2, mb: 1,
                   cursor: abrir.isPending ? 'default' : 'pointer',
