@@ -147,3 +147,22 @@ def iniciar(db: Session, rm_id: int, estilo: str | None = None,
              .filter(SimulacroRonda.sesion_id == sesion.id)
              .order_by(SimulacroRonda.id).all())
     return {"sesion": _sesion_publica(sesion), "rondas": [ronda_publica(x) for x in filas]}
+
+
+def responder(db: Session, ronda_id: int, opcion: str,
+              rm_id_scope: int | None = None) -> dict:
+    """Registra la elección y revela la correcta + retro. `rm_id_scope`, si se da,
+    debe coincidir con el dueño de la sesión (None = privilegiado/ADMIN)."""
+    r = db.get(SimulacroRonda, ronda_id)
+    if r is None:
+        raise ValueError("Ronda no encontrada")
+    sesion = db.get(SimulacroSesion, r.sesion_id)
+    if rm_id_scope is not None and sesion.rm_id != rm_id_scope:
+        raise PermisoError("Esta ronda no es de tu sesión.")
+    if r.opcion_seleccionada is not None:
+        raise ValueError("Esta ronda ya fue respondida.")
+    r.opcion_seleccionada = opcion
+    r.es_correcta = (opcion == r.opcion_correcta)
+    db.commit()
+    return {"es_correcta": r.es_correcta, "opcion_correcta": r.opcion_correcta,
+            "retroalimentacion": r.retroalimentacion}

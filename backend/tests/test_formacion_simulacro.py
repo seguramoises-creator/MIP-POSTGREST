@@ -152,3 +152,43 @@ def test_iniciar_reintenta_una_vez_y_luego_falla(db, monkeypatch):
                         lambda _db=None: _TextoStub("basura no json"))
     with pytest.raises(sim.SimulacroIAError):
         sim.iniciar(s, rm.id, estilo="Directivo", medico="Dra. Reyes", genero="F")
+
+
+def _iniciar_ok(s, rm, monkeypatch):
+    monkeypatch.setattr(sim.conexion_service, "adaptador_texto",
+                        lambda _db=None: _TextoStub(json.dumps(ESCENARIO_OK)))
+    return sim.iniciar(s, rm.id, estilo="Amistoso", medico="Dra. Fermín", genero="F")
+
+
+def test_responder_correcto_revela_correcta_y_retro(db, monkeypatch):
+    s, rm, _ = db
+    r = _iniciar_ok(s, rm, monkeypatch)
+    ronda_id = r["rondas"][0]["id"]      # Apertura, correcta = B
+    res = sim.responder(s, ronda_id, "B")
+    assert res["es_correcta"] is True
+    assert res["opcion_correcta"] == "B"
+    assert "puerta" in res["retroalimentacion"]
+
+
+def test_responder_incorrecto_tambien_revela(db, monkeypatch):
+    s, rm, _ = db
+    r = _iniciar_ok(s, rm, monkeypatch)
+    res = sim.responder(s, r["rondas"][0]["id"], "A")
+    assert res["es_correcta"] is False
+    assert res["opcion_correcta"] == "B"
+
+
+def test_no_se_responde_dos_veces(db, monkeypatch):
+    s, rm, _ = db
+    r = _iniciar_ok(s, rm, monkeypatch)
+    rid = r["rondas"][0]["id"]
+    sim.responder(s, rid, "A")
+    with pytest.raises(ValueError):
+        sim.responder(s, rid, "B")
+
+
+def test_un_rm_ajeno_no_puede_responder(db, monkeypatch):
+    s, rm, _ = db
+    r = _iniciar_ok(s, rm, monkeypatch)
+    with pytest.raises(sim.PermisoError):
+        sim.responder(s, r["rondas"][0]["id"], "B", rm_id_scope=rm.id + 999)
