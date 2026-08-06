@@ -11,7 +11,9 @@ from app.models import (  # noqa: F401
     cat_models, coaching_more_models, dimensiones, exam_models, formacion,
     hechos, ia_conexion, integracion_ext, seguridad_rbac, usuario, visita,
 )
+from app.api.v1.routers import formacion_simulacro as rt
 from app.models.dimensiones import Gerente, Linea, Pais, RepresentanteMedico
+from app.models.usuario import Rol, Usuario
 from app.services import formacion_simulacro_service as sim
 
 BD_PRUEBA = "vista_test_simulacro"
@@ -236,3 +238,25 @@ def test_mis_sesiones_y_resumen(db, monkeypatch):
     assert len(sim.mis_sesiones(s, rm.id)) == 1
     fila = next(f for f in sim.resumen(s) if f["rm_id"] == rm.id)
     assert fila["practicas"] == 1
+
+
+# --- RBAC de lectura role-aware (§ endurecimiento del router) ---
+
+def test_rm_ids_visibles_admin_ve_todos(db):
+    s, rm, gd = db
+    usuario = Usuario(rol=Rol.ADMIN)
+    assert rt._rm_ids_visibles(s, usuario) is None
+
+
+def test_rm_ids_visibles_gerente_distrito_ve_su_equipo(db):
+    s, rm, gd = db
+    usuario = Usuario(rol=Rol.GERENTE_DISTRITO, gerente_id=gd.id)
+    vis = rt._rm_ids_visibles(s, usuario)
+    assert vis is not None
+    assert rm.id in vis
+
+
+def test_rm_ids_visibles_representante_medico_solo_el_suyo(db):
+    s, rm, _ = db
+    usuario = Usuario(rol=Rol.REPRESENTANTE_MEDICO, rm_id=rm.id)
+    assert rt._rm_ids_visibles(s, usuario) == [rm.id]

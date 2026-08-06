@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_active_user, require_roles
+from app.core.deps import require_roles
 from app.db.database import get_db
 from app.models.usuario import Rol, Usuario
 from app.services import formacion_simulacro_service as sim
@@ -32,6 +32,23 @@ def _rm_propio(usuario: Usuario) -> int:
 def _scope(usuario: Usuario) -> int | None:
     """rm_id a exigir como dueño; None para ADMIN (sin restricción)."""
     return None if usuario.rol == Rol.ADMIN else _rm_propio(usuario)
+
+
+def _rm_ids_visibles(db: Session, usuario: Usuario) -> list[int] | None:
+    """None = ve todos; lista = restringido a esos rm_id."""
+    from app.models.dimensiones import RepresentanteMedico
+    if usuario.rol in (Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.CAPACITACION,
+                       Rol.PRESIDENCIA, Rol.GERENTE_MEDICO):
+        return None
+    if usuario.rol == Rol.GERENTE_DISTRITO:
+        gid = getattr(usuario, "gerente_id", None)
+        if gid is None:
+            return []
+        filas = (db.query(RepresentanteMedico.id)
+                 .filter(RepresentanteMedico.gerente_id == gid).all())
+        return [row[0] for row in filas] or [-1]
+    # REPRESENTANTE_MEDICO u otro
+    return [_rm_propio(usuario)]
 
 
 class IniciarEntrada(BaseModel):
@@ -60,6 +77,8 @@ def iniciar(datos: IniciarEntrada, db: Session = Depends(get_db),
 
 @router.get("/mis-sesiones", summary="Historial de prácticas del RM")
 def mis_sesiones(db: Session = Depends(get_db), usuario: Usuario = RequirePractica):
+    if usuario.rol == Rol.ADMIN and getattr(usuario, "rm_id", None) is None:
+        return []
     return sim.mis_sesiones(db, _rm_propio(usuario))
 
 
@@ -69,21 +88,27 @@ def sesion(sesion_id: int, db: Session = Depends(get_db), usuario: Usuario = Req
         d = sim.detalle(db, sesion_id)
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    scope = _scope(usuario)
-    if scope is not None and d["sesion"]["rm_id"] != scope:
+    vis = _rm_ids_visibles(db, usuario)
+    if vis is not None and d["sesion"]["rm_id"] not in vis:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No es tu sesión.")
     return d
 
 
 @router.get("/ronda/{ronda_id}/voz", summary="Audio de la objeción (o señal Web Speech)")
-def voz(ronda_id: int, db: Session = Depends(get_db), _: Usuario = RequireLectura):
+def voz(ronda_id: int, db: Session = Depends(get_db), usuario: Usuario = RequireLectura):
+    ronda = db.get(sim.SimulacroRonda, ronda_id)
+    if ronda is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ronda no encontrada")
+    sesion = db.get(sim.SimulacroSesion, ronda.sesion_id)
+    vis = _rm_ids_visibles(db, usuario)
+    if vis is not None and (sesion is None or sesion.rm_id not in vis):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No es tu sesión.")
     try:
         audio = sim.voz_ronda(db, ronda_id)
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     if audio.en_navegador:
-        r = db.get(sim.SimulacroRonda, ronda_id)
-        return {"en_navegador": True, "texto": r.objecion_texto, "aviso": audio.aviso}
+        return {"en_navegador": True, "texto": ronda.objecion_texto, "aviso": audio.aviso}
     return StreamingResponse(io.BytesIO(audio.contenido or b""),
                              media_type=audio.mime or "audio/mpeg")
 
@@ -91,6 +116,8 @@ def voz(ronda_id: int, db: Session = Depends(get_db), _: Usuario = RequireLectur
 @router.post("/ronda/{ronda_id}/responder", summary="Responder — revela la correcta")
 def responder(ronda_id: int, datos: ResponderEntrada, db: Session = Depends(get_db),
               usuario: Usuario = RequirePractica):
+    if db.get(sim.SimulacroRonda, ronda_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Ronda no encontrada")
     try:
         return sim.responder(db, ronda_id, datos.opcion, rm_id_scope=_scope(usuario))
     except sim.PermisoError as exc:
@@ -111,6 +138,4 @@ def finalizar(sesion_id: int, db: Session = Depends(get_db), usuario: Usuario = 
 
 @router.get("/resumen", summary="Agregado de prácticas (GD/Capacitación)")
 def resumen(db: Session = Depends(get_db), usuario: Usuario = RequireLectura):
-    if usuario.rol == Rol.REPRESENTANTE_MEDICO:
-        return sim.resumen(db, [_rm_propio(usuario)])
-    return sim.resumen(db)
+    return sim.resumen(db, _rm_ids_visibles(db, usuario))
