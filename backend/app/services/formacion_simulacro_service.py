@@ -200,3 +200,56 @@ def finalizar(db: Session, sesion_id: int, rm_id_scope: int | None = None) -> di
     sesion.finalizada = True
     db.commit()
     return {"apertura": ap, "desarrollo": de, "cierre": ci, "general": general}
+
+
+def voz_ronda(db: Session, ronda_id: int):
+    """Audio de la objeción: bytes si hay proveedor real, o Audio(en_navegador)."""
+    r = db.get(SimulacroRonda, ronda_id)
+    if r is None:
+        raise ValueError("Ronda no encontrada")
+    return conexion_service.adaptador_voz(db).sintetizar(r.objecion_texto)
+
+
+def detalle(db: Session, sesion_id: int) -> dict:
+    sesion = db.get(SimulacroSesion, sesion_id)
+    if sesion is None:
+        raise ValueError("Sesión no encontrada")
+    rondas = (db.query(SimulacroRonda)
+              .filter(SimulacroRonda.sesion_id == sesion_id)
+              .order_by(SimulacroRonda.id).all())
+    res = db.get(SimulacroResultado, sesion_id)
+    resultado = None
+    if res is not None:
+        resultado = {"apertura": res.calificacion_apertura,
+                     "desarrollo": res.calificacion_desarrollo,
+                     "cierre": res.calificacion_cierre,
+                     "general": float(res.calificacion_general) if res.calificacion_general is not None else None}
+    return {"sesion": _sesion_publica(sesion),
+            "rondas": [ronda_publica(x) for x in rondas], "resultado": resultado}
+
+
+def mis_sesiones(db: Session, rm_id: int) -> list[dict]:
+    filas = (db.query(SimulacroSesion)
+             .filter(SimulacroSesion.rm_id == rm_id)
+             .order_by(SimulacroSesion.fecha.desc()).all())
+    return [_sesion_publica(s) | {"fecha": s.fecha} for s in filas]
+
+
+def resumen(db: Session, rm_ids: list[int] | None = None) -> list[dict]:
+    """Agregado por RM: nº de prácticas finalizadas y última general."""
+    q = db.query(SimulacroSesion)
+    if rm_ids is not None:
+        q = q.filter(SimulacroSesion.rm_id.in_(rm_ids or [-1]))
+    por_rm: dict[int, list[SimulacroSesion]] = {}
+    for s in q.all():
+        por_rm.setdefault(s.rm_id, []).append(s)
+    salida = []
+    for rm_id, sesiones in por_rm.items():
+        finalizadas = [s for s in sesiones if s.finalizada]
+        ultima = None
+        if finalizadas:
+            reciente = max(finalizadas, key=lambda s: s.fecha)
+            res = db.get(SimulacroResultado, reciente.id)
+            ultima = float(res.calificacion_general) if res and res.calificacion_general is not None else None
+        salida.append({"rm_id": rm_id, "practicas": len(finalizadas), "ultima_general": ultima})
+    return sorted(salida, key=lambda x: x["rm_id"])

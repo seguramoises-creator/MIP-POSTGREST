@@ -212,3 +212,27 @@ def test_finalizar_calcula_dpae_por_fase_y_general(db, monkeypatch):
     sim.finalizar(s, r["sesion"]["id"])
     assert s.query(SimulacroResultado).filter(
         SimulacroResultado.sesion_id == r["sesion"]["id"]).count() == 1
+
+
+def test_voz_ronda_usa_el_adaptador_de_voz(db, monkeypatch):
+    s, rm, _ = db
+    r = _iniciar_ok(s, rm, monkeypatch)
+    monkeypatch.setattr(sim.conexion_service, "adaptador_voz", lambda _db=None: _VozStub())
+    audio = sim.voz_ronda(s, r["rondas"][0]["id"])
+    assert audio.en_navegador is True
+
+
+def test_detalle_no_filtra_correctas_no_respondidas(db, monkeypatch):
+    s, rm, _ = db
+    r = _iniciar_ok(s, rm, monkeypatch)
+    d = sim.detalle(s, r["sesion"]["id"])
+    assert "opcion_correcta" not in json.dumps(d["rondas"])
+
+
+def test_mis_sesiones_y_resumen(db, monkeypatch):
+    s, rm, _ = db
+    r = _iniciar_ok(s, rm, monkeypatch)
+    sim.finalizar(s, r["sesion"]["id"])
+    assert len(sim.mis_sesiones(s, rm.id)) == 1
+    fila = next(f for f in sim.resumen(s) if f["rm_id"] == rm.id)
+    assert fila["practicas"] == 1
