@@ -120,7 +120,7 @@ export default function Simulacro() {
 
   // --- Pantalla de inicio (con historial del RM / resumen del equipo) ---
   if (!sesion) {
-    return <PantallaInicio iniciar={iniciar} />;
+    return <PantallaInicio iniciar={iniciar} abrir={abrir} />;
   }
 
   // --- Pantalla de ronda ---
@@ -179,8 +179,9 @@ export default function Simulacro() {
 
 // Pantalla de arranque: botón "Nueva práctica" + historial (RM) o resumen (roles
 // gerenciales). Reutiliza los endpoints /mis-sesiones y /resumen ya existentes.
-function PantallaInicio({ iniciar }: {
+function PantallaInicio({ iniciar, abrir }: {
   iniciar: { isPending: boolean; isError: boolean; mutate: () => void };
+  abrir: { isPending: boolean; isError: boolean; variables?: number; mutate: (id: number) => void };
 }) {
   const rol = useAuthStore((s) => s.rol);
   const esRM = rol === 'REPRESENTANTE_MEDICO';
@@ -208,18 +209,34 @@ function PantallaInicio({ iniciar }: {
 
       {esRM ? (
         <Box sx={{ mt: 4 }}>
+          {abrir.isError && (
+            <Alert severity="warning" sx={{ mb: 2 }}>No se pudo abrir la práctica.</Alert>
+          )}
           <Typography variant="subtitle1" fontWeight={700} mb={1}>Mis prácticas</Typography>
           {(historial.data || []).length === 0 ? (
             <Typography color="text.secondary" variant="body2">Aún no has practicado.</Typography>
-          ) : (historial.data || []).map((s) => (
-            <Card key={s.id} elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 1 }}>
-              <CardContent sx={{ py: 1, display: 'flex', justifyContent: 'space-between' }}>
-                <span>{s.medico} · {s.estilo}</span>
-                <Chip size="small" label={s.finalizada ? 'Finalizada' : 'En curso'}
-                  color={s.finalizada ? 'success' : 'default'} />
-              </CardContent>
-            </Card>
-          ))}
+          ) : (historial.data || []).map((s) => {
+            const abriendoEsta = abrir.isPending && abrir.variables === s.id;
+            return (
+              <Card key={s.id} elevation={0} role="button"
+                onClick={() => { if (!abrir.isPending) abrir.mutate(s.id); }}
+                sx={{
+                  border: '1px solid #e0e7ef', borderRadius: 2, mb: 1,
+                  cursor: abrir.isPending ? 'default' : 'pointer',
+                  opacity: abrir.isPending && !abriendoEsta ? 0.6 : 1,
+                  '&:hover': { borderColor: abrir.isPending ? '#e0e7ef' : '#90a4c4' },
+                }}>
+                <CardContent sx={{ py: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>{s.medico} · {s.estilo}</span>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    {abriendoEsta && <CircularProgress size={16} />}
+                    <Chip size="small" label={s.finalizada ? 'Finalizada' : 'En curso'}
+                      color={s.finalizada ? 'success' : 'default'} />
+                  </Stack>
+                </CardContent>
+              </Card>
+            );
+          })}
         </Box>
       ) : (
         <Box sx={{ mt: 4 }}>
