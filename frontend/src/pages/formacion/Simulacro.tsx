@@ -14,7 +14,7 @@ import { RecordVoiceOver, VolumeUp } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import {
   iniciarSimulacro, responderRonda, finalizarSimulacro, vozRonda,
-  misSesionesSimulacro, resumenSimulacro,
+  misSesionesSimulacro, resumenSimulacro, detalleSimulacro,
   type SimulacroIniciado, type RondaSimulacro, type ResultadoSimulacro,
 } from '../../services/formacion.service';
 
@@ -53,6 +53,28 @@ export default function Simulacro() {
   const finalizar = useMutation({
     mutationFn: (sid: number) => finalizarSimulacro(sid),
     onSuccess: (r) => setResultado(r),
+  });
+  const abrir = useMutation({
+    mutationFn: (id: number) => detalleSimulacro(id),
+    onSuccess: (d) => {
+      // Finalizada: el detalle trae el resultado → pantalla de resultado.
+      if (d.resultado) {
+        setResultado(d.resultado);
+        return;
+      }
+      // En curso: hidratar y caer en la primera ronda pendiente.
+      const pendiente = d.rondas.findIndex((r) => r.opcion_seleccionada === null);
+      if (pendiente === -1) {
+        // Todas respondidas pero sin finalizar: cerrar la práctica directo.
+        finalizar.mutate(d.sesion.id);
+        return;
+      }
+      setSesion({ sesion: d.sesion, rondas: d.rondas });
+      setIdx(pendiente);
+      setFeedback(null);
+      setSeleccion(null);
+      reproducir(d.rondas[pendiente]);
+    },
   });
 
   async function reproducir(ronda: RondaSimulacro) {
