@@ -192,3 +192,23 @@ def test_un_rm_ajeno_no_puede_responder(db, monkeypatch):
     r = _iniciar_ok(s, rm, monkeypatch)
     with pytest.raises(sim.PermisoError):
         sim.responder(s, r["rondas"][0]["id"], "B", rm_id_scope=rm.id + 999)
+
+
+def test_finalizar_calcula_dpae_por_fase_y_general(db, monkeypatch):
+    s, rm, _ = db
+    r = _iniciar_ok(s, rm, monkeypatch)
+    by_fase = {x["fase_more"]: x["id"] for x in r["rondas"]}
+    sim.responder(s, by_fase["Apertura"], "B")    # correcto → 1.0 → 4
+    sim.responder(s, by_fase["Desarrollo"], "A")  # incorrecto → 0.0 → 1
+    # Cierre queda SIN responder → cuenta como incorrecto → 0.0 → 1
+    res = sim.finalizar(s, r["sesion"]["id"])
+    assert res["apertura"] == 4
+    assert res["desarrollo"] == 1
+    assert res["cierre"] == 1
+    assert res["general"] == 2.0   # (4+1+1)/3 = 2.0
+    # La sesión queda finalizada y es re-ejecutable sin duplicar.
+    from app.models.formacion import SimulacroResultado, SimulacroSesion
+    assert s.get(SimulacroSesion, r["sesion"]["id"]).finalizada is True
+    sim.finalizar(s, r["sesion"]["id"])
+    assert s.query(SimulacroResultado).filter(
+        SimulacroResultado.sesion_id == r["sesion"]["id"]).count() == 1

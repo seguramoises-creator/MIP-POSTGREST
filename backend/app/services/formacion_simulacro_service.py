@@ -10,7 +10,9 @@ import random
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.models.formacion import SimulacroRonda, SimulacroSesion
+from decimal import Decimal
+
+from app.models.formacion import SimulacroResultado, SimulacroRonda, SimulacroSesion
 from app.services.examen_ia_service import _extraer_json
 from app.services.ia import conexion_service
 
@@ -166,3 +168,35 @@ def responder(db: Session, ronda_id: int, opcion: str,
     db.commit()
     return {"es_correcta": r.es_correcta, "opcion_correcta": r.opcion_correcta,
             "retroalimentacion": r.retroalimentacion}
+
+
+def _fase_escala(rondas: list[SimulacroRonda], fase: str) -> int:
+    """Escala D/P/A/E de una fase: aciertos / total (sin responder = incorrecto)."""
+    de_fase = [r for r in rondas if r.fase_more == fase]
+    if not de_fase:
+        return 1
+    aciertos = sum(1 for r in de_fase if r.es_correcta)
+    return escala(aciertos / len(de_fase))
+
+
+def finalizar(db: Session, sesion_id: int, rm_id_scope: int | None = None) -> dict:
+    sesion = db.get(SimulacroSesion, sesion_id)
+    if sesion is None:
+        raise ValueError("Sesión no encontrada")
+    if rm_id_scope is not None and sesion.rm_id != rm_id_scope:
+        raise PermisoError("Esta sesión no es tuya.")
+    rondas = (db.query(SimulacroRonda)
+              .filter(SimulacroRonda.sesion_id == sesion_id).all())
+    ap = _fase_escala(rondas, "Apertura")
+    de = _fase_escala(rondas, "Desarrollo")
+    ci = _fase_escala(rondas, "Cierre")
+    general = round((ap + de + ci) / 3, 2)
+
+    db.query(SimulacroResultado).filter(
+        SimulacroResultado.sesion_id == sesion_id).delete(synchronize_session=False)
+    db.add(SimulacroResultado(
+        sesion_id=sesion_id, calificacion_apertura=ap, calificacion_desarrollo=de,
+        calificacion_cierre=ci, calificacion_general=Decimal(str(general))))
+    sesion.finalizada = True
+    db.commit()
+    return {"apertura": ap, "desarrollo": de, "cierre": ci, "general": general}
