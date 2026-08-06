@@ -131,3 +131,24 @@ def test_rechaza_desarrollo_sin_tecnica():
 def test_rechaza_json_no_json():
     with pytest.raises(sim.SimulacroIAError):
         sim.parsear_escenario("esto no es json")
+
+
+def test_iniciar_persiste_las_tres_rondas_sin_filtrar_la_correcta(db, monkeypatch):
+    s, rm, _ = db
+    monkeypatch.setattr(sim.conexion_service, "adaptador_texto",
+                        lambda _db=None: _TextoStub(json.dumps(ESCENARIO_OK)))
+    r = sim.iniciar(s, rm.id, estilo="Analitico", medico="Dr. Peralta", genero="M")
+    assert r["sesion"]["estilo"] == "Analitico"
+    assert len(r["rondas"]) == 3
+    serial = json.dumps(r["rondas"])
+    assert "opcion_correcta" not in serial and "retroalimentacion" not in serial
+    # Las opciones sí viajan (sin ellas no hay nada que elegir).
+    assert set(r["rondas"][0]["opciones"]) >= {"A", "B"}
+
+
+def test_iniciar_reintenta_una_vez_y_luego_falla(db, monkeypatch):
+    s, rm, _ = db
+    monkeypatch.setattr(sim.conexion_service, "adaptador_texto",
+                        lambda _db=None: _TextoStub("basura no json"))
+    with pytest.raises(sim.SimulacroIAError):
+        sim.iniciar(s, rm.id, estilo="Directivo", medico="Dra. Reyes", genero="F")

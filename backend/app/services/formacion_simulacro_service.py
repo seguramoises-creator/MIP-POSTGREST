@@ -10,7 +10,9 @@ import random
 from loguru import logger
 from sqlalchemy.orm import Session
 
+from app.models.formacion import SimulacroRonda, SimulacroSesion
 from app.services.examen_ia_service import _extraer_json
+from app.services.ia import conexion_service
 
 ESTILOS: tuple[str, ...] = ("Directivo", "Analitico", "Amistoso", "Expresivo")
 FASES: tuple[str, ...] = ("Apertura", "Desarrollo", "Cierre")
@@ -89,3 +91,59 @@ def parsear_escenario(texto: str) -> list[dict]:
         if fase == "Desarrollo" and not r.get("tecnica_objecion"):
             raise SimulacroIAError("La ronda de Desarrollo no nombra la técnica.")
     return rondas
+
+
+def ronda_publica(r: SimulacroRonda) -> dict:
+    """Lo que ve el RM. La correcta y la retro SOLO tras responder (§10.7)."""
+    d = {"id": r.id, "fase_more": r.fase_more, "tecnica_objecion": r.tecnica_objecion,
+         "objecion_texto": r.objecion_texto, "opciones": r.opciones,
+         "opcion_seleccionada": r.opcion_seleccionada, "es_correcta": r.es_correcta}
+    if r.opcion_seleccionada is not None:
+        d["opcion_correcta"] = r.opcion_correcta
+        d["retroalimentacion"] = r.retroalimentacion
+    return d
+
+
+def _sesion_publica(s: SimulacroSesion) -> dict:
+    return {"id": s.id, "rm_id": s.rm_id, "estilo": s.estilo_social_asignado,
+            "medico": s.medico_simulado, "genero": s.genero_simulado,
+            "finalizada": s.finalizada}
+
+
+def iniciar(db: Session, rm_id: int, estilo: str | None = None,
+            medico: str | None = None, genero: str | None = None) -> dict:
+    """Genera el escenario con IA y arranca la sesión. 1 reintento si la IA
+    devuelve algo inválido; luego SimulacroIAError. SinConexionIA se propaga."""
+    if estilo is None:
+        estilo = random.choice(ESTILOS)
+    if medico is None:
+        medico, genero = random.choice(_MEDICOS)
+    prompt = construir_prompt(estilo, medico, genero)
+
+    rondas_datos = None
+    for intento in (1, 2):
+        texto = conexion_service.adaptador_texto(db).generar_texto(prompt)
+        try:
+            rondas_datos = parsear_escenario(texto)
+            break
+        except SimulacroIAError:
+            logger.warning(f"Simulacro: escenario IA inválido (intento {intento}).")
+    if rondas_datos is None:
+        raise SimulacroIAError("La IA no produjo un escenario válido tras el reintento.")
+
+    sesion = SimulacroSesion(rm_id=rm_id, estilo_social_asignado=estilo,
+                             medico_simulado=medico, genero_simulado=genero)
+    db.add(sesion)
+    db.flush()
+    for r in rondas_datos:
+        db.add(SimulacroRonda(
+            sesion_id=sesion.id, fase_more=r["fase_more"],
+            tecnica_objecion=r.get("tecnica_objecion"),
+            objecion_texto=r["objecion_texto"], opciones=r["opciones"],
+            opcion_correcta=r["opcion_correcta"],
+            retroalimentacion=r.get("retroalimentacion")))
+    db.commit()
+    filas = (db.query(SimulacroRonda)
+             .filter(SimulacroRonda.sesion_id == sesion.id)
+             .order_by(SimulacroRonda.id).all())
+    return {"sesion": _sesion_publica(sesion), "rondas": [ronda_publica(x) for x in filas]}
