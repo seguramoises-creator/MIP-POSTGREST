@@ -250,7 +250,7 @@ function DialogoCapsula({ ronda, onClose, onCreada }: {
     mutationFn: () => agregarCapsula(ronda!.id, {
       formato, enunciado, orden,
       opciones: esReto ? parseOpciones() : null,
-      opcion_correcta: esReto ? correcta : null,
+      opcion_correcta: esReto ? correcta.trim() : null,
       explicacion: explicacion || null,
     }),
     onSuccess: () => { setEnunciado(''); setCorrecta(''); setError(null); onCreada(); },
