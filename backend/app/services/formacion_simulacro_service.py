@@ -10,6 +10,8 @@ import random
 from loguru import logger
 from sqlalchemy.orm import Session
 
+from app.services.examen_ia_service import _extraer_json
+
 ESTILOS: tuple[str, ...] = ("Directivo", "Analitico", "Amistoso", "Expresivo")
 FASES: tuple[str, ...] = ("Apertura", "Desarrollo", "Cierre")
 
@@ -37,3 +39,53 @@ def escala(ratio: float) -> int:
     if ratio >= 0.50:
         return 2
     return 1
+
+
+def construir_prompt(estilo: str, medico: str, genero: str | None) -> str:
+    gen = {"F": "femenino", "M": "masculino"}.get(genero or "", "no especificado")
+    return (
+        "Eres un generador de simulacros de venta farmacéutica para entrenar a un "
+        "Representante Médico con el modelo MORE.\n"
+        f"El médico simulado es {medico} (género {gen}) y su estilo social es "
+        f"{estilo}. Genera un escenario con EXACTAMENTE una ronda por cada fase: "
+        "Apertura, Desarrollo y Cierre.\n"
+        "En cada ronda el médico plantea una OBJECIÓN realista acorde a su estilo, "
+        "y ofreces de 3 a 4 opciones de respuesta para el representante, UNA sola "
+        "correcta según MORE, con una retroalimentación breve del porqué.\n"
+        "La ronda de Desarrollo DEBE nombrar la técnica de manejo de objeciones "
+        "empleada (campo tecnica_objecion).\n"
+        "Responde SOLO con JSON válido, sin texto adicional, con esta forma:\n"
+        '{"rondas":[{"fase_more":"Apertura","objecion_texto":"...",'
+        '"opciones":{"A":"...","B":"...","C":"..."},"opcion_correcta":"B",'
+        '"retroalimentacion":"..."},'
+        '{"fase_more":"Desarrollo","tecnica_objecion":"...","objecion_texto":"...",'
+        '"opciones":{"A":"...","B":"..."},"opcion_correcta":"A","retroalimentacion":"..."},'
+        '{"fase_more":"Cierre","objecion_texto":"...","opciones":{"A":"...","B":"..."},'
+        '"opcion_correcta":"A","retroalimentacion":"..."}]}'
+    )
+
+
+def parsear_escenario(texto: str) -> list[dict]:
+    """Extrae y valida las rondas del JSON que devolvió la IA."""
+    try:
+        datos = _extraer_json(texto)
+    except Exception as exc:  # noqa: BLE001 — cualquier fallo de parseo es IA inválida
+        raise SimulacroIAError(f"La IA no devolvió JSON válido: {exc}") from exc
+    rondas = datos.get("rondas") if isinstance(datos, dict) else datos
+    if not isinstance(rondas, list) or not rondas:
+        raise SimulacroIAError("El escenario no trae una lista de rondas.")
+    for r in rondas:
+        fase = r.get("fase_more")
+        opciones = r.get("opciones")
+        correcta = r.get("opcion_correcta")
+        if fase not in FASES:
+            raise SimulacroIAError(f"Fase inválida: {fase!r}.")
+        if not isinstance(opciones, dict) or not opciones:
+            raise SimulacroIAError("Una ronda no trae opciones.")
+        if correcta not in opciones:
+            raise SimulacroIAError("La opción correcta no está entre las opciones.")
+        if not r.get("objecion_texto"):
+            raise SimulacroIAError("Una ronda no trae objeción.")
+        if fase == "Desarrollo" and not r.get("tecnica_objecion"):
+            raise SimulacroIAError("La ronda de Desarrollo no nombra la técnica.")
+    return rondas

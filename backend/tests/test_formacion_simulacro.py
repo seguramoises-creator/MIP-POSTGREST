@@ -103,3 +103,31 @@ class _VozStub:
     def sintetizar(self, texto, voz=None):
         from app.services.ia.base import Audio
         return Audio(en_navegador=True, aviso="prueba")
+
+
+def test_parsea_escenario_con_fences_markdown():
+    crudo = "```json\n" + json.dumps(ESCENARIO_OK) + "\n```"
+    rondas = sim.parsear_escenario(crudo)
+    assert [r["fase_more"] for r in rondas] == ["Apertura", "Desarrollo", "Cierre"]
+    assert rondas[1]["tecnica_objecion"] == "Sentir-Sintió-Descubrió"
+
+
+def test_rechaza_escenario_sin_opcion_correcta_valida():
+    malo = {"rondas": [{"fase_more": "Apertura", "objecion_texto": "x",
+                        "opciones": {"A": "s"}, "opcion_correcta": "Z",
+                        "retroalimentacion": "r"}]}
+    with pytest.raises(sim.SimulacroIAError):
+        sim.parsear_escenario(json.dumps(malo))
+
+
+def test_rechaza_desarrollo_sin_tecnica():
+    malo = {"rondas": [{"fase_more": "Desarrollo", "objecion_texto": "x",
+                        "opciones": {"A": "s", "B": "t"}, "opcion_correcta": "A",
+                        "retroalimentacion": "r"}]}
+    with pytest.raises(sim.SimulacroIAError):
+        sim.parsear_escenario(json.dumps(malo))
+
+
+def test_rechaza_json_no_json():
+    with pytest.raises(sim.SimulacroIAError):
+        sim.parsear_escenario("esto no es json")
