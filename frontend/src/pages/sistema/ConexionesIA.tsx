@@ -3,16 +3,18 @@
  * Administra proveedores de IA de texto y voz sin tocar código: listar, crear,
  * editar, probar, activar, eliminar. Credenciales siempre enmascaradas.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Box, Typography, Paper, Table, TableHead, TableBody, TableRow, TableCell,
   Button, Chip, Stack, Alert, Snackbar, Tooltip, IconButton, CircularProgress,
+  Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, FormControl, InputLabel, Select,
 } from '@mui/material';
 import { Add, Science, PlayArrow, Edit, Delete, Warning } from '@mui/icons-material';
 import {
   listarConexionesIA, probarConexionIA, activarConexionIA, eliminarConexionIA,
-  type Conexion, type CapacidadIA,
+  crearConexionIA, actualizarConexionIA, proveedoresIA,
+  type Conexion, type CapacidadIA, type ConexionEntrada, type ConexionCambio, type MetodoAuthIA,
 } from '../../services/iaConexiones.service';
 
 type Dialogo = { modo: 'crear' } | { modo: 'editar'; conexion: Conexion } | null;
@@ -125,12 +127,127 @@ export default function ConexionesIA() {
         </Paper>
       ))}
 
-      {/* Task 3 monta aquí <DialogoConexion dialogo={dialogo} onClose={() => setDialogo(null)} onGuardado={cerrarYRefetch} setAviso={setAviso} /> */}
+      <DialogoConexion dialogo={dialogo} onClose={() => setDialogo(null)}
+        onGuardado={cerrarYRefetch} setAviso={setAviso} />
 
       <Snackbar open={!!aviso} autoHideDuration={6000} onClose={() => setAviso(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         {aviso ? <Alert severity={aviso.sev} onClose={() => setAviso(null)}>{aviso.msg}</Alert> : undefined}
       </Snackbar>
     </Box>
+  );
+}
+
+function DialogoConexion({ dialogo, onClose, onGuardado, setAviso }: {
+  dialogo: { modo: 'crear' } | { modo: 'editar'; conexion: Conexion } | null;
+  onClose: () => void;
+  onGuardado: () => void;
+  setAviso: (a: { sev: 'success' | 'warning' | 'error'; msg: string }) => void;
+}) {
+  const editando = dialogo?.modo === 'editar' ? dialogo.conexion : null;
+  const [capacidad, setCapacidad] = useState<CapacidadIA>('texto');
+  const [nombre, setNombre] = useState('');
+  const [proveedor, setProveedor] = useState('');
+  const [metodo, setMetodo] = useState<MetodoAuthIA>('api_key');
+  const [endpoint, setEndpoint] = useState('');
+  const [modelo, setModelo] = useState('');
+  const [cred1, setCred1] = useState('');
+  const [cred2, setCred2] = useState('');
+  const [errorForm, setErrorForm] = useState<string | null>(null);
+
+  const proveedores = useQuery({ queryKey: ['ia-proveedores'], queryFn: proveedoresIA, enabled: !!dialogo });
+
+  // Precargar al abrir.
+  useEffect(() => {
+    if (!dialogo) return;
+    setErrorForm(null); setCred1(''); setCred2('');
+    if (editando) {
+      setCapacidad(editando.capacidad); setNombre(editando.nombre);
+      setProveedor(editando.proveedor_tipo); setMetodo(editando.metodo_auth as MetodoAuthIA);
+      setEndpoint(editando.endpoint_url || ''); setModelo(editando.modelo || '');
+    } else {
+      setCapacidad('texto'); setNombre(''); setProveedor('');
+      setMetodo('api_key'); setEndpoint(''); setModelo('');
+    }
+  }, [dialogo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const opcionesProveedor = proveedores.data ? proveedores.data[capacidad] : [];
+
+  const guardar = useMutation({
+    mutationFn: async () => {
+      if (editando) {
+        const body: ConexionCambio = {
+          nombre, proveedor_tipo: proveedor, metodo_auth: metodo,
+          endpoint_url: endpoint || null, modelo: modelo || null,
+        };
+        // Credenciales: solo enviar si el usuario escribió algo (no pisar la real).
+        if (cred1) body.credencial_1 = cred1;
+        if (cred2) body.credencial_2 = cred2;
+        return actualizarConexionIA(editando.id, body);
+      }
+      const body: ConexionEntrada = {
+        nombre, capacidad, proveedor_tipo: proveedor, metodo_auth: metodo,
+        endpoint_url: endpoint || null, modelo: modelo || null,
+        credencial_1: cred1 || null, credencial_2: cred2 || null,
+      };
+      return crearConexionIA(body);
+    },
+    onSuccess: () => { setAviso({ sev: 'success', msg: editando ? 'Conexión actualizada.' : 'Conexión creada.' }); onGuardado(); },
+    onError: (e: any) => {
+      const status = e?.response?.status;
+      const detalle = e?.response?.data?.detail;
+      if (status === 503) { setAviso({ sev: 'error', msg: detalle || 'Falta la llave de cifrado.' }); onClose(); return; }
+      setErrorForm(detalle || 'No se pudo guardar la conexión.');
+    },
+  });
+
+  const puedeGuardar = nombre.trim() && proveedor;
+
+  return (
+    <Dialog open={!!dialogo} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{editando ? 'Editar conexión' : 'Nueva conexión'}</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} sx={{ mt: 1 }}>
+          {errorForm && <Alert severity="error">{errorForm}</Alert>}
+          <TextField label="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} fullWidth required />
+          <FormControl fullWidth disabled={!!editando}>
+            <InputLabel>Capacidad</InputLabel>
+            <Select label="Capacidad" value={capacidad} onChange={(e) => { setCapacidad(e.target.value as CapacidadIA); setProveedor(''); }}>
+              <MenuItem value="texto">Texto</MenuItem>
+              <MenuItem value="voz">Voz</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl fullWidth required>
+            <InputLabel>Proveedor</InputLabel>
+            <Select label="Proveedor" value={proveedor} onChange={(e) => setProveedor(e.target.value)}>
+              {opcionesProveedor.map((p) => <MenuItem key={p} value={p}>{p}</MenuItem>)}
+            </Select>
+          </FormControl>
+          <FormControl fullWidth>
+            <InputLabel>Método de autenticación</InputLabel>
+            <Select label="Método de autenticación" value={metodo} onChange={(e) => setMetodo(e.target.value as MetodoAuthIA)}>
+              <MenuItem value="api_key">api_key</MenuItem>
+              <MenuItem value="usuario_password">usuario_password</MenuItem>
+            </Select>
+          </FormControl>
+          <TextField label="Endpoint URL (opcional)" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} fullWidth />
+          <TextField label="Modelo (opcional)" value={modelo} onChange={(e) => setModelo(e.target.value)} fullWidth />
+          <TextField label={metodo === 'usuario_password' ? 'Usuario' : 'API Key'} type="password" value={cred1}
+            onChange={(e) => setCred1(e.target.value)} fullWidth
+            placeholder={editando?.credencial_1 || ''}
+            helperText={editando ? 'Déjalo en blanco para conservar la actual.' : ''} />
+          <TextField label={metodo === 'usuario_password' ? 'Contraseña' : 'Credencial secundaria (opcional)'} type="password" value={cred2}
+            onChange={(e) => setCred2(e.target.value)} fullWidth
+            placeholder={editando?.credencial_2 || ''}
+            helperText={editando ? 'Déjalo en blanco para conservar la actual.' : ''} />
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Cancelar</Button>
+        <Button variant="contained" disabled={!puedeGuardar || guardar.isPending} onClick={() => guardar.mutate()}>
+          {guardar.isPending ? 'Guardando…' : 'Guardar'}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 }
