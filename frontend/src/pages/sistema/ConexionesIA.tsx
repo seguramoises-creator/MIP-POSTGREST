@@ -23,6 +23,18 @@ const CAPS: { key: CapacidadIA; titulo: string }[] = [
   { key: 'texto', titulo: 'Texto' }, { key: 'voz', titulo: 'Voz' },
 ];
 
+// Motivo real de un error de axios: 422 de FastAPI (detail = [{loc,msg}]) o detail string.
+// Sin esto, un detail en array se pasaría como hijo de React y tumbaría la pantalla.
+function detalleError(e: unknown, fallback: string): string {
+  const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  if (typeof d === 'string' && d.trim()) return d;
+  if (Array.isArray(d) && d[0]) {
+    const m = (d[0] as { msg?: string }).msg;
+    if (m) return m.replace('Value error, ', '');
+  }
+  return fallback;
+}
+
 export default function ConexionesIA() {
   const qc = useQueryClient();
   const [dialogo, setDialogo] = useState<Dialogo>(null);
@@ -42,7 +54,7 @@ export default function ConexionesIA() {
   const activar = useMutation({
     mutationFn: (id: number) => activarConexionIA(id),
     onSuccess: () => setAviso({ sev: 'success', msg: 'Conexión activada.' }),
-    onError: (e: any) => setAviso({ sev: 'warning', msg: e?.response?.data?.detail || 'No se pudo activar. Prueba la conexión primero.' }),
+    onError: (e: any) => setAviso({ sev: 'warning', msg: detalleError(e, 'No se pudo activar. Prueba la conexión primero.') }),
     onSettled: invalidar,
   });
   const eliminar = useMutation({
@@ -144,6 +156,7 @@ function DialogoConexion({ dialogo, onClose, onGuardado, setAviso }: {
   onGuardado: () => void;
   setAviso: (a: { sev: 'success' | 'warning' | 'error'; msg: string }) => void;
 }) {
+  const qc = useQueryClient();
   const editando = dialogo?.modo === 'editar' ? dialogo.conexion : null;
   const [capacidad, setCapacidad] = useState<CapacidadIA>('texto');
   const [nombre, setNombre] = useState('');
@@ -176,10 +189,16 @@ function DialogoConexion({ dialogo, onClose, onGuardado, setAviso }: {
   const guardar = useMutation({
     mutationFn: async () => {
       if (editando) {
-        const body: ConexionCambio = {
-          nombre, proveedor_tipo: proveedor, metodo_auth: metodo,
-          endpoint_url: endpoint || null, modelo: modelo || null,
-        };
+        // Solo incluir los campos realmente modificados: el backend solo desactiva
+        // la conexión (verificada=False, activa=False) si "cambios" no queda vacío,
+        // y para proveedor_tipo/metodo_auth basta con que la CLAVE esté presente
+        // (no compara valores) — así que nunca deben ir si no cambiaron.
+        const body: ConexionCambio = {};
+        if (nombre !== editando.nombre) body.nombre = nombre;
+        if (proveedor !== editando.proveedor_tipo) body.proveedor_tipo = proveedor;
+        if (metodo !== editando.metodo_auth) body.metodo_auth = metodo;
+        if (endpoint !== (editando.endpoint_url || '')) body.endpoint_url = endpoint;
+        if (modelo !== (editando.modelo || '')) body.modelo = modelo;
         // Credenciales: solo enviar si el usuario escribió algo (no pisar la real).
         if (cred1) body.credencial_1 = cred1;
         if (cred2) body.credencial_2 = cred2;
@@ -195,9 +214,13 @@ function DialogoConexion({ dialogo, onClose, onGuardado, setAviso }: {
     onSuccess: () => { setAviso({ sev: 'success', msg: editando ? 'Conexión actualizada.' : 'Conexión creada.' }); onGuardado(); },
     onError: (e: any) => {
       const status = e?.response?.status;
-      const detalle = e?.response?.data?.detail;
-      if (status === 503) { setAviso({ sev: 'error', msg: detalle || 'Falta la llave de cifrado.' }); onClose(); return; }
-      setErrorForm(detalle || 'No se pudo guardar la conexión.');
+      if (status === 503) {
+        setAviso({ sev: 'error', msg: detalleError(e, 'Falta la llave de cifrado.') });
+        qc.invalidateQueries({ queryKey: ['ia-conexiones'] });
+        onClose();
+        return;
+      }
+      setErrorForm(detalleError(e, 'No se pudo guardar la conexión.'));
     },
   });
 
@@ -209,7 +232,13 @@ function DialogoConexion({ dialogo, onClose, onGuardado, setAviso }: {
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {errorForm && <Alert severity="error">{errorForm}</Alert>}
-          <TextField label="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} fullWidth required />
+          {editando && (editando.activa || editando.verificada) && (
+            <Alert severity="info">
+              Al guardar un cambio, la conexión quedará sin verificar y desactivada. Deberás probarla y activarla de nuevo.
+            </Alert>
+          )}
+          <TextField label="Nombre" value={nombre} onChange={(e) => setNombre(e.target.value)} fullWidth required
+            inputProps={{ maxLength: 100 }} />
           <FormControl fullWidth disabled={!!editando}>
             <InputLabel>Capacidad</InputLabel>
             <Select label="Capacidad" value={capacidad} onChange={(e) => { setCapacidad(e.target.value as CapacidadIA); setProveedor(''); }}>
