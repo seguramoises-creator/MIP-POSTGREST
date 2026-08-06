@@ -52,6 +52,7 @@ const ParrillaVisita = lazyWithReload(() => import('./pages/visita/ParrillaVisit
 const CostoRoiVisita = lazyWithReload(() => import('./pages/visita/CostoRoiVisita'));
 const PlanBrechas = lazyWithReload(() => import('./pages/formacion/PlanBrechas'));
 const CalendarioCoaching = lazyWithReload(() => import('./pages/formacion/CalendarioCoaching'));
+const Simulacro = lazyWithReload(() => import('./pages/formacion/Simulacro'));
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
 
@@ -173,6 +174,9 @@ function AppRoutes() {
         {/* Calendario de Coaching (Formación §7). Sin `recurso`: el router backend gatea
             por rol (require_roles), no por la matriz RBAC — un recurso inexistente denegaría a todos. */}
         <Route path="formacion/calendario" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','PRESIDENCIA','GERENTE_MEDICO','CAPACITACION']}><CalendarioCoaching /></ProtectedRoute>} />
+        {/* Simulacro de Venta con IA (Formación §9). Sin `recurso`: el router backend gatea
+            por rol (require_roles), no por la matriz RBAC — un recurso inexistente denegaría a todos. */}
+        <Route path="formacion/simulacro" element={<ProtectedRoute allowedRoles={['ADMIN','REPRESENTANTE_MEDICO','GERENTE_PRODUCTIVIDAD','CAPACITACION','GERENTE_DISTRITO','PRESIDENCIA','GERENTE_MEDICO']}><Simulacro /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to={inicio} />} />
     </Routes>

@@ -10,7 +10,7 @@ import {
   SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn, Groups,
   MedicalServices, EditNote, EventNote, ReportProblem, Campaign, Paid,
   ChevronLeft, ChevronRight, Add, Remove, RateReview, LocalPharmacy, Storefront,
-  Insights, CalendarMonth,
+  Insights, CalendarMonth, RecordVoiceOver,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { usePuede } from '../../store/permisos.store';
@@ -94,6 +94,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Exámenes — Equipo', path: '/examenes-equipo', icon: <Groups />,             roles: ['GERENTE_DISTRITO'] },
       { label: 'Plan de Brechas',   path: '/formacion/brechas', icon: <Insights />,         roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'PRESIDENCIA', 'GERENTE_MEDICO'] },
       { label: 'Calendario de Coaching', path: '/formacion/calendario', icon: <CalendarMonth />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'PRESIDENCIA', 'GERENTE_MEDICO', 'CAPACITACION'] },
+      { label: 'Simulacro de Venta', path: '/formacion/simulacro', icon: <RecordVoiceOver />, roles: ['ADMIN', 'REPRESENTANTE_MEDICO', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'GERENTE_DISTRITO', 'PRESIDENCIA', 'GERENTE_MEDICO'] },
     ],
   },
   {
