@@ -123,3 +123,55 @@ export const obtenerFrecuenciasLSII = (paisCodigo: string) =>
 export const fijarFrecuenciaLSII = (p: {
   pais_codigo: string; cuadrante: string; visitas_por_ciclo: number; descripcion?: string | null;
 }) => api.put('/formacion/calendario-coaching/frecuencias', p).then((r) => r.data);
+
+// ── Simulacro de Venta con IA (§9) ────────────────────────────────────────
+export interface RondaSimulacro {
+  id: number; fase_more: string; tecnica_objecion: string | null;
+  objecion_texto: string; opciones: Record<string, string>;
+  opcion_seleccionada: string | null; es_correcta: boolean | null;
+  opcion_correcta?: string; retroalimentacion?: string;
+}
+export interface SesionSimulacro {
+  id: number; rm_id: number; estilo: string; medico: string;
+  genero: string | null; finalizada: boolean;
+}
+export interface SimulacroIniciado { sesion: SesionSimulacro; rondas: RondaSimulacro[]; }
+export interface ResultadoSimulacro {
+  apertura: number; desarrollo: number; cierre: number; general: number;
+}
+export interface VozRonda { en_navegador: boolean; texto?: string; aviso?: string; }
+
+export const iniciarSimulacro = (p: { estilo?: string; medico?: string; genero?: string; rm_id?: number } = {}) =>
+  api.post<SimulacroIniciado>('/formacion/simulacro/iniciar', p).then((r) => r.data);
+
+export const detalleSimulacro = (sesionId: number) =>
+  api.get<{ sesion: SesionSimulacro; rondas: RondaSimulacro[]; resultado: ResultadoSimulacro | null }>(
+    `/formacion/simulacro/sesion/${sesionId}`).then((r) => r.data);
+
+export const responderRonda = (rondaId: number, opcion: string) =>
+  api.post<{ es_correcta: boolean; opcion_correcta: string; retroalimentacion: string }>(
+    `/formacion/simulacro/ronda/${rondaId}/responder`, { opcion }).then((r) => r.data);
+
+export const finalizarSimulacro = (sesionId: number) =>
+  api.post<ResultadoSimulacro>(`/formacion/simulacro/sesion/${sesionId}/finalizar`).then((r) => r.data);
+
+export const misSesionesSimulacro = () =>
+  api.get<(SesionSimulacro & { fecha: string })[]>('/formacion/simulacro/mis-sesiones').then((r) => r.data);
+
+export const resumenSimulacro = () =>
+  api.get<{ rm_id: number; practicas: number; ultima_general: number | null }[]>(
+    '/formacion/simulacro/resumen').then((r) => r.data);
+
+/** Voz de una ronda: si el backend devuelve JSON `en_navegador`, sintetizar con
+ *  Web Speech; si devuelve audio (blob), reproducirlo. Se resuelve con la señal. */
+export const vozRonda = async (rondaId: number): Promise<VozRonda> => {
+  const r = await api.get(`/formacion/simulacro/ronda/${rondaId}/voz`, { responseType: 'blob' });
+  const tipo = String(r.headers['content-type'] || '');
+  if (tipo.includes('application/json')) {
+    const txt = await (r.data as Blob).text();
+    return JSON.parse(txt) as VozRonda;
+  }
+  const url = URL.createObjectURL(r.data as Blob);
+  new Audio(url).play().catch(() => {/* autoplay bloqueado: el botón lo reintenta */});
+  return { en_navegador: false };
+};
