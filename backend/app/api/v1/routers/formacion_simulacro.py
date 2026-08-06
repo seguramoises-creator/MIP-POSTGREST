@@ -107,6 +107,11 @@ def voz(ronda_id: int, db: Session = Depends(get_db), usuario: Usuario = Require
         audio = sim.voz_ronda(db, ronda_id)
     except ValueError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except SinConexionIA:
+        # Sin conexión de VOZ activa (config común: el respaldo de entorno solo
+        # cubre texto) — degrada a la misma señal que el adaptador de navegador,
+        # que el frontend ya sabe consumir (Web Speech), en vez de un 500.
+        return {"en_navegador": True, "texto": ronda.objecion_texto, "aviso": None}
     if audio.en_navegador:
         return {"en_navegador": True, "texto": ronda.objecion_texto, "aviso": audio.aviso}
     return StreamingResponse(io.BytesIO(audio.contenido or b""),

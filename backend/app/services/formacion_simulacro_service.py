@@ -86,6 +86,13 @@ def parsear_escenario(texto: str) -> list[dict]:
             raise SimulacroIAError(f"Fase inválida: {fase!r}.")
         if not isinstance(opciones, dict) or not opciones:
             raise SimulacroIAError("Una ronda no trae opciones.")
+        # SimulacroRonda.opcion_correcta/opcion_seleccionada son String(1) — una
+        # clave de más de 1 carácter pasaría esta validación y reventaría en el
+        # INSERT (500) en vez de dar un 502 controlado.
+        if any(len(str(k)) != 1 for k in opciones):
+            raise SimulacroIAError("Las claves de opción deben ser de 1 carácter.")
+        if len(str(correcta)) != 1:
+            raise SimulacroIAError("La opción correcta debe ser de 1 carácter.")
         if correcta not in opciones:
             raise SimulacroIAError("La opción correcta no está entre las opciones.")
         if not r.get("objecion_texto"):

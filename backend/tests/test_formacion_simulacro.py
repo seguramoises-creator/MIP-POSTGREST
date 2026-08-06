@@ -135,6 +135,14 @@ def test_rechaza_json_no_json():
         sim.parsear_escenario("esto no es json")
 
 
+def test_rechaza_clave_de_opcion_de_mas_de_un_caracter():
+    malo = {"rondas": [{"fase_more": "Apertura", "objecion_texto": "x",
+                        "opciones": {"A": "s", "AB": "t"}, "opcion_correcta": "A",
+                        "retroalimentacion": "r"}]}
+    with pytest.raises(sim.SimulacroIAError):
+        sim.parsear_escenario(json.dumps(malo))
+
+
 def test_iniciar_persiste_las_tres_rondas_sin_filtrar_la_correcta(db, monkeypatch):
     s, rm, _ = db
     monkeypatch.setattr(sim.conexion_service, "adaptador_texto",

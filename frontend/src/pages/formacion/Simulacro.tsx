@@ -37,10 +37,14 @@ export default function Simulacro() {
   const [idx, setIdx] = useState(0);
   const [feedback, setFeedback] = useState<{ correcta: string; retro: string; acerto: boolean } | null>(null);
   const [resultado, setResultado] = useState<ResultadoSimulacro | null>(null);
+  const [seleccion, setSeleccion] = useState<string | null>(null);
 
   const iniciar = useMutation({
     mutationFn: () => iniciarSimulacro(),
-    onSuccess: (d) => { setSesion(d); setIdx(0); setFeedback(null); setResultado(null); reproducir(d.rondas[0]); },
+    onSuccess: (d) => {
+      setSesion(d); setIdx(0); setFeedback(null); setResultado(null); setSeleccion(null);
+      reproducir(d.rondas[0]);
+    },
   });
   const responder = useMutation({
     mutationFn: (v: { rondaId: number; opcion: string }) => responderRonda(v.rondaId, v.opcion),
@@ -65,7 +69,7 @@ export default function Simulacro() {
     if (!sesion) return;
     if (esUltima) { finalizar.mutate(sesion.sesion.id); return; }
     const n = idx + 1;
-    setIdx(n); setFeedback(null); reproducir(sesion.rondas[n]);
+    setIdx(n); setFeedback(null); setSeleccion(null); reproducir(sesion.rondas[n]);
   }
 
   // --- Pantalla de resultado ---
@@ -119,7 +123,7 @@ export default function Simulacro() {
 
       <Stack spacing={1}>
         {Object.entries(ronda!.opciones).map(([k, v]) => {
-          const elegido = feedback && k === ronda!.opcion_seleccionada;
+          const elegido = feedback && k === seleccion;
           const esCorrecta = feedback && k === feedback.correcta;
           const color = feedback
             ? (esCorrecta ? 'success' : (elegido ? 'error' : 'inherit'))
@@ -127,7 +131,7 @@ export default function Simulacro() {
           return (
             <Button key={k} fullWidth variant={feedback ? 'outlined' : 'contained'} color={color as any}
               disabled={!!feedback || responder.isPending}
-              onClick={() => { ronda!.opcion_seleccionada = k; responder.mutate({ rondaId: ronda!.id, opcion: k }); }}
+              onClick={() => { setSeleccion(k); responder.mutate({ rondaId: ronda!.id, opcion: k }); }}
               sx={{ justifyContent: 'flex-start', textTransform: 'none' }}>
               <strong style={{ marginRight: 8 }}>{k}.</strong> {v}
             </Button>

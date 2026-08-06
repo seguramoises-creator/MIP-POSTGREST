@@ -172,6 +172,8 @@ export const vozRonda = async (rondaId: number): Promise<VozRonda> => {
     return JSON.parse(txt) as VozRonda;
   }
   const url = URL.createObjectURL(r.data as Blob);
-  new Audio(url).play().catch(() => {/* autoplay bloqueado: el botón lo reintenta */});
+  const audio = new Audio(url);
+  audio.onended = () => URL.revokeObjectURL(url);
+  audio.play().catch(() => {/* autoplay bloqueado: el botón lo reintenta */});
   return { en_navegador: false };
 };
