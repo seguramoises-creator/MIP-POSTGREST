@@ -55,6 +55,7 @@ const CalendarioCoaching = lazyWithReload(() => import('./pages/formacion/Calend
 const Simulacro = lazyWithReload(() => import('./pages/formacion/Simulacro'));
 const Refuerzo = lazyWithReload(() => import('./pages/formacion/Refuerzo'));
 const Onboarding = lazyWithReload(() => import('./pages/formacion/Onboarding'));
+const RankingFormacion = lazyWithReload(() => import('./pages/formacion/RankingFormacion'));
 const ConexionesIA = lazyWithReload(() => import('./pages/sistema/ConexionesIA'));
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
@@ -186,6 +187,9 @@ function AppRoutes() {
         {/* Formación inicial: Onboarding + Biblioteca (§4-§5). Sin `recurso`: el router backend gatea
             por rol (require_roles), no por la matriz RBAC — un recurso inexistente denegaría a todos. */}
         <Route path="formacion/onboarding" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','CAPACITACION','GERENTE_MEDICO','PRESIDENCIA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><Onboarding /></ProtectedRoute>} />
+        {/* Ranking de Formación (§8): ranking propio del módulo, no alimenta el Score Integral.
+            Sin `recurso`: el router backend gatea por rol (require_roles), no por la matriz RBAC. */}
+        <Route path="formacion/ranking" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','CAPACITACION','PRESIDENCIA','GERENTE_MEDICO','GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><RankingFormacion /></ProtectedRoute>} />
         <Route path="conexiones-ia" element={<ProtectedRoute allowedRoles={['ADMIN']}><ConexionesIA /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to={inicio} />} />

@@ -97,6 +97,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Simulacro de Venta', path: '/formacion/simulacro', icon: <RecordVoiceOver />, roles: ['ADMIN', 'REPRESENTANTE_MEDICO', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'GERENTE_DISTRITO', 'PRESIDENCIA', 'GERENTE_MEDICO'] },
       { label: 'Refuerzo de Memoria', path: '/formacion/refuerzo', icon: <Psychology />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'PRESIDENCIA', 'GERENTE_MEDICO', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
       { label: 'Formación inicial', path: '/formacion/onboarding', icon: <School />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'GERENTE_MEDICO', 'PRESIDENCIA', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Ranking de Formación', path: '/formacion/ranking', icon: <EmojiEvents />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'PRESIDENCIA', 'GERENTE_MEDICO', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
     ],
   },
   {
