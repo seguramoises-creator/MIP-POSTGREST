@@ -35,6 +35,7 @@ from app.models import seguridad_rbac  # noqa: F401,E402  ← RBAC Fase 1 (DIM_R
 from app.models import integracion_ext  # noqa: F401,E402  ← esquema ext (integracion Laboratorio Mallen)
 from app.models import formacion  # noqa: F401,E402  ← esquema formacion (Ampliacion Modulo de Formacion)
 from app.models import ia_conexion  # noqa: F401,E402  ← Security.DIM_IAConexion (proveedores de IA, seccion 20)
+from app.models import integracion_hallazgo  # noqa: F401,E402  ← Audit.IntegracionHallazgo (traza de validacion de lotes de Mallen)
 
 target_metadata = Base.metadata
 
