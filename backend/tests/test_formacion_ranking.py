@@ -288,3 +288,122 @@ def test_ranking_filtra_por_rm_ids(escenario):
 
     assert len(filas) == 1
     assert filas[0]["rm_id"] == rm.id
+
+
+def test_recalcular_limpia_filas_de_rm_fuera_del_roster_actual(escenario):
+    """I-1: el delete debe ser por ciclo, no por el roster actual del país.
+
+    Si un RM cambió de país (o se dio de baja) después de que se le calculó una
+    fila en este ciclo, esa fila queda fuera del roster que `recalcular_ciclo`
+    vuelve a traer — pero sigue perteneciendo al ciclo y debe limpiarse igual.
+    Antes del fix, filtrar el delete por `rm_id in (roster actual)` la dejaba
+    huérfana para siempre.
+    """
+    db, c1 = escenario["db"], escenario["c1"]
+    otro_pais = Pais(codigo="PA", nombre="Panamá")
+    db.add(otro_pais)
+    db.flush()
+    otra_linea = Linea(pais_codigo="PA", codigo="CARD", nombre="Cardiología")
+    db.add(otra_linea)
+    db.flush()
+    rm_ajeno = RepresentanteMedico(pais_codigo="PA", linea_id=otra_linea.id,
+                                   codigo="VM99", nombre="Representante Ajeno")
+    db.add(rm_ajeno)
+    db.flush()
+    # Fila huérfana: pertenece al ciclo de "DO" pero su RM ya no está en el
+    # roster de "DO" (nunca lo estuvo, simulando el cambio de país).
+    db.add(RankingFormacionPuntos(rm_id=rm_ajeno.id, ciclo_id=c1.id,
+                                  puntos_certificacion=0, puntos_examenes=0,
+                                  puntos_refuerzo=0, puntos_onboarding=0,
+                                  puntos_total=999))
+    db.commit()
+
+    ranking.recalcular_ciclo(db, c1.id, "DO")
+
+    fila_ajena = (db.query(RankingFormacionPuntos)
+                  .filter(RankingFormacionPuntos.rm_id == rm_ajeno.id,
+                          RankingFormacionPuntos.ciclo_id == c1.id).first())
+    assert fila_ajena is None
+
+
+def test_recalcular_ciclo_anterior_refresca_racha_del_posterior(escenario):
+    """I-2: corregir un ciclo pasado debe refrescar la racha de los siguientes.
+
+    c1 arranca en 0 puntos (sin actividad) y c2 con actividad. Al calcular
+    ambos en ese estado, la racha de c2 es 1 (solo cuenta consigo mismo, porque
+    c1 rompe la cadena). Luego se agrega actividad a c1 (llega tarde, como una
+    certificación cargada con retraso) y se recalcula SOLO c1. Si el refresco
+    de ciclos posteriores funciona, la racha de c2 debe subir a 2.
+    """
+    db, rm, c1, c2 = (escenario["db"], escenario["rm"],
+                      escenario["c1"], escenario["c2"])
+
+    # Vaciar la actividad de c1 para que arranque en 0 puntos.
+    db.query(CapacitacionFact).delete()
+    db.query(RefuerzoRespuesta).delete()
+    db.query(RefuerzoRondaProgramada).delete()
+    db.query(RefuerzoCampana).delete()
+    db.commit()
+    from app.models.exam_models import IntentoExamen
+    db.query(IntentoExamen).delete()
+    db.commit()
+
+    # c2 sí tiene actividad: una certificación aprobada dentro de su rango.
+    cert2 = CapacitacionDim(codigo="CERT2", nombre="Certificación Ciclo 2",
+                            tipo="CERTIFICACION")
+    db.add(cert2)
+    db.flush()
+    db.add(CapacitacionFact(pais_codigo="DO", rm_id=rm.id, capacitacion_id=cert2.id,
+                            ciclo_id=c2.id, asistio=True, aprobado=True))
+    db.commit()
+
+    ranking.recalcular_ciclo(db, c1.id, "DO")
+    ranking.recalcular_ciclo(db, c2.id, "DO")
+
+    fila_c1 = db.query(RankingFormacionPuntos).filter(
+        RankingFormacionPuntos.ciclo_id == c1.id).one()
+    fila_c2 = db.query(RankingFormacionPuntos).filter(
+        RankingFormacionPuntos.ciclo_id == c2.id).one()
+    assert fila_c1.puntos_total == 0
+    assert fila_c2.puntos_total > 0
+    assert fila_c2.racha_ciclos == 1  # c1 en 0 corta la cadena antes de llegar ahí
+
+    # Llega tarde una certificación para c1 (el escenario que el docstring de
+    # `recalcular_ciclo` dice habilitar) y se recalcula SOLO c1.
+    cert1_tarde = CapacitacionDim(codigo="CERT1_TARDE", nombre="Certificación Tardía",
+                                  tipo="CERTIFICACION")
+    db.add(cert1_tarde)
+    db.flush()
+    db.add(CapacitacionFact(pais_codigo="DO", rm_id=rm.id, capacitacion_id=cert1_tarde.id,
+                            ciclo_id=c1.id, asistio=True, aprobado=True))
+    db.commit()
+
+    ranking.recalcular_ciclo(db, c1.id, "DO")
+
+    db.expire_all()
+    fila_c1 = db.query(RankingFormacionPuntos).filter(
+        RankingFormacionPuntos.ciclo_id == c1.id).one()
+    fila_c2 = db.query(RankingFormacionPuntos).filter(
+        RankingFormacionPuntos.ciclo_id == c2.id).one()
+    assert fila_c1.puntos_total > 0
+    assert fila_c2.racha_ciclos == 2  # ahora c1 también tiene puntos: la cadena sigue
+
+
+def test_mis_puntos_calcula_la_posicion_real(escenario):
+    """M-3: `mis_puntos` filtra por `rm_id` para no traer el ciclo completo, pero
+    eso hace que `ranking()` numere dentro de un subconjunto de una sola fila
+    (`posicion` siempre 1). Se corrige por separado contando cuántas filas del
+    ciclo completo superan al RM — debe reflejar su posición real, no 1 fijo.
+    """
+    db, c1, linea, rm = escenario["db"], escenario["c1"], escenario["linea"], escenario["rm"]
+    otro = RepresentanteMedico(pais_codigo="DO", linea_id=linea.id,
+                               codigo="VM03", nombre="Representante Tres")
+    db.add(otro)
+    db.commit()
+    ranking.recalcular_ciclo(db, c1.id, "DO")
+
+    mp_lider = ranking.mis_puntos(db, rm.id, c1.id)
+    mp_ultimo = ranking.mis_puntos(db, otro.id, c1.id)
+
+    assert mp_lider["posicion"] == 1
+    assert mp_ultimo["posicion"] == 2

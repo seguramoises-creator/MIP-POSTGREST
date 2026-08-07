@@ -14,6 +14,7 @@ justo lo que se decidió evitar.
 from datetime import date
 from decimal import Decimal
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.models.dimensiones import CapacitacionDim, Ciclo, RepresentanteMedico
@@ -179,6 +180,28 @@ def _racha(db: Session, rm_id: int, ciclo: Ciclo) -> int:
     return racha
 
 
+def _refrescar_rachas_posteriores(db: Session, ciclo: Ciclo) -> None:
+    """Recalcula la racha de los ciclos ya persistidos POSTERIORES a `ciclo`.
+
+    Recalcular un ciclo pasado (p. ej. por certificaciones cargadas con retraso)
+    puede cambiar si la racha de los ciclos siguientes se cortaba o no. Sin esto,
+    la racha quedaría congelada con el valor que tenía cuando se calculó.
+    """
+    posteriores = (db.query(Ciclo)
+                   .filter(Ciclo.pais_codigo == ciclo.pais_codigo,
+                           (Ciclo.anio > ciclo.anio) |
+                           ((Ciclo.anio == ciclo.anio) & (Ciclo.numero > ciclo.numero)))
+                   .order_by(Ciclo.anio.asc(), Ciclo.numero.asc())
+                   .all())
+    for c in posteriores:
+        filas = (db.query(RankingFormacionPuntos)
+                 .filter(RankingFormacionPuntos.ciclo_id == c.id).all())
+        for fila in filas:
+            fila.racha_ciclos = _racha(db, fila.rm_id, c)
+    if posteriores:
+        db.commit()
+
+
 def recalcular_ciclo(db: Session, ciclo_id: int, pais_codigo: str) -> dict:
     """Recalcula y persiste los puntos de todos los RM del país en un ciclo.
 
@@ -195,12 +218,12 @@ def recalcular_ciclo(db: Session, ciclo_id: int, pais_codigo: str) -> dict:
            .filter(RepresentanteMedico.pais_codigo == pais_codigo).all())
     pesos_pais = pesos(db, pais_codigo)
 
-    ids = [r.id for r in rms]
-    if ids:
-        (db.query(RankingFormacionPuntos)
-         .filter(RankingFormacionPuntos.ciclo_id == ciclo_id,
-                 RankingFormacionPuntos.rm_id.in_(ids))
-         .delete(synchronize_session=False))
+    # Se borra por ciclo, NO por el roster actual: si un representante cambió de
+    # país o se dio de baja, filtrar por `rm_id in (roster)` dejaría su fila
+    # vieja huérfana para siempre, y ninguna llamada futura la limpiaría.
+    (db.query(RankingFormacionPuntos)
+     .filter(RankingFormacionPuntos.ciclo_id == ciclo_id)
+     .delete(synchronize_session=False))
     total_general = 0
     for rm in rms:
         comp = calcular_componentes(db, rm.id, ciclo, pesos_pais)
@@ -217,6 +240,10 @@ def recalcular_ciclo(db: Session, ciclo_id: int, pais_codigo: str) -> dict:
         if fila is not None:
             fila.racha_ciclos = _racha(db, rm.id, ciclo)
     db.commit()
+
+    # Un recálculo de este ciclo puede cambiar si su racha se cortaba o no, lo
+    # que a su vez afecta la racha de todos los ciclos posteriores ya calculados.
+    _refrescar_rachas_posteriores(db, ciclo)
 
     return {"ciclo_id": ciclo_id, "rms_procesados": len(rms),
             "puntos_totales": total_general}
@@ -245,8 +272,24 @@ def ranking(db: Session, ciclo_id: int, rm_ids: list[int] | None = None) -> list
 
 
 def mis_puntos(db: Session, rm_id: int, ciclo_id: int) -> dict | None:
-    """El desglose propio del RM, o None si el ciclo no se ha calculado."""
-    for fila in ranking(db, ciclo_id):
-        if fila["rm_id"] == rm_id:
-            return fila
-    return None
+    """El desglose propio del RM, o None si el ciclo no se ha calculado.
+
+    Filtra por `rm_id` para no traer ni ordenar todas las filas del ciclo solo
+    para extraer una. OJO: con `rm_ids=[rm_id]`, `ranking()` numera dentro del
+    subconjunto de una sola fila, así que `posicion` siempre volvería 1 — eso
+    rompería la tarjeta "Mis puntos" del frontend. Se sobrescribe aquí con la
+    posición real: cuántas filas del ciclo completo tienen más puntos (o
+    empatan con un `rm_id` menor, el mismo criterio de desempate de `ranking()`).
+    """
+    filas = ranking(db, ciclo_id, rm_ids=[rm_id])
+    if not filas:
+        return None
+    fila = filas[0]
+    mas_arriba = (db.query(RankingFormacionPuntos)
+                  .filter(RankingFormacionPuntos.ciclo_id == ciclo_id,
+                          or_(RankingFormacionPuntos.puntos_total > fila["puntos_total"],
+                              and_(RankingFormacionPuntos.puntos_total == fila["puntos_total"],
+                                   RankingFormacionPuntos.rm_id < rm_id)))
+                  .count())
+    fila["posicion"] = mas_arriba + 1
+    return fila
