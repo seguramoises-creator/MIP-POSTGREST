@@ -221,6 +221,17 @@ def asignar(datos: AsignacionEntrada, db: Session = Depends(get_db),
     return {"id": a.id, "rm_id": a.rm_id, "progreso_pct": float(a.progreso_pct)}
 
 
+@router.get("/onboarding/mis-asignaciones",
+            summary="Mis rutas de formación (el representante descubre la suya)")
+def mis_asignaciones(db: Session = Depends(get_db), usuario: Usuario = RequireAnyAuth):
+    """Auto-scope: no recibe rm_id, siempre devuelve las del usuario en sesión.
+
+    No es un filtro opcional sino el único comportamiento: no debe existir un
+    camino por el que alguien pida la ruta de otro por esta vía.
+    """
+    return onboarding.asignaciones_de_rm(db, _rm_propio(usuario))
+
+
 @router.get("/onboarding/asignaciones/{asignacion_id}",
             summary="Estado de la ruta: qué está disponible y qué bloquea")
 def estado(asignacion_id: int, db: Session = Depends(get_db),

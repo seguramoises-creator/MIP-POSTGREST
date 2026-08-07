@@ -158,6 +158,27 @@ def asignar(db: Session, plantilla_id: int, rm_id: int,
     return a
 
 
+def asignaciones_de_rm(db: Session, rm_id: int) -> list[dict]:
+    """Las rutas asignadas a un representante, para que descubra la suya (§4).
+
+    `estado_ruta` consulta por id de asignación, que el representante no tiene
+    forma de conocer: sin esto, la ruta existe pero él no puede abrirla.
+    """
+    filas = (db.query(OnboardingAsignacion, OnboardingPlantilla)
+             .join(OnboardingPlantilla,
+                   OnboardingAsignacion.plantilla_id == OnboardingPlantilla.id)
+             .filter(OnboardingAsignacion.rm_id == rm_id)
+             .order_by(OnboardingAsignacion.fecha_inicio.desc())
+             .all())
+    return [{
+        "id": a.id, "plantilla_id": a.plantilla_id,
+        "nombre_plantilla": p.nombre_plantilla,
+        "fecha_inicio": a.fecha_inicio,
+        "progreso_pct": float(a.progreso_pct),
+        "completada_en": a.completada_en,
+    } for a, p in filas]
+
+
 # ---------------------------------------------------------------------------
 # El motor de bloqueo
 # ---------------------------------------------------------------------------

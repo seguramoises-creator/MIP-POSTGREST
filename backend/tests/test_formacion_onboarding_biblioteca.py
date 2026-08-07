@@ -304,3 +304,45 @@ def test_la_ruta_avanza_y_el_progreso_refleja_lo_completado(escenario):
     assert estado["progreso_pct"] > 0
     # Y el siguiente queda disponible, porque el anterior dejó de frenar.
     assert estado["pasos"][1]["estado"] == "disponible"
+
+
+# ---------------------------------------------------------------------------
+# §4 — el representante descubre su propia ruta
+# ---------------------------------------------------------------------------
+
+def test_asignaciones_de_rm_devuelve_solo_las_propias(escenario):
+    """El representante descubre su ruta sin conocer el id (§4).
+
+    Se crea una segunda asignación para OTRO representante: si la consulta no
+    filtrara por rm_id, aparecerían las dos y el RM vería la ruta ajena.
+    """
+    db = escenario["db"]
+    rm = escenario["rm"]
+    plantilla = escenario["plantilla"]
+
+    otro = RepresentanteMedico(pais_codigo="DO", linea_id=escenario["linea"].id,
+                               codigo="VM02", nombre="Otro Representante")
+    db.add(otro)
+    db.flush()
+    onboarding.asignar(db, plantilla.id, otro.id, date(2026, 7, 15))
+    db.commit()
+
+    filas = onboarding.asignaciones_de_rm(db, rm.id)
+
+    assert len(filas) == 1
+    assert filas[0]["id"] == escenario["asignacion"].id
+    assert filas[0]["plantilla_id"] == plantilla.id
+    assert filas[0]["nombre_plantilla"] == "Onboarding Cardiología"
+    assert filas[0]["progreso_pct"] == 0.0
+    assert filas[0]["completada_en"] is None
+
+
+def test_asignaciones_de_rm_sin_ruta_devuelve_lista_vacia(escenario):
+    """Un representante recién dado de alta no tiene ruta: lista vacía, no error."""
+    db = escenario["db"]
+    nuevo = RepresentanteMedico(pais_codigo="DO", linea_id=escenario["linea"].id,
+                                codigo="VM03", nombre="Sin Ruta")
+    db.add(nuevo)
+    db.commit()
+
+    assert onboarding.asignaciones_de_rm(db, nuevo.id) == []
