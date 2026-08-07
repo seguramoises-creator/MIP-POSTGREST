@@ -153,3 +153,100 @@ def calcular_componentes(db: Session, rm_id: int, ciclo: Ciclo,
     return {"puntos_certificacion": cert, "puntos_examenes": exam,
             "puntos_refuerzo": ref, "puntos_onboarding": onb,
             "puntos_total": cert + exam + ref + onb}
+
+
+def _racha(db: Session, rm_id: int, ciclo: Ciclo) -> int:
+    """Ciclos consecutivos con actividad, contando hacia atrás desde `ciclo`.
+
+    Se apoya en lo ya persistido: por eso `recalcular_ciclo` guarda primero los
+    puntos y calcula la racha después. Si el ciclo actual no tiene puntos, la
+    racha es 0 — la constancia se rompe, no se congela.
+    """
+    previos = (db.query(Ciclo)
+               .filter(Ciclo.pais_codigo == ciclo.pais_codigo,
+                       (Ciclo.anio < ciclo.anio) |
+                       ((Ciclo.anio == ciclo.anio) & (Ciclo.numero <= ciclo.numero)))
+               .order_by(Ciclo.anio.desc(), Ciclo.numero.desc())
+               .all())
+    racha = 0
+    for c in previos:
+        fila = (db.query(RankingFormacionPuntos)
+                .filter(RankingFormacionPuntos.rm_id == rm_id,
+                        RankingFormacionPuntos.ciclo_id == c.id).first())
+        if fila is None or fila.puntos_total <= 0:
+            break
+        racha += 1
+    return racha
+
+
+def recalcular_ciclo(db: Session, ciclo_id: int, pais_codigo: str) -> dict:
+    """Recalcula y persiste los puntos de todos los RM del país en un ciclo.
+
+    Delete-then-insert, así que es re-ejecutable: correrlo dos veces da lo mismo.
+
+    NO lleva guard de ciclo cerrado, a diferencia del motor de Score: aquí
+    recalcular no mueve premios ni comisiones, y poder recomputar un ciclo ya
+    cerrado es útil cuando las certificaciones se cargan con retraso.
+    """
+    ciclo = db.get(Ciclo, ciclo_id)
+    if ciclo is None:
+        raise ValueError("Ciclo no encontrado")
+    rms = (db.query(RepresentanteMedico)
+           .filter(RepresentanteMedico.pais_codigo == pais_codigo).all())
+    pesos_pais = pesos(db, pais_codigo)
+
+    ids = [r.id for r in rms]
+    if ids:
+        (db.query(RankingFormacionPuntos)
+         .filter(RankingFormacionPuntos.ciclo_id == ciclo_id,
+                 RankingFormacionPuntos.rm_id.in_(ids))
+         .delete(synchronize_session=False))
+    total_general = 0
+    for rm in rms:
+        comp = calcular_componentes(db, rm.id, ciclo, pesos_pais)
+        db.add(RankingFormacionPuntos(rm_id=rm.id, ciclo_id=ciclo_id, **comp))
+        total_general += comp["puntos_total"]
+    db.commit()
+
+    # La racha se calcula DESPUÉS de persistir: lee los ciclos ya guardados,
+    # incluido el actual.
+    for rm in rms:
+        fila = (db.query(RankingFormacionPuntos)
+                .filter(RankingFormacionPuntos.rm_id == rm.id,
+                        RankingFormacionPuntos.ciclo_id == ciclo_id).first())
+        if fila is not None:
+            fila.racha_ciclos = _racha(db, rm.id, ciclo)
+    db.commit()
+
+    return {"ciclo_id": ciclo_id, "rms_procesados": len(rms),
+            "puntos_totales": total_general}
+
+
+def ranking(db: Session, ciclo_id: int, rm_ids: list[int] | None = None) -> list[dict]:
+    """Ranking del ciclo, ordenado. `posicion` se calcula al leer y no se
+    persiste: así recalcular a un RM no obliga a reescribir filas ajenas."""
+    q = (db.query(RankingFormacionPuntos, RepresentanteMedico)
+         .join(RepresentanteMedico,
+               RankingFormacionPuntos.rm_id == RepresentanteMedico.id)
+         .filter(RankingFormacionPuntos.ciclo_id == ciclo_id))
+    if rm_ids is not None:
+        q = q.filter(RankingFormacionPuntos.rm_id.in_(rm_ids or [-1]))
+    # Empates por rm_id ascendente para que el orden sea estable entre llamadas.
+    filas = q.order_by(RankingFormacionPuntos.puntos_total.desc(),
+                       RankingFormacionPuntos.rm_id.asc()).all()
+    return [{
+        "posicion": i + 1, "rm_id": p.rm_id, "rm_nombre": rm.nombre,
+        "puntos_certificacion": p.puntos_certificacion,
+        "puntos_examenes": p.puntos_examenes,
+        "puntos_refuerzo": p.puntos_refuerzo,
+        "puntos_onboarding": p.puntos_onboarding,
+        "puntos_total": p.puntos_total, "racha_ciclos": p.racha_ciclos,
+    } for i, (p, rm) in enumerate(filas)]
+
+
+def mis_puntos(db: Session, rm_id: int, ciclo_id: int) -> dict | None:
+    """El desglose propio del RM, o None si el ciclo no se ha calculado."""
+    for fila in ranking(db, ciclo_id):
+        if fila["rm_id"] == rm_id:
+            return fila
+    return None

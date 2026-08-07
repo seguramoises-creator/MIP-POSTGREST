@@ -65,7 +65,8 @@ def db(motor):
     Sesion = sessionmaker(bind=motor)
     s = Sesion()
     # Cada prueba parte de cero en las tablas que toca.
-    for tabla in ('formacion."RefuerzoRespuesta"', 'formacion."RefuerzoCapsula"',
+    for tabla in ('formacion."RankingFormacionPuntos"',
+                  'formacion."RefuerzoRespuesta"', 'formacion."RefuerzoCapsula"',
                   'formacion."RefuerzoRondaProgramada"', 'formacion."RefuerzoCampana"',
                   'formacion."ParametroFormacion"',
                   'exam."FactIntentoExamen"', 'exam."FactAsignacionExamen"',
@@ -224,3 +225,66 @@ def test_pesos_configurados_sobrescriben_los_de_defecto(escenario):
 def test_fijar_peso_rechaza_clave_desconocida(escenario):
     with pytest.raises(ValueError, match="Peso desconocido"):
         ranking.fijar_peso(escenario["db"], "DO", "peso_inventado", 1.0)
+
+
+def test_recalcular_es_reejecutable(escenario):
+    """Delete-then-insert: correrlo dos veces no duplica ni acumula."""
+    db, c1 = escenario["db"], escenario["c1"]
+
+    r1 = ranking.recalcular_ciclo(db, c1.id, "DO")
+    r2 = ranking.recalcular_ciclo(db, c1.id, "DO")
+
+    assert r1["rms_procesados"] == 1
+    assert r2["rms_procesados"] == 1
+    filas = db.query(RankingFormacionPuntos).filter(
+        RankingFormacionPuntos.ciclo_id == c1.id).all()
+    assert len(filas) == 1
+    assert filas[0].puntos_total == 88
+
+
+def test_racha_cuenta_ciclos_consecutivos_y_se_corta(escenario):
+    """La racha mira hacia atrás y se detiene en el primer ciclo sin puntos.
+
+    El ciclo 2 no tiene actividad, así que al calcularlo la racha vuelve a 0
+    aunque el ciclo 1 sí tuviera puntos.
+    """
+    db, c1, c2 = escenario["db"], escenario["c1"], escenario["c2"]
+
+    ranking.recalcular_ciclo(db, c1.id, "DO")
+    ranking.recalcular_ciclo(db, c2.id, "DO")
+
+    fila_c1 = db.query(RankingFormacionPuntos).filter(
+        RankingFormacionPuntos.ciclo_id == c1.id).one()
+    fila_c2 = db.query(RankingFormacionPuntos).filter(
+        RankingFormacionPuntos.ciclo_id == c2.id).one()
+    assert fila_c1.racha_ciclos == 1      # su propio ciclo con puntos
+    assert fila_c2.puntos_total == 0
+    assert fila_c2.racha_ciclos == 0      # sin puntos, la racha se corta
+
+
+def test_ranking_ordena_y_numera(escenario):
+    """Un segundo RM sin actividad debe quedar detrás, con posición 2."""
+    db, c1, linea = escenario["db"], escenario["c1"], escenario["linea"]
+    otro = RepresentanteMedico(pais_codigo="DO", linea_id=linea.id,
+                               codigo="VM02", nombre="Representante Dos")
+    db.add(otro)
+    db.commit()
+    ranking.recalcular_ciclo(db, c1.id, "DO")
+
+    filas = ranking.ranking(db, c1.id)
+
+    assert [f["posicion"] for f in filas] == [1, 2]
+    assert filas[0]["rm_nombre"] == "Representante Uno"
+    assert filas[0]["puntos_total"] == 88
+    assert filas[1]["puntos_total"] == 0
+
+
+def test_ranking_filtra_por_rm_ids(escenario):
+    """El auto-scope del GD se aplica en la lectura, no en el cálculo."""
+    db, c1, rm = escenario["db"], escenario["c1"], escenario["rm"]
+    ranking.recalcular_ciclo(db, c1.id, "DO")
+
+    filas = ranking.ranking(db, c1.id, rm_ids=[rm.id])
+
+    assert len(filas) == 1
+    assert filas[0]["rm_id"] == rm.id
