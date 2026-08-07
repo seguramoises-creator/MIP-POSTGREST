@@ -59,8 +59,8 @@ export default function MiRuta() {
   if (asignaciones.isLoading) return <CircularProgress />;
   if (asignaciones.isError) {
     return <Alert severity="warning">
-      No se pudo cargar tu ruta. Si tu usuario no está enlazado a un representante,
-      pídele a un administrador que lo enlace.
+      {detalleError(asignaciones.error,
+        'No se pudo cargar tu ruta. Si tu usuario no está enlazado a un representante, pídele a un administrador que lo enlace.')}
     </Alert>;
   }
 

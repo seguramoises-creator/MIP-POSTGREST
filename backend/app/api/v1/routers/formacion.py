@@ -199,7 +199,8 @@ def crear_plantilla(datos: PlantillaEntrada, db: Session = Depends(get_db),
     pasos = onboarding.pasos_de(db, p.id)
     return {"id": p.id, "nombre_plantilla": p.nombre_plantilla,
             "pasos": [{"id": x.id, "orden": x.orden, "titulo": x.titulo,
-                       "tipo": x.tipo, "quien_lo_marca": x.quien_lo_marca}
+                       "tipo": x.tipo, "plazo_sugerido": x.plazo_sugerido,
+                       "bloqueante": x.bloqueante, "quien_lo_marca": x.quien_lo_marca}
                       for x in pasos]}
 
 

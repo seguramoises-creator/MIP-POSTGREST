@@ -14,8 +14,11 @@ import RutasAdmin from './onboarding/RutasAdmin';
 const ROLES_MI_RUTA = ['REPRESENTANTE_MEDICO'];
 // Gestión de rutas: RequireContenido del backend (crear plantillas). GERENTE_MEDICO
 // sí puede operar este tab; solo «Asignar» le está vedado (RequireCapacitacion),
-// y ese botón se oculta para él dentro del tab.
-const ROLES_RUTAS = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'GERENTE_MEDICO'];
+// y ese botón se oculta para él dentro del tab. GERENTE_DISTRITO también entra
+// aquí aunque no pueda crear ni asignar rutas: es quien debe marcar el hito de
+// campo (paso 9, "gd", §4.6) de sus representantes, y este es el único tab con
+// la lista de pasos donde hacerlo.
+const ROLES_RUTAS = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'GERENTE_MEDICO', 'GERENTE_DISTRITO'];
 // Biblioteca: listar es RequireAnyAuth; las acciones se gatean dentro del tab.
 const ROLES_BIBLIOTECA = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION',
   'GERENTE_MEDICO', 'PRESIDENCIA', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'];

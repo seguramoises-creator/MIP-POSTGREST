@@ -38,7 +38,7 @@ export interface Confirmacion { rm_id: number; confirmado_en: string; }
 
 export interface Paso {
   id: number; orden: number; titulo: string; tipo: string;
-  plazo_sugerido: number | null; bloqueante: boolean; quien_lo_marca: string;
+  plazo_sugerido: string | null; bloqueante: boolean; quien_lo_marca: string;
 }
 
 export interface MiAsignacion {

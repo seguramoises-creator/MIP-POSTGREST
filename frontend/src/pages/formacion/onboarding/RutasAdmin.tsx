@@ -1,8 +1,11 @@
 /**
  * RutasAdmin.tsx — Gestión de rutas de inducción (§4).
  * Crear la ruta estándar de 10 pasos por línea, asignarla y consultar el avance.
- * «Asignar» exige RequireCapacitacion en el backend: se oculta para GERENTE_MEDICO
- * en vez de ofrecer un botón que siempre daría 403.
+ * Los botones «Nueva ruta estándar» (RequireContenido) y «Asignar a un
+ * representante» (RequireCapacitacion) se ocultan por lista blanca de rol —
+ * en vez de deducir "no es GERENTE_MEDICO" — porque desde que GERENTE_DISTRITO
+ * también entra a este tab (para marcar su hito de campo, §4.6) necesitaría
+ * quedar fuera de ambos igual que GERENTE_MEDICO queda fuera de «Asignar».
  */
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
@@ -15,7 +18,7 @@ import { Add, PersonAdd, Search } from '@mui/icons-material';
 import { useCicloStore } from '../../../store/ciclo.store';
 import { useAuthStore } from '../../../store/auth.store';
 import {
-  crearPlantilla, pasosDePlantilla, asignarRuta, estadoRuta,
+  crearPlantilla, pasosDePlantilla, asignarRuta, estadoRuta, completarPaso,
   type Paso, type EstadoRuta,
 } from '../../../services/onboarding.service';
 import ListaPasos from './ListaPasos';
@@ -30,10 +33,16 @@ function detalleError(e: unknown, fallback: string): string {
   return fallback;
 }
 
+// RequireContenido en el backend — controla el botón «Nueva ruta estándar».
+const ROLES_CONTENIDO = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'GERENTE_MEDICO'];
+// RequireCapacitacion en el backend — controla el botón «Asignar a un representante».
+const ROLES_CAPACITACION = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION'];
+
 export default function RutasAdmin() {
   const paisCodigo = useCicloStore((s) => s.paisCodigo);
   const rol = useAuthStore((s) => s.rol);
-  const puedeAsignar = rol !== 'GERENTE_MEDICO';   // RequireCapacitacion en el backend
+  const puedeCrear = !!rol && ROLES_CONTENIDO.includes(rol);
+  const puedeAsignar = !!rol && ROLES_CAPACITACION.includes(rol);
 
   const [nueva, setNueva] = useState(false);
   const [asignar, setAsignar] = useState(false);
@@ -55,14 +64,27 @@ export default function RutasAdmin() {
     onError: (e) => setAviso({ sev: 'warning', msg: detalleError(e, 'No se pudo cargar la asignación.') }),
   });
 
+  const completar = useMutation({
+    mutationFn: (pasoId: number) => completarPaso(Number(asignacionId), pasoId),
+    onSuccess: () => {
+      setAviso({ sev: 'success', msg: 'Paso completado.' });
+      verAsignacion.mutate(Number(asignacionId));
+    },
+    // El backend decide si a este rol le toca marcar el paso (§4.6) y devuelve
+    // 403 con el motivo; 409 si todavía está bloqueado. Se muestran tal cual.
+    onError: (e) => setAviso({ sev: 'warning', msg: detalleError(e, 'No se pudo completar el paso.') }),
+  });
+
   if (!paisCodigo) return <Alert severity="info">Selecciona un país en el encabezado.</Alert>;
 
   return (
     <Box>
       <Stack direction="row" spacing={2} mb={2}>
-        <Button variant="contained" startIcon={<Add />} onClick={() => setNueva(true)}>
-          Nueva ruta estándar
-        </Button>
+        {puedeCrear && (
+          <Button variant="contained" startIcon={<Add />} onClick={() => setNueva(true)}>
+            Nueva ruta estándar
+          </Button>
+        )}
         {puedeAsignar && (
           <Button variant="outlined" startIcon={<PersonAdd />} onClick={() => setAsignar(true)}>
             Asignar a un representante
@@ -117,8 +139,13 @@ export default function RutasAdmin() {
             onClick={() => verAsignacion.mutate(Number(asignacionId))}>Consultar</Button>
           {verAsignacion.isPending && <CircularProgress size={20} />}
         </Stack>
-        {/* Solo lectura: sin onCompletar no se muestran botones de marcar. */}
-        {estado && <ListaPasos estado={estado} />}
+        {/* El backend decide quién puede marcar cada paso (§4.6): el botón
+            aparece para todos, pero solo funciona si al rol le toca. */}
+        {estado && (
+          <ListaPasos estado={estado}
+            onCompletar={(pasoId) => completar.mutate(pasoId)}
+            completando={completar.isPending ? (completar.variables as number) : null} />
+        )}
       </Paper>
 
       <DialogoPlantilla abierto={nueva} paisCodigo={paisCodigo} onClose={() => setNueva(false)}
