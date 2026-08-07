@@ -15,7 +15,13 @@ import KpiRefuerzo from './refuerzo/KpiRefuerzo';
 // guarda el rol; el backend exige el enlace a representante y responde 403 si
 // falta, que es la única fuente de verdad de ese dato.
 const ROLES_CAPSULAS = ['REPRESENTANTE_MEDICO'];
-const ROLES_CAMPANAS = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'GERENTE_MEDICO'];
+// GERENTE_MEDICO NO va aquí: en el backend (formacion_refuerzo.py) solo
+// POST /rondas/{id}/capsulas lo admite (RequireContenido) — listar_campanas,
+// calendario, programar y publicar exigen RequireCapacitacion. Si entrara al
+// tab, la lista le daría 403 antes de llegar a lo único que sí puede hacer.
+// Hoy GERENTE_MEDICO no tiene camino propio en la UI para aportar cápsulas
+// (follow-up pendiente).
+const ROLES_CAMPANAS = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION'];
 const ROLES_KPI = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'PRESIDENCIA',
   'GERENTE_MEDICO', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'];
 

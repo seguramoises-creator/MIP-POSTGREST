@@ -20,10 +20,22 @@ const ETIQUETA_FORMATO: Record<string, string> = {
   caso_breve: 'Caso breve', reflexion_abierta: 'Reflexión abierta',
 };
 
+// Motivo real de un error de axios: 422 de FastAPI (detail = [{loc,msg}]) o detail string.
+function detalleError(e: unknown, fallback: string): string {
+  const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+  if (typeof d === 'string' && d.trim()) return d;
+  if (Array.isArray(d) && d[0]) {
+    const m = (d[0] as { msg?: string }).msg;
+    if (m) return m.replace('Value error, ', '');
+  }
+  return fallback;
+}
+
 export default function MisCapsulas() {
   const qc = useQueryClient();
   const [resultados, setResultados] = useState<Record<number, ResultadoRespuesta>>({});
   const [textos, setTextos] = useState<Record<number, string>>({});
+  const [errores, setErrores] = useState<Record<number, string>>({});
 
   const pendientes = useQuery({ queryKey: ['refuerzo-mis-capsulas'], queryFn: misCapsulas });
   const puntos = useQuery({ queryKey: ['refuerzo-mis-puntos'], queryFn: () => misPuntos() });
@@ -33,8 +45,19 @@ export default function MisCapsulas() {
       responderCapsula(v.capsulaId, { opcion: v.opcion, texto_libre: v.texto_libre }),
     onSuccess: (r) => {
       setResultados((prev) => ({ ...prev, [r.capsula_id]: r }));
+      setErrores((prev) => { const n = { ...prev }; delete n[r.capsula_id]; return n; });
       qc.invalidateQueries({ queryKey: ['refuerzo-mis-puntos'] });
+      // NOTA (M-D, no aplicado): invalidar ['refuerzo-mis-capsulas'] haría
+      // desaparecer la tarjeta recién respondida — el endpoint /mis-capsulas
+      // solo devuelve pendientes (refuerzo.capsulas_pendientes en el backend),
+      // y `respondidas`/`visibles` se derivan filtrando `lista` (pendientes.data).
+      // Al refetch, la cápsula ya respondida sale de `lista` y por tanto de
+      // ambas listas derivadas, aunque siga en `resultados`. Se deja sin
+      // invalidar para no perder la corrección visible en pantalla.
     },
+    onError: (e, v) => setErrores((prev) => ({
+      ...prev, [v.capsulaId]: detalleError(e, 'No se pudo registrar tu respuesta. Intenta de nuevo.'),
+    })),
   });
 
   if (pendientes.isLoading) return <CircularProgress />;
@@ -67,6 +90,7 @@ export default function MisCapsulas() {
       {[...respondidas, ...visibles].map((c) => (
         <TarjetaCapsula key={c.capsula_id} capsula={c}
           resultado={resultados[c.capsula_id]}
+          error={errores[c.capsula_id]}
           texto={textos[c.capsula_id] || ''}
           onTexto={(v) => setTextos((p) => ({ ...p, [c.capsula_id]: v }))}
           enviando={responder.isPending && responder.variables?.capsulaId === c.capsula_id}
@@ -77,9 +101,10 @@ export default function MisCapsulas() {
   );
 }
 
-function TarjetaCapsula({ capsula, resultado, texto, onTexto, enviando, onResponder }: {
+function TarjetaCapsula({ capsula, resultado, error, texto, onTexto, enviando, onResponder }: {
   capsula: CapsulaPendiente;
   resultado?: ResultadoRespuesta;
+  error?: string;
   texto: string;
   onTexto: (v: string) => void;
   enviando: boolean;
@@ -88,6 +113,9 @@ function TarjetaCapsula({ capsula, resultado, texto, onTexto, enviando, onRespon
   const opciones = capsula.opciones || {};
   const esReto = capsula.formato === 'reto';
   const esAbierta = capsula.formato === 'reflexion_abierta';
+  // El backend normaliza con .strip().upper() al corregir (§10.7); la UI debe
+  // comparar igual para no dejar sin resaltar una opción como "a" vs "A".
+  const norm = (s: string | null | undefined) => (s || '').trim().toUpperCase();
 
   return (
     <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 2 }}>
@@ -103,8 +131,8 @@ function TarjetaCapsula({ capsula, resultado, texto, onTexto, enviando, onRespon
         {esReto && (
           <Stack spacing={1}>
             {Object.entries(opciones).map(([k, v]) => {
-              const esCorrecta = resultado && k === resultado.opcion_correcta;
-              const elegidaMal = resultado && k === resultado.opcion_seleccionada && !esCorrecta;
+              const esCorrecta = resultado && norm(k) === norm(resultado.opcion_correcta);
+              const elegidaMal = resultado && norm(k) === norm(resultado.opcion_seleccionada) && !esCorrecta;
               return (
                 <Button key={k} fullWidth
                   variant={resultado ? 'outlined' : 'contained'}
@@ -134,6 +162,8 @@ function TarjetaCapsula({ capsula, resultado, texto, onTexto, enviando, onRespon
         )}
 
         {enviando && <CircularProgress size={20} sx={{ mt: 1 }} />}
+
+        {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
 
         {resultado && (
           <>

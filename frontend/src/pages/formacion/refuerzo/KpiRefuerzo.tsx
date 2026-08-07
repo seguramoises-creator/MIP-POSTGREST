@@ -93,7 +93,7 @@ function Extremo({ titulo, p }: { titulo: string; p: PreguntaExtremo | null }) {
 }
 
 function TablaDesglose<T extends Metricas>({ titulo, clave, etiqueta, filas }: {
-  titulo: string; clave: string; etiqueta: string;
+  titulo: string; clave: keyof T & string; etiqueta: string;
   filas: T[];
 }) {
   return (

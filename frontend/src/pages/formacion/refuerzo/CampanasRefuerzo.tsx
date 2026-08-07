@@ -3,7 +3,7 @@
  * VISTA sugiere el calendario; nada sale publicado hasta que alguien lo
  * confirma y publica explícitamente (§10.3).
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Box, Paper, Typography, Button, Stack, Alert, Chip, Table, TableHead, TableBody,
@@ -79,7 +79,11 @@ export default function CampanasRefuerzo() {
         <Button variant="contained" startIcon={<Add />} onClick={() => setNueva(true)}>Nueva campaña</Button>
       </Stack>
 
-      {campanas.isLoading ? <CircularProgress /> : (
+      {campanas.isLoading ? <CircularProgress /> : campanas.isError ? (
+        <Alert severity="warning">
+          No se pudieron cargar las campañas. Puede que tu rol no tenga permiso para verlas.
+        </Alert>
+      ) : (
         <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 3 }}>
           <Table size="small">
             <TableHead>
@@ -144,11 +148,11 @@ export default function CampanasRefuerzo() {
                     </TableCell>
                     <TableCell align="right">
                       <Button size="small" startIcon={<Check />} onClick={() => confirmar.mutate(r.id)}
-                        disabled={confirmar.isPending || r.publicada}>Confirmar</Button>
+                        disabled={(confirmar.isPending && confirmar.variables === r.id) || r.publicada}>Confirmar</Button>
                       <Button size="small" startIcon={<Add />} onClick={() => setCapsulaEn(r)}
                         disabled={r.publicada}>Cápsula</Button>
                       <Button size="small" startIcon={<Publish />} onClick={() => publicar.mutate(r.id)}
-                        disabled={publicar.isPending || r.publicada}>Publicar</Button>
+                        disabled={(publicar.isPending && publicar.variables === r.id) || r.publicada}>Publicar</Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -228,6 +232,14 @@ function DialogoCapsula({ ronda, onClose, onCreada }: {
   const [correcta, setCorrecta] = useState('');
   const [explicacion, setExplicacion] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Reabrir el diálogo para otra ronda no debe arrastrar el formulario de la
+  // vez anterior (riesgo de guardar opciones que no corresponden).
+  useEffect(() => {
+    if (!ronda) return;
+    setFormato('microlectura'); setEnunciado(''); setOrden(1);
+    setOpcionesTxt('A: \nB: '); setCorrecta(''); setExplicacion(''); setError(null);
+  }, [ronda]);
 
   const esReto = formato === 'reto';
 
