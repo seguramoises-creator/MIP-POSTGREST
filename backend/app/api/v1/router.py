@@ -21,6 +21,7 @@ from app.api.v1.routers.examenes      import router as examenes_router
 from app.api.v1.routers.ia_conexiones import router as ia_conexiones_router
 from app.api.v1.routers.formacion     import router as formacion_router
 from app.api.v1.routers.formacion_refuerzo import router as formacion_refuerzo_router
+from app.api.v1.routers.formacion_ranking import router as formacion_ranking_router
 from app.api.v1.routers.formacion_brechas import router as formacion_brechas_router
 from app.api.v1.routers.formacion_calendario import router as formacion_calendario_router
 from app.api.v1.routers.formacion_simulacro import router as formacion_simulacro_router
@@ -55,6 +56,7 @@ api_router.include_router(maestro_medicos_router)  # Maestro de Médicos (Config
 api_router.include_router(authz_router)  # RBAC Fase 1: contrato de autorizacion (/authz/me/permisos)
 api_router.include_router(formacion_router)
 api_router.include_router(formacion_refuerzo_router)  # Refuerzo de Memoria + KPI (10 y 11)  # Onboarding + Biblioteca (secciones 4 y 5)
+api_router.include_router(formacion_ranking_router)  # Ranking de Formacion (8) — no toca el Score Integral
 api_router.include_router(formacion_brechas_router)  # Plan de Cierre de Brechas (12) — motor de reglas sobre el KPI
 api_router.include_router(formacion_calendario_router)  # Calendario de Coaching (7) — consume el cuadrante LSII
 api_router.include_router(formacion_simulacro_router)  # Simulacro de Venta con IA (9)
