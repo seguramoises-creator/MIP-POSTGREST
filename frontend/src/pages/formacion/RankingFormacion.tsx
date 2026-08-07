@@ -221,8 +221,13 @@ function DialogoPesos({ abierto, paisCodigo, onClose, onGuardado }: {
     onError: (e) => setError(detalleError(e, 'No se pudo guardar el peso.')),
   });
 
+  // Cerrar (Cancelar o clic fuera) descarta cualquier valor sin guardar: si no,
+  // reabrir el diálogo más tarde muestra el borrador viejo como si fuera el
+  // valor vigente, y un "Guardar" sin tocar nada lo persistiría igual.
+  const cerrar = () => { setBorrador({}); setError(null); onClose(); };
+
   return (
-    <Dialog open={abierto} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={abierto} onClose={cerrar} maxWidth="sm" fullWidth>
       <DialogTitle>Pesos del Ranking de Formación</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
@@ -240,7 +245,7 @@ function DialogoPesos({ abierto, paisCodigo, onClose, onGuardado }: {
         </Stack>
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancelar</Button>
+        <Button onClick={cerrar}>Cancelar</Button>
         <Button variant="contained" disabled={guardar.isPending}
           onClick={() => guardar.mutate()}>{guardar.isPending ? 'Guardando…' : 'Guardar'}</Button>
       </DialogActions>

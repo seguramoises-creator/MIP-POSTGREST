@@ -69,6 +69,8 @@ def db(motor):
                   'formacion."RefuerzoRespuesta"', 'formacion."RefuerzoCapsula"',
                   'formacion."RefuerzoRondaProgramada"', 'formacion."RefuerzoCampana"',
                   'formacion."ParametroFormacion"',
+                  'formacion."OnboardingPasoProgreso"', 'formacion."OnboardingAsignacion"',
+                  'formacion."OnboardingPaso"', 'formacion."OnboardingPlantilla"',
                   'exam."FactIntentoExamen"', 'exam."FactAsignacionExamen"',
                   'exam."DimExamen"', '"DW"."FACT_Capacitacion"',
                   '"Config"."DIM_Capacitacion"', '"Security"."DIM_Usuario"',
@@ -280,14 +282,26 @@ def test_ranking_ordena_y_numera(escenario):
 
 
 def test_ranking_filtra_por_rm_ids(escenario):
-    """El auto-scope del GD se aplica en la lectura, no en el cálculo."""
-    db, c1, rm = escenario["db"], escenario["c1"], escenario["rm"]
+    """El auto-scope del GD se aplica en la lectura, no en el cálculo.
+
+    M-1: con un solo RM en el escenario, filtrar por él daría lo mismo que no
+    filtrar — el test pasaría aunque `ranking()` ignorara `rm_ids`. Se agrega un
+    segundo RM del mismo país para que el filtro tenga algo real que excluir.
+    """
+    db, c1, rm, linea = escenario["db"], escenario["c1"], escenario["rm"], escenario["linea"]
+    otro = RepresentanteMedico(pais_codigo="DO", linea_id=linea.id,
+                               codigo="VM04", nombre="Representante Cuatro")
+    db.add(otro)
+    db.commit()
     ranking.recalcular_ciclo(db, c1.id, "DO")
 
-    filas = ranking.ranking(db, c1.id, rm_ids=[rm.id])
+    filas_filtradas = ranking.ranking(db, c1.id, rm_ids=[rm.id])
+    filas_sin_filtro = ranking.ranking(db, c1.id)
 
-    assert len(filas) == 1
-    assert filas[0]["rm_id"] == rm.id
+    assert len(filas_filtradas) == 1
+    assert filas_filtradas[0]["rm_id"] == rm.id
+    assert all(f["rm_id"] != otro.id for f in filas_filtradas)
+    assert len(filas_sin_filtro) == 2
 
 
 def test_recalcular_limpia_filas_de_rm_fuera_del_roster_actual(escenario):
@@ -407,3 +421,72 @@ def test_mis_puntos_calcula_la_posicion_real(escenario):
 
     assert mp_lider["posicion"] == 1
     assert mp_ultimo["posicion"] == 2
+
+
+def test_recalcular_rechaza_ciclo_de_otro_pais(escenario):
+    """M-3: el DELETE de `recalcular_ciclo` va por `ciclo_id`, pero el INSERT va
+    por el roster de `pais_codigo`. Sin un guard de consistencia, llamar la
+    función con un ciclo de un país y el código de otro borraría en silencio el
+    ranking de un país y lo repoblaría con representantes ajenos. Se verifica
+    que la llamada cruzada levanta `ValueError` y que NO borra nada."""
+    db, c1 = escenario["db"], escenario["c1"]
+    otro_pais = Pais(codigo="PA", nombre="Panamá")
+    db.add(otro_pais)
+    db.commit()
+
+    ranking.recalcular_ciclo(db, c1.id, "DO")
+    filas_antes = db.query(RankingFormacionPuntos).filter(
+        RankingFormacionPuntos.ciclo_id == c1.id).all()
+    assert len(filas_antes) == 1
+
+    with pytest.raises(ValueError, match="no es de PA|es de DO"):
+        ranking.recalcular_ciclo(db, c1.id, "PA")
+
+    filas_despues = db.query(RankingFormacionPuntos).filter(
+        RankingFormacionPuntos.ciclo_id == c1.id).all()
+    assert len(filas_despues) == 1
+    assert filas_despues[0].puntos_total == filas_antes[0].puntos_total
+
+
+def test_onboarding_suma_pasos_dentro_del_ciclo_y_bono_de_ruta(escenario):
+    """I-1: pinea el componente de onboarding, que el fixture `escenario` no
+    ejercita (sale en 0 sin importar si `_puntos_onboarding` está roto).
+
+    Cubre: el join PasoProgreso→Asignacion, la ventana de fechas del ciclo, el
+    bono `ranking_bono_ruta_completa`, y en particular `_dia_siguiente()` — uno
+    de los pasos se completa el ÚLTIMO día del ciclo a una hora tardía (18:00),
+    que es exactamente el caso que existe esa función para no perder (comparar
+    con `<= fecha_fin` en vez de `< dia_siguiente` lo dejaría fuera).
+    """
+    from app.models.formacion import OnboardingPasoProgreso
+    from app.services import formacion_onboarding_service as onboarding
+
+    db, rm, c1, linea = (escenario["db"], escenario["rm"], escenario["c1"],
+                         escenario["linea"])
+
+    plantilla = onboarding.crear_plantilla_estandar(db, "DO", linea.id, "Ruta Cardio")
+    asignacion = onboarding.asignar(db, plantilla.id, rm.id, fecha_inicio=date(2026, 1, 1))
+    pasos = onboarding.pasos_de(db, plantilla.id)
+    assert len(pasos) >= 3  # la plantilla estándar trae al menos estos 3 pasos
+
+    # Dos pasos completados DENTRO del ciclo 1; el segundo, el último día del
+    # ciclo a una hora tardía (protegido por `_dia_siguiente`).
+    db.add(OnboardingPasoProgreso(asignacion_id=asignacion.id, paso_id=pasos[0].id,
+                                  completado=True,
+                                  completado_en=datetime(2026, 1, 5, 9, 0)))
+    db.add(OnboardingPasoProgreso(asignacion_id=asignacion.id, paso_id=pasos[1].id,
+                                  completado=True,
+                                  completado_en=datetime(2026, 1, 31, 18, 0)))
+    # Un tercer paso completado FUERA del ciclo (ciclo 2): no debe sumar.
+    db.add(OnboardingPasoProgreso(asignacion_id=asignacion.id, paso_id=pasos[2].id,
+                                  completado=True,
+                                  completado_en=datetime(2026, 2, 5, 9, 0)))
+    # La ruta se da por completada dentro del ciclo 1: aplica el bono.
+    asignacion.completada_en = datetime(2026, 1, 31, 20, 0)
+    db.commit()
+
+    p = ranking.pesos(db, "DO")
+    r = ranking.calcular_componentes(db, rm.id, c1, p)
+
+    assert r["puntos_onboarding"] == 2 * 5 + 25 == 35
+    assert r["puntos_total"] == 88 + 35

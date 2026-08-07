@@ -214,6 +214,12 @@ def recalcular_ciclo(db: Session, ciclo_id: int, pais_codigo: str) -> dict:
     ciclo = db.get(Ciclo, ciclo_id)
     if ciclo is None:
         raise ValueError("Ciclo no encontrado")
+    if ciclo.pais_codigo != pais_codigo:
+        # El DELETE va por ciclo y el INSERT por roster de país: sin esta
+        # comprobación, cruzar ambos borraría el ranking de un país y lo
+        # repoblaría con los representantes de otro.
+        raise ValueError(
+            f"El ciclo {ciclo_id} es de {ciclo.pais_codigo}, no de {pais_codigo}.")
     rms = (db.query(RepresentanteMedico)
            .filter(RepresentanteMedico.pais_codigo == pais_codigo).all())
     pesos_pais = pesos(db, pais_codigo)
