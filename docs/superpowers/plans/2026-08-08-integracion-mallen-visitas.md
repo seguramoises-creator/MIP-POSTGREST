@@ -1325,6 +1325,8 @@ def test_ciclo_cerrado_integra_los_hechos_pero_aborta_el_recalculo(farmacia):
 
     assert r["recalculo"]["abortado"] is True
     assert db.query(FactVisita).count() == 1   # los hechos SÍ entraron
+    # …pero nada calculado se tocó: el motor de indicadores se abstuvo solo.
+    assert r["indicadores"]["omitido_ciclo_cerrado"] is True
 
 
 def test_lote_validado_pasa_a_integrado(farmacia):
@@ -1454,11 +1456,17 @@ def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
     for _, integrar in _INTEGRADORES:
         conteos.append(integrar(db, pais_codigo, ciclo_codigo, hallazgos))
 
+    # `calcular_indicadores` ya se protege solo contra el ciclo cerrado: devuelve
+    # `omitido_ciclo_cerrado=True` sin borrar ni escribir nada (si borrara, se
+    # llevaría por delante los `puntos_obtenidos` del snapshot histórico y el
+    # recálculo posterior abortaría sin reponerlos). Ese dict viaja tal cual al
+    # llamador, así que la UI distingue "no había nada que calcular" de "el
+    # ciclo está cerrado y no se tocó". Aquí NO se duplica el guard.
     try:
         resumen_ind = indicadores.calcular_indicadores(
             db, pais_codigo, ciclo_codigo, hallazgos)
     except ValueError as exc:
-        resumen_ind = {"rms": 0, "filas": 0}
+        resumen_ind = {"rms": 0, "filas": 0, "omitido_ciclo_cerrado": False}
         hallazgos.append(Hallazgo("indicador", None, str(exc), SEVERIDAD_ERROR))
 
     detalle = "; ".join(
