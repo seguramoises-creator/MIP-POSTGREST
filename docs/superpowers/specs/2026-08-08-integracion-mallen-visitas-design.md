@@ -61,7 +61,7 @@ Se reutiliza `Config.MapeoExterno` con las entidades `visita_medico` y `visita_f
 
 **`DIM_TargetMedico`** (desde `panelmedico`):
 - `programado` ← `activo` de `ext`.
-- `potencial` ← `prioridad` (TOP/REGULAR) — es el campo que `ext` usa para segmentar.
+- `potencial` **NO se escribe** (queda como esté). Corrige un error de una versión anterior de este spec, que lo mapeaba desde `prioridad` (TOP/REGULAR): `potencial` significa **categoría A/B/C** (así lo declara el propio modelo) y el §11.5 del requerimiento advierte literalmente que *"marcar TOP no es marcar categoría A"* — son criterios ortogonales. La `prioridad` de `ext` es competencia del **sub-proyecto de Médicos TOP** (§7.3 del requerimiento), que decidirá dónde vive; aquí no se le busca acomodo forzado.
 - `medico_nombre` y `especialidad` se resuelven desde `DIM_Medico` (ya sincronizado), no desde `ext`: el maestro es la fuente.
 - La **frecuencia** (`F1`/`F2`) NO se guarda aquí: `DIM_TargetMedico` no tiene esa columna y no se le añade. El motor de indicadores (§3.4) la lee directamente de `ext.panelmedico`, que es donde el dato existe. Esta tabla alimenta el módulo 4DX, no el cálculo del Score.
 
@@ -90,14 +90,18 @@ Este sub-proyecto añade el motor de los **cuatro indicadores de visita**, que e
 
 | Indicador | Fórmula |
 |---|---|
-| `COB_MD_F1` | médicos F1 **cubiertos** / médicos F1 en el panel × 100 |
-| `COB_MD_F2` | médicos F2 **cubiertos** / médicos F2 en el panel × 100 |
-| `PROM_DIARIO` | visitas ejecutadas a médicos / `dias_laborables` del ciclo |
-| `COB_FARMACIAS` | farmacias **cubiertas** / farmacias en el target × 100 |
+| `COB_MD_F1` | médicos F1 **distintos visitados** / médicos F1 en el panel × 100 |
+| `COB_MD_F2` | médicos F2 **distintos visitados** / médicos F2 en el panel × 100 |
+| `PROM_DIARIO` | **médicos distintos visitados** / `dias_laborables` del ciclo |
+| `COB_FARMACIAS` | farmacias **distintas visitadas** / farmacias en el target × 100 |
 
-**Definición de «cubierto» (decisión del cliente): cumplir la frecuencia completa.** Un médico está cubierto cuando recibió **al menos las `visitas_programadas`** que su fila de `panelmedico` exige (p. ej. F1 = 2 visitas, F2 = 1). Lo mismo para farmacias con `targetfarmacia.visitas_programadas`. Es la lectura literal del requerimiento y mide cumplimiento del plan, no mero alcance.
+**Definición de «cubierto»: alcance — al menos una visita ejecutada.** Un médico cuenta en el numerador cuando tiene **una o más** visitas ejecutadas en el ciclo; visitarlo más veces no lo cuenta dos veces. Lo mismo para farmacias.
 
-Si `visitas_programadas` viene nulo, se usa **1** como mínimo (no se puede exigir una frecuencia que no se declaró) y se emite hallazgo `aviso`.
+**Corrección de una versión anterior de este spec**, que definía cubierto como *"cumplir las `visitas_programadas` completas"*. El **§2.1 del requerimiento v2** dice literalmente: *"calcula la cobertura dividiendo la **cantidad de médicos distintos visitados** entre la cantidad de médicos programados para cada frecuencia"*, y para el promedio diario: *"**Médicos visitados** dividido entre los días laborables del ciclo"* — no visitas. La definición anterior venía del RFI del 22-jul, que el v2 reemplazó. Como el requerimiento es el documento acordado con Mallén, **los números de VISTA deben cuadrar con los suyos**.
+
+Consecuencia directa: `visitas_programadas` **no participa en el cálculo** y **no tiene destino interno** — `DIM_TargetMedico` no tiene esa columna y no se le añade (§Global Constraints). Queda disponible en `ext` para quien la necesite. No hay, por tanto, caso de "frecuencia no declarada" que avisar.
+
+> **Nota abierta (no bloquea):** el §11.6 del requerimiento menciona una vez *"la cobertura completa queda en cero mientras la cobertura simple funciona"* y la liga al par `tipo_visita` V/R, sin definirla. Es la única aparición de un segundo concepto de cobertura en todo el documento. Se implementa lo que dice el §2.1, que es explícito y normativo; si Mallén confirma que además quieren la "completa", se añade como indicador aparte sin tocar estos cuatro.
 
 **El cálculo se hace directamente sobre `ext`**, no sobre las tablas internas. Razón: `ext.panelmedico` trae `frecuencia_objetivo` (F1/F2) y `visitas_programadas`, que son justo lo que separa los dos indicadores de cobertura — y `DIM_TargetMedico` **no tiene columna de frecuencia**. Calcular desde el origen evita inventar un mapeo o alterar una tabla existente para que quepa el dato.
 
@@ -106,6 +110,26 @@ Si `visitas_programadas` viene nulo, se usa **1** como mínimo (no se puede exig
 **Escritura idempotente:** delete-then-insert de las filas de `FACT_ResultadoIndicador` de esos cuatro indicadores para el `(rm_id, ciclo_id)` procesado. No se tocan los otros cuatro indicadores, que siguen llegando por su vía.
 
 **Los puntos no se calculan aquí:** se escribe `resultado_real` y el motor existente (`motor_calculo_service.completar_puntajes`) hace la conversión a puntos, igual que con los datos del Excel. Así el camino de puntuación sigue siendo uno solo.
+
+### 3.5 Paso 3 del §7.1 — disparar el recálculo del Score
+
+Escribir `resultado_real` **no actualiza nada visible**: el Score Integral, los rankings y los reconocimientos siguen mostrando los valores del cálculo anterior hasta que corre el motor. El §7.1 paso 3 lo exige: *"Recalcula los ocho indicadores del ciclo, **el score integral, los rankings y los reconocimientos**, con el motor que ya existe."*
+
+Tras integrar los hechos y escribir los indicadores, el orquestador llama a `recalculo_service.recalcular_ciclo(db, ciclo_id, pais_codigo)` — el mismo servicio que dispara el ETL y el botón "Calcular IUP y Ranking". **No se escribe una línea de cálculo nueva**: se engancha el existente, que ya trae su guard de ciclo abierto.
+
+- Se llama **después del commit** de la integración: el motor abre su propia transacción y debe ver los datos ya escritos.
+- Si el ciclo está **cerrado**, `recalcular_ciclo` devuelve `abortado=true` sin escribir nada. Eso no es un error de la integración: los hechos entran (son historia), pero el Score no se recalcula. Se refleja en la respuesta y se avisa en la UI.
+- El resultado del recálculo viaja en la respuesta del endpoint, para que la pantalla muestre qué pasó y no solo "integrado".
+
+### 3.6 Paso 4 del §7.1 — cerrar el lote
+
+Hoy **nadie escribe `INTEGRADO`**. El sub-proyecto 1 mueve los lotes a `VALIDADO`/`RECHAZADO` y ahí se quedan; el guard `LoteYaIntegrado` que se construyó protege contra un estado que nunca se alcanza. El §7.1 paso 4 pide: *"Marca el lote como INTEGRADO o RECHAZADO y deja el detalle en el campo de mensaje."*
+
+**Reconciliación lote ↔ ciclo:** la integración trabaja por `(pais_codigo, ciclo_codigo)`, pero el estado vive en el lote. Se resuelve sin ambigüedad con el dato que ya existe: **los lotes que se cierran son exactamente los referenciados por el `lote_id` de las filas integradas** en esa corrida. Se recogen mientras se recorren los hechos; no hace falta inferir nada.
+
+- Solo pasan a `INTEGRADO` los lotes que estaban en `VALIDADO`. Uno en `RECHAZADO` no se rescata por la puerta de atrás, y uno ya en `INTEGRADO` se deja como está (la re-ejecución es idempotente).
+- `mensaje` recibe el detalle de la corrida (filas integradas y actualizadas por hecho).
+- Escribir `estado`/`mensaje` **no viola la prohibición sobre `ext`**: esa prohibición es sobre el **esquema** (DDL). El propio contrato asigna esos dos campos a VISTA — el sub-proyecto 1 ya los escribe.
 
 ## 4. Apagado de la captura de visitas
 
@@ -149,12 +173,17 @@ Respuesta de `POST /integrar`:
  "hechos": [
    {"hecho": "panelmedico", "en_ext": 480, "integrados": 12, "actualizados": 468, "omitidos": 0}
  ],
+ "indicadores": {"rms": 24, "filas": 96},
+ "recalculo": {"abortado": false, "filas_kpi_actualizadas": 192, "rankings_generados": 24},
+ "lotes_cerrados": [1042, 1043],
  "hallazgos": [
    {"hecho": "factvisitamedico", "origen_id": "V-01923",
     "problema": "No se pudo resolver el médico «MD-999»; sincroniza dimensiones primero.",
     "severidad": "error"}
  ]}
 ```
+
+`recalculo` es el dict que devuelve `recalculo_service.recalcular_ciclo` tal cual (§3.5); `lotes_cerrados` son los que pasaron a `INTEGRADO` (§3.6).
 
 ## 7. El punto de F1/F2 — RESUELTO
 
@@ -174,6 +203,7 @@ Un solo commit al final: o entra el conjunto coherente o no entra nada.
 
 - Indicadores 5, 6 y 8 (ventas, prescripciones, coaching): **sub-proyecto 4**.
 - Indicador 7 y la pantalla de captura manual de notas: sub-proyecto propio.
+- **Médicos TOP** (§3.4, §7.3 y §11.5 del requerimiento): sub-proyecto propio, inmediatamente después de este. Son tres reglas de negocio — no publicar una planeación que omita un TOP, marcar los TOP sin visita y sin revisita, y recordatorio al RM con escalamiento al GD. Aquí solo se establece lo que las habilita: **no se quema `prioridad` dentro de `potencial`** (§3.3), para que ese sub-proyecto pueda modelarla bien.
 - Automatizar el disparo de la integración: sub-proyecto 5. Aquí es un botón.
 - Desmantelar o vaciar el módulo de Visita: solo se cierra la escritura de visitas; el resto de fases y todos los datos históricos se conservan.
 - Tocar `cobertura_predictiva_service` o `cobertura_farmacia_service`: los cálculos ya leen las tablas destino.
@@ -182,7 +212,7 @@ Un solo commit al final: o entra el conjunto coherente o no entra nada.
 ## 10. Verificación
 
 **Backend** — tests en `backend/tests/test_integracion_visitas.py`, patrón PostgreSQL real:
-1. Un `panelmedico` con sus dimensiones sincronizadas → crea `DIM_TargetMedico` con `programado` y `potencial` correctos.
+1. Un `panelmedico` con sus dimensiones sincronizadas → crea `DIM_TargetMedico` con `programado` correcto y **`potencial` en nulo** (la prioridad TOP no se quema ahí).
 2. Un `factvisitamedico` ejecutado → crea `DW.FACT_Visita` con `estado_visita='Realizada'` y `tipo_contacto` correcto.
 3. Un `factvisitamedico` no ejecutado → `estado_visita='Cancelada'`.
 4. **Re-integrar el mismo ciclo no duplica** (ni visitas ni targets).
@@ -193,11 +223,18 @@ Un solo commit al final: o entra el conjunto coherente o no entra nada.
 9. Tras integrar, `cobertura_predictiva_service` devuelve cobertura distinta de cero para ese ciclo — la prueba de que el circuito 4DX funciona.
 
 **Motor de indicadores (§3.4):**
-10. Un RM con 2 médicos F1, uno con sus 2 visitas exigidas y otro con 1 → `COB_MD_F1 = 50`. Es el caso que distingue «cubierto = frecuencia completa» de «al menos una visita»: con la otra definición daría 100.
+10. Un RM con 2 médicos F1, uno visitado **3 veces** y otro **ninguna** → `COB_MD_F1 = 50`. Es el caso que fija «distintos visitados»: las 3 visitas al mismo médico cuentan **una sola vez**, así que repetir no infla la cobertura.
 11. Los médicos F2 del mismo RM no afectan a `COB_MD_F1` y viceversa.
-12. `PROM_DIARIO` = visitas ejecutadas / `dias_laborables` del ciclo; las no ejecutadas no cuentan en el numerador pero su médico sí en el denominador de cobertura.
-13. `visitas_programadas` nulo → se exige 1 y se emite hallazgo `aviso`.
+12. `PROM_DIARIO` = **médicos distintos** visitados / `dias_laborables`. Con 1 médico visitado 3 veces en un ciclo de 20 días → `0.05`, no `0.15`. Es el caso que distingue médicos de visitas.
+13. Una visita con `ejecutada = false` no cuenta en el numerador, pero su médico **sí sigue** en el denominador de cobertura.
 14. Recalcular el mismo ciclo **no duplica** filas en `FACT_ResultadoIndicador` (delete-then-insert), y **no toca** los otros cuatro indicadores del ciclo.
 15. Se escribe `resultado_real` y NO `puntos_obtenidos`: la conversión a puntos sigue siendo del motor existente.
+
+**Recálculo y cierre de lote (§3.5, §3.6):**
+16. Integrar un ciclo **abierto** deja el Score y el ranking actualizados: `FACT_ScoreIntegralRM` y `FACT_RankingRM` tienen filas del ciclo que antes no existían.
+17. Integrar un ciclo **cerrado**: los hechos entran, el recálculo devuelve `abortado=true` y ninguna FACT calculada cambia.
+18. Un lote en `VALIDADO` cuyas filas se integran → queda `INTEGRADO` con el detalle en `mensaje`.
+19. Un lote en `RECHAZADO` **no** pasa a `INTEGRADO` aunque alguna de sus filas se recorra.
+20. Re-integrar el mismo ciclo con el lote ya en `INTEGRADO` no falla ni revierte el estado.
 
 **Frontend** — `npm run build` + smoke: sembrar hechos en `ext`, integrar, ver los conteos, y comprobar que la pantalla de registro está en solo lectura con su aviso.

@@ -13,9 +13,12 @@
 - **PROHIBIDO tocar el esquema `ext`** (modelos, migración `0030`, SQL entregado). Solo se LEE.
 - **PROHIBIDO modificar cualquier `Config.DIM_*`, `DW.FACT_*` o `Visita.*` existente** (columnas, índices, constraints). **Este sub-proyecto NO lleva migración.**
 - **PROHIBIDO tocar `motor_calculo_service.py`**, `cobertura_predictiva_service.py` ni `cobertura_farmacia_service.py`. El motor nuevo escribe `resultado_real` y la conversión a puntos sigue siendo del motor existente.
-- **«Cubierto» = cumplir la frecuencia completa** (decisión del cliente): un médico está cubierto cuando recibió **al menos sus `visitas_programadas`**. Si ese campo viene nulo, se exige **1** y se emite hallazgo `aviso`.
+- **«Cubierto» = médicos DISTINTOS visitados** (§2.1 del requerimiento v2, literal): basta **una** visita ejecutada; visitarlo cinco veces lo cuenta una vez. **`visitas_programadas` NO entra en la fórmula.** Corrige una versión anterior de este plan que exigía la frecuencia completa, tomada del RFI del 22-jul que el v2 reemplazó.
+- **`PROM_DIARIO` = médicos distintos visitados / `dias_laborables`** — médicos, **no visitas** (§2.1: *"Médicos visitados dividido entre los días laborables del ciclo"*).
 - **Solo cuentan las visitas con `ejecutada = true`.** `V` y `R` cuentan ambas como contacto. Las no ejecutadas no suman al numerador, pero su médico **sigue en el denominador**.
 - **El cálculo de indicadores se hace sobre `ext`, no sobre las tablas internas**: `DIM_TargetMedico` no tiene columna de frecuencia y no se le añade.
+- **`prioridad` (TOP/REGULAR) NO se escribe en `DIM_TargetMedico.potencial`**: ese campo significa categoría A/B/C y el §11.5 advierte que *"marcar TOP no es marcar categoría A"*. La prioridad es del sub-proyecto de Médicos TOP, que va después de este.
+- **Al final de la integración se dispara `recalculo_service.recalcular_ciclo`** (§7.1 paso 3) y **se marcan como `INTEGRADO` los lotes recorridos** (§7.1 paso 4). Sin esos dos pasos, integrar no actualiza el Score ni cierra el ciclo de vida del lote.
 - **Una fila mala no detiene la integración**: se registra un hallazgo y se sigue. Los hallazgos viajan en la respuesta, no se persisten.
 - **Idempotencia**: los hechos se emparejan por `MapeoExterno` (`visita_medico`, `visita_farmacia`, `target_medico`, `target_farmacia`); los indicadores por delete-then-insert acotado a los 4 códigos y al `(rm_id, ciclo_id)` procesado.
 - **La solución es multipaís**: sin parametrización por país en ninguna parte.
@@ -210,7 +213,10 @@ def test_panel_crea_el_target_medico(escenario):
     assert t.ciclo_id == escenario["ciclo"].id
     assert t.medico_codigo == "MD01"
     assert t.programado is True
-    assert t.potencial == "TOP"
+    # `potencial` significa categoría A/B/C, NO prioridad TOP/REGULAR. La
+    # prioridad de `ext` es del sub-proyecto de Médicos TOP; aquí no se
+    # escribe. Este assert impide que alguien "aproveche" la columna.
+    assert t.potencial is None
 
 
 def test_visita_ejecutada_entra_como_realizada(escenario):
@@ -399,9 +405,11 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
                     .first())
 
         def _crear(f=fila, cid=ciclo_id, rid=rm_id):
+            # `potencial` NO se escribe: significa categoría A/B/C, no la
+            # prioridad TOP/REGULAR de `ext` (§11.5 del requerimiento).
             nuevo = TargetMedico(
                 pais_codigo=f.pais_codigo, rm_id=rid, ciclo_id=cid,
-                medico_codigo=f.medico_codigo, potencial=f.prioridad,
+                medico_codigo=f.medico_codigo,
                 programado=f.activo, activo=f.activo)
             db.add(nuevo)
             db.flush()
@@ -411,7 +419,6 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
             db, ENT_TARGET_MEDICO, pais_codigo,
             f"{ciclo_codigo}/{fila.rm_codigo}/{fila.medico_codigo}",
             TargetMedico, _buscar, _crear)
-        registro.potencial = fila.prioridad
         registro.programado = fila.activo
         registro.activo = fila.activo
         conteo.anotar(resultado)
@@ -825,23 +832,41 @@ def _visitas(db, medico, cuantas, ejecutada=True, desde=1):
             ejecutada=ejecutada, acompanado=False))
 
 
-def test_cubierto_exige_la_frecuencia_completa(base):
-    """El caso que separa «frecuencia completa» de «al menos una visita».
+def test_cobertura_cuenta_medicos_distintos_no_visitas(base):
+    """El caso que fija «médicos distintos visitados» (§2.1 del requerimiento).
 
-    Dos médicos F1 que exigen 2 visitas: uno las recibió, el otro solo 1.
-    Con la definición del cliente da 50; con «al menos una» daría 100.
+    Dos médicos F1: uno visitado 3 veces, el otro ninguna. Las 3 visitas al
+    mismo médico cuentan UNA vez, así que da 50. Si el numerador contara
+    visitas en vez de médicos, daría 150 — un valor imposible.
     """
     db = base["db"]
     _panel(db, "MD01", "F1", 2)
     _panel(db, "MD02", "F1", 2)
-    _visitas(db, "MD01", 2)
-    _visitas(db, "MD02", 1, desde=10)
+    _visitas(db, "MD01", 3)
     db.commit()
 
     ind.calcular_indicadores(db, "DO", "C01-2026", [])
     db.commit()
 
     assert _valor(db, base["rm"].id, base["ciclo"].id, "COB_MD_F1") == 50.0
+
+
+def test_una_sola_visita_ya_cubre_aunque_exija_mas(base):
+    """`visitas_programadas` NO participa: basta una visita ejecutada.
+
+    Un médico F1 que declara exigir 2 visitas y recibió 1 → cubierto, 100.
+    Con la definición vieja («frecuencia completa») daría 0. Este test es el
+    que impide que esa definición vuelva a colarse.
+    """
+    db = base["db"]
+    _panel(db, "MD01", "F1", 2)
+    _visitas(db, "MD01", 1)
+    db.commit()
+
+    ind.calcular_indicadores(db, "DO", "C01-2026", [])
+    db.commit()
+
+    assert _valor(db, base["rm"].id, base["ciclo"].id, "COB_MD_F1") == 100.0
 
 
 def test_f1_y_f2_no_se_mezclan(base):
@@ -858,11 +883,30 @@ def test_f1_y_f2_no_se_mezclan(base):
     assert _valor(db, base["rm"].id, base["ciclo"].id, "COB_MD_F2") == 0.0
 
 
-def test_promedio_diario_usa_los_dias_laborables_del_ciclo(base):
-    """10 visitas ejecutadas / 20 días laborables = 0.5."""
+def test_promedio_diario_cuenta_medicos_distintos_no_visitas(base):
+    """§2.1: «MÉDICOS visitados / días laborables», no visitas.
+
+    Un médico visitado 10 veces en un ciclo de 20 días → 1/20 = 0.05.
+    Si contara visitas daría 0.5: diez veces más. Es la diferencia que
+    justifica este test.
+    """
     db = base["db"]
     _panel(db, "MD01", "F1", 1)
     _visitas(db, "MD01", 10)
+    db.commit()
+
+    ind.calcular_indicadores(db, "DO", "C01-2026", [])
+    db.commit()
+
+    assert _valor(db, base["rm"].id, base["ciclo"].id, "PROM_DIARIO") == 0.05
+
+
+def test_promedio_diario_suma_medicos_distintos(base):
+    """10 médicos distintos visitados / 20 días laborables = 0.5."""
+    db = base["db"]
+    for i in range(10):
+        _panel(db, f"MD{i:02d}", "F1", 1)
+        _visitas(db, f"MD{i:02d}", 1)
     db.commit()
 
     ind.calcular_indicadores(db, "DO", "C01-2026", [])
@@ -887,7 +931,9 @@ def test_las_no_ejecutadas_no_cuentan_pero_su_medico_si(base):
     assert _valor(db, base["rm"].id, base["ciclo"].id, "PROM_DIARIO") == 0.05
 
 
-def test_visitas_programadas_nulo_exige_una_y_avisa(base):
+def test_visitas_programadas_nulo_no_afecta_el_calculo(base):
+    """`visitas_programadas` no entra en la fórmula, así que un nulo no rompe
+    nada ni genera hallazgo: no hay frecuencia que exigir."""
     db = base["db"]
     _panel(db, "MD01", "F1", None)
     _visitas(db, "MD01", 1)
@@ -898,7 +944,7 @@ def test_visitas_programadas_nulo_exige_una_y_avisa(base):
     db.commit()
 
     assert _valor(db, base["rm"].id, base["ciclo"].id, "COB_MD_F1") == 100.0
-    assert any(h.severidad == "aviso" for h in hallazgos)
+    assert hallazgos == []
 
 
 def test_recalcular_no_duplica_ni_toca_otros_indicadores(base):
@@ -964,18 +1010,25 @@ tiene que producirlos. Es este módulo.
 
 SE CALCULA SOBRE `ext`, NO SOBRE LAS TABLAS INTERNAS
 -----------------------------------------------------
-`ext.panelmedico` trae `frecuencia_objetivo` (F1/F2) y `visitas_programadas`, que
-son justo lo que separa COB_MD_F1 de COB_MD_F2 y lo que define «cubierto».
-`DIM_TargetMedico` no tiene esas columnas, y añadírselas sería deformar una tabla
-interna para que quepa un dato del contrato.
+`ext.panelmedico` trae `frecuencia_objetivo` (F1/F2), que es justo lo que separa
+COB_MD_F1 de COB_MD_F2. `DIM_TargetMedico` no tiene esa columna, y añadírsela
+sería deformar una tabla interna para que quepa un dato del contrato.
 
-DEFINICIÓN DE «CUBIERTO» (decisión del cliente)
-------------------------------------------------
-Cumplir la FRECUENCIA COMPLETA: al menos `visitas_programadas` visitas ejecutadas
-en el ciclo. No basta con haber pasado una vez. Mide cumplimiento del plan, que es
-lo que el indicador dice medir.
+DEFINICIÓN DE «CUBIERTO»: MÉDICOS DISTINTOS VISITADOS
+------------------------------------------------------
+§2.1 del requerimiento v2, literal: «calcula la cobertura dividiendo la cantidad
+de MÉDICOS DISTINTOS VISITADOS entre la cantidad de médicos programados para cada
+frecuencia». Un médico cuenta cuando tiene AL MENOS UNA visita ejecutada;
+visitarlo cinco veces no lo cuenta cinco veces.
+
+`visitas_programadas` NO participa en esta fórmula. Se integra igual a
+`DIM_TargetMedico` porque lo consume el módulo 4DX, pero aquí no se lee.
+
+Una versión anterior de este módulo exigía la frecuencia completa
+(`>= visitas_programadas`). Venía del RFI del 22-jul, que el requerimiento v2
+reemplazó. Se corrigió porque los números de VISTA deben cuadrar con los de
+Mallén, y el documento acordado es el v2.
 """
-from dataclasses import dataclass
 from decimal import Decimal
 
 from loguru import logger
@@ -989,18 +1042,13 @@ from app.models.integracion_ext import (
 )
 from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE
 from app.services import integracion_mapeo as mapeo
-from app.services.integracion_visitas_service import (
-    SEVERIDAD_AVISO, SEVERIDAD_ERROR, Hallazgo,
-)
+from app.services.integracion_visitas_service import SEVERIDAD_ERROR, Hallazgo
 
 COB_MD_F1 = "COB_MD_F1"
 COB_MD_F2 = "COB_MD_F2"
 PROM_DIARIO = "PROM_DIARIO"
 COB_FARMACIAS = "COB_FARMACIAS"
 CODIGOS: tuple[str, ...] = (COB_MD_F1, COB_MD_F2, PROM_DIARIO, COB_FARMACIAS)
-
-#: Si el contrato no declara la frecuencia, no se puede exigir más de una visita.
-VISITAS_MINIMAS = 1
 
 
 def _pct(cubiertos: int, universo: int) -> Decimal:
@@ -1021,84 +1069,75 @@ def _indicadores_del_pais(db: Session, pais_codigo: str) -> dict[str, int]:
     return {f.codigo: f.id for f in filas}
 
 
+def _medicos_visitados(db: Session, pais_codigo: str, ciclo_codigo: str,
+                       rm_codigo: str) -> set[str]:
+    """Códigos de los médicos con AL MENOS UNA visita ejecutada en el ciclo.
+
+    Un `set` es la estructura que expresa la regla: «distintos visitados». Da
+    igual cuántas veces aparezca cada médico. Tanto `V` (visita) como `R`
+    (revisita) cuentan: ambas son presencia frente al médico.
+    """
+    filas = (db.query(ExtFactVisitaMedico.medico_codigo)
+             .filter(ExtFactVisitaMedico.pais_codigo == pais_codigo,
+                     ExtFactVisitaMedico.ciclo_codigo == ciclo_codigo,
+                     ExtFactVisitaMedico.rm_codigo == rm_codigo,
+                     ExtFactVisitaMedico.ejecutada.is_(True))
+             .distinct().all())
+    return {f[0] for f in filas}
+
+
 def _cobertura_medicos(db: Session, pais_codigo: str, ciclo_codigo: str,
                        rm_codigo: str, frecuencia: str,
-                       hallazgos: list) -> Decimal:
-    panel = (db.query(ExtPanelMedico)
+                       visitados: set[str]) -> Decimal:
+    """Médicos distintos visitados de esa frecuencia / médicos de esa
+    frecuencia en el panel × 100.
+
+    El numerador se intersecta con el panel de ESTA frecuencia: una visita a
+    un médico F2 no puede sumar a la cobertura F1. Los no visitados siguen en
+    el denominador — no visitar no reduce el universo.
+    """
+    panel = {f[0] for f in db.query(ExtPanelMedico.medico_codigo)
              .filter(ExtPanelMedico.pais_codigo == pais_codigo,
                      ExtPanelMedico.ciclo_codigo == ciclo_codigo,
                      ExtPanelMedico.rm_codigo == rm_codigo,
                      ExtPanelMedico.frecuencia_objetivo == frecuencia,
-                     ExtPanelMedico.activo.is_(True)).all())
+                     ExtPanelMedico.activo.is_(True)).distinct().all()}
     if not panel:
         return Decimal("0")
-
-    visitas = (db.query(ExtFactVisitaMedico)
-               .filter(ExtFactVisitaMedico.pais_codigo == pais_codigo,
-                       ExtFactVisitaMedico.ciclo_codigo == ciclo_codigo,
-                       ExtFactVisitaMedico.rm_codigo == rm_codigo,
-                       ExtFactVisitaMedico.ejecutada.is_(True)).all())
-    por_medico: dict[str, int] = {}
-    for v in visitas:
-        por_medico[v.medico_codigo] = por_medico.get(v.medico_codigo, 0) + 1
-
-    cubiertos = 0
-    for fila in panel:
-        exigidas = fila.visitas_programadas
-        if exigidas is None or exigidas <= 0:
-            exigidas = VISITAS_MINIMAS
-            hallazgos.append(Hallazgo(
-                "panelmedico", f"{rm_codigo}/{fila.medico_codigo}",
-                "No declara `visitas_programadas`; se exigió 1 visita para "
-                "considerarlo cubierto.", SEVERIDAD_AVISO))
-        if por_medico.get(fila.medico_codigo, 0) >= exigidas:
-            cubiertos += 1
-    return _pct(cubiertos, len(panel))
+    return _pct(len(panel & visitados), len(panel))
 
 
-def _promedio_diario(db: Session, pais_codigo: str, ciclo_codigo: str,
-                     rm_codigo: str, dias_laborables: int) -> Decimal:
-    total = (db.query(ExtFactVisitaMedico)
-             .filter(ExtFactVisitaMedico.pais_codigo == pais_codigo,
-                     ExtFactVisitaMedico.ciclo_codigo == ciclo_codigo,
-                     ExtFactVisitaMedico.rm_codigo == rm_codigo,
-                     ExtFactVisitaMedico.ejecutada.is_(True)).count())
+def _promedio_diario(db: Session, visitados: set[str],
+                     dias_laborables: int) -> Decimal:
+    """§2.1: «MÉDICOS visitados dividido entre los días laborables del ciclo».
+
+    Médicos distintos, no visitas: un médico visitado tres veces aporta 1.
+    Se reutiliza el mismo conjunto que la cobertura, así los dos indicadores
+    no pueden divergir en qué cuenta como visitado.
+    """
     if dias_laborables <= 0:
         return Decimal("0")
-    return (Decimal(total) / Decimal(dias_laborables)).quantize(Decimal("0.01"))
+    return (Decimal(len(visitados)) / Decimal(dias_laborables)).quantize(Decimal("0.01"))
 
 
 def _cobertura_farmacias(db: Session, pais_codigo: str, ciclo_codigo: str,
-                         rm_codigo: str, hallazgos: list) -> Decimal:
-    target = (db.query(ExtTargetFarmacia)
+                         rm_codigo: str) -> Decimal:
+    """Farmacias distintas visitadas / farmacias en el target × 100."""
+    target = {f[0] for f in db.query(ExtTargetFarmacia.farmacia_codigo)
               .filter(ExtTargetFarmacia.pais_codigo == pais_codigo,
                       ExtTargetFarmacia.ciclo_codigo == ciclo_codigo,
                       ExtTargetFarmacia.rm_codigo == rm_codigo,
-                      ExtTargetFarmacia.activo.is_(True)).all())
+                      ExtTargetFarmacia.activo.is_(True)).distinct().all()}
     if not target:
         return Decimal("0")
 
-    visitas = (db.query(ExtFactVisitaFarmacia)
-               .filter(ExtFactVisitaFarmacia.pais_codigo == pais_codigo,
-                       ExtFactVisitaFarmacia.ciclo_codigo == ciclo_codigo,
-                       ExtFactVisitaFarmacia.rm_codigo == rm_codigo,
-                       ExtFactVisitaFarmacia.ejecutada.is_(True)).all())
-    por_farmacia: dict[str, int] = {}
-    for v in visitas:
-        por_farmacia[v.farmacia_codigo] = por_farmacia.get(v.farmacia_codigo, 0) + 1
-
-    cubiertas = 0
-    for fila in target:
-        exigidas = fila.visitas_programadas
-        if exigidas is None or exigidas <= 0:
-            exigidas = VISITAS_MINIMAS
-            hallazgos.append(Hallazgo(
-                "targetfarmacia", f"{rm_codigo}/{fila.farmacia_codigo}",
-                "No declara `visitas_programadas`; se exigió 1 visita para "
-                "considerarla cubierta.", SEVERIDAD_AVISO))
-        if por_farmacia.get(fila.farmacia_codigo, 0) >= exigidas:
-            cubiertas += 1
-    return _pct(cubiertas, len(target))
+    visitadas = {f[0] for f in db.query(ExtFactVisitaFarmacia.farmacia_codigo)
+                 .filter(ExtFactVisitaFarmacia.pais_codigo == pais_codigo,
+                         ExtFactVisitaFarmacia.ciclo_codigo == ciclo_codigo,
+                         ExtFactVisitaFarmacia.rm_codigo == rm_codigo,
+                         ExtFactVisitaFarmacia.ejecutada.is_(True))
+                 .distinct().all()}
+    return _pct(len(target & visitadas), len(target))
 
 
 def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
@@ -1149,15 +1188,16 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
                 f"indicadores no se calcularon.", SEVERIDAD_ERROR))
             continue
 
+        visitados = _medicos_visitados(db, pais_codigo, ciclo_codigo, rm_codigo)
         valores = {
             COB_MD_F1: _cobertura_medicos(db, pais_codigo, ciclo_codigo,
-                                          rm_codigo, "F1", hallazgos),
+                                          rm_codigo, "F1", visitados),
             COB_MD_F2: _cobertura_medicos(db, pais_codigo, ciclo_codigo,
-                                          rm_codigo, "F2", hallazgos),
-            PROM_DIARIO: _promedio_diario(db, pais_codigo, ciclo_codigo,
-                                          rm_codigo, ciclo_ext.dias_laborables),
+                                          rm_codigo, "F2", visitados),
+            PROM_DIARIO: _promedio_diario(db, visitados,
+                                          ciclo_ext.dias_laborables),
             COB_FARMACIAS: _cobertura_farmacias(db, pais_codigo, ciclo_codigo,
-                                                rm_codigo, hallazgos),
+                                                rm_codigo),
         }
 
         indicador_ids = [ids[c] for c in CODIGOS if c in ids]
@@ -1183,7 +1223,7 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
 - [ ] **Step 4: Correr los tests para verificar que pasan**
 
 Run: `cd backend && ./venv/Scripts/python.exe -m pytest tests/test_integracion_indicadores.py -v`
-Expected: 7 passed (o SKIPPED).
+Expected: 9 passed (o SKIPPED).
 
 - [ ] **Step 5: Commit**
 
@@ -1203,7 +1243,8 @@ git commit -m "feat(integracion) motor de los 4 indicadores de visita desde los 
 
 **Interfaces:**
 - Consumes: los cuatro integradores (Tasks 1-2) y `calcular_indicadores` (Task 3).
-- Produce (para Task 6): `integrar_todo(db, pais_codigo, ciclo_codigo) -> dict` con `{"pais_codigo", "ciclo_codigo", "hechos": [...], "indicadores": {...}, "hallazgos": [...]}`; y `resumen_visitas(db, pais_codigo, ciclo_codigo) -> list[dict]` con `{"hecho", "en_ext", "integradas"}`.
+- Consumes también: `recalculo_service.recalcular_ciclo(db, ciclo_id, pais_codigo) -> dict` (existente, con su guard de ciclo abierto) y `ExtControlCarga`.
+- Produce (para Task 6): `integrar_todo(db, pais_codigo, ciclo_codigo) -> dict` con `{"pais_codigo", "ciclo_codigo", "hechos": [...], "indicadores": {...}, "recalculo": {...}, "lotes_cerrados": [int], "hallazgos": [...]}`; y `resumen_visitas(db, pais_codigo, ciclo_codigo) -> list[dict]` con `{"hecho", "en_ext", "integradas"}`.
 
 - [ ] **Step 1: Añadir los tests al final de `test_integracion_visitas.py`**
 
@@ -1250,11 +1291,88 @@ def test_resumen_cuenta_ext_y_integradas(farmacia):
     v = next(f for f in filas if f["hecho"] == "factvisitamedico")
     assert v["en_ext"] == 1
     assert v["integradas"] == 1
+
+
+def test_integrar_dispara_el_recalculo_del_score(farmacia):
+    """§7.1 paso 3: sin esto, integrar no movería el Score ni el ranking.
+
+    Se comprueba sobre la salida del motor, no sobre un mock: `recalculo`
+    trae el dict real de `recalculo_service.recalcular_ciclo`.
+    """
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.commit()
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    assert r["recalculo"]["abortado"] is False
+    assert "rankings_generados" in r["recalculo"]
+
+
+def test_ciclo_cerrado_integra_los_hechos_pero_aborta_el_recalculo(farmacia):
+    """Un ciclo cerrado es un snapshot histórico: los hechos entran, el Score
+    no se toca. El guard vive en `recalculo_service`, no se duplica aquí."""
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    farmacia["ciclo"].cerrado = True
+    db.commit()
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    assert r["recalculo"]["abortado"] is True
+    assert db.query(FactVisita).count() == 1   # los hechos SÍ entraron
+
+
+def test_lote_validado_pasa_a_integrado(farmacia):
+    """§7.1 paso 4. Hasta ahora nadie escribía INTEGRADO."""
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.commit()
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    assert r["lotes_cerrados"] == [1001]
+    lote = db.query(ExtControlCarga).filter_by(lote_id=1001).one()
+    assert lote.estado == "INTEGRADO"
+    assert "factvisitamedico" in lote.mensaje
+
+
+def test_lote_rechazado_no_se_rescata(farmacia):
+    """Un lote que la validación rechazó no llega a INTEGRADO por el hecho de
+    que la integración recorra sus filas."""
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.query(ExtControlCarga).filter_by(lote_id=1001).one().estado = "RECHAZADO"
+    db.commit()
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    assert r["lotes_cerrados"] == []
+    assert db.query(ExtControlCarga).filter_by(lote_id=1001).one().estado == "RECHAZADO"
+
+
+def test_reintegrar_no_revierte_el_estado_del_lote(farmacia):
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.commit()
+    viz.integrar_todo(db, "DO", "C01-2026")
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    assert r["lotes_cerrados"] == []          # ya estaba cerrado
+    assert db.query(ExtControlCarga).filter_by(lote_id=1001).one().estado == "INTEGRADO"
 ```
+
+El fixture `farmacia` debe exponer `"ciclo"` (el `Ciclo` interno) para el test de ciclo cerrado; si no lo hace, añádelo a su dict de retorno.
 
 - [ ] **Step 2: Correr los tests para verificar que fallan**
 
-Run: `cd backend && ./venv/Scripts/python.exe -m pytest tests/test_integracion_visitas.py -k "todo or resumen" -v`
+Run: `cd backend && ./venv/Scripts/python.exe -m pytest tests/test_integracion_visitas.py -k "todo or resumen or recalculo or lote or cerrado" -v`
 Expected: FAIL con `AttributeError: ... has no attribute 'integrar_todo'`.
 
 - [ ] **Step 3: Añadir el orquestador**
@@ -1278,18 +1396,56 @@ _ORIGEN_CONTEO = {
 }
 
 
-def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
-    """Integra los cuatro hechos del ciclo y recalcula los cuatro indicadores.
+def _lotes_del_ciclo(db: Session, pais_codigo: str, ciclo_codigo: str) -> list[int]:
+    """Los `lote_id` que aportaron filas a este ciclo, en cualquiera de los
+    cuatro hechos. Es la reconciliación lote ↔ ciclo: la integración trabaja
+    por ciclo, pero el estado del §7.1 vive en el lote."""
+    lotes: set[int] = set()
+    for modelo, _ in _ORIGEN_CONTEO.values():
+        lotes |= {f[0] for f in db.query(modelo.lote_id)
+                  .filter(modelo.pais_codigo == pais_codigo,
+                          modelo.ciclo_codigo == ciclo_codigo).distinct().all()}
+    return sorted(lotes)
 
-    Un solo commit al final: o entra el ciclo coherente o no entra nada. Las filas
-    problemáticas no abortan —se omiten con su hallazgo—, así que el commit
-    confirma solo lo que sí se pudo resolver.
+
+def _cerrar_lotes(db: Session, lotes: list[int], detalle: str) -> list[int]:
+    """§7.1 paso 4: marca como INTEGRADO los lotes que estaban en VALIDADO.
+
+    Solo VALIDADO → INTEGRADO. Un lote RECHAZADO no se rescata por la puerta
+    de atrás, y uno ya INTEGRADO se deja como está (la re-ejecución del
+    proceso es idempotente por diseño del contrato).
+
+    Escribir `estado`/`mensaje` no viola la prohibición sobre `ext`: esa
+    prohibición es sobre el ESQUEMA. El contrato asigna esos dos campos a
+    VISTA y el sub-proyecto 1 ya los escribe.
+    """
+    if not lotes:
+        return []
+    cerrados = []
+    for lote in (db.query(ExtControlCarga)
+                 .filter(ExtControlCarga.lote_id.in_(lotes)).all()):
+        if (lote.estado or "").strip().upper() != "VALIDADO":
+            continue
+        lote.estado = "INTEGRADO"
+        lote.mensaje = detalle[:500]
+        cerrados.append(lote.lote_id)
+    return sorted(cerrados)
+
+
+def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
+    """Los cuatro pasos del §7.1 para un ciclo: integrar, calcular, recalcular
+    el Score y cerrar los lotes.
+
+    Un solo commit para la integración: o entra el ciclo coherente o no entra
+    nada. Las filas problemáticas no abortan —se omiten con su hallazgo—, así
+    que el commit confirma solo lo que sí se pudo resolver.
 
     El cálculo de indicadores va DESPUÉS de integrar, aunque lea de `ext` y no de
     las tablas internas: así una sola acción del operador deja el ciclo completo,
     sin un segundo paso que se olvide.
     """
     from app.services import integracion_indicadores_service as indicadores
+    from app.services import recalculo_service
 
     hallazgos: list[Hallazgo] = []
     conteos: list[ConteoHecho] = []
@@ -1303,7 +1459,31 @@ def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
         resumen_ind = {"rms": 0, "filas": 0}
         hallazgos.append(Hallazgo("indicador", None, str(exc), SEVERIDAD_ERROR))
 
+    detalle = "; ".join(
+        f"{c.hecho}: {c.integrados} nuevas, {c.actualizados} actualizadas"
+        for c in conteos)
+    cerrados = _cerrar_lotes(
+        db, _lotes_del_ciclo(db, pais_codigo, ciclo_codigo),
+        f"Integrado en VISTA. {detalle}")
+
     db.commit()
+
+    # §7.1 paso 3 — DESPUÉS del commit: el motor abre su propia transacción y
+    # tiene que ver los indicadores ya escritos. Sin esta llamada, integrar un
+    # ciclo no movería el Score, el ranking ni los reconocimientos: seguirían
+    # mostrando el cálculo anterior.
+    ciclo_id = mapeo.id_mapeado(db, ENT_CICLO, pais_codigo, ciclo_codigo)
+    if ciclo_id is None:
+        recalculo = {"abortado": True, "motivo": "El ciclo no está sincronizado."}
+    else:
+        recalculo = recalculo_service.recalcular_ciclo(db, ciclo_id, pais_codigo)
+        if recalculo.get("abortado"):
+            # Ciclo cerrado: los hechos entran (son historia) pero el Score no
+            # se toca. No es un error de la integración; se informa y ya.
+            logger.warning(
+                f"Integración {pais_codigo}/{ciclo_codigo}: hechos integrados "
+                f"pero el recálculo se abortó ({recalculo.get('motivo')})")
+
     return {
         "pais_codigo": pais_codigo, "ciclo_codigo": ciclo_codigo,
         "hechos": [{
@@ -1311,6 +1491,8 @@ def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
             "actualizados": c.actualizados, "omitidos": c.omitidos,
         } for c in conteos],
         "indicadores": resumen_ind,
+        "recalculo": recalculo,
+        "lotes_cerrados": cerrados,
         "hallazgos": [{
             "hecho": h.hecho, "origen_id": h.origen_id,
             "problema": h.problema, "severidad": h.severidad,
@@ -1334,7 +1516,7 @@ def resumen_visitas(db: Session, pais_codigo: str, ciclo_codigo: str) -> list[di
     return salida
 ```
 
-Amplía los imports del módulo con `MapeoExterno`.
+Amplía los imports del módulo con `MapeoExterno`, `ExtControlCarga` y `ENT_CICLO`.
 
 - [ ] **Step 4: Añadir los endpoints al router**
 
@@ -1346,11 +1528,12 @@ Y al final del archivo:
 
 ```python
 @router.post("/visitas/integrar",
-             summary="Integrar los hechos de visita de un ciclo y recalcular indicadores")
+             summary="Integrar los hechos de visita de un ciclo, recalcular y cerrar los lotes")
 def integrar_visitas(pais_codigo: str, ciclo_codigo: str,
                      db: Session = Depends(get_db), _: Usuario = RequireTI):
-    """Deja el ciclo listo: hechos integrados y los 4 indicadores de visita
-    recalculados desde ellos."""
+    """Los cuatro pasos del §7.1 en una acción: integra los hechos, calcula los
+    4 indicadores de visita, dispara el recálculo del Score/ranking/premios y
+    marca los lotes recorridos como INTEGRADO."""
     return visitas.integrar_todo(db, pais_codigo, ciclo_codigo)
 
 
@@ -1363,7 +1546,7 @@ def resumen_visitas(pais_codigo: str, ciclo_codigo: str,
 - [ ] **Step 5: Verificar**
 
 Run: `cd backend && ./venv/Scripts/python.exe -m pytest tests/test_integracion_visitas.py tests/test_integracion_indicadores.py -v`
-Expected: todos pasan (11 de visitas + 7 de indicadores).
+Expected: todos pasan (16 de visitas + 9 de indicadores).
 
 Run: `cd backend && ./venv/Scripts/python.exe -c "from app.main import app; print([r.path for r in app.routes if 'visitas' in r.path])"`
 Expected: imprime las 2 rutas nuevas bajo `/api/v1/integracion/visitas`.
@@ -1495,10 +1678,19 @@ export interface HallazgoVisita {
   severidad: SeveridadHallazgo;
 }
 
+export interface RecalculoIntegracion {
+  abortado: boolean;
+  motivo?: string;
+  filas_kpi_actualizadas?: number;
+  rankings_generados?: number;
+}
+
 export interface ResultadoIntegracionVisitas {
   pais_codigo: string; ciclo_codigo: string;
   hechos: ConteoHecho[];
   indicadores: { rms: number; filas: number };
+  recalculo: RecalculoIntegracion;
+  lotes_cerrados: number[];
   hallazgos: HallazgoVisita[];
 }
 
@@ -1563,8 +1755,9 @@ function SeccionVisitas({ paisCodigo }: { paisCodigo: string | null }) {
       </Box>
 
       <Alert severity="info" sx={{ mb: 2 }}>
-        Integrar deja el ciclo completo: los cuatro hechos entran y los indicadores
-        COB_MD_F1, COB_MD_F2, PROM_DIARIO y COB_FARMACIAS se recalculan desde ellos.
+        Integrar deja el ciclo completo: los cuatro hechos entran, los indicadores
+        COB_MD_F1, COB_MD_F2, PROM_DIARIO y COB_FARMACIAS se calculan desde ellos,
+        se recalculan Score y ranking, y los lotes quedan marcados como integrados.
       </Alert>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -1595,9 +1788,25 @@ function SeccionVisitas({ paisCodigo }: { paisCodigo: string | null }) {
       {resultado && (
         <>
           <Alert severity="success" sx={{ mb: 2 }}>
-            Integración completada. Indicadores recalculados para {resultado.indicadores.rms}
+            Integración completada. Indicadores calculados para {resultado.indicadores.rms}
             {' '}representante(s): {resultado.indicadores.filas} valor(es).
+            {resultado.lotes_cerrados.length > 0 &&
+              ` Lote(s) marcados como integrados: ${resultado.lotes_cerrados.join(', ')}.`}
           </Alert>
+          {/* El recálculo es lo que hace visible la integración en el Score y el
+              ranking. Si se abortó, el operador tiene que saberlo: los hechos
+              entraron pero los tableros siguen mostrando el cálculo anterior. */}
+          {resultado.recalculo.abortado ? (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              Los hechos se integraron, pero el Score y el ranking <b>no</b> se
+              recalcularon: {resultado.recalculo.motivo ?? 'el ciclo está cerrado.'}
+            </Alert>
+          ) : (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Score y ranking recalculados: {resultado.recalculo.rankings_generados ?? 0}
+              {' '}posición(es) de ranking generadas.
+            </Alert>
+          )}
           <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 2 }}>
             <Table size="small">
               <TableHead>
@@ -1688,12 +1897,14 @@ git commit -m "feat(integracion) seccion Visitas y pantalla de registro en solo 
 Con JWT de ADMIN y sembrando datos en `ext` a mano (Mallén aún no envía):
 
 1. Sincronizar dimensiones primero (sub-proyecto 2), luego integrar visitas.
-2. Sembrar 2 médicos F1 que exijan 2 visitas: uno con 2 visitas y otro con 1 → `COB_MD_F1` debe salir **50**, no 100. Es la comprobación de que «cubierto» se aplicó como frecuencia completa.
-3. Integrar dos veces → los conteos pasan de "integrados" a "actualizados" y no hay duplicados.
-4. Una visita con un médico sin sincronizar → aparece en hallazgos y el resto entra.
-5. Abrir la pantalla de registro de visita → aviso visible y sin controles de captura.
-6. Intentar `POST /visita/registrar` por API → 409 con el mensaje.
-7. Comprobar que el Score del RM refleja los nuevos valores tras correr el recálculo del motor existente.
+2. Sembrar 2 médicos F1: uno visitado **3 veces** y otro ninguna → `COB_MD_F1` debe salir **50**. Es la comprobación de que el numerador cuenta médicos distintos y no visitas (con visitas daría 150, un imposible).
+3. En ese mismo escenario, `PROM_DIARIO` con 20 días laborables debe salir **0.05** (1 médico / 20 días), no 0.15.
+4. Integrar dos veces → los conteos pasan de "integrados" a "actualizados" y no hay duplicados.
+5. Una visita con un médico sin sincronizar → aparece en hallazgos y el resto entra.
+6. Abrir la pantalla de registro de visita → aviso visible y sin controles de captura.
+7. Intentar `POST /visita/registrar` por API → 409 con el mensaje.
+8. **El Score del RM cambia con la sola integración**, sin correr nada más: la respuesta trae `recalculo.abortado = false` y `/ranking` muestra el ciclo actualizado (§7.1 paso 3).
+9. **El lote queda en `INTEGRADO`**: `SELECT estado, mensaje FROM ext.controlcarga` tras integrar (§7.1 paso 4).
 
 ---
 
@@ -1704,7 +1915,9 @@ Con JWT de ADMIN y sembrando datos en `ext` a mano (Mallén aún no envía):
   - §3.1 resolución de referencias por mapeo, omitir si falta → Tasks 1-2 + 1 test.
   - §3.2 idempotencia por `origen_id` → Tasks 1-2 + 2 tests.
   - §3.3 reglas por destino (estado_visita, aprobada, registrado_por nulo) → Tasks 1-2 + tests.
-  - §3.4 motor de indicadores con «cubierto = frecuencia completa» → Task 3 + 7 tests.
+  - §3.4 motor de indicadores con «cubierto = médicos distintos visitados» (§2.1 del requerimiento) → Task 3 + 9 tests.
+  - §3.5 recálculo del Score al integrar (§7.1 paso 3) → Task 4 + 2 tests.
+  - §3.6 cierre del lote a INTEGRADO (§7.1 paso 4) → Task 4 + 3 tests.
   - §4 apagado de los 5 endpoints → Task 5.
   - §5 frontend → Task 6.
   - §6 los 2 endpoints → Task 4.
