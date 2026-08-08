@@ -12,15 +12,18 @@ resuelve al vuelo: adoptar o crear dimensiones es trabajo del sub-proyecto 2 y
 duplicar esa lógica aquí llevaría a dos verdades sobre la misma identidad.
 """
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime
 
 from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.models.dimensiones import TargetMedico
 from app.models.hechos import Visita as FactVisita
-from app.models.integracion_ext import ExtFactVisitaMedico, ExtPanelMedico
-from app.models.mapeo_externo import ENT_CICLO, ENT_MEDICO, ENT_REPRESENTANTE
+from app.models.integracion_ext import (
+    ExtFactVisitaFarmacia, ExtFactVisitaMedico, ExtPanelMedico, ExtTargetFarmacia,
+)
+from app.models.mapeo_externo import ENT_CICLO, ENT_FARMACIA, ENT_MEDICO, ENT_REPRESENTANTE
+from app.models.visita import FactVisitaFarmacia, FarmaciaVisita
 from app.services import integracion_mapeo as mapeo
 
 SEVERIDAD_ERROR = "error"
@@ -180,4 +183,113 @@ def integrar_visitas_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
         conteo.anotar(resultado)
     logger.info(f"Visitas médicas {pais_codigo}/{ciclo_codigo}: "
                 f"{conteo.integrados} nuevas, {conteo.omitidos} omitidas")
+    return conteo
+
+
+#: Entidades propias de este sub-proyecto (farmacia) en `MapeoExterno`.
+ENT_TARGET_FARMACIA = "target_farmacia"
+ENT_VISITA_FARMACIA = "visita_farmacia"
+
+
+def integrar_target_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
+                             hallazgos: list) -> ConteoHecho:
+    """`ext.targetfarmacia` → `Visita.DIM_FarmaciaVisita` (panel del VM).
+
+    Entra como APROBADA: el flujo de aprobación VM→GD existe para las altas que
+    solicita un representante, y esto es maestro oficial del SFA.
+
+    `ciclos_sin_visita` NO se toca: lo lleva el rodaje de cierre de ciclo.
+    """
+    conteo = ConteoHecho("targetfarmacia")
+    filas = (db.query(ExtTargetFarmacia)
+             .filter(ExtTargetFarmacia.pais_codigo == pais_codigo,
+                     ExtTargetFarmacia.ciclo_codigo == ciclo_codigo).all())
+    conteo.en_ext = len(filas)
+    for fila in filas:
+        ciclo_id, rm_id = _refs(db, pais_codigo, ciclo_codigo, fila.rm_codigo)
+        clave = f"{fila.rm_codigo}/{fila.farmacia_codigo}"
+        if rm_id is None:
+            conteo.omitidos += 1
+            _falta_ref(hallazgos, "targetfarmacia", clave, "el representante",
+                       fila.rm_codigo)
+            continue
+        maestro_id = mapeo.id_mapeado(db, ENT_FARMACIA, pais_codigo,
+                                      fila.farmacia_codigo)
+        if maestro_id is None:
+            conteo.omitidos += 1
+            _falta_ref(hallazgos, "targetfarmacia", clave, "la farmacia",
+                       fila.farmacia_codigo)
+            continue
+
+        def _buscar(f=fila, rid=rm_id, mid=maestro_id):
+            return (db.query(FarmaciaVisita)
+                    .filter(FarmaciaVisita.vm_id == rid,
+                            FarmaciaVisita.maestro_farmacia_id == mid).first())
+
+        def _crear(f=fila, rid=rm_id, mid=maestro_id, cid=ciclo_id):
+            nuevo = FarmaciaVisita(
+                vm_id=rid, maestro_farmacia_id=mid,
+                estado_aprobacion="APROBADA", ciclo_alta_id=cid,
+                activo=f.activo)
+            db.add(nuevo)
+            db.flush()
+            return nuevo
+
+        registro, resultado = mapeo.resolver(
+            db, ENT_TARGET_FARMACIA, pais_codigo,
+            f"{ciclo_codigo}/{fila.rm_codigo}/{fila.farmacia_codigo}",
+            FarmaciaVisita, _buscar, _crear)
+        registro.activo = fila.activo
+        conteo.anotar(resultado)
+    return conteo
+
+
+def integrar_visitas_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
+                              hallazgos: list) -> ConteoHecho:
+    """`ext.factvisitafarmacia` → `Visita.FactVisitaFarmacia`.
+
+    `registrado_por` queda nulo (no la capturó un usuario de VISTA) y la hora
+    es 00:00 porque el contrato solo trae fecha.
+    """
+    conteo = ConteoHecho("factvisitafarmacia")
+    filas = (db.query(ExtFactVisitaFarmacia)
+             .filter(ExtFactVisitaFarmacia.pais_codigo == pais_codigo,
+                     ExtFactVisitaFarmacia.ciclo_codigo == ciclo_codigo).all())
+    conteo.en_ext = len(filas)
+    for fila in filas:
+        ciclo_id, rm_id = _refs(db, pais_codigo, ciclo_codigo, fila.rm_codigo)
+        if ciclo_id is None or rm_id is None:
+            conteo.omitidos += 1
+            _falta_ref(hallazgos, "factvisitafarmacia", fila.origen_id,
+                       "el ciclo o el representante",
+                       f"{ciclo_codigo}/{fila.rm_codigo}")
+            continue
+        panel_id = mapeo.id_mapeado(
+            db, ENT_TARGET_FARMACIA, pais_codigo,
+            f"{ciclo_codigo}/{fila.rm_codigo}/{fila.farmacia_codigo}")
+        if panel_id is None:
+            conteo.omitidos += 1
+            _falta_ref(hallazgos, "factvisitafarmacia", fila.origen_id,
+                       "la farmacia en el panel del representante",
+                       fila.farmacia_codigo)
+            continue
+
+        def _buscar():
+            return None  # la identidad la lleva el mapeo por origen_id
+
+        def _crear(f=fila, cid=ciclo_id, rid=rm_id, pid=panel_id):
+            nuevo = FactVisitaFarmacia(
+                vm_id=rid, ciclo_id=cid, farmacia_id=pid,
+                fecha_hora=datetime(f.fecha_visita.year, f.fecha_visita.month,
+                                    f.fecha_visita.day),
+                ejecutada=f.ejecutada, registrado_por=None)
+            db.add(nuevo)
+            db.flush()
+            return nuevo
+
+        registro, resultado = mapeo.resolver(
+            db, ENT_VISITA_FARMACIA, pais_codigo, fila.origen_id,
+            FactVisitaFarmacia, _buscar, _crear)
+        registro.ejecutada = fila.ejecutada
+        conteo.anotar(resultado)
     return conteo

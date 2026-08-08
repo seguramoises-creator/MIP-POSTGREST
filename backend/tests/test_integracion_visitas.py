@@ -20,16 +20,18 @@ from app.models import (  # noqa: F401
     seguridad_rbac, usuario, visita,
 )
 from app.models.dimensiones import (
-    Ciclo, Linea, Medico, Pais, RepresentanteMedico, TargetMedico,
+    Ciclo, Farmacia, Linea, Medico, Pais, RepresentanteMedico, TargetMedico,
 )
 from app.models.hechos import Visita as FactVisita
 from app.models.integracion_ext import (
-    ExtControlCarga, ExtDimCiclo, ExtDimMedico, ExtDimPais,
-    ExtDimRepresentante, ExtFactVisitaMedico, ExtPanelMedico,
+    ExtControlCarga, ExtDimCiclo, ExtDimFarmacia, ExtDimMedico, ExtDimPais,
+    ExtDimRepresentante, ExtFactVisitaFarmacia, ExtFactVisitaMedico,
+    ExtPanelMedico, ExtTargetFarmacia,
 )
 from app.models.mapeo_externo import (
-    ENT_CICLO, ENT_MEDICO, ENT_REPRESENTANTE, MapeoExterno,
+    ENT_CICLO, ENT_FARMACIA, ENT_MEDICO, ENT_REPRESENTANTE, MapeoExterno,
 )
+from app.models.visita import FactVisitaFarmacia, FarmaciaVisita
 from app.services import integracion_visitas_service as viz
 
 BD_PRUEBA = "vista_test_visitas_int"
@@ -68,7 +70,10 @@ def motor():
 def db(motor):
     Sesion = sessionmaker(bind=motor)
     s = Sesion()
-    for tabla in ('"DW"."FACT_Visita"', '"Config"."DIM_TargetMedico"',
+    for tabla in ('"Visita"."FactVisitaFarmacia"', '"Visita"."DIM_FarmaciaVisita"',
+                  '"Config"."DIM_Farmacia"', "ext.factvisitafarmacia",
+                  "ext.targetfarmacia", "ext.dimfarmacia",
+                  '"DW"."FACT_Visita"', '"Config"."DIM_TargetMedico"',
                   '"Config"."MapeoExterno"', "ext.factvisitamedico",
                   "ext.panelmedico", "ext.controlcarga", "ext.dimmedico",
                   "ext.dimrepresentante", "ext.dimciclo", "ext.dimpais",
@@ -233,3 +238,90 @@ def test_visita_con_medico_sin_sincronizar_se_omite(escenario):
     assert db.query(FactVisita).count() == 1
     assert any(h.severidad == viz.SEVERIDAD_ERROR and h.origen_id == "V-0099"
                for h in hallazgos)
+
+
+@pytest.fixture
+def farmacia(escenario):
+    """Una farmacia sincronizada, con su mapeo, lista para recibir hechos."""
+    db = escenario["db"]
+    maestro = Farmacia(pais_codigo="DO", nombre="Farmacia Central",
+                       nombre_completo="FARMACIA CENTRAL", direccion="",
+                       encargado="", estado="APROBADA", origen="CONFIG")
+    db.add(maestro)
+    db.add(ExtDimFarmacia(pais_codigo="DO", farmacia_codigo="FAR01",
+                          nombre="Farmacia Central", activo=True))
+    db.flush()
+    db.add(MapeoExterno(entidad=ENT_FARMACIA, pais_codigo="DO",
+                        codigo_externo="FAR01", id_interno=maestro.id))
+    db.commit()
+    return {**escenario, "maestro": maestro}
+
+
+def test_target_farmacia_entra_aprobado(farmacia):
+    """Viene del maestro oficial del SFA: no pasa por la cola de aprobación
+    VM→GD, que existe para las altas que pide un representante."""
+    db = farmacia["db"]
+    db.add(ExtTargetFarmacia(
+        lote_id=1001, pais_codigo="DO", ciclo_codigo="C01-2026",
+        rm_codigo="VM01", farmacia_codigo="FAR01", visitas_programadas=1,
+        activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = viz.integrar_target_farmacia(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert conteo.integrados == 1
+    panel = db.query(FarmaciaVisita).one()
+    assert panel.estado_aprobacion == "APROBADA"
+    assert panel.vm_id == farmacia["rm"].id
+    assert panel.maestro_farmacia_id == farmacia["maestro"].id
+
+
+def test_visita_farmacia_entra_sin_usuario_que_la_registro(farmacia):
+    """`registrado_por` queda nulo: no la capturó nadie en VISTA."""
+    db = farmacia["db"]
+    db.add(ExtTargetFarmacia(
+        lote_id=1001, pais_codigo="DO", ciclo_codigo="C01-2026",
+        rm_codigo="VM01", farmacia_codigo="FAR01", visitas_programadas=1,
+        activo=True))
+    db.commit()
+    hallazgos = []
+    viz.integrar_target_farmacia(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+    db.add(ExtFactVisitaFarmacia(
+        lote_id=1001, origen_id="VF-0001", pais_codigo="DO",
+        ciclo_codigo="C01-2026", rm_codigo="VM01", farmacia_codigo="FAR01",
+        fecha_visita=date(2026, 1, 20), ejecutada=True))
+    db.commit()
+
+    conteo = viz.integrar_visitas_farmacia(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert conteo.integrados == 1
+    v = db.query(FactVisitaFarmacia).one()
+    assert v.registrado_por is None
+    assert v.ejecutada is True
+
+
+def test_reintegrar_no_duplica_visitas_de_farmacia(farmacia):
+    db = farmacia["db"]
+    db.add(ExtTargetFarmacia(
+        lote_id=1001, pais_codigo="DO", ciclo_codigo="C01-2026",
+        rm_codigo="VM01", farmacia_codigo="FAR01", visitas_programadas=1,
+        activo=True))
+    db.add(ExtFactVisitaFarmacia(
+        lote_id=1001, origen_id="VF-0001", pais_codigo="DO",
+        ciclo_codigo="C01-2026", rm_codigo="VM01", farmacia_codigo="FAR01",
+        fecha_visita=date(2026, 1, 20), ejecutada=True))
+    db.commit()
+    hallazgos = []
+    viz.integrar_target_farmacia(db, "DO", "C01-2026", hallazgos)
+    viz.integrar_visitas_farmacia(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    conteo = viz.integrar_visitas_farmacia(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert conteo.actualizados == 1
+    assert db.query(FactVisitaFarmacia).count() == 1
