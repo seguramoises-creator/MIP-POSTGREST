@@ -210,6 +210,23 @@ def sincronizar_representante(db: Session, pais_codigo: str,
             _omitir_por_largo(conteo, hallazgos, ENT_REPRESENTANTE, fila.rm_codigo,
                               "DIM_RM.codigo", 20)
             continue
+
+        # MINOR-4: la colisión de código global se comprueba ANTES que la
+        # línea. Si un VM01 ajeno tiene además una línea que no resuelve, el
+        # hallazgo debe señalar la causa real (código ya usado por otro país),
+        # no "no se pudo resolver la línea" — ese mensaje llevaría a buscar el
+        # problema en el catálogo de líneas cuando el problema real es otro.
+        existente = db.query(RepresentanteMedico).filter(
+            RepresentanteMedico.codigo == fila.rm_codigo).first()
+        if existente is not None and existente.pais_codigo != pais_codigo:
+            conteo.omitidos += 1
+            hallazgos.append(Hallazgo(
+                ENT_REPRESENTANTE, fila.rm_codigo,
+                f"El código ya existe en el país {existente.pais_codigo} y "
+                f"DIM_RM.codigo es único global; la fila se omitió.",
+                SEVERIDAD_ERROR))
+            continue
+
         linea_id = (mapeo.id_mapeado(db, ENT_LINEA, pais_codigo, fila.linea_codigo)
                     if fila.linea_codigo else None)
         if linea_id is None:
@@ -222,17 +239,6 @@ def sincronizar_representante(db: Session, pais_codigo: str,
         gerente_id = (mapeo.id_mapeado(db, ENT_GERENTE, pais_codigo,
                                        fila.gerente_codigo)
                       if fila.gerente_codigo else None)
-
-        existente = db.query(RepresentanteMedico).filter(
-            RepresentanteMedico.codigo == fila.rm_codigo).first()
-        if existente is not None and existente.pais_codigo != pais_codigo:
-            conteo.omitidos += 1
-            hallazgos.append(Hallazgo(
-                ENT_REPRESENTANTE, fila.rm_codigo,
-                f"El código ya existe en el país {existente.pais_codigo} y "
-                f"DIM_RM.codigo es único global; la fila se omitió.",
-                SEVERIDAD_ERROR))
-            continue
 
         def _buscar(f=fila):
             return (db.query(RepresentanteMedico)
@@ -355,11 +361,16 @@ def sincronizar_especialidad(db: Session, pais_codigo: str,
 
 
 def _provincia_id(db: Session, pais_codigo: str, nombre: str | None) -> int | None:
+    """Compara con `maestro_medico_service.normalizar_nombre` (quita acentos,
+    igual que en `_buscar`/`_centro_medico_id`, ver docstring de `sincronizar_medico`):
+    un `_norm` que solo hace `casefold` no empataría 'Santo Domingo' con
+    'Sto. Domingo' escrito con tilde en otra fuente, y en RD el acento es la
+    norma, no la excepción (mismo argumento que C2 en farmacias)."""
     if not _norm(nombre):
         return None
-    objetivo = _norm(nombre)
+    objetivo = maestro_medico_service.normalizar_nombre(nombre)
     for p in db.query(Provincia).filter(Provincia.pais_codigo == pais_codigo).all():
-        if _norm(p.nombre) == objetivo:
+        if maestro_medico_service.normalizar_nombre(p.nombre) == objetivo:
             return p.id
     nueva = Provincia(pais_codigo=pais_codigo, nombre=nombre.strip())
     db.add(nueva)
@@ -370,12 +381,13 @@ def _provincia_id(db: Session, pais_codigo: str, nombre: str | None) -> int | No
 def _municipio_id(db: Session, provincia_id: int | None,
                   nombre: str | None) -> int | None:
     """`DIM_Municipio` cuelga de la provincia, no del país: sin provincia
-    resuelta no se puede crear el municipio."""
+    resuelta no se puede crear el municipio. Normalización sin acentos, mismo
+    motivo que `_provincia_id`."""
     if provincia_id is None or not _norm(nombre):
         return None
-    objetivo = _norm(nombre)
+    objetivo = maestro_medico_service.normalizar_nombre(nombre)
     for m in db.query(Municipio).filter(Municipio.provincia_id == provincia_id).all():
-        if _norm(m.nombre) == objetivo:
+        if maestro_medico_service.normalizar_nombre(m.nombre) == objetivo:
             return m.id
     nuevo = Municipio(provincia_id=provincia_id, nombre=nombre.strip())
     db.add(nuevo)
@@ -386,18 +398,42 @@ def _municipio_id(db: Session, provincia_id: int | None,
 def _centro_medico_id(db: Session, pais_codigo: str, nombre: str | None,
                       provincia_id: int | None,
                       municipio_id: int | None) -> int | None:
+    """CRITICAL-2: normalización sin acentos (`maestro_medico_service.
+    normalizar_nombre`), la misma que usa el tercer intento de `_buscar` en
+    `sincronizar_medico`. Con el `_norm` local (solo `casefold`), 'Clínica
+    Abreu' (VISTA) no empataba con 'Clinica Abreu' (Mallén, sin tilde) y se
+    creaba un CentroMedico duplicado — y al buscar médicos por ese centro
+    nuevo (vacío), el tercer intento de `_buscar` fallaba en silencio y
+    duplicaba también al médico."""
     if not _norm(nombre):
         return None
-    objetivo = _norm(nombre)
+    objetivo = maestro_medico_service.normalizar_nombre(nombre)
     for c in db.query(CentroMedico).filter(
             CentroMedico.pais_codigo == pais_codigo).all():
-        if _norm(c.nombre) == objetivo:
+        if maestro_medico_service.normalizar_nombre(c.nombre) == objetivo:
             return c.id
     nuevo = CentroMedico(pais_codigo=pais_codigo, nombre=nombre.strip(),
                          provincia_id=provincia_id, municipio_id=municipio_id)
     db.add(nuevo)
     db.flush()
     return nuevo.id
+
+
+def _otro_medico_ocupa_la_llave(db: Session, registro_id: int, pais_codigo: str,
+                                nombre_nuevo: str, centro_nuevo: int | None) -> bool:
+    """CRITICAL-1: `UQ_Medico_Pais_Nombre_Centro` es (pais_codigo, nombre,
+    centro_medico_id) EXACTOS (no normalizados). Antes de escribir esos dos
+    campos sobre un registro ya adoptado/creado hay que comprobar si OTRA fila
+    ya ocupa la llave resultante — si no se comprueba, el UPDATE revienta con
+    un IntegrityError que ni siquiera se atrapa, y como `sincronizar_todo`
+    hace un solo commit al final, se caen las nueve dimensiones por un solo
+    médico duplicado en el maestro."""
+    q = db.query(Medico).filter(Medico.id != registro_id,
+                                Medico.pais_codigo == pais_codigo,
+                                Medico.nombre == nombre_nuevo)
+    q = (q.filter(Medico.centro_medico_id == centro_nuevo) if centro_nuevo is not None
+         else q.filter(Medico.centro_medico_id.is_(None)))
+    return q.first() is not None
 
 
 def sincronizar_medico(db: Session, pais_codigo: str, hallazgos: list) -> Conteo:
@@ -481,7 +517,30 @@ def sincronizar_medico(db: Session, pais_codigo: str, hallazgos: list) -> Conteo
         registro, resultado = mapeo.resolver(
             db, ENT_MEDICO, pais_codigo, fila.medico_codigo, Medico,
             _buscar, _crear)
-        registro.nombre = fila.nombre
+        # CRITICAL-1: si el nombre+centro que se va a escribir ya lo ocupa OTRO
+        # médico del maestro (típicamente porque el mismo médico existe en los
+        # dos universos de DIM_Medico — uno hallado aquí por código/exequátur,
+        # otro con codigo=NULL cargado por Excel de Categorización), no se
+        # escribe: violaría UQ_Medico_Pais_Nombre_Centro. Se deja constancia y
+        # se sigue con el resto de campos, que no forman parte de la llave.
+        # NO se fusionan automáticamente los dos registros: consolidar
+        # duplicados del maestro es una decisión humana (cuál nombre/centro es
+        # el correcto, qué pasa con los hechos que ya apuntan a cada uno) — es
+        # trabajo del maestro de médicos en VISTA, no algo que la sincronización
+        # deba decidir sola en background.
+        centro_final = centro_id if centro_id is not None else registro.centro_medico_id
+        if _otro_medico_ocupa_la_llave(db, registro.id, pais_codigo,
+                                       fila.nombre, centro_final):
+            hallazgos.append(Hallazgo(
+                ENT_MEDICO, fila.medico_codigo,
+                f"El maestro tiene dos registros que corresponderían al mismo "
+                f"médico («{fila.nombre}») con el mismo centro; no se actualizó "
+                f"nombre/centro para no violar UQ_Medico_Pais_Nombre_Centro. "
+                f"Hay que consolidarlos a mano en VISTA.", SEVERIDAD_AVISO))
+        else:
+            registro.nombre = fila.nombre
+            if centro_id is not None:
+                registro.centro_medico_id = centro_id
         registro.activo = fila.activo
         if fila.exequatur:
             registro.exequatur = fila.exequatur
@@ -491,8 +550,6 @@ def sincronizar_medico(db: Session, pais_codigo: str, hallazgos: list) -> Conteo
             registro.codigo = fila.medico_codigo
         if especialidad_id is not None:
             registro.especialidad_id = especialidad_id
-        if centro_id is not None:
-            registro.centro_medico_id = centro_id
         if provincia_id is not None:
             registro.provincia_id = provincia_id
         if municipio_id is not None:
@@ -558,6 +615,17 @@ def sincronizar_farmacia(db: Session, pais_codigo: str, hallazgos: list) -> Cont
         # sincronización (incluidas las filas adoptadas/actualizadas) degradaría
         # la propia detección de duplicados de C2 y la presentación en el panel
         # del VM.
+        # MINOR-3: como el nombre YA no se sincroniza, un cambio de nombre en
+        # Mallén queda invisible si no se avisa — se compara normalizado para
+        # no generar ruido por may/minúsculas o acentos (mismo criterio de C2).
+        if (maestro_farmacia_service.normalizar(fila.nombre)
+                != maestro_farmacia_service.normalizar(registro.nombre_completo)):
+            hallazgos.append(Hallazgo(
+                ENT_FARMACIA, fila.farmacia_codigo,
+                f"El nombre en Mallén («{fila.nombre}») difiere del "
+                f"nombre_completo guardado en VISTA («{registro.nombre_completo}»); "
+                f"el nombre no se sincroniza automáticamente, hay que revisarlo "
+                f"a mano en VISTA.", SEVERIDAD_AVISO))
         if fila.provincia:
             registro.provincia = fila.provincia
         if fila.municipio:

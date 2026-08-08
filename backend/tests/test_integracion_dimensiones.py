@@ -507,6 +507,99 @@ def test_representante_no_secuestra_el_codigo_de_otro_pais(base):
     assert any(h.severidad == dim.SEVERIDAD_ERROR for h in hallazgos)
 
 
+def test_medico_no_pisa_llave_de_otro_registro_del_maestro(base):
+    """CRITICAL-1. El mismo médico existe en los DOS universos de DIM_Medico:
+    fila A (universo Cobertura, codigo='MD01', centro_medico_id=None) y fila B
+    (universo Categorización, codigo=None, nombre='Juan Perez', centro=
+    'Clinica Abreu'). `ext` manda MD01 con centro_trabajo='Clinica Abreu'. El
+    primer intento de `_buscar` adopta A por código; si el UPDATE le estampara
+    el centro sin comprobar, chocaría con B y reventaría con un
+    IntegrityError que tumbaría las nueve dimensiones (el commit es único)."""
+    db = base
+    centro = CentroMedico(pais_codigo="DO", nombre="Clinica Abreu")
+    db.add(centro)
+    db.flush()
+    fila_a = Medico(pais_codigo="DO", codigo="MD01", nombre="Juan Perez (viejo)",
+                    centro_medico_id=None)
+    db.add(fila_a)
+    db.add(Medico(pais_codigo="DO", codigo=None, nombre="Juan Perez",
+                  centro_medico_id=centro.id))
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD01",
+                        nombre="Juan Perez", centro_trabajo="Clinica Abreu",
+                        activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_medico(db, "DO", hallazgos)
+    db.commit()
+
+    assert db.query(Medico).count() == 2               # ni se fusionaron ni se duplicaron
+    assert any(h.severidad == dim.SEVERIDAD_AVISO for h in hallazgos)
+    a_recargada = db.query(Medico).filter_by(codigo="MD01").one()
+    assert a_recargada.centro_medico_id is None         # no se escribió: hubiera violado la UQ
+
+
+def test_medico_categorizacion_se_adopta_pese_a_acento_en_el_centro(base):
+    """CRITICAL-2. VISTA tiene el centro 'Clínica Abreu' (con tilde); Mallén
+    manda 'Clinica Abreu' (sin tilde). Con el `_norm` local (solo casefold) no
+    empataban: se creaba un centro duplicado y, al buscar médicos en ese
+    centro nuevo (vacío), el tercer intento de `_buscar` fallaba en silencio y
+    duplicaba también al médico."""
+    db = base
+    centro = CentroMedico(pais_codigo="DO", nombre="Clínica Abreu")
+    db.add(centro)
+    db.flush()
+    db.add(Medico(pais_codigo="DO", codigo=None, nombre="Juan Perez",
+                  centro_medico_id=centro.id))
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD01",
+                        nombre="Juan Perez", centro_trabajo="Clinica Abreu",
+                        activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_medico(db, "DO", hallazgos)
+    db.commit()
+
+    assert conteo.adoptados == 1
+    assert db.query(Medico).count() == 1
+    assert db.query(CentroMedico).count() == 1
+
+
+def test_representante_colision_de_codigo_se_reporta_aunque_la_linea_no_resuelva(base):
+    """MINOR-4. Un VM01 ajeno cuya línea tampoco resuelve: el hallazgo debe
+    señalar la colisión de código (la causa real), no la línea."""
+    db = base
+    linea_do = Linea(pais_codigo="DO", codigo="CARD", nombre="Cardiología")
+    db.add(linea_do)
+    db.flush()
+    db.add(RepresentanteMedico(pais_codigo="DO", linea_id=linea_do.id,
+                               codigo="VM01", nombre="Representante DO"))
+    db.commit()
+
+    db.add(Pais(codigo="PA", nombre="Panamá"))
+    db.add(ExtDimPais(pais_codigo="PA", nombre="Panamá", activo=True))
+    db.commit()
+    # La línea existe en `ext` (FK de dimrepresentante lo exige) pero NUNCA se
+    # sincroniza a `Config.DIM_Linea`: así `mapeo.id_mapeado` no la resuelve y
+    # la fila reproduce el caso "línea tampoco resuelve", sin tocar el guard
+    # de colisión que es lo que este test verifica.
+    db.add(ExtDimLinea(pais_codigo="PA", linea_codigo="LINEA-QUE-NO-EXISTE",
+                       nombre="Línea inexistente en VISTA", activo=True))
+    db.add(ExtDimRepresentante(pais_codigo="PA", rm_codigo="VM01",
+                               linea_codigo="LINEA-QUE-NO-EXISTE",
+                               nombre="Representante PA", activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_representante(db, "PA", hallazgos)
+    db.commit()
+
+    assert conteo.omitidos == 1
+    hallazgo = next(h for h in hallazgos if h.codigo_externo == "VM01")
+    assert "único global" in hallazgo.problema
+    assert "línea" not in hallazgo.problema
+
+
 def test_producto_nombre_demasiado_largo_se_omite_sin_reventar(base):
     """I4. `dimproducto.nombre` permite 200 caracteres en `ext` y
     `DIM_Producto.nombre` solo 120: sin el chequeo, la fila revienta con un
