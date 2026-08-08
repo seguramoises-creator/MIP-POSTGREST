@@ -70,6 +70,26 @@ def _hallazgo(lote_id: int, tabla: str, problema: str, severidad: str,
         detectado_en=datetime.now(timezone.utc))
 
 
+def _identificador(fila, tabla: str) -> str | None:
+    """Cómo se señala una fila concreta en el informe que recibe Mallén.
+
+    Los hechos traen `origen_id` (su clave en el sistema de origen), pero
+    `panelmedico` y `targetfarmacia` no: se identifican por su llave de negocio,
+    la misma de sus índices únicos `ux_tm_clave` / `ux_tf_clave`. Sin esto el
+    informe diría «hay 200 filas mal» sin decir cuáles.
+    """
+    origen = getattr(fila, "origen_id", None)
+    if origen:
+        return origen
+    if tabla == "panelmedico":
+        return (f"{fila.pais_codigo}/{fila.ciclo_codigo}/"
+                f"{fila.rm_codigo}/{fila.medico_codigo}")
+    if tabla == "targetfarmacia":
+        return (f"{fila.pais_codigo}/{fila.ciclo_codigo}/"
+                f"{fila.rm_codigo}/{fila.farmacia_codigo}")
+    return None
+
+
 def _validar_dominios(filas: list, tabla: str, lote_id: int) -> list[IntegracionHallazgo]:
     """Revisa los campos acotados de una tabla. Un valor fuera de dominio es un
     hallazgo, nunca una excepción."""
@@ -90,7 +110,7 @@ def _validar_dominios(filas: list, tabla: str, lote_id: int) -> list[Integracion
                     f"«{valor}» no es un valor válido de {campo}. "
                     f"Se esperaba uno de: {', '.join(sorted(validos))}.",
                     SEVERIDAD_ERROR,
-                    origen_id=getattr(fila, "origen_id", None), campo=campo))
+                    origen_id=_identificador(fila, tabla), campo=campo))
     return hallazgos
 
 
@@ -116,7 +136,11 @@ def validar_lote(db: Session, lote_id: int) -> dict:
     lote = db.get(ExtControlCarga, lote_id)
     if lote is None:
         raise ValueError(f"Lote {lote_id} no encontrado")
-    if lote.estado == "INTEGRADO":
+    # Comparación tolerante A PROPÓSITO, al revés que la de dominios: aquí no se
+    # está midiendo si el dato es correcto sino protegiendo datos ya integrados.
+    # Si el estado parece INTEGRADO en cualquier capitalización, no se toca; su
+    # inconsistencia se reporta como hallazgo, no se corrige en silencio.
+    if (lote.estado or "").strip().upper() == "INTEGRADO":
         raise LoteYaIntegrado(
             f"El lote {lote_id} ya fue integrado; no se re-valida.")
 
@@ -128,6 +152,13 @@ def validar_lote(db: Session, lote_id: int) -> dict:
     hallazgos: list[IntegracionHallazgo] = []
     for tabla, filas in por_tabla.items():
         hallazgos.extend(_validar_dominios(filas, tabla, lote_id))
+
+    if lote.estado not in ESTADOS_LOTE:
+        hallazgos.append(_hallazgo(
+            lote_id, "controlcarga",
+            f"«{lote.estado}» no es un estado válido. Se esperaba uno de: "
+            f"{', '.join(sorted(ESTADOS_LOTE))}.",
+            SEVERIDAD_ERROR, campo="estado"))
 
     if lote.filas_enviadas != filas_reales:
         hallazgos.append(_hallazgo(
@@ -214,12 +245,17 @@ def detalle_lote(db: Session, lote_id: int) -> dict:
 
 def resumen(db: Session, pais_codigo: str | None = None) -> dict[str, int]:
     """Conteo de lotes por estado. Devuelve SIEMPRE los cuatro estados, aunque
-    valgan cero: el tablero necesita las cuatro tarjetas siempre."""
+    valgan cero: el tablero necesita las cuatro tarjetas siempre.
+
+    Un estado fuera de dominio (§I-2) no se descarta en silencio: se cuenta
+    bajo "OTRO" para que la suma del resumen siempre cuadre con `listar_lotes`.
+    """
     q = db.query(ExtControlCarga)
     if pais_codigo:
         q = q.filter(ExtControlCarga.pais_codigo == pais_codigo)
     conteo = {e: 0 for e in sorted(ESTADOS_LOTE)}
+    conteo["OTRO"] = 0
     for lote in q.all():
-        if lote.estado in conteo:
-            conteo[lote.estado] += 1
+        clave = lote.estado if lote.estado in conteo else "OTRO"
+        conteo[clave] += 1
     return conteo

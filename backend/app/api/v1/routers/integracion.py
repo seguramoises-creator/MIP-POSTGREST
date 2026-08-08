@@ -1,8 +1,9 @@
 """Integración con Laboratorio Mallén — recepción y validación de lotes.
 
-Operación de TI, no de negocio: se gatea por rol (ADMIN, GERENTE_PRODUCTIVIDAD)
-igual que `/admin` y `/ia/conexiones`, y no por la matriz RBAC, que exigiría una
-migración para dar de alta el recurso —y sin ella quedaría denegado para todos.
+Operación de TI, no de negocio: se gatea por rol (ADMIN, GERENTE_PRODUCTIVIDAD),
+el mismo criterio que usan `/admin` y `/ia/conexiones` (cada uno con su propio
+conjunto de roles) — y no por la matriz RBAC, que exigiría una migración para
+dar de alta el recurso —y sin ella quedaría denegado para todos.
 
 Este router NO integra datos a los esquemas internos de VISTA: solo valida lo que
 Mallén dejó en `ext` y reporta qué corregir.

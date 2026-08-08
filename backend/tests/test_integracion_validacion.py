@@ -246,3 +246,55 @@ def test_resumen_cuenta_por_estado(escenario):
 
     assert r["VALIDADO"] == 1
     assert r["RECIBIDO"] == 0
+
+
+def test_hallazgo_de_panel_trae_llave_de_negocio(escenario):
+    """I-1: panelmedico/targetfarmacia no tienen origen_id; el hallazgo debe
+    identificar la fila por su llave de negocio, no dejarla vacía."""
+    db = escenario["db"]
+    db.query(ExtPanelMedico).one().prioridad = "ALTA"
+    db.commit()
+
+    validacion.validar_lote(db, escenario["lote_id"])
+
+    h = db.query(IntegracionHallazgo).filter(
+        IntegracionHallazgo.tabla == "panelmedico").one()
+    assert h.origen_id == "DO/C01-2026/VM01/MD01"
+
+
+def test_estado_de_lote_en_minuscula_genera_hallazgo(escenario):
+    """I-2a: 'recibido' en minúscula no debe pasar en silencio."""
+    db = escenario["db"]
+    db.get(ExtControlCarga, escenario["lote_id"]).estado = "recibido"
+    db.commit()
+
+    validacion.validar_lote(db, escenario["lote_id"])
+
+    h = db.query(IntegracionHallazgo).filter(
+        IntegracionHallazgo.campo == "estado").one()
+    assert h.tabla == "controlcarga"
+    assert h.severidad == "error"
+
+
+def test_guard_integrado_es_insensible_a_mayusculas(escenario):
+    """I-2c: el guard protege el lote aunque el estado venga en minúscula."""
+    db = escenario["db"]
+    db.get(ExtControlCarga, escenario["lote_id"]).estado = "integrado"
+    db.commit()
+
+    with pytest.raises(validacion.LoteYaIntegrado):
+        validacion.validar_lote(db, escenario["lote_id"])
+
+
+def test_resumen_cuenta_estado_desconocido_bajo_otro(escenario):
+    """I-2: un estado fuera de dominio no debe desaparecer del tablero; la suma
+    del resumen debe coincidir con lo que devuelve listar_lotes."""
+    db = escenario["db"]
+    db.get(ExtControlCarga, escenario["lote_id"]).estado = "PENDIENTE_RARO"
+    db.commit()
+
+    r = validacion.resumen(db)
+    lotes = validacion.listar_lotes(db)
+
+    assert r["OTRO"] == 1
+    assert sum(r.values()) == len(lotes)
