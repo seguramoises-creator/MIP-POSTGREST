@@ -428,6 +428,90 @@ def test_resumen_cuenta_ext_y_integradas(farmacia):
     assert v["integradas"] == 1
 
 
+def test_resumen_no_mezcla_ciclos_del_mismo_pais(farmacia):
+    """El defecto que esto reproduce: `MapeoExterno` no tiene columna
+    `ciclo_codigo`, así que `integradas` contaba TODOS los mapeos del país sin
+    filtrar por ciclo. Integrar un segundo ciclo (mismo país, mismo RM/médico
+    ya sincronizados) NO debe cambiar el resumen del primero — un test con un
+    solo ciclo no lo habría detectado, que es justo por qué se coló."""
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.commit()
+    viz.integrar_todo(db, "DO", "C01-2026")
+
+    resumen_c01_antes = viz.resumen_visitas(db, "DO", "C01-2026")
+
+    # Segundo ciclo del mismo país, con su propio panel y visita.
+    ciclo2 = Ciclo(pais_codigo="DO", anio=2026, numero=2, nombre="Ciclo 2",
+                   fecha_inicio=date(2026, 2, 1), fecha_fin=date(2026, 2, 28),
+                   dias_laborables=20, cerrado=False)
+    db.add(ciclo2)
+    db.flush()
+    db.add(ExtDimCiclo(pais_codigo="DO", ciclo_codigo="C02-2026", anio=2026,
+                       numero=2, fecha_inicio=date(2026, 2, 1),
+                       fecha_fin=date(2026, 2, 28), dias_laborables=20,
+                       cerrado=False))
+    db.add(MapeoExterno(entidad=ENT_CICLO, pais_codigo="DO",
+                        codigo_externo="C02-2026", id_interno=ciclo2.id))
+    db.add(ExtControlCarga(
+        lote_id=1002, sistema_origen="SFA", modulo="VISITAS", pais_codigo="DO",
+        ciclo_codigo="C02-2026", fecha_extraccion=datetime(2026, 2, 28, 20, 0),
+        fecha_recepcion=datetime(2026, 2, 28, 21, 0), filas_enviadas=2,
+        estado="VALIDADO"))
+    db.add(ExtPanelMedico(
+        lote_id=1002, pais_codigo="DO", ciclo_codigo="C02-2026", rm_codigo="VM01",
+        medico_codigo="MD01", frecuencia_objetivo="F1", prioridad="TOP",
+        visitas_programadas=2, activo=True))
+    db.add(ExtFactVisitaMedico(
+        lote_id=1002, origen_id="V-0002", pais_codigo="DO",
+        ciclo_codigo="C02-2026", rm_codigo="VM01", medico_codigo="MD01",
+        fecha_visita=date(2026, 2, 15), tipo_visita="V", ejecutada=True,
+        acompanado=False))
+    db.commit()
+
+    viz.integrar_todo(db, "DO", "C02-2026")
+
+    resumen_c01_despues = viz.resumen_visitas(db, "DO", "C01-2026")
+    resumen_c02 = viz.resumen_visitas(db, "DO", "C02-2026")
+
+    for hecho in ("panelmedico", "factvisitamedico"):
+        antes = next(f for f in resumen_c01_antes if f["hecho"] == hecho)
+        despues = next(f for f in resumen_c01_despues if f["hecho"] == hecho)
+        assert despues == antes, (
+            f"integrar C02-2026 no debe alterar el resumen de C01-2026 ({hecho})")
+
+    panel_c02 = next(f for f in resumen_c02 if f["hecho"] == "panelmedico")
+    visita_c02 = next(f for f in resumen_c02 if f["hecho"] == "factvisitamedico")
+    assert panel_c02["en_ext"] == 1
+    assert panel_c02["integradas"] == 1
+    assert visita_c02["en_ext"] == 1
+    assert visita_c02["integradas"] == 1
+
+
+def test_resumen_integradas_iguala_en_ext_y_baja_con_omitidos(escenario):
+    """Cuando todo se integra bien, `integradas` coincide con `en_ext`. Si una
+    fila se omite por falta de dimensión (médico sin sincronizar), no entra a
+    `MapeoExterno` y `integradas` debe quedar por debajo de `en_ext`."""
+    db = escenario["db"]
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD99",
+                        nombre="Doctor Sin Sincronizar", activo=True))
+    db.flush()
+    _visita(db, "V-0001")
+    _visita(db, "V-0099", medico="MD99")
+    db.commit()
+    hallazgos = []
+
+    viz.integrar_visitas_medico(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    filas = viz.resumen_visitas(db, "DO", "C01-2026")
+    v = next(f for f in filas if f["hecho"] == "factvisitamedico")
+    assert v["en_ext"] == 2
+    assert v["integradas"] == 1
+    assert v["integradas"] < v["en_ext"]
+
+
 def test_integrar_dispara_el_recalculo_del_score(farmacia):
     """§7.1 paso 3: sin esto, integrar no movería el Score ni el ranking.
 

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from loguru import logger
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.dimensiones import TargetMedico
@@ -316,11 +317,23 @@ _INTEGRADORES = (
     ("factvisitafarmacia", integrar_visitas_farmacia),
 )
 
+#: El tercer elemento reconstruye, en SQL, la misma `codigo_externo` que los
+#: cuatro integradores de arriba le pasan a `mapeo.resolver` para ese hecho —
+#: ver las llamadas a `mapeo.resolver` en `integrar_panel_medico` /
+#: `integrar_visitas_medico` / `integrar_target_farmacia` /
+#: `integrar_visitas_farmacia`. Se usa para el JOIN de `resumen_visitas`, no
+#: para integrar (eso lo siguen haciendo los integradores, sin tocar).
 _ORIGEN_CONTEO = {
-    "panelmedico": (ExtPanelMedico, ENT_TARGET_MEDICO),
-    "factvisitamedico": (ExtFactVisitaMedico, ENT_VISITA_MEDICO),
-    "targetfarmacia": (ExtTargetFarmacia, ENT_TARGET_FARMACIA),
-    "factvisitafarmacia": (ExtFactVisitaFarmacia, ENT_VISITA_FARMACIA),
+    "panelmedico": (
+        ExtPanelMedico, ENT_TARGET_MEDICO,
+        lambda m: func.concat(m.ciclo_codigo, "/", m.rm_codigo, "/", m.medico_codigo)),
+    "factvisitamedico": (
+        ExtFactVisitaMedico, ENT_VISITA_MEDICO, lambda m: m.origen_id),
+    "targetfarmacia": (
+        ExtTargetFarmacia, ENT_TARGET_FARMACIA,
+        lambda m: func.concat(m.ciclo_codigo, "/", m.rm_codigo, "/", m.farmacia_codigo)),
+    "factvisitafarmacia": (
+        ExtFactVisitaFarmacia, ENT_VISITA_FARMACIA, lambda m: m.origen_id),
 }
 
 
@@ -329,7 +342,7 @@ def _lotes_del_ciclo(db: Session, pais_codigo: str, ciclo_codigo: str) -> list[i
     cuatro hechos. Es la reconciliación lote ↔ ciclo: la integración trabaja
     por ciclo, pero el estado del §7.1 vive en el lote."""
     lotes: set[int] = set()
-    for modelo, _ in _ORIGEN_CONTEO.values():
+    for modelo, _, _ in _ORIGEN_CONTEO.values():
         lotes |= {f[0] for f in db.query(modelo.lote_id)
                   .filter(modelo.pais_codigo == pais_codigo,
                           modelo.ciclo_codigo == ciclo_codigo).distinct().all()}
@@ -402,10 +415,14 @@ def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
 
     db.commit()
 
-    # §7.1 paso 3 — DESPUÉS del commit: el motor abre su propia transacción y
-    # tiene que ver los indicadores ya escritos. Sin esta llamada, integrar un
-    # ciclo no movería el Score, el ranking ni los reconocimientos: seguirían
-    # mostrando el cálculo anterior.
+    # §7.1 paso 3 — DESPUÉS del commit, a propósito: el recálculo es un paso
+    # independiente que debe operar sobre datos ya confirmados (el motor recibe
+    # esta misma `Session` y comitea sobre ella, no abre una transacción
+    # propia). Si se llamara antes del commit y el motor fallara, se llevaría
+    # por delante — con el rollback — la integración de los hechos, que es
+    # información de origen y debe conservarse aunque el recálculo no corra.
+    # Sin esta llamada, integrar un ciclo tampoco movería el Score, el ranking
+    # ni los reconocimientos: seguirían mostrando el cálculo anterior.
     ciclo_id = mapeo.id_mapeado(db, ENT_CICLO, pais_codigo, ciclo_codigo)
     if ciclo_id is None:
         recalculo = {"abortado": True, "motivo": "El ciclo no está sincronizado."}
@@ -435,16 +452,30 @@ def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
 
 
 def resumen_visitas(db: Session, pais_codigo: str, ciclo_codigo: str) -> list[dict]:
-    """Filas en `ext` frente a filas ya integradas, por hecho."""
+    """Filas en `ext` frente a filas ya integradas, por hecho — ambos conteos
+    acotados a este mismo `(pais_codigo, ciclo_codigo)`.
+
+    `MapeoExterno` no tiene columna `ciclo_codigo` (la clave de mapeo es
+    `entidad + pais_codigo + codigo_externo`), así que "integradas" no se
+    puede pedir filtrando la tabla de mapeo por ciclo directamente. En vez de
+    eso se hace un JOIN, en el servidor, entre las filas de `ext` de ESTE
+    ciclo y `MapeoExterno` por la misma `codigo_externo` que construyó el
+    integrador (ver `_ORIGEN_CONTEO`) — así una fila de otro ciclo del mismo
+    país nunca cuenta aquí, y no se traen miles de filas a Python para armar
+    un `IN` en memoria.
+    """
     salida = []
-    for hecho, (modelo, entidad) in _ORIGEN_CONTEO.items():
-        en_ext = (db.query(modelo)
-                  .filter(modelo.pais_codigo == pais_codigo,
-                          modelo.ciclo_codigo == ciclo_codigo).count())
-        integradas = (db.query(MapeoExterno)
-                      .filter(MapeoExterno.entidad == entidad,
-                              MapeoExterno.pais_codigo == pais_codigo)
-                      .count())
+    for hecho, (modelo, entidad, clave_externa) in _ORIGEN_CONTEO.items():
+        base = (db.query(modelo)
+                .filter(modelo.pais_codigo == pais_codigo,
+                        modelo.ciclo_codigo == ciclo_codigo))
+        en_ext = base.count()
+        integradas = base.join(
+            MapeoExterno,
+            (MapeoExterno.entidad == entidad)
+            & (MapeoExterno.pais_codigo == pais_codigo)
+            & (MapeoExterno.codigo_externo == clave_externa(modelo)),
+        ).count()
         salida.append({"hecho": hecho, "en_ext": en_ext,
                        "integradas": integradas})
     return salida
