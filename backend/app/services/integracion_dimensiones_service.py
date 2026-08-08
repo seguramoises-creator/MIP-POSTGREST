@@ -330,19 +330,28 @@ def _norm(texto: str | None) -> str:
 
 def sincronizar_especialidad(db: Session, pais_codigo: str,
                              hallazgos: list) -> Conteo:
-    """`DIM_Especialidad` no tiene código ni país: su identidad es el nombre.
+    """`DIM_Especialidad` no tiene código ni país: su identidad es el nombre —
+    y es `unique=True` GLOBAL, así que es su ÚNICA identidad.
 
     Por eso el mapeo se guarda con `pais_codigo=""` — es el único catálogo
     compartido entre países, igual que en el contrato.
+
+    H1: la comparación usa `maestro_medico_service.normalizar_nombre` (quita
+    acentos, colapsa espacios), la misma normalización que ya usan
+    `_provincia_id`/`_municipio_id`/`_centro_medico_id` más abajo. El `_norm`
+    local (solo `casefold`) no empataba 'Cardiología' (VISTA) con
+    'Cardiologia' (Mallén, sin tilde) — en RD el acento es la norma, no la
+    excepción — y se creaban dos filas, partiendo el catálogo: los médicos de
+    cada fuente quedaban colgados de una especialidad distinta.
     """
     conteo = Conteo(ENT_ESPECIALIDAD)
     filas = db.query(ExtDimEspecialidad).all()
     conteo.en_ext = len(filas)
     for fila in filas:
         def _buscar(f=fila):
-            objetivo = _norm(f.nombre)
+            objetivo = maestro_medico_service.normalizar_nombre(f.nombre)
             for e in db.query(Especialidad).all():
-                if _norm(e.nombre) == objetivo:
+                if maestro_medico_service.normalizar_nombre(e.nombre) == objetivo:
                     return e
             return None
 
@@ -419,6 +428,24 @@ def _centro_medico_id(db: Session, pais_codigo: str, nombre: str | None,
     return nuevo.id
 
 
+def _candidato_por_nombre_y_centro(db: Session, pais_codigo: str, nombre: str,
+                                   centro_id: int | None) -> "Medico | None":
+    """Tercer intento de adopción de médico (C1): nombre normalizado
+    (`maestro_medico_service.normalizar_nombre`) dentro del mismo
+    `centro_medico_id` resuelto (o `IS NULL` si no hay centro). Compartido
+    entre `sincronizar_medico._buscar` y el guard H3 de más abajo, para que
+    ambos vean exactamente el mismo candidato."""
+    objetivo = maestro_medico_service.normalizar_nombre(nombre)
+    candidatos = db.query(Medico).filter(Medico.pais_codigo == pais_codigo)
+    candidatos = (candidatos.filter(Medico.centro_medico_id == centro_id)
+                  if centro_id is not None
+                  else candidatos.filter(Medico.centro_medico_id.is_(None)))
+    for candidato in candidatos.all():
+        if maestro_medico_service.normalizar_nombre(candidato.nombre) == objetivo:
+            return candidato
+    return None
+
+
 def _otro_medico_ocupa_la_llave(db: Session, registro_id: int, pais_codigo: str,
                                 nombre_nuevo: str, centro_nuevo: int | None) -> bool:
     """CRITICAL-1: `UQ_Medico_Pais_Nombre_Centro` es (pais_codigo, nombre,
@@ -427,12 +454,21 @@ def _otro_medico_ocupa_la_llave(db: Session, registro_id: int, pais_codigo: str,
     ya ocupa la llave resultante — si no se comprueba, el UPDATE revienta con
     un IntegrityError que ni siquiera se atrapa, y como `sincronizar_todo`
     hace un solo commit al final, se caen las nueve dimensiones por un solo
-    médico duplicado en el maestro."""
+    médico duplicado en el maestro.
+
+    H2: cuando `centro_nuevo is None` no hay llave que violar. El propio
+    docstring de `Medico` (`app/models/dimensiones.py`) documenta que en
+    PostgreSQL un índice único trata múltiples NULL como DISTINTOS: dos filas
+    `(pais, 'Juan Perez', NULL)` conviven sin problema, así que dos médicos
+    homónimos sin centro NUNCA colisionan en `UQ_Medico_Pais_Nombre_Centro`.
+    Sin este corte, el guard bloqueaba correcciones de nombre legítimas y
+    repetía el aviso en cada corrida por un conflicto que no existe."""
+    if centro_nuevo is None:
+        return False
     q = db.query(Medico).filter(Medico.id != registro_id,
                                 Medico.pais_codigo == pais_codigo,
-                                Medico.nombre == nombre_nuevo)
-    q = (q.filter(Medico.centro_medico_id == centro_nuevo) if centro_nuevo is not None
-         else q.filter(Medico.centro_medico_id.is_(None)))
+                                Medico.nombre == nombre_nuevo,
+                                Medico.centro_medico_id == centro_nuevo)
     return q.first() is not None
 
 
@@ -481,6 +517,42 @@ def sincronizar_medico(db: Session, pais_codigo: str, hallazgos: list) -> Conteo
             mapeo.id_mapeado(db, ENT_ESPECIALIDAD, "", fila.especialidad_codigo)
             if fila.especialidad_codigo else None)
 
+        # H3: dos códigos de Mallén pueden ser dos médicos homónimos reales
+        # (mismo nombre, sin `centro_trabajo` que los distinga — el campo es
+        # opcional en el contrato). Sin este guard, el tercer intento de
+        # `_buscar` (nombre+centro) adoptaría para el SEGUNDO código el mismo
+        # registro que ya adoptó/creó el primero, colapsando a dos personas en
+        # un solo `DIM_Medico` — las visitas y la cobertura del segundo
+        # quedarían atribuidas al primero, en silencio. Se comprueba ANTES de
+        # llamar a `mapeo.resolver` (que ya escribiría el mapeo y, si no
+        # hubiera candidato, hasta crearía un `DIM_Medico`) y solo cuando esta
+        # fila todavía no tiene mapeo propio y ni el código ni el exequátur
+        # (los dos identificadores fuertes) encuentran nada — si cualquiera de
+        # los dos matcheara, sería adopción legítima, no colisión.
+        if mapeo.id_mapeado(db, ENT_MEDICO, pais_codigo, fila.medico_codigo) is None:
+            directo = (db.query(Medico)
+                       .filter(Medico.pais_codigo == pais_codigo,
+                               Medico.codigo == fila.medico_codigo).first())
+            if directo is None and fila.exequatur:
+                directo = (db.query(Medico)
+                           .filter(Medico.pais_codigo == pais_codigo,
+                                   Medico.exequatur == fila.exequatur).first())
+            if directo is None:
+                candidato_ajeno = _candidato_por_nombre_y_centro(
+                    db, pais_codigo, fila.nombre, centro_id)
+                if (candidato_ajeno is not None and candidato_ajeno.codigo
+                        and candidato_ajeno.codigo != fila.medico_codigo):
+                    conteo.omitidos += 1
+                    hallazgos.append(Hallazgo(
+                        ENT_MEDICO, fila.medico_codigo,
+                        f"Hay otro médico homónimo («{fila.nombre}») ya "
+                        f"sincronizado con el código «{candidato_ajeno.codigo}» "
+                        f"de Mallén; el contrato no trae centro_trabajo para "
+                        f"distinguirlos. Mallén debe enviarlo para diferenciar "
+                        f"a los dos médicos; la fila se omitió (no se fusionó "
+                        f"ni se duplicó).", SEVERIDAD_AVISO))
+                    continue
+
         def _buscar(f=fila, cid=centro_id):
             por_codigo = (db.query(Medico)
                           .filter(Medico.pais_codigo == f.pais_codigo,
@@ -493,15 +565,7 @@ def sincronizar_medico(db: Session, pais_codigo: str, hallazgos: list) -> Conteo
                                           Medico.exequatur == f.exequatur).first())
                 if por_exequatur is not None:
                     return por_exequatur
-            objetivo = maestro_medico_service.normalizar_nombre(f.nombre)
-            candidatos = db.query(Medico).filter(Medico.pais_codigo == f.pais_codigo)
-            candidatos = (candidatos.filter(Medico.centro_medico_id == cid)
-                          if cid is not None
-                          else candidatos.filter(Medico.centro_medico_id.is_(None)))
-            for candidato in candidatos.all():
-                if maestro_medico_service.normalizar_nombre(candidato.nombre) == objetivo:
-                    return candidato
-            return None
+            return _candidato_por_nombre_y_centro(db, f.pais_codigo, f.nombre, cid)
 
         def _crear(f=fila, eid=especialidad_id, cid=centro_id,
                    pid=provincia_id, mid=municipio_id):

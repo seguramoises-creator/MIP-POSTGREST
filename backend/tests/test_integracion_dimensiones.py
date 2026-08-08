@@ -618,3 +618,80 @@ def test_producto_nombre_demasiado_largo_se_omite_sin_reventar(base):
     assert conteo.creados == 0
     assert db.query(Producto).count() == 0
     assert any(h.severidad == dim.SEVERIDAD_ERROR for h in hallazgos)
+
+
+# ===========================================================================
+# Fix subagent — H1/H2/H3
+# ===========================================================================
+
+def test_especialidad_sin_acentos_se_adopta_una_sola_vez(base):
+    """H1. `DIM_Especialidad.nombre` es su ÚNICA identidad (unique global). El
+    `_norm` local (solo casefold) no empataba 'Cardiología' (VISTA) con
+    'Cardiologia' (Mallén, sin tilde): se creaban dos filas y el catálogo
+    quedaba partido. La comparación debe usar la misma normalización sin
+    acentos que ya usan `_provincia_id`/`_municipio_id`/`_centro_medico_id`."""
+    db = base
+    db.add(Especialidad(nombre="Cardiología"))
+    db.add(ExtDimEspecialidad(especialidad_codigo="CARD", nombre="Cardiologia",
+                              activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_especialidad(db, "DO", hallazgos)
+    db.commit()
+
+    assert conteo.adoptados == 1
+    assert db.query(Especialidad).count() == 1
+
+
+def test_guard_de_llave_no_bloquea_sin_centro_y_permite_corregir_nombre(base):
+    """H2. `_otro_medico_ocupa_la_llave` no puede colisionar cuando el centro
+    nuevo es NULL: en PostgreSQL un índice único trata múltiples NULL como
+    DISTINTOS. Dos médicos homónimos sin centro deben poder convivir, y
+    corregir el nombre de uno de ellos es una escritura legal que no debe
+    quedar bloqueada ni generar el aviso de llave ocupada."""
+    db = base
+    db.add(Medico(pais_codigo="DO", codigo="MD01", nombre="Juan Perz",
+                  centro_medico_id=None))
+    db.add(Medico(pais_codigo="DO", codigo="MD02", nombre="Juan Perez",
+                  centro_medico_id=None))
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD01",
+                        nombre="Juan Perez", centro_trabajo=None, activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_medico(db, "DO", hallazgos)
+    db.commit()
+
+    md01 = db.query(Medico).filter_by(codigo="MD01").one()
+    assert md01.nombre == "Juan Perez"          # la escritura era legal: sí se actualizó
+    assert conteo.adoptados == 1                # adopción por código (primera corrida)
+    assert not any(h.severidad == dim.SEVERIDAD_AVISO and h.codigo_externo == "MD01"
+                   for h in hallazgos)
+
+
+def test_dos_codigos_de_mallen_homonimos_sin_centro_no_colapsan(base):
+    """H3. Dos médicos homónimos en `ext`, ambos sin `centro_trabajo` (VISTA
+    vacío): sin el guard, el tercer intento de `_buscar` (nombre+centro NULL)
+    adoptaría para MD02 el mismo registro que ya creó MD01, atribuyéndole a
+    un solo médico las visitas/cobertura de los dos. Debe crearse UNA sola
+    fila (la primera) y la segunda se omite con un aviso, sin fusionar ni
+    duplicar."""
+    db = base
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD01",
+                        nombre="Juan Perez", centro_trabajo=None, activo=True))
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD02",
+                        nombre="Juan Perez", centro_trabajo=None, activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_medico(db, "DO", hallazgos)
+    db.commit()
+
+    assert db.query(Medico).count() == 1
+    assert conteo.creados == 1
+    assert conteo.omitidos == 1
+    aviso = next(h for h in hallazgos if h.codigo_externo == "MD02")
+    assert aviso.severidad == dim.SEVERIDAD_AVISO
+    assert dim.mapeo.id_mapeado(db, dim.ENT_MEDICO, "DO", "MD02") is None
+    assert dim.mapeo.id_mapeado(db, dim.ENT_MEDICO, "DO", "MD01") is not None
