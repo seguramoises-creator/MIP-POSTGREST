@@ -36,6 +36,7 @@ from app.models import integracion_ext  # noqa: F401,E402  ← esquema ext (inte
 from app.models import formacion  # noqa: F401,E402  ← esquema formacion (Ampliacion Modulo de Formacion)
 from app.models import ia_conexion  # noqa: F401,E402  ← Security.DIM_IAConexion (proveedores de IA, seccion 20)
 from app.models import integracion_hallazgo  # noqa: F401,E402  ← Audit.IntegracionHallazgo (traza de validacion de lotes de Mallen)
+from app.models import mapeo_externo  # noqa: F401,E402  ← Config.MapeoExterno (equivalencias codigos Mallen <-> ids VISTA)
 
 target_metadata = Base.metadata
 
