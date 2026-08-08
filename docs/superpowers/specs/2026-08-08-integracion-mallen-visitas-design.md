@@ -9,7 +9,7 @@
 
 ## 1. Objetivo
 
-Integrar los cuatro hechos de visita que Mallén deja en `ext` a los destinos internos de VISTA, de modo que **los indicadores se calculen con datos del SFA de Mallén**, y apagar la captura manual de visitas dentro de VISTA, que deja de ser fuente de verdad.
+Integrar los cuatro hechos de visita que Mallén deja en `ext`, **añadir el motor que calcula los cuatro indicadores de visita desde ellos** (ver §3.4), y apagar la captura manual de visitas dentro de VISTA, que deja de ser fuente de verdad.
 
 ## 2. El modelo, ya consensuado
 
@@ -41,7 +41,9 @@ Los ocho indicadores quedan cubiertos así:
 | `targetfarmacia` | `Visita.DIM_FarmaciaVisita` | panel de farmacias — denominador farmacia |
 | `factvisitafarmacia` | `Visita.FactVisitaFarmacia` | bitácora — numerador farmacia |
 
-Son exactamente las tablas que ya leen `cobertura_predictiva_service` y `cobertura_farmacia_service`, así que **no hay que tocar ningún motor de cálculo**: al poblarlas con datos de Mallén, los indicadores pasan a calcularse sobre ellos.
+Son las tablas que ya leen `cobertura_predictiva_service` y `cobertura_farmacia_service`, así que poblarlas alimenta directamente el **módulo de Cobertura Predictiva (4DX)** y sus dashboards en vivo.
+
+**PERO eso NO alimenta los 8 indicadores del Score** — ver §3.4.
 
 ### 3.1 Resolución de referencias
 Los hechos de `ext` traen códigos (`rm_codigo`, `ciclo_codigo`, `medico_codigo`, `farmacia_codigo`); los destinos internos esperan ids. Se resuelven con `integracion_mapeo.id_mapeado`, contra el mapeo que dejó el sub-proyecto 2.
@@ -77,6 +79,33 @@ Se reutiliza `Config.MapeoExterno` con las entidades `visita_medico` y `visita_f
 - `registrado_por` queda `NULL` (no lo registró un usuario de VISTA).
 - `fecha_hora` ← `fecha_visita` a las 00:00; el contrato solo trae fecha, no hora.
 - `latitud`, `longitud`, `foto` quedan nulos: el contrato no los envía.
+
+### 3.4 El motor de cálculo de indicadores (verificado, corrige un supuesto inicial)
+
+**Hallazgo al escribir el plan:** VISTA **no calcula** los 8 indicadores del Score. Llegan **ya calculados** en el Excel `KPI_RM` → `FACT_ResultadoIndicador.resultado_real`, y el motor solo los convierte a puntos con `DIM_IndicadorTabla`. No existe ningún servicio que derive `COB_MD_F1` de unas visitas: el nombre solo aparece en un comentario del ETL.
+
+Como el contrato de `ext` **no tiene tabla de indicadores calculados** (Mallén envía hechos, no porcentajes), si el Excel deja de usarse alguien debe calcular esos valores. **Decisión del cliente: los calcula VISTA.**
+
+Este sub-proyecto añade el motor de los **cuatro indicadores de visita**, que escribe en `Config.DIM_Indicador` → `DW.FACT_ResultadoIndicador` por RM y ciclo, igual que hoy hace el ETL:
+
+| Indicador | Fórmula |
+|---|---|
+| `COB_MD_F1` | médicos F1 **cubiertos** / médicos F1 en el panel × 100 |
+| `COB_MD_F2` | médicos F2 **cubiertos** / médicos F2 en el panel × 100 |
+| `PROM_DIARIO` | visitas ejecutadas a médicos / `dias_laborables` del ciclo |
+| `COB_FARMACIAS` | farmacias **cubiertas** / farmacias en el target × 100 |
+
+**Definición de «cubierto» (decisión del cliente): cumplir la frecuencia completa.** Un médico está cubierto cuando recibió **al menos las `visitas_programadas`** que su fila de `panelmedico` exige (p. ej. F1 = 2 visitas, F2 = 1). Lo mismo para farmacias con `targetfarmacia.visitas_programadas`. Es la lectura literal del requerimiento y mide cumplimiento del plan, no mero alcance.
+
+Si `visitas_programadas` viene nulo, se usa **1** como mínimo (no se puede exigir una frecuencia que no se declaró) y se emite hallazgo `aviso`.
+
+**El cálculo se hace directamente sobre `ext`**, no sobre las tablas internas. Razón: `ext.panelmedico` trae `frecuencia_objetivo` (F1/F2) y `visitas_programadas`, que son justo lo que separa los dos indicadores de cobertura — y `DIM_TargetMedico` **no tiene columna de frecuencia**. Calcular desde el origen evita inventar un mapeo o alterar una tabla existente para que quepa el dato.
+
+**Qué visitas cuentan:** solo las que tienen `ejecutada = true`. Tanto `V` (visita) como `R` (revisita) cuentan como contacto: ambas son presencia frente al médico. Las no ejecutadas se excluyen del numerador pero el médico sigue en el denominador — no visitar no reduce el universo.
+
+**Escritura idempotente:** delete-then-insert de las filas de `FACT_ResultadoIndicador` de esos cuatro indicadores para el `(rm_id, ciclo_id)` procesado. No se tocan los otros cuatro indicadores, que siguen llegando por su vía.
+
+**Los puntos no se calculan aquí:** se escribe `resultado_real` y el motor existente (`motor_calculo_service.completar_puntajes`) hace la conversión a puntos, igual que con los datos del Excel. Así el camino de puntuación sigue siendo uno solo.
 
 ## 4. Apagado de la captura de visitas
 
@@ -127,15 +156,13 @@ Respuesta de `POST /integrar`:
  ]}
 ```
 
-## 7. Punto que requiere verificación antes de implementar
+## 7. El punto de F1/F2 — RESUELTO
 
-`ext.panelmedico.frecuencia_objetivo` (`F1`/`F2`) es lo que separa COB_MD_F1 de COB_MD_F2, pero **`DIM_TargetMedico` no tiene una columna de frecuencia**. Antes de escribir el plan hay que leer `cobertura_predictiva_service` y determinar **cómo distingue hoy VISTA F1 de F2**:
+El spec marcó como pendiente cómo distingue VISTA `F1` de `F2`. **Verificado: no lo distingue en ninguna parte.** `cobertura_predictiva_service` menciona `frecuencia_objetivo` una sola vez, en la lectura de un Excel; ningún servicio calcula esos indicadores. Llegaban ya separados desde el archivo `KPI_RM`.
 
-- Si lo hace por un campo existente (p. ej. `potencial`), se mapea ahí y se documenta.
-- Si lo hace por parámetros de `DIM_ParametroCobertura`, hay que ver cómo encaja la frecuencia que envía Mallén.
-- Si hoy no lo distingue, **es un hueco real** y hay que decidir explícitamente con el cliente antes de construir, no inventar un mapeo.
+**Resolución:** el motor de §3.4 calcula ambos **directamente desde `ext.panelmedico.frecuencia_objetivo`**, que es donde el dato existe. No se añade columna a `DIM_TargetMedico` ni se reutiliza `potencial` para algo que no significa eso.
 
-Este punto se resuelve al escribir el plan; el spec lo deja marcado a propósito en vez de suponer.
+`DIM_TargetMedico` sigue recibiendo el panel (para el módulo 4DX), pero **no es la fuente del cálculo de los indicadores**.
 
 ## 8. Manejo de errores
 
@@ -163,6 +190,14 @@ Un solo commit al final: o entra el conjunto coherente o no entra nada.
 6. Un `targetfarmacia` → crea `DIM_FarmaciaVisita` con `estado_aprobacion='APROBADA'`.
 7. Un `factvisitafarmacia` → crea `FactVisitaFarmacia` con `registrado_por=NULL`.
 8. **Los endpoints de captura responden 409** (uno por cada uno de los cinco).
-9. Tras integrar, `cobertura_predictiva_service` devuelve cobertura distinta de cero para ese ciclo — la prueba de que el circuito completo funciona.
+9. Tras integrar, `cobertura_predictiva_service` devuelve cobertura distinta de cero para ese ciclo — la prueba de que el circuito 4DX funciona.
+
+**Motor de indicadores (§3.4):**
+10. Un RM con 2 médicos F1, uno con sus 2 visitas exigidas y otro con 1 → `COB_MD_F1 = 50`. Es el caso que distingue «cubierto = frecuencia completa» de «al menos una visita»: con la otra definición daría 100.
+11. Los médicos F2 del mismo RM no afectan a `COB_MD_F1` y viceversa.
+12. `PROM_DIARIO` = visitas ejecutadas / `dias_laborables` del ciclo; las no ejecutadas no cuentan en el numerador pero su médico sí en el denominador de cobertura.
+13. `visitas_programadas` nulo → se exige 1 y se emite hallazgo `aviso`.
+14. Recalcular el mismo ciclo **no duplica** filas en `FACT_ResultadoIndicador` (delete-then-insert), y **no toca** los otros cuatro indicadores del ciclo.
+15. Se escribe `resultado_real` y NO `puntos_obtenidos`: la conversión a puntos sigue siendo del motor existente.
 
 **Frontend** — `npm run build` + smoke: sembrar hechos en `ext`, integrar, ver los conteos, y comprobar que la pantalla de registro está en solo lectura con su aviso.
