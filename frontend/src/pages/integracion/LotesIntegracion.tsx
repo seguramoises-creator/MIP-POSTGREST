@@ -10,11 +10,13 @@ import {
   TableRow, TableCell, Card, CardContent, Grid, CircularProgress, Snackbar,
   Dialog, DialogTitle, DialogContent, DialogActions, Tooltip,
 } from '@mui/material';
-import { FactCheck, Visibility } from '@mui/icons-material';
+import { FactCheck, Visibility, Sync } from '@mui/icons-material';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
   listarLotes, detalleLote, validarLote, resumenLotes,
+  sincronizarDimensiones, resumenDimensiones,
   type EstadoLote, type LoteIntegracion,
+  type ConteoDimension, type ResultadoSincronizacion,
 } from '../../services/integracion.service';
 
 // Motivo real de un error de axios: 422 de FastAPI (detail = [{loc,msg}]) o string.
@@ -133,6 +135,8 @@ export default function LotesIntegracion() {
 
       <DialogoHallazgos loteId={verLote} onClose={() => setVerLote(null)} />
 
+      <SeccionDimensiones paisCodigo={paisCodigo} />
+
       <Snackbar open={!!aviso} autoHideDuration={8000} onClose={() => setAviso(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         {aviso ? <Alert severity={aviso.sev} onClose={() => setAviso(null)}>{aviso.msg}</Alert> : undefined}
@@ -187,5 +191,133 @@ function DialogoHallazgos({ loteId, onClose }: { loteId: number | null; onClose:
       </DialogContent>
       <DialogActions><Button onClick={onClose}>Cerrar</Button></DialogActions>
     </Dialog>
+  );
+}
+
+function SeccionDimensiones({ paisCodigo }: { paisCodigo: string | null }) {
+  const qc = useQueryClient();
+  const [resultado, setResultado] = useState<ResultadoSincronizacion | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const resumen = useQuery({
+    queryKey: ['integracion-dimensiones', paisCodigo],
+    queryFn: () => resumenDimensiones(paisCodigo as string),
+    enabled: !!paisCodigo,
+  });
+
+  const sincronizar = useMutation({
+    mutationFn: () => sincronizarDimensiones(paisCodigo as string),
+    onSuccess: (r) => {
+      setResultado(r); setError(null);
+      qc.invalidateQueries({ queryKey: ['integracion-dimensiones'] });
+    },
+    onError: (e) => setError(detalleError(e, 'No se pudieron sincronizar las dimensiones.')),
+  });
+
+  if (!paisCodigo) {
+    return <Alert severity="info" sx={{ mt: 4 }}>
+      Selecciona un país en el encabezado para ver las dimensiones.
+    </Alert>;
+  }
+
+  return (
+    <Box sx={{ mt: 5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>Dimensiones</Typography>
+        <Button variant="contained" startIcon={<Sync />}
+          disabled={sincronizar.isPending} onClick={() => sincronizar.mutate()}>
+          {sincronizar.isPending ? 'Sincronizando…' : 'Sincronizar dimensiones'}
+        </Button>
+      </Box>
+
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 2 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Dimensión</TableCell>
+              <TableCell align="right">En Mallén</TableCell>
+              <TableCell align="right">Mapeadas</TableCell>
+              <TableCell align="right">Pendientes</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {(resumen.data || []).map((f) => (
+              <TableRow key={f.entidad}>
+                <TableCell sx={{ textTransform: 'capitalize' }}>{f.entidad}</TableCell>
+                <TableCell align="right">{f.en_ext}</TableCell>
+                <TableCell align="right">{f.mapeadas}</TableCell>
+                <TableCell align="right">{Math.max(0, f.en_ext - f.mapeadas) || '—'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Paper>
+
+      {resultado && (
+        <>
+          <Alert severity="success" sx={{ mb: 2 }}>
+            Sincronización completada. «Adoptados» son los registros que ya existían
+            en VISTA y se emparejaron en vez de duplicarse.
+          </Alert>
+          <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 2 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Dimensión</TableCell>
+                  <TableCell align="right">Creados</TableCell>
+                  <TableCell align="right">Adoptados</TableCell>
+                  <TableCell align="right">Actualizados</TableCell>
+                  <TableCell align="right">Omitidos</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {resultado.dimensiones.map((d: ConteoDimension) => (
+                  <TableRow key={d.entidad}>
+                    <TableCell sx={{ textTransform: 'capitalize' }}>{d.entidad}</TableCell>
+                    <TableCell align="right">{d.creados}</TableCell>
+                    <TableCell align="right"><strong>{d.adoptados}</strong></TableCell>
+                    <TableCell align="right">{d.actualizados}</TableCell>
+                    <TableCell align="right">{d.omitidos || '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Paper>
+
+          {resultado.hallazgos.length > 0 && (
+            <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2 }}>
+              <Box sx={{ p: 2 }}>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Esto es lo que hay que enviarle al equipo técnico de Mallén para corregir.
+                </Alert>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Dimensión</TableCell><TableCell>Código</TableCell>
+                      <TableCell>Problema</TableCell><TableCell>Severidad</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {resultado.hallazgos.map((h, i) => (
+                      <TableRow key={`${h.entidad}-${h.codigo_externo}-${i}`}>
+                        <TableCell sx={{ textTransform: 'capitalize' }}>{h.entidad}</TableCell>
+                        <TableCell>{h.codigo_externo}</TableCell>
+                        <TableCell>{h.problema}</TableCell>
+                        <TableCell>
+                          <Chip size="small" label={h.severidad}
+                            color={h.severidad === 'error' ? 'error' : 'warning'} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            </Paper>
+          )}
+        </>
+      )}
+    </Box>
   );
 }
