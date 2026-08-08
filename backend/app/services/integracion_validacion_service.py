@@ -157,3 +157,69 @@ def validar_lote(db: Session, lote_id: int) -> dict:
     return {"lote_id": lote_id, "estado": lote.estado,
             "filas_declaradas": lote.filas_enviadas, "filas_reales": filas_reales,
             "errores": errores, "avisos": avisos, "mensaje": mensaje}
+
+
+def _lote_publico(lote: ExtControlCarga) -> dict:
+    return {
+        "lote_id": lote.lote_id, "sistema_origen": lote.sistema_origen,
+        "modulo": lote.modulo, "pais_codigo": lote.pais_codigo,
+        "ciclo_codigo": lote.ciclo_codigo, "periodo": lote.periodo,
+        "fecha_extraccion": lote.fecha_extraccion,
+        "fecha_recepcion": lote.fecha_recepcion,
+        "filas_enviadas": lote.filas_enviadas, "estado": lote.estado,
+        "mensaje": lote.mensaje,
+    }
+
+
+def listar_lotes(db: Session, pais_codigo: str | None = None,
+                 estado: str | None = None, limite: int = 100) -> list[dict]:
+    """Lotes más recientes primero, con su conteo de hallazgos."""
+    q = db.query(ExtControlCarga)
+    if pais_codigo:
+        q = q.filter(ExtControlCarga.pais_codigo == pais_codigo)
+    if estado:
+        q = q.filter(ExtControlCarga.estado == estado)
+    lotes = q.order_by(ExtControlCarga.fecha_recepcion.desc()).limit(limite).all()
+
+    salida = []
+    for lote in lotes:
+        n = (db.query(IntegracionHallazgo)
+             .filter(IntegracionHallazgo.lote_id == lote.lote_id).count())
+        salida.append(_lote_publico(lote) | {"hallazgos": n})
+    return salida
+
+
+def detalle_lote(db: Session, lote_id: int) -> dict:
+    """Cabecera del lote y sus hallazgos, los errores primero."""
+    lote = db.get(ExtControlCarga, lote_id)
+    if lote is None:
+        raise ValueError(f"Lote {lote_id} no encontrado")
+    # severidad DESC porque alfabéticamente 'error' > 'aviso': así los errores
+    # (lo que rechaza el lote) salen primero, que es lo que hay que corregir.
+    filas = (db.query(IntegracionHallazgo)
+             .filter(IntegracionHallazgo.lote_id == lote_id)
+             .order_by(IntegracionHallazgo.severidad.desc(),
+                       IntegracionHallazgo.tabla.asc(),
+                       IntegracionHallazgo.id.asc())
+             .all())
+    return {
+        "lote": _lote_publico(lote),
+        "hallazgos": [{
+            "id": h.id, "tabla": h.tabla, "origen_id": h.origen_id,
+            "campo": h.campo, "problema": h.problema, "severidad": h.severidad,
+            "detectado_en": h.detectado_en,
+        } for h in filas],
+    }
+
+
+def resumen(db: Session, pais_codigo: str | None = None) -> dict[str, int]:
+    """Conteo de lotes por estado. Devuelve SIEMPRE los cuatro estados, aunque
+    valgan cero: el tablero necesita las cuatro tarjetas siempre."""
+    q = db.query(ExtControlCarga)
+    if pais_codigo:
+        q = q.filter(ExtControlCarga.pais_codigo == pais_codigo)
+    conteo = {e: 0 for e in sorted(ESTADOS_LOTE)}
+    for lote in q.all():
+        if lote.estado in conteo:
+            conteo[lote.estado] += 1
+    return conteo

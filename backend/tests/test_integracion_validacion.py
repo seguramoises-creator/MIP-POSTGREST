@@ -202,3 +202,47 @@ def test_no_se_revalida_un_lote_integrado(escenario):
 def test_lote_inexistente(escenario):
     with pytest.raises(ValueError, match="no encontrado"):
         validacion.validar_lote(escenario["db"], 999999)
+
+
+def test_listar_lotes_incluye_conteo_de_hallazgos(escenario):
+    db = escenario["db"]
+    db.query(ExtFactVisitaMedico).filter(
+        ExtFactVisitaMedico.origen_id == "V-0001").one().tipo_visita = "X"
+    db.commit()
+    validacion.validar_lote(db, escenario["lote_id"])
+
+    filas = validacion.listar_lotes(db)
+
+    assert len(filas) == 1
+    assert filas[0]["lote_id"] == 1001
+    assert filas[0]["estado"] == "RECHAZADO"
+    assert filas[0]["hallazgos"] == 1
+
+
+def test_listar_lotes_filtra_por_estado(escenario):
+    validacion.validar_lote(escenario["db"], escenario["lote_id"])
+
+    assert len(validacion.listar_lotes(escenario["db"], estado="VALIDADO")) == 1
+    assert validacion.listar_lotes(escenario["db"], estado="RECHAZADO") == []
+
+
+def test_detalle_lote_trae_sus_hallazgos(escenario):
+    db = escenario["db"]
+    db.query(ExtPanelMedico).one().prioridad = "ALTA"
+    db.commit()
+    validacion.validar_lote(db, escenario["lote_id"])
+
+    d = validacion.detalle_lote(db, escenario["lote_id"])
+
+    assert d["lote"]["estado"] == "RECHAZADO"
+    assert len(d["hallazgos"]) == 1
+    assert d["hallazgos"][0]["campo"] == "prioridad"
+
+
+def test_resumen_cuenta_por_estado(escenario):
+    validacion.validar_lote(escenario["db"], escenario["lote_id"])
+
+    r = validacion.resumen(escenario["db"])
+
+    assert r["VALIDADO"] == 1
+    assert r["RECIBIDO"] == 0
