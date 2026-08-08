@@ -34,6 +34,7 @@ from app.models.mapeo_externo import (
 )
 from app.models.mapeo_externo import ENTIDADES, MapeoExterno
 from app.services import integracion_mapeo as mapeo
+from app.services import maestro_farmacia_service, maestro_medico_service
 
 SEVERIDAD_ERROR = "error"
 SEVERIDAD_AVISO = "aviso"
@@ -71,12 +72,15 @@ def _cabe(valor: str, largo: int) -> bool:
 
 def _omitir_por_largo(conteo: Conteo, hallazgos: list, entidad: str,
                       codigo: str, columna: str, largo: int) -> None:
-    """Un código que no cabe se omite, NO se trunca: dos códigos distintos que
-    compartan los primeros N caracteres colapsarían en uno solo."""
+    """Un valor que no cabe se omite, NO se trunca: truncar podría colapsar dos
+    filas distintas en una sola clave, o cortar un nombre a la mitad. Cubre
+    tanto códigos (identidad) como nombres/textos largos (I4): `codigo` siempre
+    es el identificador externo de la fila, para que el hallazgo sea rastreable
+    aunque el campo que desbordó sea otro."""
     conteo.omitidos += 1
     hallazgos.append(Hallazgo(
         entidad, codigo,
-        f"El código excede los {largo} caracteres de {columna}; la fila se omitió.",
+        f"El valor excede los {largo} caracteres de {columna}; la fila se omitió.",
         SEVERIDAD_ERROR))
 
 
@@ -189,7 +193,14 @@ def sincronizar_gerente(db: Session, pais_codigo: str, hallazgos: list) -> Conte
 
 def sincronizar_representante(db: Session, pais_codigo: str,
                               hallazgos: list) -> Conteo:
-    """`DIM_RM.linea_id` es NOT NULL: sin línea resuelta la fila se omite."""
+    """`DIM_RM.linea_id` es NOT NULL: sin línea resuelta la fila se omite.
+
+    `DIM_RM.codigo` es único GLOBAL, igual que `DIM_Gerente.codigo` (I3): sin
+    este guard, un `VM01` de otro país secuestraría al `VM01` dominicano —le
+    pisaría nombre y `linea_id` con los de la línea del otro país— porque
+    `_buscar` encuentra por código sin filtrar por país. Mismo criterio que
+    `sincronizar_gerente`.
+    """
     conteo = Conteo(ENT_REPRESENTANTE)
     filas = (db.query(ExtDimRepresentante)
              .filter(ExtDimRepresentante.pais_codigo == pais_codigo).all())
@@ -211,6 +222,17 @@ def sincronizar_representante(db: Session, pais_codigo: str,
         gerente_id = (mapeo.id_mapeado(db, ENT_GERENTE, pais_codigo,
                                        fila.gerente_codigo)
                       if fila.gerente_codigo else None)
+
+        existente = db.query(RepresentanteMedico).filter(
+            RepresentanteMedico.codigo == fila.rm_codigo).first()
+        if existente is not None and existente.pais_codigo != pais_codigo:
+            conteo.omitidos += 1
+            hallazgos.append(Hallazgo(
+                ENT_REPRESENTANTE, fila.rm_codigo,
+                f"El código ya existe en el país {existente.pais_codigo} y "
+                f"DIM_RM.codigo es único global; la fila se omitió.",
+                SEVERIDAD_ERROR))
+            continue
 
         def _buscar(f=fila):
             return (db.query(RepresentanteMedico)
@@ -253,16 +275,24 @@ def sincronizar_ciclo(db: Session, pais_codigo: str, hallazgos: list) -> Conteo:
              .filter(ExtDimCiclo.pais_codigo == pais_codigo).all())
     conteo.en_ext = len(filas)
     for fila in filas:
+        # `DIM_Ciclo.nombre` es String(50) y `ext.dimciclo.nombre` permite 100;
+        # el valor que realmente se escribe es `fila.nombre or fila.ciclo_codigo`
+        # (I4) — hay que medir ESE valor, no `fila.nombre` a secas.
+        nombre_valor = fila.nombre or fila.ciclo_codigo
+        if not _cabe(nombre_valor, 50):
+            _omitir_por_largo(conteo, hallazgos, ENT_CICLO, fila.ciclo_codigo,
+                              "DIM_Ciclo.nombre", 50)
+            continue
+
         def _buscar(f=fila):
             return (db.query(Ciclo)
                     .filter(Ciclo.pais_codigo == f.pais_codigo,
                             Ciclo.anio == f.anio, Ciclo.numero == f.numero)
                     .first())
 
-        def _crear(f=fila):
+        def _crear(f=fila, nv=nombre_valor):
             nuevo = Ciclo(pais_codigo=f.pais_codigo, anio=f.anio, numero=f.numero,
-                          nombre=f.nombre or f.ciclo_codigo,
-                          nombre_canonico=f.ciclo_codigo,
+                          nombre=nv, nombre_canonico=f.ciclo_codigo,
                           fecha_inicio=f.fecha_inicio, fecha_fin=f.fecha_fin,
                           dias_laborables=f.dias_laborables, cerrado=False)
             db.add(nuevo)
@@ -271,7 +301,7 @@ def sincronizar_ciclo(db: Session, pais_codigo: str, hallazgos: list) -> Conteo:
 
         registro, resultado = mapeo.resolver(
             db, ENT_CICLO, pais_codigo, fila.ciclo_codigo, Ciclo, _buscar, _crear)
-        registro.nombre = fila.nombre or fila.ciclo_codigo
+        registro.nombre = nombre_valor
         registro.fecha_inicio = fila.fecha_inicio
         registro.fecha_fin = fila.fecha_fin
         registro.dias_laborables = fila.dias_laborables
@@ -379,6 +409,19 @@ def sincronizar_medico(db: Session, pais_codigo: str, hallazgos: list) -> Conteo
     La adopción por exequátur va después de la del código porque el exequátur es
     el identificador profesional: si el código de Mallén no coincide pero el
     exequátur sí, es la misma persona.
+
+    TERCER intento (C1): `DIM_Medico` tiene DOS identidades (ver docstring de
+    `Medico` en `app/models/dimensiones.py`) — universo Cobertura, por
+    (pais_codigo, codigo); y universo Categorización/Panel del VM, por
+    (pais_codigo, nombre, centro_medico_id), con `codigo` NULL. Sin este tercer
+    intento, un médico ya cargado por Excel para Categorización nunca se
+    encuentra por código ni por exequátur (no los tiene) y se duplica — y si el
+    centro coincide, la creación viola `UQ_Medico_Pais_Nombre_Centro` y revienta
+    la sincronización de las nueve dimensiones. Compara por nombre normalizado
+    (`maestro_medico_service.normalizar_nombre`, que además de mayúsculas quita
+    acentos y colapsa espacios — el `_norm` de este módulo no) restringido al
+    mismo `centro_medico_id` ya resuelto (o a `centro_medico_id IS NULL` si no
+    hay centro).
     """
     conteo = Conteo(ENT_MEDICO)
     filas = (db.query(ExtDimMedico)
@@ -387,22 +430,41 @@ def sincronizar_medico(db: Session, pais_codigo: str, hallazgos: list) -> Conteo
     for fila in filas:
         provincia_id = _provincia_id(db, pais_codigo, fila.provincia)
         municipio_id = _municipio_id(db, provincia_id, fila.municipio)
+        if fila.municipio and provincia_id is None:
+            # M7: `_municipio_id` devuelve None en silencio cuando falta la
+            # provincia; contra la filosofía del módulo ("anotar y seguir"),
+            # se deja constancia en vez de perder el dato sin avisar.
+            hallazgos.append(Hallazgo(
+                ENT_MEDICO, fila.medico_codigo,
+                f"El municipio «{fila.municipio}» no se pudo resolver porque no "
+                f"llegó provincia; el médico se sincronizó sin municipio.",
+                SEVERIDAD_AVISO))
         centro_id = _centro_medico_id(db, pais_codigo, fila.centro_trabajo,
                                       provincia_id, municipio_id)
         especialidad_id = (
             mapeo.id_mapeado(db, ENT_ESPECIALIDAD, "", fila.especialidad_codigo)
             if fila.especialidad_codigo else None)
 
-        def _buscar(f=fila):
+        def _buscar(f=fila, cid=centro_id):
             por_codigo = (db.query(Medico)
                           .filter(Medico.pais_codigo == f.pais_codigo,
                                   Medico.codigo == f.medico_codigo).first())
             if por_codigo is not None:
                 return por_codigo
             if f.exequatur:
-                return (db.query(Medico)
-                        .filter(Medico.pais_codigo == f.pais_codigo,
-                                Medico.exequatur == f.exequatur).first())
+                por_exequatur = (db.query(Medico)
+                                  .filter(Medico.pais_codigo == f.pais_codigo,
+                                          Medico.exequatur == f.exequatur).first())
+                if por_exequatur is not None:
+                    return por_exequatur
+            objetivo = maestro_medico_service.normalizar_nombre(f.nombre)
+            candidatos = db.query(Medico).filter(Medico.pais_codigo == f.pais_codigo)
+            candidatos = (candidatos.filter(Medico.centro_medico_id == cid)
+                          if cid is not None
+                          else candidatos.filter(Medico.centro_medico_id.is_(None)))
+            for candidato in candidatos.all():
+                if maestro_medico_service.normalizar_nombre(candidato.nombre) == objetivo:
+                    return candidato
             return None
 
         def _crear(f=fila, eid=especialidad_id, cid=centro_id,
@@ -446,17 +508,34 @@ def sincronizar_farmacia(db: Session, pais_codigo: str, hallazgos: list) -> Cont
 
     Entra con `origen='CONFIG'` y `estado='APROBADA'`: viene del maestro oficial,
     no de un representante solicitando un alta que un gerente deba aprobar.
+
+    La adopción compara `nombre_completo` normalizado con
+    `maestro_farmacia_service.normalizar` en AMBOS lados (C2): ese normalizador
+    —a diferencia del `_norm` de este módulo— también quita acentos, y en
+    República Dominicana un nombre con tilde (`'Farmacia San José'`) es la
+    norma, no el caso de borde; compararlo tal cual contra el
+    `'FARMACIA SAN JOSE'` que guarda el maestro nunca empataría y duplicaría la
+    farmacia en cada corrida.
     """
     conteo = Conteo(ENT_FARMACIA)
     filas = (db.query(ExtDimFarmacia)
              .filter(ExtDimFarmacia.pais_codigo == pais_codigo).all())
     conteo.en_ext = len(filas)
     for fila in filas:
+        if fila.provincia and not _cabe(fila.provincia, 100):
+            _omitir_por_largo(conteo, hallazgos, ENT_FARMACIA, fila.farmacia_codigo,
+                              "DIM_Farmacia.provincia", 100)
+            continue
+        if fila.municipio and not _cabe(fila.municipio, 100):
+            _omitir_por_largo(conteo, hallazgos, ENT_FARMACIA, fila.farmacia_codigo,
+                              "DIM_Farmacia.municipio", 100)
+            continue
+
         def _buscar(f=fila):
-            objetivo = _norm(f.nombre)
+            objetivo = maestro_farmacia_service.normalizar(f.nombre)
             for far in db.query(Farmacia).filter(
                     Farmacia.pais_codigo == f.pais_codigo).all():
-                if _norm(far.nombre_completo) == objetivo:
+                if maestro_farmacia_service.normalizar(far.nombre_completo) == objetivo:
                     return far
             return None
 
@@ -473,12 +552,17 @@ def sincronizar_farmacia(db: Session, pais_codigo: str, hallazgos: list) -> Cont
         registro, resultado = mapeo.resolver(
             db, ENT_FARMACIA, pais_codigo, fila.farmacia_codigo, Farmacia,
             _buscar, _crear)
-        registro.nombre = fila.nombre
-        registro.nombre_completo = fila.nombre
+        # `nombre`/`nombre_completo` SOLO se fijan arriba, en `_crear` (I5). El
+        # maestro los guarda normalizados, y si `es_cadena=True` se DERIVAN de
+        # `cadena`+`sucursal` — no del nombre libre de `ext`. Pisarlos en cada
+        # sincronización (incluidas las filas adoptadas/actualizadas) degradaría
+        # la propia detección de duplicados de C2 y la presentación en el panel
+        # del VM.
         if fila.provincia:
             registro.provincia = fila.provincia
         if fila.municipio:
             registro.municipio = fila.municipio
+        registro.activo = fila.activo  # M6: única de las nueve que no lo propagaba
         conteo.anotar(resultado)
     return conteo
 
@@ -486,7 +570,14 @@ def sincronizar_farmacia(db: Session, pais_codigo: str, hallazgos: list) -> Cont
 def sincronizar_producto(db: Session, pais_codigo: str, hallazgos: list) -> Conteo:
     """Los campos propios de VISTA (`area_terapeutica`, `segmento_target`,
     `meta_muestras_visita`, `gerente_producto`) NO se tocan: `ext` no los conoce
-    y pisarlos borraría configuración hecha en VISTA."""
+    y pisarlos borraría configuración hecha en VISTA.
+
+    `DIM_Producto.codigo` es único GLOBAL y, a diferencia de RM/Gerente, la
+    tabla no tiene columna de país para detectar la colisión directamente (I3).
+    En su lugar se mira el mapeo: si el producto ya está mapeado a OTRO país,
+    es la misma colisión —un país repisando el `linea_id` de otro— y se omite
+    igual que en `sincronizar_representante`/`sincronizar_gerente`.
+    """
     conteo = Conteo(ENT_PRODUCTO)
     filas = (db.query(ExtDimProducto)
              .filter(ExtDimProducto.pais_codigo == pais_codigo).all())
@@ -496,8 +587,29 @@ def sincronizar_producto(db: Session, pais_codigo: str, hallazgos: list) -> Cont
             _omitir_por_largo(conteo, hallazgos, ENT_PRODUCTO,
                               fila.producto_codigo, "DIM_Producto.codigo", 40)
             continue
+        if not _cabe(fila.nombre, 120):
+            _omitir_por_largo(conteo, hallazgos, ENT_PRODUCTO,
+                              fila.producto_codigo, "DIM_Producto.nombre", 120)
+            continue
         linea_id = (mapeo.id_mapeado(db, ENT_LINEA, pais_codigo, fila.linea_codigo)
                     if fila.linea_codigo else None)
+
+        existente = db.query(Producto).filter(
+            Producto.codigo == fila.producto_codigo).first()
+        if existente is not None:
+            mapeo_otro_pais = (db.query(MapeoExterno)
+                               .filter(MapeoExterno.entidad == ENT_PRODUCTO,
+                                       MapeoExterno.id_interno == existente.id,
+                                       MapeoExterno.pais_codigo != pais_codigo)
+                               .first())
+            if mapeo_otro_pais is not None:
+                conteo.omitidos += 1
+                hallazgos.append(Hallazgo(
+                    ENT_PRODUCTO, fila.producto_codigo,
+                    f"El código ya está mapeado al país {mapeo_otro_pais.pais_codigo} "
+                    f"y DIM_Producto.codigo es único global; la fila se omitió.",
+                    SEVERIDAD_ERROR))
+                continue
 
         def _buscar(f=fila):
             return (db.query(Producto)

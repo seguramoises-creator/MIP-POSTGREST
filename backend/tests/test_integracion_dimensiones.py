@@ -372,3 +372,156 @@ def test_resumen_cuenta_ext_y_mapeadas(base):
     rep = next(f for f in filas if f["entidad"] == "representante")
     assert rep["en_ext"] == 1
     assert rep["mapeadas"] == 1
+
+
+# ===========================================================================
+# Revisión final — 7 hallazgos (2 críticos)
+# ===========================================================================
+
+def test_medico_categorizacion_se_adopta_por_nombre_y_centro(base):
+    """C1. Universo Categorización/Panel: identidad = (pais, nombre, centro),
+    con `codigo` NULL en VISTA. Sin el tercer intento de búsqueda por
+    nombre+centro, esta fila se duplicaría —o, si el centro coincidiera,
+    reventaría `UQ_Medico_Pais_Nombre_Centro` y con ella la sincronización
+    completa de las nueve dimensiones."""
+    db = base
+    centro = CentroMedico(pais_codigo="DO", nombre="Clinica Abreu")
+    db.add(centro)
+    db.flush()
+    db.add(Medico(pais_codigo="DO", codigo=None, nombre="Juan Perez",
+                  centro_medico_id=centro.id))
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD01",
+                        nombre="Juan Perez", centro_trabajo="Clinica Abreu",
+                        activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_medico(db, "DO", hallazgos)
+    db.commit()
+
+    assert conteo.adoptados == 1
+    assert db.query(Medico).count() == 1
+
+
+def test_medico_categorizacion_se_adopta_pese_a_acentos_y_espacios(base):
+    """C1-bis. La comparación usa `maestro_medico_service.normalizar_nombre`
+    (quita acentos, colapsa espacios), no el `_norm` local del módulo, que solo
+    hace `casefold`."""
+    db = base
+    centro = CentroMedico(pais_codigo="DO", nombre="Clinica Abreu")
+    db.add(centro)
+    db.flush()
+    db.add(Medico(pais_codigo="DO", codigo=None, nombre="Juan Pérez",
+                  centro_medico_id=centro.id))
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD01",
+                        nombre="JUAN  PEREZ", centro_trabajo="Clinica Abreu",
+                        activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_medico(db, "DO", hallazgos)
+    db.commit()
+
+    assert conteo.adoptados == 1
+    assert db.query(Medico).count() == 1
+
+
+def test_farmacia_con_acento_se_adopta(base):
+    """C2. VISTA guarda `nombre_completo` normalizado (sin acentos, mayúsculas);
+    `ext` manda el nombre con tilde tal cual lo tiene Mallén. Comparar con el
+    `_norm` local (que no quita acentos) nunca empataría."""
+    db = base
+    db.add(Farmacia(pais_codigo="DO", es_cadena=False,
+                    nombre_completo="FARMACIA SAN JOSE",
+                    direccion="", encargado="", estado="APROBADA",
+                    origen="CONFIG"))
+    db.add(ExtDimFarmacia(pais_codigo="DO", farmacia_codigo="FAR01",
+                          nombre="Farmacia San José", activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_farmacia(db, "DO", hallazgos)
+    db.commit()
+
+    assert conteo.adoptados == 1
+    assert db.query(Farmacia).count() == 1
+
+
+def test_farmacia_adoptada_no_pisa_nombre_completo_normalizado(base):
+    """I5. `nombre_completo` solo se fija al CREAR: una fila adoptada no debe
+    perder el valor que el maestro ya guardaba normalizado (o derivado de
+    cadena+sucursal)."""
+    db = base
+    db.add(Farmacia(pais_codigo="DO", es_cadena=True, cadena="Cadena X",
+                    sucursal="Sucursal Y", nombre_completo="CADENA X SUCURSAL Y",
+                    direccion="Av. Principal 1", encargado="Juan Pérez",
+                    estado="APROBADA", origen="CONFIG"))
+    db.add(ExtDimFarmacia(pais_codigo="DO", farmacia_codigo="FAR01",
+                          nombre="cadena x sucursal y", activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_farmacia(db, "DO", hallazgos)
+    db.commit()
+
+    assert conteo.adoptados == 1
+    f = db.query(Farmacia).one()
+    assert f.nombre_completo == "CADENA X SUCURSAL Y"
+
+
+def test_representante_no_secuestra_el_codigo_de_otro_pais(base):
+    """I3. `DIM_RM.codigo` es único GLOBAL. Sin el guard, un `VM01` de Panamá
+    sobrescribiría el nombre y la línea del `VM01` dominicano existente."""
+    db = base
+    linea_do = Linea(pais_codigo="DO", codigo="CARD", nombre="Cardiología")
+    db.add(linea_do)
+    db.flush()
+    rm_do = RepresentanteMedico(pais_codigo="DO", linea_id=linea_do.id,
+                                codigo="VM01", nombre="Representante DO")
+    db.add(rm_do)
+    db.commit()
+    linea_id_do = rm_do.linea_id
+
+    db.add(Pais(codigo="PA", nombre="Panamá"))
+    db.add(ExtDimPais(pais_codigo="PA", nombre="Panamá", activo=True))
+    db.flush()
+    db.add(ExtDimLinea(pais_codigo="PA", linea_codigo="CARD",
+                       nombre="Cardiología", activo=True))
+    db.add(ExtDimRepresentante(pais_codigo="PA", rm_codigo="VM01",
+                               linea_codigo="CARD", nombre="Representante PA",
+                               activo=True))
+    db.commit()
+    hallazgos = []
+    dim.sincronizar_linea(db, "PA", hallazgos)
+
+    conteo = dim.sincronizar_representante(db, "PA", hallazgos)
+    db.commit()
+
+    rm_do_recargado = db.query(RepresentanteMedico).filter_by(codigo="VM01").one()
+    assert rm_do_recargado.pais_codigo == "DO"
+    assert rm_do_recargado.nombre == "Representante DO"    # no se pisó
+    assert rm_do_recargado.linea_id == linea_id_do          # no se pisó
+    assert conteo.omitidos == 1
+    assert conteo.creados == 0
+    assert conteo.adoptados == 0
+    assert any(h.severidad == dim.SEVERIDAD_ERROR for h in hallazgos)
+
+
+def test_producto_nombre_demasiado_largo_se_omite_sin_reventar(base):
+    """I4. `dimproducto.nombre` permite 200 caracteres en `ext` y
+    `DIM_Producto.nombre` solo 120: sin el chequeo, la fila revienta con un
+    error de la base de datos en vez de dejar un Hallazgo y seguir."""
+    db = base
+    nombre_largo = "P" * 150
+    db.add(ExtDimProducto(pais_codigo="DO", producto_codigo="PRD01",
+                          nombre=nombre_largo, activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_producto(db, "DO", hallazgos)
+    db.commit()
+
+    assert conteo.omitidos == 1
+    assert conteo.creados == 0
+    assert db.query(Producto).count() == 0
+    assert any(h.severidad == dim.SEVERIDAD_ERROR for h in hallazgos)
