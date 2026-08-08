@@ -382,3 +382,124 @@ def test_target_farmacia_adopta_panel_pendiente_de_alta(farmacia):
     # el texto del rechazo lo sigue mostrando en el panel del VM.
     assert panel.motivo is None
     assert conteo.integrados == 0
+
+
+def test_integrar_todo_corre_los_cuatro_hechos(farmacia):
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.commit()
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    assert r["ciclo_codigo"] == "C01-2026"
+    assert [h["hecho"] for h in r["hechos"]] == [
+        "panelmedico", "factvisitamedico", "targetfarmacia", "factvisitafarmacia"]
+    panel = next(h for h in r["hechos"] if h["hecho"] == "panelmedico")
+    assert panel["integrados"] == 1
+
+
+def test_integrar_todo_es_idempotente(farmacia):
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.commit()
+    viz.integrar_todo(db, "DO", "C01-2026")
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    visitas = next(h for h in r["hechos"] if h["hecho"] == "factvisitamedico")
+    assert visitas["integrados"] == 0
+    assert visitas["actualizados"] == 1
+    assert db.query(FactVisita).count() == 1
+
+
+def test_resumen_cuenta_ext_y_integradas(farmacia):
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.commit()
+    viz.integrar_todo(db, "DO", "C01-2026")
+
+    filas = viz.resumen_visitas(db, "DO", "C01-2026")
+
+    v = next(f for f in filas if f["hecho"] == "factvisitamedico")
+    assert v["en_ext"] == 1
+    assert v["integradas"] == 1
+
+
+def test_integrar_dispara_el_recalculo_del_score(farmacia):
+    """§7.1 paso 3: sin esto, integrar no movería el Score ni el ranking.
+
+    Se comprueba sobre la salida del motor, no sobre un mock: `recalculo`
+    trae el dict real de `recalculo_service.recalcular_ciclo`.
+    """
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.commit()
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    assert r["recalculo"]["abortado"] is False
+    assert "rankings_generados" in r["recalculo"]
+
+
+def test_ciclo_cerrado_integra_los_hechos_pero_aborta_el_recalculo(farmacia):
+    """Un ciclo cerrado es un snapshot histórico: los hechos entran, el Score
+    no se toca. El guard vive en `recalculo_service`, no se duplica aquí."""
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    farmacia["ciclo"].cerrado = True
+    db.commit()
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    assert r["recalculo"]["abortado"] is True
+    assert db.query(FactVisita).count() == 1   # los hechos SÍ entraron
+    # …pero nada calculado se tocó: el motor de indicadores se abstuvo solo.
+    assert r["indicadores"]["omitido_ciclo_cerrado"] is True
+
+
+def test_lote_validado_pasa_a_integrado(farmacia):
+    """§7.1 paso 4. Hasta ahora nadie escribía INTEGRADO."""
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.commit()
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    assert r["lotes_cerrados"] == [1001]
+    lote = db.query(ExtControlCarga).filter_by(lote_id=1001).one()
+    assert lote.estado == "INTEGRADO"
+    assert "factvisitamedico" in lote.mensaje
+
+
+def test_lote_rechazado_no_se_rescata(farmacia):
+    """Un lote que la validación rechazó no llega a INTEGRADO por el hecho de
+    que la integración recorra sus filas."""
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.query(ExtControlCarga).filter_by(lote_id=1001).one().estado = "RECHAZADO"
+    db.commit()
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    assert r["lotes_cerrados"] == []
+    assert db.query(ExtControlCarga).filter_by(lote_id=1001).one().estado == "RECHAZADO"
+
+
+def test_reintegrar_no_revierte_el_estado_del_lote(farmacia):
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.commit()
+    viz.integrar_todo(db, "DO", "C01-2026")
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    assert r["lotes_cerrados"] == []          # ya estaba cerrado
+    assert db.query(ExtControlCarga).filter_by(lote_id=1001).one().estado == "INTEGRADO"

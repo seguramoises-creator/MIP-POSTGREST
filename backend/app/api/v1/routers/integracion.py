@@ -16,6 +16,7 @@ from app.db.database import get_db
 from app.models.usuario import Rol, Usuario
 from app.services import integracion_dimensiones_service as dimensiones
 from app.services import integracion_validacion_service as validacion
+from app.services import integracion_visitas_service as visitas
 
 router = APIRouter(prefix="/integracion", tags=["Integración — Mallén"])
 
@@ -68,3 +69,19 @@ def sincronizar_dimensiones(pais_codigo: str, db: Session = Depends(get_db),
 def resumen_dimensiones(pais_codigo: str, db: Session = Depends(get_db),
                         _: Usuario = RequireTI):
     return dimensiones.resumen_dimensiones(db, pais_codigo)
+
+
+@router.post("/visitas/integrar",
+             summary="Integrar los hechos de visita de un ciclo, recalcular y cerrar los lotes")
+def integrar_visitas(pais_codigo: str, ciclo_codigo: str,
+                     db: Session = Depends(get_db), _: Usuario = RequireTI):
+    """Los cuatro pasos del §7.1 en una acción: integra los hechos, calcula los
+    4 indicadores de visita, dispara el recálculo del Score/ranking/premios y
+    marca los lotes recorridos como INTEGRADO."""
+    return visitas.integrar_todo(db, pais_codigo, ciclo_codigo)
+
+
+@router.get("/visitas/resumen", summary="Filas en ext frente a integradas")
+def resumen_visitas(pais_codigo: str, ciclo_codigo: str,
+                    db: Session = Depends(get_db), _: Usuario = RequireTI):
+    return visitas.resumen_visitas(db, pais_codigo, ciclo_codigo)
