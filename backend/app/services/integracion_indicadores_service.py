@@ -33,7 +33,7 @@ from decimal import Decimal
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.models.dimensiones import Indicador, RepresentanteMedico
+from app.models.dimensiones import Ciclo, Indicador, RepresentanteMedico
 from app.models.hechos import ResultadoIndicador
 from app.models.integracion_ext import (
     ExtDimCiclo, ExtFactVisitaFarmacia, ExtFactVisitaMedico, ExtPanelMedico,
@@ -41,7 +41,9 @@ from app.models.integracion_ext import (
 )
 from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE
 from app.services import integracion_mapeo as mapeo
-from app.services.integracion_visitas_service import SEVERIDAD_ERROR, Hallazgo
+from app.services.integracion_visitas_service import (
+    SEVERIDAD_AVISO, SEVERIDAD_ERROR, Hallazgo,
+)
 
 COB_MD_F1 = "COB_MD_F1"
 COB_MD_F2 = "COB_MD_F2"
@@ -106,8 +108,7 @@ def _cobertura_medicos(db: Session, pais_codigo: str, ciclo_codigo: str,
     return _pct(len(panel & visitados), len(panel))
 
 
-def _promedio_diario(db: Session, visitados: set[str],
-                     dias_laborables: int) -> Decimal:
+def _promedio_diario(visitados: set[str], dias_laborables: int) -> Decimal:
     """§2.1: «MÉDICOS visitados dividido entre los días laborables del ciclo».
 
     Médicos distintos, no visitas: un médico visitado tres veces aporta 1.
@@ -149,6 +150,13 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
 
     Delete-then-insert acotado a estos 4 códigos y a los RM procesados: los otros
     indicadores del ciclo no se rozan.
+
+    REGLA DE NEGOCIO: los ciclos cerrados son snapshots históricos inmutables
+    (misma regla que aplica `recalculo_service.validar_ciclo_abierto` en el
+    resto del sistema). Si el ciclo interno ya está cerrado, no se borra ni se
+    escribe nada — el delete-then-insert de más abajo borraría `puntos_obtenidos`
+    ya calculados por el motor y los dejaría sin reponer, porque el recálculo
+    posterior también rechaza el ciclo cerrado.
     """
     ciclo_ext = (db.query(ExtDimCiclo)
                  .filter(ExtDimCiclo.pais_codigo == pais_codigo,
@@ -159,6 +167,15 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
     if ciclo_id is None:
         raise ValueError(
             f"El ciclo {ciclo_codigo} no está sincronizado; corre dimensiones primero.")
+
+    ciclo_interno = db.get(Ciclo, ciclo_id)
+    if ciclo_interno is not None and ciclo_interno.cerrado:
+        hallazgos.append(Hallazgo(
+            "indicador", ciclo_codigo,
+            f"El ciclo {ciclo_codigo} está cerrado; no se recalcularon los "
+            f"indicadores de visita (los ciclos cerrados son snapshots "
+            f"inmutables).", SEVERIDAD_AVISO))
+        return {"rms": 0, "filas": 0, "omitido_ciclo_cerrado": True}
 
     ids = _indicadores_del_pais(db, pais_codigo)
     faltantes = [c for c in CODIGOS if c not in ids]
@@ -178,6 +195,7 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
                     ExtTargetFarmacia.ciclo_codigo == ciclo_codigo).distinct()}
 
     filas_escritas = 0
+    rms_calculados = 0
     for rm_codigo in sorted(rms):
         rm_id = mapeo.id_mapeado(db, ENT_REPRESENTANTE, pais_codigo, rm_codigo)
         if rm_id is None:
@@ -198,14 +216,14 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
                 SEVERIDAD_ERROR))
             continue
 
+        rms_calculados += 1
         visitados = _medicos_visitados(db, pais_codigo, ciclo_codigo, rm_codigo)
         valores = {
             COB_MD_F1: _cobertura_medicos(db, pais_codigo, ciclo_codigo,
                                           rm_codigo, "F1", visitados),
             COB_MD_F2: _cobertura_medicos(db, pais_codigo, ciclo_codigo,
                                           rm_codigo, "F2", visitados),
-            PROM_DIARIO: _promedio_diario(db, visitados,
-                                          ciclo_ext.dias_laborables),
+            PROM_DIARIO: _promedio_diario(visitados, ciclo_ext.dias_laborables),
             COB_FARMACIAS: _cobertura_farmacias(db, pais_codigo, ciclo_codigo,
                                                 rm_codigo),
         }
@@ -221,11 +239,12 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
             if codigo not in ids:
                 continue
             db.add(ResultadoIndicador(
-                rm_id=rm_id, pais_codigo=pais_codigo, linea_id=rm.linea_id,
+                rm_id=rm_id, pais_codigo=rm.pais_codigo, linea_id=rm.linea_id,
                 gerente_id=rm.gerente_id, ciclo_id=ciclo_id,
                 indicador_id=ids[codigo], resultado_real=valor, activo=True))
             filas_escritas += 1
 
     logger.info(f"Indicadores de visita {pais_codigo}/{ciclo_codigo}: "
-                f"{len(rms)} representantes, {filas_escritas} filas")
-    return {"rms": len(rms), "filas": filas_escritas}
+                f"{rms_calculados} representantes, {filas_escritas} filas")
+    return {"rms": rms_calculados, "filas": filas_escritas,
+            "omitido_ciclo_cerrado": False}

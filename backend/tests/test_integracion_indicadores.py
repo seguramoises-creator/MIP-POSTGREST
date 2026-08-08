@@ -9,6 +9,7 @@ Necesita PostgreSQL real: cruza dos esquemas con claves compuestas e índices
 únicos.
 """
 from datetime import date, datetime
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import create_engine, text
@@ -309,3 +310,94 @@ def test_no_escribe_puntos_solo_el_valor(base):
             .filter(Indicador.codigo == "COB_MD_F1").one())
     assert fila.resultado_real is not None
     assert fila.puntos_obtenidos is None
+
+
+def test_ciclo_cerrado_no_borra_puntos_ya_calculados(base):
+    """El defecto que este test delata: reintegrar un ciclo YA CERRADO hacía
+    delete-then-insert de las 4 filas y perdía `puntos_obtenidos` para
+    siempre, porque el recálculo posterior (`recalculo_service`) también
+    rechaza el ciclo cerrado y nunca los repone.
+
+    Secuencia: ciclo abierto → se calculan los indicadores → el motor llena
+    `puntos_obtenidos` → se cierra el ciclo → llega un lote tardío y alguien
+    vuelve a integrar. Las 4 filas y sus puntos deben seguir intactos.
+    """
+    db = base["db"]
+    rm_id, ciclo_id = base["rm"].id, base["ciclo"].id
+    _panel(db, "MD01", "F1", 1)
+    _visitas(db, "MD01", 1)
+    db.commit()
+
+    ind.calcular_indicadores(db, "DO", "C01-2026", [])
+    db.commit()
+
+    filas_antes = (db.query(ResultadoIndicador)
+                   .filter(ResultadoIndicador.rm_id == rm_id,
+                           ResultadoIndicador.ciclo_id == ciclo_id).all())
+    assert len(filas_antes) == 4
+    # Simula lo que hace el motor de cálculo: llena puntos_obtenidos.
+    for fila in filas_antes:
+        fila.puntos_obtenidos = Decimal("77.5")
+        fila.resultado_porcentaje = Decimal("77.5")
+    db.commit()
+
+    base["ciclo"].cerrado = True
+    db.commit()
+
+    hallazgos = []
+    resultado = ind.calcular_indicadores(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert resultado["omitido_ciclo_cerrado"] is True
+    assert resultado == {"rms": 0, "filas": 0, "omitido_ciclo_cerrado": True}
+
+    filas_despues = (db.query(ResultadoIndicador)
+                      .filter(ResultadoIndicador.rm_id == rm_id,
+                              ResultadoIndicador.ciclo_id == ciclo_id).all())
+    assert len(filas_despues) == 4
+    for fila in filas_despues:
+        assert fila.puntos_obtenidos == Decimal("77.5")
+        assert fila.resultado_porcentaje == Decimal("77.5")
+
+    assert len(hallazgos) == 1
+    assert hallazgos[0].severidad == "aviso"
+    assert "cerrado" in hallazgos[0].problema.lower()
+
+
+def test_ciclo_abierto_reporta_omitido_ciclo_cerrado_false(base):
+    """Los demás casos deben devolver la clave siempre, en False, para que
+    quien consuma el dict pueda leerla sin comprobar antes si existe."""
+    db = base["db"]
+    _panel(db, "MD01", "F1", 1)
+    _visitas(db, "MD01", 1)
+    db.commit()
+
+    resultado = ind.calcular_indicadores(db, "DO", "C01-2026", [])
+    db.commit()
+
+    assert resultado["omitido_ciclo_cerrado"] is False
+
+
+def test_rms_solo_cuenta_los_efectivamente_calculados(base):
+    """`rms` no debe contar representantes sin mapeo: si no se calculó nada
+    para ellos, el panel del operador no puede decir que sí se calculó."""
+    db = base["db"]
+    _panel(db, "MD01", "F1", 1)
+    _visitas(db, "MD01", 1)
+    # Un segundo RM con actividad en `ext` pero SIN mapeo interno: no debe
+    # sumar a `rms`, solo generar su propio hallazgo de error.
+    db.add(ExtDimRepresentante(pais_codigo="DO", rm_codigo="VM02",
+                               nombre="Representante Dos", activo=True))
+    db.add(ExtPanelMedico(
+        lote_id=1001, pais_codigo="DO", ciclo_codigo="C01-2026",
+        rm_codigo="VM02", medico_codigo="MD01", frecuencia_objetivo="F1",
+        prioridad="TOP", visitas_programadas=1, activo=True))
+    db.commit()
+
+    hallazgos = []
+    resultado = ind.calcular_indicadores(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert resultado["rms"] == 1
+    assert resultado["filas"] == 4
+    assert any(h.origen_id == "VM02" for h in hallazgos)

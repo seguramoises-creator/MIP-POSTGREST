@@ -120,6 +120,10 @@ Tras integrar los hechos y escribir los indicadores, el orquestador llama a `rec
 
 - Se llama **después del commit** de la integración: el motor abre su propia transacción y debe ver los datos ya escritos.
 - Si el ciclo está **cerrado**, `recalcular_ciclo` devuelve `abortado=true` sin escribir nada. Eso no es un error de la integración: los hechos entran (son historia), pero el Score no se recalcula. Se refleja en la respuesta y se avisa en la UI.
+
+**Regla derivada — en un ciclo cerrado tampoco se calculan los indicadores.** Es la consecuencia obligada de lo anterior, y sin ella la integración corrompe el histórico: el delete-then-insert de `calcular_indicadores` borraría las filas de `FACT_ResultadoIndicador` **con sus `puntos_obtenidos` ya calculados** y las reinsertaría solo con `resultado_real`; acto seguido `recalcular_ciclo` aborta por ciclo cerrado y **nunca los repone**. El ciclo quedaría con un `FACT_ScoreIntegralRM` cuyo detalle ya no lo sustenta.
+
+Por eso `calcular_indicadores` comprueba `DIM_Ciclo.cerrado` **antes de borrar nada** y, si está cerrado, no escribe: devuelve conteos en cero con la marca `omitido_ciclo_cerrado` y un hallazgo `aviso`. Los hechos crudos (`FACT_Visita`, panel, farmacias) sí entran — son bitácora, no cálculo — pero nada calculado se toca. Es la misma regla que ya aplica `recalculo_service.validar_ciclo_abierto` en todos los demás caminos del sistema.
 - El resultado del recálculo viaja en la respuesta del endpoint, para que la pantalla muestre qué pasó y no solo "integrado".
 
 ### 3.6 Paso 4 del §7.1 — cerrar el lote
@@ -235,6 +239,7 @@ Un solo commit al final: o entra el conjunto coherente o no entra nada.
 **Recálculo y cierre de lote (§3.5, §3.6):**
 16. Integrar un ciclo **abierto** deja el Score y el ranking actualizados: `FACT_ScoreIntegralRM` y `FACT_RankingRM` tienen filas del ciclo que antes no existían.
 17. Integrar un ciclo **cerrado**: los hechos entran, el recálculo devuelve `abortado=true` y ninguna FACT calculada cambia.
+17b. Un ciclo cerrado que **ya tenía `puntos_obtenidos` calculados** los conserva intactos tras re-integrar: el motor de indicadores no borró nada. Es el test que delata el borrado silencioso — comprobar solo `abortado=true` no lo detecta.
 18. Un lote en `VALIDADO` cuyas filas se integran → queda `INTEGRADO` con el detalle en `mensaje`.
 19. Un lote en `RECHAZADO` **no** pasa a `INTEGRADO` aunque alguna de sus filas se recorra.
 20. Re-integrar el mismo ciclo con el lote ya en `INTEGRADO` no falla ni revierte el estado.
