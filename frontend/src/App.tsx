@@ -57,6 +57,7 @@ const Refuerzo = lazyWithReload(() => import('./pages/formacion/Refuerzo'));
 const Onboarding = lazyWithReload(() => import('./pages/formacion/Onboarding'));
 const RankingFormacion = lazyWithReload(() => import('./pages/formacion/RankingFormacion'));
 const ConexionesIA = lazyWithReload(() => import('./pages/sistema/ConexionesIA'));
+const LotesIntegracion = lazyWithReload(() => import('./pages/integracion/LotesIntegracion'));
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
 
@@ -191,6 +192,7 @@ function AppRoutes() {
             Sin `recurso`: el router backend gatea por rol (require_roles), no por la matriz RBAC. */}
         <Route path="formacion/ranking" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','CAPACITACION','PRESIDENCIA','GERENTE_MEDICO','GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><RankingFormacion /></ProtectedRoute>} />
         <Route path="conexiones-ia" element={<ProtectedRoute allowedRoles={['ADMIN']}><ConexionesIA /></ProtectedRoute>} />
+        <Route path="integracion/lotes" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><LotesIntegracion /></ProtectedRoute>} />
       </Route>
       <Route path="*" element={<Navigate to={inicio} />} />
     </Routes>

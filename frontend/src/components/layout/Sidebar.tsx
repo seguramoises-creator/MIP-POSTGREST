@@ -10,7 +10,7 @@ import {
   SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn, Groups,
   MedicalServices, EditNote, EventNote, ReportProblem, Campaign, Paid,
   ChevronLeft, ChevronRight, Add, Remove, RateReview, LocalPharmacy, Storefront,
-  Insights, CalendarMonth, RecordVoiceOver, Hub, Psychology, School,
+  Insights, CalendarMonth, RecordVoiceOver, Hub, Psychology, School, CloudSync,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { usePuede } from '../../store/permisos.store';
@@ -113,6 +113,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Configuración',   path: '/admin',    icon: <Settings />,           roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
       { label: 'Administración',  path: '/usuarios', icon: <AdminPanelSettings />, recurso: 'config.usuarios', roles: ['ADMIN'] },
       { label: 'Conexiones de IA', path: '/conexiones-ia', icon: <Hub />, roles: ['ADMIN'] },
+      { label: 'Lotes de Mallén', path: '/integracion/lotes', icon: <CloudSync />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
     ],
   },
 ];
