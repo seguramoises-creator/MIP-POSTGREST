@@ -52,7 +52,15 @@ Que los códigos referenciados existan **dentro del propio `ext`** (no contra lo
 - `(pais_codigo, medico_codigo)` en `ext.dimmedico`
 - `(pais_codigo, farmacia_codigo)` en `ext.dimfarmacia`
 
-**Nota importante:** las tablas ya tienen estas FK declaradas, así que un código inexistente ni siquiera podría insertarse. La validación sirve para el caso real: **que la dimensión venga en un lote posterior al del hecho**. Se reporta como hallazgo informativo, no como error bloqueante.
+**DESCARTADA — no se implementa (confirmado con el cliente, ago-2026).**
+
+Las tablas ya tienen estas FK declaradas, así que un código inexistente **ni siquiera puede insertarse**: la FK bloquea el `INSERT` del hecho y el error lo recibe Mallén en su propia carga, antes de que VISTA vea nada. El caso que esta sección imaginaba —que la dimensión venga en un lote posterior al del hecho— es **físicamente imposible** con las FK activas: Mallén está obligado a enviar las dimensiones primero.
+
+Quedaba una sola vía por la que el escenario podría reaparecer: que su ETL **desactivara las FK** durante la carga masiva (práctica habitual para acelerar cargas grandes, reactivándolas al final). **Se preguntó al equipo de TI de Mallén y confirmaron que NO las desactivan.**
+
+Con eso, escribir esta validación sería código que nunca podría dispararse. `SEVERIDAD_AVISO` se conserva y se usa para el lote vacío, que sí es un aviso real.
+
+*Si en el futuro Mallén cambiara su método de carga a uno que deshabilite las FK, esta comprobación habría que añadirla — es aditiva y no rompe nada de lo construido.*
 
 ### 3.3 Coherencia del lote
 - **Conteo**: `filas_enviadas` declarado vs. filas realmente escritas con ese `lote_id` (sumando todas las tablas). Una discrepancia es el síntoma clásico de una carga cortada a la mitad.
