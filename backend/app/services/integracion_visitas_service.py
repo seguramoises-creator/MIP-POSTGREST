@@ -195,7 +195,7 @@ def integrar_target_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
                              hallazgos: list) -> ConteoHecho:
     """`ext.targetfarmacia` → `Visita.DIM_FarmaciaVisita` (panel del VM).
 
-    Entra como APROBADA: el flujo de aprobación VM→GD existe para las altas que
+    Entra como APROBADO: el flujo de aprobación VM→GD existe para las altas que
     solicita un representante, y esto es maestro oficial del SFA.
 
     `ciclos_sin_visita` NO se toca: lo lleva el rodaje de cierre de ciclo.
@@ -229,7 +229,7 @@ def integrar_target_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
         def _crear(f=fila, rid=rm_id, mid=maestro_id, cid=ciclo_id):
             nuevo = FarmaciaVisita(
                 vm_id=rid, maestro_farmacia_id=mid,
-                estado_aprobacion="APROBADA", ciclo_alta_id=cid,
+                estado_aprobacion="APROBADO", ciclo_alta_id=cid,
                 activo=f.activo)
             db.add(nuevo)
             db.flush()
@@ -240,6 +240,11 @@ def integrar_target_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
             f"{ciclo_codigo}/{fila.rm_codigo}/{fila.farmacia_codigo}",
             FarmaciaVisita, _buscar, _crear)
         registro.activo = fila.activo
+        # El panel puede haber sido ADOPTADO desde un alta que el VM ya había
+        # solicitado a mano (PENDIENTE_ALTA/RECHAZADO): el SFA es maestro oficial
+        # y no pasa por la cola VM→GD, así que se reafirma APROBADO también en el
+        # camino de adopción/actualización, no solo al crear.
+        registro.estado_aprobacion = "APROBADO"
         conteo.anotar(resultado)
     return conteo
 

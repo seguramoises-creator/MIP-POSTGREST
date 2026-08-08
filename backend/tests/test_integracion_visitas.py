@@ -32,6 +32,7 @@ from app.models.mapeo_externo import (
     ENT_CICLO, ENT_FARMACIA, ENT_MEDICO, ENT_REPRESENTANTE, MapeoExterno,
 )
 from app.models.visita import FactVisitaFarmacia, FarmaciaVisita
+from app.services import cobertura_farmacia_service
 from app.services import integracion_visitas_service as viz
 
 BD_PRUEBA = "vista_test_visitas_int"
@@ -246,7 +247,7 @@ def farmacia(escenario):
     db = escenario["db"]
     maestro = Farmacia(pais_codigo="DO", nombre="Farmacia Central",
                        nombre_completo="FARMACIA CENTRAL", direccion="",
-                       encargado="", estado="APROBADA", origen="CONFIG")
+                       encargado="", estado="ACTIVA", origen="CONFIG")
     db.add(maestro)
     db.add(ExtDimFarmacia(pais_codigo="DO", farmacia_codigo="FAR01",
                           nombre="Farmacia Central", activo=True))
@@ -273,7 +274,7 @@ def test_target_farmacia_entra_aprobado(farmacia):
 
     assert conteo.integrados == 1
     panel = db.query(FarmaciaVisita).one()
-    assert panel.estado_aprobacion == "APROBADA"
+    assert panel.estado_aprobacion == "APROBADO"
     assert panel.vm_id == farmacia["rm"].id
     assert panel.maestro_farmacia_id == farmacia["maestro"].id
 
@@ -325,3 +326,55 @@ def test_reintegrar_no_duplica_visitas_de_farmacia(farmacia):
 
     assert conteo.actualizados == 1
     assert db.query(FactVisitaFarmacia).count() == 1
+
+
+def test_target_farmacia_integrado_es_visible_en_cobertura(farmacia):
+    """El valor de `estado_aprobacion` que escribe la integración debe ser el
+    mismo que filtra `cobertura_farmacia_service` («APROBADO», masculino) — un
+    `assert estado_aprobacion == "APROBADO"` en el test anterior solo compara la
+    constante contra sí misma y no habría detectado el valor mal escrito
+    («APROBADA»). Este test cruza el dato con el consumidor real."""
+    db = farmacia["db"]
+    db.add(ExtTargetFarmacia(
+        lote_id=1001, pais_codigo="DO", ciclo_codigo="C01-2026",
+        rm_codigo="VM01", farmacia_codigo="FAR01", visitas_programadas=1,
+        activo=True))
+    db.commit()
+    hallazgos = []
+
+    viz.integrar_target_farmacia(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    resultado = cobertura_farmacia_service.cobertura_rm(
+        db, farmacia["rm"].id, farmacia["ciclo"].id)
+    assert resultado["universo"] > 0
+
+
+def test_target_farmacia_adopta_panel_pendiente_de_alta(farmacia):
+    """Si el VM ya había solicitado esa farmacia a mano, el panel existe en
+    PENDIENTE_ALTA. `mapeo.resolver` lo ADOPTA (mismo id, no lo duplica), y la
+    integración debe reafirmar APROBADO en ese camino también — no solo al
+    crear — porque el SFA es maestro oficial y no pasa por la cola VM→GD."""
+    db = farmacia["db"]
+    panel_previo = FarmaciaVisita(
+        vm_id=farmacia["rm"].id, maestro_farmacia_id=farmacia["maestro"].id,
+        estado_aprobacion="PENDIENTE_ALTA", activo=True)
+    db.add(panel_previo)
+    db.commit()
+    panel_id = panel_previo.id
+
+    db.add(ExtTargetFarmacia(
+        lote_id=1001, pais_codigo="DO", ciclo_codigo="C01-2026",
+        rm_codigo="VM01", farmacia_codigo="FAR01", visitas_programadas=1,
+        activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = viz.integrar_target_farmacia(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert db.query(FarmaciaVisita).count() == 1
+    panel = db.query(FarmaciaVisita).one()
+    assert panel.id == panel_id
+    assert panel.estado_aprobacion == "APROBADO"
+    assert conteo.integrados == 0
