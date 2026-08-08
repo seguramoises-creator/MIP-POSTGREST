@@ -1508,8 +1508,18 @@ def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
             "problema": h.problema, "severidad": h.severidad,
         } for h in hallazgos],
     }
+```
 
+> **CORREGIDO durante la ejecución (revisión de Task 4).** El código de abajo
+> contaba `integradas` filtrando `MapeoExterno` solo por entidad y país. Como
+> esa tabla **no tiene columna `ciclo_codigo`**, el número sumaba los mapeos de
+> *todos* los ciclos del país: tras integrar un segundo ciclo, el resumen del
+> primero subía sin que nada hubiera cambiado en él. La implementación real
+> cuenta las filas de `ext` **de ese ciclo** que ya tienen mapeo, con un JOIN
+> por la clave externa de cada hecho (que se construye distinto: `origen_id`
+> para las visitas, `ciclo/rm/entidad` para los targets). Ver el archivo real.
 
+```python
 def resumen_visitas(db: Session, pais_codigo: str, ciclo_codigo: str) -> list[dict]:
     """Filas en `ext` frente a filas ya integradas, por hecho."""
     salida = []
