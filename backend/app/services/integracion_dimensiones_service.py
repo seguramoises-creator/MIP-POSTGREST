@@ -17,11 +17,20 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.models.dimensiones import Ciclo, Gerente, Linea, Pais, RepresentanteMedico
+from app.models.dimensiones import (
+    CentroMedico, Especialidad, Farmacia, Medico, Municipio, Producto, Provincia,
+)
 from app.models.integracion_ext import (
     ExtDimCiclo, ExtDimGerente, ExtDimLinea, ExtDimPais, ExtDimRepresentante,
 )
+from app.models.integracion_ext import (
+    ExtDimEspecialidad, ExtDimFarmacia, ExtDimMedico, ExtDimProducto,
+)
 from app.models.mapeo_externo import (
     ENT_CICLO, ENT_GERENTE, ENT_LINEA, ENT_PAIS, ENT_REPRESENTANTE,
+)
+from app.models.mapeo_externo import (
+    ENT_ESPECIALIDAD, ENT_FARMACIA, ENT_MEDICO, ENT_PRODUCTO,
 )
 from app.services import integracion_mapeo as mapeo
 
@@ -273,5 +282,239 @@ def sincronizar_ciclo(db: Session, pais_codigo: str, hallazgos: list) -> Conteo:
                 f"El ciclo viene como cerrado={fila.cerrado} y en VISTA está "
                 f"cerrado={registro.cerrado}. El estado del ciclo lo decide "
                 f"VISTA: no se modificó.", SEVERIDAD_AVISO))
+        conteo.anotar(resultado)
+    return conteo
+
+
+def _norm(texto: str | None) -> str:
+    """Nombre normalizado para emparejar catálogos que se identifican por texto."""
+    return (texto or "").strip().casefold()
+
+
+def sincronizar_especialidad(db: Session, pais_codigo: str,
+                             hallazgos: list) -> Conteo:
+    """`DIM_Especialidad` no tiene código ni país: su identidad es el nombre.
+
+    Por eso el mapeo se guarda con `pais_codigo=""` — es el único catálogo
+    compartido entre países, igual que en el contrato.
+    """
+    conteo = Conteo(ENT_ESPECIALIDAD)
+    filas = db.query(ExtDimEspecialidad).all()
+    conteo.en_ext = len(filas)
+    for fila in filas:
+        def _buscar(f=fila):
+            objetivo = _norm(f.nombre)
+            for e in db.query(Especialidad).all():
+                if _norm(e.nombre) == objetivo:
+                    return e
+            return None
+
+        def _crear(f=fila):
+            nuevo = Especialidad(nombre=f.nombre.strip(), activo=f.activo)
+            db.add(nuevo)
+            db.flush()
+            return nuevo
+
+        registro, resultado = mapeo.resolver(
+            db, ENT_ESPECIALIDAD, "", fila.especialidad_codigo, Especialidad,
+            _buscar, _crear)
+        registro.activo = fila.activo
+        conteo.anotar(resultado)
+    return conteo
+
+
+def _provincia_id(db: Session, pais_codigo: str, nombre: str | None) -> int | None:
+    if not _norm(nombre):
+        return None
+    objetivo = _norm(nombre)
+    for p in db.query(Provincia).filter(Provincia.pais_codigo == pais_codigo).all():
+        if _norm(p.nombre) == objetivo:
+            return p.id
+    nueva = Provincia(pais_codigo=pais_codigo, nombre=nombre.strip())
+    db.add(nueva)
+    db.flush()
+    return nueva.id
+
+
+def _municipio_id(db: Session, provincia_id: int | None,
+                  nombre: str | None) -> int | None:
+    """`DIM_Municipio` cuelga de la provincia, no del país: sin provincia
+    resuelta no se puede crear el municipio."""
+    if provincia_id is None or not _norm(nombre):
+        return None
+    objetivo = _norm(nombre)
+    for m in db.query(Municipio).filter(Municipio.provincia_id == provincia_id).all():
+        if _norm(m.nombre) == objetivo:
+            return m.id
+    nuevo = Municipio(provincia_id=provincia_id, nombre=nombre.strip())
+    db.add(nuevo)
+    db.flush()
+    return nuevo.id
+
+
+def _centro_medico_id(db: Session, pais_codigo: str, nombre: str | None,
+                      provincia_id: int | None,
+                      municipio_id: int | None) -> int | None:
+    if not _norm(nombre):
+        return None
+    objetivo = _norm(nombre)
+    for c in db.query(CentroMedico).filter(
+            CentroMedico.pais_codigo == pais_codigo).all():
+        if _norm(c.nombre) == objetivo:
+            return c.id
+    nuevo = CentroMedico(pais_codigo=pais_codigo, nombre=nombre.strip(),
+                         provincia_id=provincia_id, municipio_id=municipio_id)
+    db.add(nuevo)
+    db.flush()
+    return nuevo.id
+
+
+def sincronizar_medico(db: Session, pais_codigo: str, hallazgos: list) -> Conteo:
+    """`ext` trae centro, provincia y municipio como texto; `DIM_Medico` los
+    referencia por clave foránea. Se resuelven por nombre y se crean si faltan:
+    son catálogos auxiliares sin identidad propia en el contrato, y descartar el
+    dato sería peor que crearlos.
+
+    La adopción por exequátur va después de la del código porque el exequátur es
+    el identificador profesional: si el código de Mallén no coincide pero el
+    exequátur sí, es la misma persona.
+    """
+    conteo = Conteo(ENT_MEDICO)
+    filas = (db.query(ExtDimMedico)
+             .filter(ExtDimMedico.pais_codigo == pais_codigo).all())
+    conteo.en_ext = len(filas)
+    for fila in filas:
+        provincia_id = _provincia_id(db, pais_codigo, fila.provincia)
+        municipio_id = _municipio_id(db, provincia_id, fila.municipio)
+        centro_id = _centro_medico_id(db, pais_codigo, fila.centro_trabajo,
+                                      provincia_id, municipio_id)
+        especialidad_id = (
+            mapeo.id_mapeado(db, ENT_ESPECIALIDAD, "", fila.especialidad_codigo)
+            if fila.especialidad_codigo else None)
+
+        def _buscar(f=fila):
+            por_codigo = (db.query(Medico)
+                          .filter(Medico.pais_codigo == f.pais_codigo,
+                                  Medico.codigo == f.medico_codigo).first())
+            if por_codigo is not None:
+                return por_codigo
+            if f.exequatur:
+                return (db.query(Medico)
+                        .filter(Medico.pais_codigo == f.pais_codigo,
+                                Medico.exequatur == f.exequatur).first())
+            return None
+
+        def _crear(f=fila, eid=especialidad_id, cid=centro_id,
+                   pid=provincia_id, mid=municipio_id):
+            nuevo = Medico(pais_codigo=f.pais_codigo, codigo=f.medico_codigo,
+                           nombre=f.nombre, especialidad_id=eid,
+                           centro_medico_id=cid, provincia_id=pid,
+                           municipio_id=mid, exequatur=f.exequatur,
+                           activo=f.activo)
+            db.add(nuevo)
+            db.flush()
+            return nuevo
+
+        registro, resultado = mapeo.resolver(
+            db, ENT_MEDICO, pais_codigo, fila.medico_codigo, Medico,
+            _buscar, _crear)
+        registro.nombre = fila.nombre
+        registro.activo = fila.activo
+        if fila.exequatur:
+            registro.exequatur = fila.exequatur
+        # El código de Mallén se adopta también en el registro interno cuando
+        # este no tenía ninguno: así los dos universos de médicos convergen.
+        if not registro.codigo:
+            registro.codigo = fila.medico_codigo
+        if especialidad_id is not None:
+            registro.especialidad_id = especialidad_id
+        if centro_id is not None:
+            registro.centro_medico_id = centro_id
+        if provincia_id is not None:
+            registro.provincia_id = provincia_id
+        if municipio_id is not None:
+            registro.municipio_id = municipio_id
+        conteo.anotar(resultado)
+    return conteo
+
+
+def sincronizar_farmacia(db: Session, pais_codigo: str, hallazgos: list) -> Conteo:
+    """`DIM_Farmacia` exige `direccion` y `encargado` (NOT NULL) que `ext` no
+    envía: se crean vacíos para completarse en VISTA, y al re-sincronizar NO se
+    pisan — son datos que VISTA enriqueció y Mallén no conoce.
+
+    Entra con `origen='CONFIG'` y `estado='APROBADA'`: viene del maestro oficial,
+    no de un representante solicitando un alta que un gerente deba aprobar.
+    """
+    conteo = Conteo(ENT_FARMACIA)
+    filas = (db.query(ExtDimFarmacia)
+             .filter(ExtDimFarmacia.pais_codigo == pais_codigo).all())
+    conteo.en_ext = len(filas)
+    for fila in filas:
+        def _buscar(f=fila):
+            objetivo = _norm(f.nombre)
+            for far in db.query(Farmacia).filter(
+                    Farmacia.pais_codigo == f.pais_codigo).all():
+                if _norm(far.nombre_completo) == objetivo:
+                    return far
+            return None
+
+        def _crear(f=fila):
+            nueva = Farmacia(
+                pais_codigo=f.pais_codigo, es_cadena=False, nombre=f.nombre,
+                nombre_completo=f.nombre, direccion="", encargado="",
+                provincia=f.provincia, municipio=f.municipio,
+                estado="APROBADA", origen="CONFIG")
+            db.add(nueva)
+            db.flush()
+            return nueva
+
+        registro, resultado = mapeo.resolver(
+            db, ENT_FARMACIA, pais_codigo, fila.farmacia_codigo, Farmacia,
+            _buscar, _crear)
+        registro.nombre = fila.nombre
+        registro.nombre_completo = fila.nombre
+        if fila.provincia:
+            registro.provincia = fila.provincia
+        if fila.municipio:
+            registro.municipio = fila.municipio
+        conteo.anotar(resultado)
+    return conteo
+
+
+def sincronizar_producto(db: Session, pais_codigo: str, hallazgos: list) -> Conteo:
+    """Los campos propios de VISTA (`area_terapeutica`, `segmento_target`,
+    `meta_muestras_visita`, `gerente_producto`) NO se tocan: `ext` no los conoce
+    y pisarlos borraría configuración hecha en VISTA."""
+    conteo = Conteo(ENT_PRODUCTO)
+    filas = (db.query(ExtDimProducto)
+             .filter(ExtDimProducto.pais_codigo == pais_codigo).all())
+    conteo.en_ext = len(filas)
+    for fila in filas:
+        if not _cabe(fila.producto_codigo, 40):
+            _omitir_por_largo(conteo, hallazgos, ENT_PRODUCTO,
+                              fila.producto_codigo, "DIM_Producto.codigo", 40)
+            continue
+        linea_id = (mapeo.id_mapeado(db, ENT_LINEA, pais_codigo, fila.linea_codigo)
+                    if fila.linea_codigo else None)
+
+        def _buscar(f=fila):
+            return (db.query(Producto)
+                    .filter(Producto.codigo == f.producto_codigo).first())
+
+        def _crear(f=fila, lid=linea_id):
+            nuevo = Producto(codigo=f.producto_codigo, nombre=f.nombre,
+                             linea_id=lid, activo=f.activo)
+            db.add(nuevo)
+            db.flush()
+            return nuevo
+
+        registro, resultado = mapeo.resolver(
+            db, ENT_PRODUCTO, pais_codigo, fila.producto_codigo, Producto,
+            _buscar, _crear)
+        registro.nombre = fila.nombre
+        registro.activo = fila.activo
+        if linea_id is not None:
+            registro.linea_id = linea_id
         conteo.anotar(resultado)
     return conteo

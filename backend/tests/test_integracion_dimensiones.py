@@ -21,8 +21,14 @@ from app.models import (  # noqa: F401
     seguridad_rbac, usuario, visita,
 )
 from app.models.dimensiones import Ciclo, Gerente, Linea, Pais, RepresentanteMedico
+from app.models.dimensiones import (
+    CentroMedico, Especialidad, Farmacia, Medico, Municipio, Producto, Provincia,
+)
 from app.models.integracion_ext import (
     ExtDimCiclo, ExtDimGerente, ExtDimLinea, ExtDimPais, ExtDimRepresentante,
+)
+from app.models.integracion_ext import (
+    ExtDimEspecialidad, ExtDimFarmacia, ExtDimMedico, ExtDimProducto,
 )
 from app.services import integracion_dimensiones_service as dim
 
@@ -63,7 +69,12 @@ def db(motor):
     Sesion = sessionmaker(bind=motor)
     s = Sesion()
     # Hijos antes que padres.
-    for tabla in ('"Config"."MapeoExterno"', '"Config"."DIM_RM"',
+    for tabla in ('"Config"."DIM_Medico"', '"Config"."DIM_CentroMedico"',
+                  '"Config"."DIM_Municipio"', '"Config"."DIM_Provincia"',
+                  '"Config"."DIM_Farmacia"', '"Config"."DIM_Producto"',
+                  '"Config"."DIM_Especialidad"', "ext.dimmedico", "ext.dimfarmacia",
+                  "ext.dimproducto", "ext.dimespecialidad",
+                  '"Config"."MapeoExterno"', '"Config"."DIM_RM"',
                   '"Config"."DIM_Gerente"', '"Config"."DIM_Ciclo"',
                   '"Config"."DIM_Linea"', "ext.dimrepresentante",
                   "ext.dimgerente", "ext.dimciclo", "ext.dimlinea",
@@ -197,3 +208,122 @@ def test_sincronizar_dos_veces_no_duplica(base):
     assert conteo.actualizados == 1
     assert conteo.creados == 0
     assert db.query(RepresentanteMedico).count() == 1
+
+
+def test_especialidad_se_adopta_por_nombre(base):
+    """DIM_Especialidad no tiene código: su identidad es el nombre."""
+    db = base
+    db.add(Especialidad(nombre="Cardiología"))
+    db.add(ExtDimEspecialidad(especialidad_codigo="CARD", nombre="cardiología",
+                              activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_especialidad(db, "DO", hallazgos)
+    db.commit()
+
+    assert conteo.adoptados == 1
+    assert db.query(Especialidad).count() == 1     # no duplicó por may/minúsculas
+
+
+def test_medico_crea_sus_catalogos_auxiliares(base):
+    """`ext` trae centro, provincia y municipio como TEXTO; DIM_Medico los
+    referencia por FK. Se crean al vuelo en vez de descartar el dato."""
+    db = base
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD01",
+                        nombre="Doctor Uno", especialidad_codigo=None,
+                        centro_trabajo="Clínica Central", provincia="Santo Domingo",
+                        municipio="Distrito Nacional", activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_medico(db, "DO", hallazgos)
+    db.commit()
+
+    assert conteo.creados == 1
+    medico = db.query(Medico).one()
+    assert medico.provincia_id is not None
+    assert medico.municipio_id is not None
+    assert medico.centro_medico_id is not None
+    assert db.query(Provincia).one().nombre == "Santo Domingo"
+    assert db.query(Municipio).one().nombre == "Distrito Nacional"
+    assert db.query(CentroMedico).one().nombre == "Clínica Central"
+
+
+def test_medico_se_adopta_por_exequatur(base):
+    """Si el código no coincide pero el exequátur sí, es la misma persona: el
+    exequátur es el identificador profesional único."""
+    db = base
+    db.add(Medico(pais_codigo="DO", codigo="VIEJO-01", nombre="Doctor Uno",
+                  exequatur="EX-123"))
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD01",
+                        nombre="Doctor Uno", exequatur="EX-123", activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_medico(db, "DO", hallazgos)
+    db.commit()
+
+    assert conteo.adoptados == 1
+    assert db.query(Medico).count() == 1
+
+
+def test_farmacia_se_crea_como_maestro_oficial(base):
+    """Viene del sistema oficial, no de un VM pidiendo alta: entra aprobada y
+    con origen CONFIG. `direccion` y `encargado` son NOT NULL y `ext` no los
+    envía, así que quedan vacíos para completarse en VISTA."""
+    db = base
+    db.add(ExtDimFarmacia(pais_codigo="DO", farmacia_codigo="FAR01",
+                          nombre="Farmacia Central", activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_farmacia(db, "DO", hallazgos)
+    db.commit()
+
+    assert conteo.creados == 1
+    f = db.query(Farmacia).one()
+    assert f.origen == "CONFIG"
+    assert f.estado == "APROBADA"
+    assert f.nombre_completo == "Farmacia Central"
+
+
+def test_farmacia_no_pisa_lo_que_vista_completo(base):
+    """`direccion` y `encargado` los enriquece VISTA y `ext` no los conoce."""
+    db = base
+    db.add(ExtDimFarmacia(pais_codigo="DO", farmacia_codigo="FAR01",
+                          nombre="Farmacia Central", activo=True))
+    db.commit()
+    hallazgos = []
+    dim.sincronizar_farmacia(db, "DO", hallazgos)
+    db.commit()
+    f = db.query(Farmacia).one()
+    f.direccion = "Av. Principal 100"
+    f.encargado = "Ana Pérez"
+    db.commit()
+
+    dim.sincronizar_farmacia(db, "DO", hallazgos)
+    db.commit()
+
+    f = db.query(Farmacia).one()
+    assert f.direccion == "Av. Principal 100"
+    assert f.encargado == "Ana Pérez"
+
+
+def test_producto_se_sincroniza_sin_pisar_campos_de_vista(base):
+    """`area_terapeutica` y compañía son de VISTA; `ext` no los conoce."""
+    db = base
+    db.add(Producto(codigo="ONCX-301", nombre="Producto Viejo",
+                    area_terapeutica="Oncología"))
+    db.add(ExtDimProducto(pais_codigo="DO", producto_codigo="ONCX-301",
+                          nombre="Producto Nuevo", activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = dim.sincronizar_producto(db, "DO", hallazgos)
+    db.commit()
+
+    assert conteo.adoptados == 1
+    p = db.query(Producto).one()
+    assert p.nombre == "Producto Nuevo"            # sí se sincroniza
+    assert p.area_terapeutica == "Oncología"       # no se pisa
