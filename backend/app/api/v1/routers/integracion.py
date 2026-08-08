@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import require_roles
 from app.db.database import get_db
 from app.models.usuario import Rol, Usuario
+from app.services import integracion_dimensiones_service as dimensiones
 from app.services import integracion_validacion_service as validacion
 
 router = APIRouter(prefix="/integracion", tags=["Integración — Mallén"])
@@ -52,3 +53,18 @@ def validar(lote_id: int, db: Session = Depends(get_db), _: Usuario = RequireTI)
 def ver_resumen(pais_codigo: str | None = None, db: Session = Depends(get_db),
                 _: Usuario = RequireTI):
     return validacion.resumen(db, pais_codigo)
+
+
+@router.post("/dimensiones/sincronizar",
+             summary="Sincronizar las 9 dimensiones de un país")
+def sincronizar_dimensiones(pais_codigo: str, db: Session = Depends(get_db),
+                            _: Usuario = RequireTI):
+    """Adopta lo que VISTA ya tiene en vez de duplicarlo: mirar `adoptados` en la
+    primera corrida es la forma de comprobar que el emparejamiento funcionó."""
+    return dimensiones.sincronizar_todo(db, pais_codigo)
+
+
+@router.get("/dimensiones/resumen", summary="Filas en ext frente a mapeadas")
+def resumen_dimensiones(pais_codigo: str, db: Session = Depends(get_db),
+                        _: Usuario = RequireTI):
+    return dimensiones.resumen_dimensiones(db, pais_codigo)

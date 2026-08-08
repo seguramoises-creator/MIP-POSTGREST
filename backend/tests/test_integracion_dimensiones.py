@@ -327,3 +327,48 @@ def test_producto_se_sincroniza_sin_pisar_campos_de_vista(base):
     p = db.query(Producto).one()
     assert p.nombre == "Producto Nuevo"            # sí se sincroniza
     assert p.area_terapeutica == "Oncología"       # no se pisa
+
+
+def test_sincronizar_todo_devuelve_las_nueve_dimensiones(base):
+    db = base
+    db.add(ExtDimRepresentante(pais_codigo="DO", rm_codigo="VM99",
+                               linea_codigo="CARD", nombre="Nuevo", activo=True))
+    db.commit()
+
+    r = dim.sincronizar_todo(db, "DO")
+
+    assert r["pais_codigo"] == "DO"
+    assert len(r["dimensiones"]) == 9
+    entidades = [d["entidad"] for d in r["dimensiones"]]
+    assert entidades == list(dim.ENTIDADES)          # y en orden de dependencia
+    rep = next(d for d in r["dimensiones"] if d["entidad"] == "representante")
+    assert rep["creados"] == 1
+
+
+def test_sincronizar_todo_es_idempotente(base):
+    db = base
+    db.add(ExtDimRepresentante(pais_codigo="DO", rm_codigo="VM99",
+                               linea_codigo="CARD", nombre="Nuevo", activo=True))
+    db.commit()
+    dim.sincronizar_todo(db, "DO")
+
+    r = dim.sincronizar_todo(db, "DO")
+
+    rep = next(d for d in r["dimensiones"] if d["entidad"] == "representante")
+    assert rep["creados"] == 0
+    assert rep["actualizados"] == 1
+    assert db.query(RepresentanteMedico).count() == 1
+
+
+def test_resumen_cuenta_ext_y_mapeadas(base):
+    db = base
+    db.add(ExtDimRepresentante(pais_codigo="DO", rm_codigo="VM99",
+                               linea_codigo="CARD", nombre="Nuevo", activo=True))
+    db.commit()
+    dim.sincronizar_todo(db, "DO")
+
+    filas = dim.resumen_dimensiones(db, "DO")
+
+    rep = next(f for f in filas if f["entidad"] == "representante")
+    assert rep["en_ext"] == 1
+    assert rep["mapeadas"] == 1

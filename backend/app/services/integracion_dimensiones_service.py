@@ -32,6 +32,7 @@ from app.models.mapeo_externo import (
 from app.models.mapeo_externo import (
     ENT_ESPECIALIDAD, ENT_FARMACIA, ENT_MEDICO, ENT_PRODUCTO,
 )
+from app.models.mapeo_externo import ENTIDADES, MapeoExterno
 from app.services import integracion_mapeo as mapeo
 
 SEVERIDAD_ERROR = "error"
@@ -518,3 +519,82 @@ def sincronizar_producto(db: Session, pais_codigo: str, hallazgos: list) -> Cont
             registro.linea_id = linea_id
         conteo.anotar(resultado)
     return conteo
+
+
+#: Cada dimensión en el orden en que debe correr: las posteriores resuelven sus
+#: claves foráneas contra el mapeo que dejan las anteriores.
+_SINCRONIZADORES = {
+    ENT_PAIS: sincronizar_pais,
+    ENT_LINEA: sincronizar_linea,
+    ENT_GERENTE: sincronizar_gerente,
+    ENT_REPRESENTANTE: sincronizar_representante,
+    ENT_CICLO: sincronizar_ciclo,
+    ENT_ESPECIALIDAD: sincronizar_especialidad,
+    ENT_MEDICO: sincronizar_medico,
+    ENT_FARMACIA: sincronizar_farmacia,
+    ENT_PRODUCTO: sincronizar_producto,
+}
+
+
+def sincronizar_todo(db: Session, pais_codigo: str) -> dict:
+    """Corre las nueve dimensiones en orden de dependencia.
+
+    Un solo commit al final: o entra el maestro coherente o no entra nada. Las
+    filas problemáticas no abortan —se omiten con su hallazgo—, así que el commit
+    solo confirma lo que sí se pudo resolver.
+    """
+    hallazgos: list[Hallazgo] = []
+    conteos: list[Conteo] = []
+    for entidad in ENTIDADES:
+        conteos.append(_SINCRONIZADORES[entidad](db, pais_codigo, hallazgos))
+    db.commit()
+
+    errores = sum(1 for h in hallazgos if h.severidad == SEVERIDAD_ERROR)
+    logger.info(f"Dimensiones sincronizadas para {pais_codigo}: "
+                f"{sum(c.creados for c in conteos)} creadas, "
+                f"{sum(c.adoptados for c in conteos)} adoptadas, "
+                f"{errores} con error")
+    return {
+        "pais_codigo": pais_codigo,
+        "dimensiones": [{
+            "entidad": c.entidad, "en_ext": c.en_ext, "creados": c.creados,
+            "adoptados": c.adoptados, "actualizados": c.actualizados,
+            "omitidos": c.omitidos,
+        } for c in conteos],
+        "hallazgos": [{
+            "entidad": h.entidad, "codigo_externo": h.codigo_externo,
+            "problema": h.problema, "severidad": h.severidad,
+        } for h in hallazgos],
+    }
+
+
+#: Cuántas filas hay en `ext` por dimensión, para el tablero. La especialidad no
+#: lleva país en el contrato, así que se cuenta entera.
+_ORIGEN_CONTEO = {
+    ENT_PAIS: (ExtDimPais, True),
+    ENT_LINEA: (ExtDimLinea, True),
+    ENT_GERENTE: (ExtDimGerente, True),
+    ENT_REPRESENTANTE: (ExtDimRepresentante, True),
+    ENT_CICLO: (ExtDimCiclo, True),
+    ENT_ESPECIALIDAD: (ExtDimEspecialidad, False),
+    ENT_MEDICO: (ExtDimMedico, True),
+    ENT_FARMACIA: (ExtDimFarmacia, True),
+    ENT_PRODUCTO: (ExtDimProducto, True),
+}
+
+
+def resumen_dimensiones(db: Session, pais_codigo: str) -> list[dict]:
+    """Filas en `ext` frente a filas ya mapeadas, por dimensión."""
+    salida = []
+    for entidad in ENTIDADES:
+        modelo, por_pais = _ORIGEN_CONTEO[entidad]
+        q = db.query(modelo)
+        if por_pais:
+            q = q.filter(modelo.pais_codigo == pais_codigo)
+        clave_pais = pais_codigo if entidad != ENT_ESPECIALIDAD else ""
+        mapeadas = (db.query(MapeoExterno)
+                    .filter(MapeoExterno.entidad == entidad,
+                            MapeoExterno.pais_codigo == clave_pais).count())
+        salida.append({"entidad": entidad, "en_ext": q.count(),
+                       "mapeadas": mapeadas})
+    return salida
