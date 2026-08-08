@@ -31,6 +31,7 @@ from app.api.v1.routers.coaching_more import router as coaching_more_router
 from app.api.v1.routers.maestro_medicos import router as maestro_medicos_router
 from app.api.v1.routers.authz         import router as authz_router
 from app.api.v1.routers.farmacias     import router as farmacias_router
+from app.api.v1.routers.integracion import router as integracion_router
 
 api_router = APIRouter()
 
@@ -62,3 +63,4 @@ api_router.include_router(formacion_calendario_router)  # Calendario de Coaching
 api_router.include_router(formacion_simulacro_router)  # Simulacro de Venta con IA (9)
 api_router.include_router(ia_conexiones_router)  # Conexiones de IA configurables (seccion 20)
 api_router.include_router(farmacias_router)  # Módulo de Farmacias (Config.DIM_Farmacia / Visita.*)
+api_router.include_router(integracion_router)  # Integracion Mallen: recepcion y validacion de lotes
