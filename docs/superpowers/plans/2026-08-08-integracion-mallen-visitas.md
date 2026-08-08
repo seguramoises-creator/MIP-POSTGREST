@@ -533,7 +533,7 @@ def farmacia(escenario):
     db = escenario["db"]
     maestro = Farmacia(pais_codigo="DO", nombre="Farmacia Central",
                        nombre_completo="FARMACIA CENTRAL", direccion="",
-                       encargado="", estado="APROBADA", origen="CONFIG")
+                       encargado="", estado="ACTIVA", origen="CONFIG")
     db.add(maestro)
     db.add(ExtDimFarmacia(pais_codigo="DO", farmacia_codigo="FAR01",
                           nombre="Farmacia Central", activo=True))
@@ -560,7 +560,7 @@ def test_target_farmacia_entra_aprobado(farmacia):
 
     assert conteo.integrados == 1
     panel = db.query(FarmaciaVisita).one()
-    assert panel.estado_aprobacion == "APROBADA"
+    assert panel.estado_aprobacion == "APROBADO"
     assert panel.vm_id == farmacia["rm"].id
     assert panel.maestro_farmacia_id == farmacia["maestro"].id
 
@@ -632,7 +632,9 @@ def integrar_target_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
                              hallazgos: list) -> ConteoHecho:
     """`ext.targetfarmacia` → `Visita.DIM_FarmaciaVisita` (panel del VM).
 
-    Entra como APROBADA: el flujo de aprobación VM→GD existe para las altas que
+    Entra como APROBADO (masculino: es el valor que usan farmacia_aprobacion_service
+    y el filtro de cobertura_farmacia_service). El flujo de aprobación VM→GD existe
+    para las altas que
     solicita un representante, y esto es maestro oficial del SFA.
 
     `ciclos_sin_visita` NO se toca: lo lleva el rodaje de cierre de ciclo.
@@ -666,7 +668,7 @@ def integrar_target_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
         def _crear(f=fila, rid=rm_id, mid=maestro_id, cid=ciclo_id):
             nuevo = FarmaciaVisita(
                 vm_id=rid, maestro_farmacia_id=mid,
-                estado_aprobacion="APROBADA", ciclo_alta_id=cid,
+                estado_aprobacion="APROBADO", ciclo_alta_id=cid,
                 activo=f.activo)
             db.add(nuevo)
             db.flush()

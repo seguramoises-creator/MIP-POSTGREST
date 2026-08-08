@@ -245,6 +245,11 @@ def integrar_target_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
         # y no pasa por la cola VM→GD, así que se reafirma APROBADO también en el
         # camino de adopción/actualización, no solo al crear.
         registro.estado_aprobacion = "APROBADO"
+        # `motivo` guarda el texto con que el GD rechazó el alta. Sin limpiarlo,
+        # un panel que el SFA acaba de aprobar seguiría mostrando el motivo de
+        # rechazo viejo en el panel del VM (`GET /farmacias/panel` lo pinta sin
+        # mirar el estado).
+        registro.motivo = None
         conteo.anotar(resultado)
     return conteo
 

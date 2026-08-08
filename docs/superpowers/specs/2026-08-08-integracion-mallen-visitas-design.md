@@ -71,7 +71,8 @@ Se reutiliza `Config.MapeoExterno` con las entidades `visita_medico` y `visita_f
 - `carga_excel_id` queda `NULL`: no viene de una carga Excel.
 
 **`Visita.DIM_FarmaciaVisita`** (desde `targetfarmacia`):
-- `estado_aprobacion` ← `'APROBADA'`. Lo que viene del SFA es maestro oficial y **no entra a la cola de aprobación VM→GD**, igual que se hizo con `DIM_Farmacia` en el sub-proyecto 2.
+- `estado_aprobacion` ← **`'APROBADO'`** (masculino: es el valor que ya usan `farmacia_aprobacion_service.aprobar` y el filtro de `cobertura_farmacia_service`; escribir `'APROBADA'` deja el panel invisible para la cobertura). Lo que viene del SFA es maestro oficial y **no entra a la cola de aprobación VM→GD**, igual que se hizo con `DIM_Farmacia` en el sub-proyecto 2.
+- **También en la adopción**: si el panel ya existía por el flujo manual VM→GD (en `PENDIENTE_ALTA`), la integración lo **reafirma a `APROBADO`** — el SFA manda. Reasignar solo `activo` tras `resolver` dejaría la farmacia colgada en la cola para siempre.
 - `maestro_farmacia_id` se resuelve por el mapeo de la entidad `farmacia`.
 - `ciclos_sin_visita` **no se toca**: lo calcula el rodaje de cierre de ciclo de VISTA.
 
@@ -217,7 +218,8 @@ Un solo commit al final: o entra el conjunto coherente o no entra nada.
 3. Un `factvisitamedico` no ejecutado → `estado_visita='Cancelada'`.
 4. **Re-integrar el mismo ciclo no duplica** (ni visitas ni targets).
 5. Una visita cuyo `medico_codigo` no está sincronizado → se omite con hallazgo `error`, y el resto del lote sí entra.
-6. Un `targetfarmacia` → crea `DIM_FarmaciaVisita` con `estado_aprobacion='APROBADA'`.
+6. Un `targetfarmacia` → crea `DIM_FarmaciaVisita` con `estado_aprobacion='APROBADO'`, y `cobertura_farmacia_service` lo ve en su universo (es el filtro que delata el valor mal escrito).
+6b. Un panel que ya existía en `PENDIENTE_ALTA` por el flujo manual → tras integrar queda en `APROBADO`, no se queda colgado en la cola.
 7. Un `factvisitafarmacia` → crea `FactVisitaFarmacia` con `registrado_por=NULL`.
 8. **Los endpoints de captura responden 409** (uno por cada uno de los cinco).
 9. Tras integrar, `cobertura_predictiva_service` devuelve cobertura distinta de cero para ese ciclo — la prueba de que el circuito 4DX funciona.

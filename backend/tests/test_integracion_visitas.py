@@ -358,7 +358,8 @@ def test_target_farmacia_adopta_panel_pendiente_de_alta(farmacia):
     db = farmacia["db"]
     panel_previo = FarmaciaVisita(
         vm_id=farmacia["rm"].id, maestro_farmacia_id=farmacia["maestro"].id,
-        estado_aprobacion="PENDIENTE_ALTA", activo=True)
+        estado_aprobacion="PENDIENTE_ALTA", activo=True,
+        motivo="Dirección no verificable")
     db.add(panel_previo)
     db.commit()
     panel_id = panel_previo.id
@@ -377,4 +378,7 @@ def test_target_farmacia_adopta_panel_pendiente_de_alta(farmacia):
     panel = db.query(FarmaciaVisita).one()
     assert panel.id == panel_id
     assert panel.estado_aprobacion == "APROBADO"
+    # El motivo del rechazo anterior se limpia: un panel aprobado que conserva
+    # el texto del rechazo lo sigue mostrando en el panel del VM.
+    assert panel.motivo is None
     assert conteo.integrados == 0
