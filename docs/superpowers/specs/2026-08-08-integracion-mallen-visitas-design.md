@@ -63,7 +63,7 @@ Se reutiliza `Config.MapeoExterno` con las entidades `visita_medico` y `visita_f
 - `programado` ← `activo` de `ext`.
 - `potencial` ← `prioridad` (TOP/REGULAR) — es el campo que `ext` usa para segmentar.
 - `medico_nombre` y `especialidad` se resuelven desde `DIM_Medico` (ya sincronizado), no desde `ext`: el maestro es la fuente.
-- La **frecuencia** (`F1`/`F2`) determina a qué indicador cuenta cada médico. `DIM_TargetMedico` no tiene columna de frecuencia; se conserva en el mapeo del hecho para que el cálculo pueda distinguirlos. *(Ver §7: punto que requiere verificación contra el motor de cobertura antes de implementar.)*
+- La **frecuencia** (`F1`/`F2`) NO se guarda aquí: `DIM_TargetMedico` no tiene esa columna y no se le añade. El motor de indicadores (§3.4) la lee directamente de `ext.panelmedico`, que es donde el dato existe. Esta tabla alimenta el módulo 4DX, no el cálculo del Score.
 
 **`DW.FACT_Visita`** (desde `factvisitamedico`):
 - `estado_visita` ← `'Realizada'` si `ejecutada` es verdadero; `'Cancelada'` si no. La `causa_no_visita` de `ext` no tiene destino en esta tabla y se descarta con hallazgo `aviso` la primera vez que aparece.
