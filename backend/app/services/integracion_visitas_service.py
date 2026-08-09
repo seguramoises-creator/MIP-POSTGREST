@@ -10,8 +10,13 @@ porque VISTA nunca los derivó de visitas — llegaban ya calculados en un Excel
 Una fila cuya dimensión no esté sincronizada se OMITE con hallazgo, nunca se
 resuelve al vuelo: adoptar o crear dimensiones es trabajo del sub-proyecto 2 y
 duplicar esa lógica aquí llevaría a dos verdades sobre la misma identidad.
+
+Tampoco se integra una fila cuyo LOTE no esté en VALIDADO/INTEGRADO (ver
+`_ESTADOS_LOTE_INTEGRABLES`): el sub-proyecto 1 valida el lote y lo puede
+marcar RECHAZADO, y un integrador que no mirara ese estado se tragaría las
+filas de un lote que la validación ya descartó.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from loguru import logger
@@ -37,6 +42,18 @@ SEVERIDAD_AVISO = "aviso"
 ENT_TARGET_MEDICO = "target_medico"
 ENT_VISITA_MEDICO = "visita_medico"
 
+#: `MapeoExterno.codigo_externo` es String(60). Las claves compuestas que arman
+#: `integrar_panel_medico`/`integrar_target_farmacia` (ciclo/rm/entidad) pueden
+#: superarlo, y los `origen_id` que usan los otros dos integradores también se
+#: comprueban contra el mismo límite (defensivo: hoy coincide con el largo de
+#: columna de `ext`, pero no hay que asumirlo).
+LARGO_CODIGO_EXTERNO = 60
+
+#: Solo se integran filas cuyo lote esté en uno de estos dos estados. Un lote
+#: RECIBIDO (todavía sin validar), RECHAZADO, o sin fila de control en
+#: absoluto (nulo/vacío), se omite — ver `_resolver_estados_lotes`.
+_ESTADOS_LOTE_INTEGRABLES = {"VALIDADO", "INTEGRADO"}
+
 
 @dataclass
 class Hallazgo:
@@ -53,14 +70,19 @@ class ConteoHecho:
     integrados: int = 0
     actualizados: int = 0
     omitidos: int = 0
+    #: Qué lotes aportaron al menos una fila efectivamente creada o actualizada
+    #: en esta corrida. `_cerrar_lotes` lo usa (condición 1 del §7.1 paso 4):
+    #: un lote cuyas filas se omitieron TODAS no debe pasar a INTEGRADO.
+    lotes_aportados: set[int] = field(default_factory=set)
 
-    def anotar(self, resultado: str) -> None:
+    def anotar(self, resultado: str, lote_id: int) -> None:
         if resultado == mapeo.RESULTADO_CREADO:
             self.integrados += 1
         else:
             # Adoptado y actualizado se cuentan igual: para un hecho no existe la
             # distinción del maestro (nadie los cargó antes a mano).
             self.actualizados += 1
+        self.lotes_aportados.add(lote_id)
 
 
 def _refs(db: Session, pais_codigo: str, ciclo_codigo: str, rm_codigo: str
@@ -78,8 +100,58 @@ def _falta_ref(hallazgos: list, hecho: str, origen_id: str | None,
         SEVERIDAD_ERROR))
 
 
+def _cabe(valor: str, largo: int) -> bool:
+    return len(valor) <= largo
+
+
+def _omitir_por_largo(conteo: ConteoHecho, hallazgos: list, hecho: str,
+                      origen_id: str | None, columna: str, largo: int) -> None:
+    """Mismo patrón que `integracion_dimensiones_service._omitir_por_largo`
+    (sub-proyecto 2): una clave que no cabe en `columna` se OMITE, nunca se
+    trunca — truncar podría colapsar dos entidades distintas en una sola
+    clave y confundirlas."""
+    conteo.omitidos += 1
+    hallazgos.append(Hallazgo(
+        hecho, origen_id,
+        f"La clave de integración supera los {largo} caracteres de {columna}; "
+        f"la fila se omitió.", SEVERIDAD_ERROR))
+
+
+def _resolver_estados_lotes(db: Session, lote_ids: set[int]) -> dict[int, str]:
+    """El estado normalizado (`.strip().upper()`, tolerante a la caja que
+    mande el origen — igual que ya hacía `_cerrar_lotes` para VALIDADO) de
+    cada lote, resuelto en UNA sola consulta.
+
+    Se llama una vez por corrida (desde `integrar_todo`, que ya conoce de
+    antemano los lotes del ciclo) o, en el peor caso, una vez por integrador
+    cuando se invoca suelto — nunca dentro del bucle de filas, que sería una
+    consulta a `ExtControlCarga` por fila.
+    """
+    if not lote_ids:
+        return {}
+    filas = (db.query(ExtControlCarga.lote_id, ExtControlCarga.estado)
+             .filter(ExtControlCarga.lote_id.in_(lote_ids)).all())
+    return {lote_id: (estado or "").strip().upper() for lote_id, estado in filas}
+
+
+def _lote_habilitado(estados_lote: dict[int, str], lote_id: int) -> bool:
+    return estados_lote.get(lote_id) in _ESTADOS_LOTE_INTEGRABLES
+
+
+def _omitir_por_lote(conteo: ConteoHecho, hallazgos: list, hecho: str,
+                     origen_id: str | None, lote_id: int,
+                     estados_lote: dict[int, str]) -> None:
+    conteo.omitidos += 1
+    estado = estados_lote.get(lote_id)
+    hallazgos.append(Hallazgo(
+        hecho, origen_id,
+        f"El lote {lote_id} está en estado «{estado or 'sin control de carga'}», "
+        f"no VALIDADO/INTEGRADO; la fila se omitió.", SEVERIDAD_ERROR))
+
+
 def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
-                          hallazgos: list) -> ConteoHecho:
+                          hallazgos: list,
+                          estados_lote: dict[int, str] | None = None) -> ConteoHecho:
     """`ext.panelmedico` → `Config.DIM_TargetMedico` (universo del módulo 4DX).
 
     La frecuencia (F1/F2) NO se guarda: `DIM_TargetMedico` no tiene esa columna y
@@ -90,9 +162,20 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
              .filter(ExtPanelMedico.pais_codigo == pais_codigo,
                      ExtPanelMedico.ciclo_codigo == ciclo_codigo).all())
     conteo.en_ext = len(filas)
+    if estados_lote is None:
+        estados_lote = _resolver_estados_lotes(db, {f.lote_id for f in filas})
     for fila in filas:
-        ciclo_id, rm_id = _refs(db, pais_codigo, ciclo_codigo, fila.rm_codigo)
         clave = f"{fila.rm_codigo}/{fila.medico_codigo}"
+        if not _lote_habilitado(estados_lote, fila.lote_id):
+            _omitir_por_lote(conteo, hallazgos, "panelmedico", clave,
+                             fila.lote_id, estados_lote)
+            continue
+        clave_mapeo = f"{ciclo_codigo}/{fila.rm_codigo}/{fila.medico_codigo}"
+        if not _cabe(clave_mapeo, LARGO_CODIGO_EXTERNO):
+            _omitir_por_largo(conteo, hallazgos, "panelmedico", clave,
+                              "MapeoExterno.codigo_externo", LARGO_CODIGO_EXTERNO)
+            continue
+        ciclo_id, rm_id = _refs(db, pais_codigo, ciclo_codigo, fila.rm_codigo)
         if ciclo_id is None:
             conteo.omitidos += 1
             _falta_ref(hallazgos, "panelmedico", clave, "el ciclo", ciclo_codigo)
@@ -122,17 +205,17 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
             return nuevo
 
         registro, resultado = mapeo.resolver(
-            db, ENT_TARGET_MEDICO, pais_codigo,
-            f"{ciclo_codigo}/{fila.rm_codigo}/{fila.medico_codigo}",
+            db, ENT_TARGET_MEDICO, pais_codigo, clave_mapeo,
             TargetMedico, _buscar, _crear)
         registro.programado = fila.activo
         registro.activo = fila.activo
-        conteo.anotar(resultado)
+        conteo.anotar(resultado, fila.lote_id)
     return conteo
 
 
 def integrar_visitas_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
-                            hallazgos: list) -> ConteoHecho:
+                            hallazgos: list,
+                            estados_lote: dict[int, str] | None = None) -> ConteoHecho:
     """`ext.factvisitamedico` → `DW.FACT_Visita` (bitácora del módulo 4DX).
 
     `origen_id` es la clave de idempotencia que garantiza el contrato: reenviar
@@ -143,7 +226,17 @@ def integrar_visitas_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
              .filter(ExtFactVisitaMedico.pais_codigo == pais_codigo,
                      ExtFactVisitaMedico.ciclo_codigo == ciclo_codigo).all())
     conteo.en_ext = len(filas)
+    if estados_lote is None:
+        estados_lote = _resolver_estados_lotes(db, {f.lote_id for f in filas})
     for fila in filas:
+        if not _lote_habilitado(estados_lote, fila.lote_id):
+            _omitir_por_lote(conteo, hallazgos, "factvisitamedico", fila.origen_id,
+                             fila.lote_id, estados_lote)
+            continue
+        if not _cabe(fila.origen_id, LARGO_CODIGO_EXTERNO):
+            _omitir_por_largo(conteo, hallazgos, "factvisitamedico", fila.origen_id,
+                              "MapeoExterno.codigo_externo", LARGO_CODIGO_EXTERNO)
+            continue
         ciclo_id, rm_id = _refs(db, pais_codigo, ciclo_codigo, fila.rm_codigo)
         if ciclo_id is None:
             conteo.omitidos += 1
@@ -184,7 +277,7 @@ def integrar_visitas_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
         registro.fecha_visita = fila.fecha_visita
         registro.tipo_contacto = fila.tipo_visita
         registro.estado_visita = "Realizada" if fila.ejecutada else "Cancelada"
-        conteo.anotar(resultado)
+        conteo.anotar(resultado, fila.lote_id)
     logger.info(f"Visitas médicas {pais_codigo}/{ciclo_codigo}: "
                 f"{conteo.integrados} nuevas, {conteo.omitidos} omitidas")
     return conteo
@@ -196,7 +289,8 @@ ENT_VISITA_FARMACIA = "visita_farmacia"
 
 
 def integrar_target_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
-                             hallazgos: list) -> ConteoHecho:
+                             hallazgos: list,
+                             estados_lote: dict[int, str] | None = None) -> ConteoHecho:
     """`ext.targetfarmacia` → `Visita.DIM_FarmaciaVisita` (panel del VM).
 
     Entra como APROBADO: el flujo de aprobación VM→GD existe para las altas que
@@ -209,9 +303,20 @@ def integrar_target_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
              .filter(ExtTargetFarmacia.pais_codigo == pais_codigo,
                      ExtTargetFarmacia.ciclo_codigo == ciclo_codigo).all())
     conteo.en_ext = len(filas)
+    if estados_lote is None:
+        estados_lote = _resolver_estados_lotes(db, {f.lote_id for f in filas})
     for fila in filas:
-        ciclo_id, rm_id = _refs(db, pais_codigo, ciclo_codigo, fila.rm_codigo)
         clave = f"{fila.rm_codigo}/{fila.farmacia_codigo}"
+        if not _lote_habilitado(estados_lote, fila.lote_id):
+            _omitir_por_lote(conteo, hallazgos, "targetfarmacia", clave,
+                             fila.lote_id, estados_lote)
+            continue
+        clave_mapeo = f"{ciclo_codigo}/{fila.rm_codigo}/{fila.farmacia_codigo}"
+        if not _cabe(clave_mapeo, LARGO_CODIGO_EXTERNO):
+            _omitir_por_largo(conteo, hallazgos, "targetfarmacia", clave,
+                              "MapeoExterno.codigo_externo", LARGO_CODIGO_EXTERNO)
+            continue
+        ciclo_id, rm_id = _refs(db, pais_codigo, ciclo_codigo, fila.rm_codigo)
         if rm_id is None:
             conteo.omitidos += 1
             _falta_ref(hallazgos, "targetfarmacia", clave, "el representante",
@@ -240,8 +345,7 @@ def integrar_target_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
             return nuevo
 
         registro, resultado = mapeo.resolver(
-            db, ENT_TARGET_FARMACIA, pais_codigo,
-            f"{ciclo_codigo}/{fila.rm_codigo}/{fila.farmacia_codigo}",
+            db, ENT_TARGET_FARMACIA, pais_codigo, clave_mapeo,
             FarmaciaVisita, _buscar, _crear)
         registro.activo = fila.activo
         # El panel puede haber sido ADOPTADO desde un alta que el VM ya había
@@ -254,12 +358,13 @@ def integrar_target_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
         # rechazo viejo en el panel del VM (`GET /farmacias/panel` lo pinta sin
         # mirar el estado).
         registro.motivo = None
-        conteo.anotar(resultado)
+        conteo.anotar(resultado, fila.lote_id)
     return conteo
 
 
 def integrar_visitas_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
-                              hallazgos: list) -> ConteoHecho:
+                              hallazgos: list,
+                              estados_lote: dict[int, str] | None = None) -> ConteoHecho:
     """`ext.factvisitafarmacia` → `Visita.FactVisitaFarmacia`.
 
     `registrado_por` queda nulo (no la capturó un usuario de VISTA) y la hora
@@ -270,7 +375,17 @@ def integrar_visitas_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
              .filter(ExtFactVisitaFarmacia.pais_codigo == pais_codigo,
                      ExtFactVisitaFarmacia.ciclo_codigo == ciclo_codigo).all())
     conteo.en_ext = len(filas)
+    if estados_lote is None:
+        estados_lote = _resolver_estados_lotes(db, {f.lote_id for f in filas})
     for fila in filas:
+        if not _lote_habilitado(estados_lote, fila.lote_id):
+            _omitir_por_lote(conteo, hallazgos, "factvisitafarmacia", fila.origen_id,
+                             fila.lote_id, estados_lote)
+            continue
+        if not _cabe(fila.origen_id, LARGO_CODIGO_EXTERNO):
+            _omitir_por_largo(conteo, hallazgos, "factvisitafarmacia", fila.origen_id,
+                              "MapeoExterno.codigo_externo", LARGO_CODIGO_EXTERNO)
+            continue
         ciclo_id, rm_id = _refs(db, pais_codigo, ciclo_codigo, fila.rm_codigo)
         if ciclo_id is None or rm_id is None:
             conteo.omitidos += 1
@@ -282,10 +397,15 @@ def integrar_visitas_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
             db, ENT_TARGET_FARMACIA, pais_codigo,
             f"{ciclo_codigo}/{fila.rm_codigo}/{fila.farmacia_codigo}")
         if panel_id is None:
+            # Una visita a una farmacia fuera del target del ciclo es ruido
+            # normal (el VM puede visitar una farmacia no programada), no un
+            # error de integración: se informa, no se marca como fallo.
             conteo.omitidos += 1
-            _falta_ref(hallazgos, "factvisitafarmacia", fila.origen_id,
-                       "la farmacia en el panel del representante",
-                       fila.farmacia_codigo)
+            hallazgos.append(Hallazgo(
+                "factvisitafarmacia", fila.origen_id,
+                f"La farmacia «{fila.farmacia_codigo}» visitada no está en el "
+                f"target del representante para este ciclo; la visita quedó "
+                f"fuera de plan y no se integró.", SEVERIDAD_AVISO))
             continue
 
         def _buscar():
@@ -305,7 +425,7 @@ def integrar_visitas_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
             db, ENT_VISITA_FARMACIA, pais_codigo, fila.origen_id,
             FactVisitaFarmacia, _buscar, _crear)
         registro.ejecutada = fila.ejecutada
-        conteo.anotar(resultado)
+        conteo.anotar(resultado, fila.lote_id)
     return conteo
 
 
@@ -349,12 +469,43 @@ def _lotes_del_ciclo(db: Session, pais_codigo: str, ciclo_codigo: str) -> list[i
     return sorted(lotes)
 
 
-def _cerrar_lotes(db: Session, lotes: list[int], detalle: str) -> list[int]:
+def _lote_tiene_filas_de_otro_ciclo(db: Session, lote_id: int,
+                                    ciclo_codigo: str) -> bool:
+    """¿El lote todavía tiene filas de un ciclo DISTINTO al que se acaba de
+    integrar, en cualquiera de los cuatro hechos? Un mismo lote puede traer
+    filas de más de un ciclo (p. ej. un corte de mes a mitad del envío); si
+    las tiene, cerrarlo como INTEGRADO dejaría esas otras filas huérfanas —y
+    como `validar_lote` (sub-proyecto 1) rechaza re-validar un lote ya
+    INTEGRADO, ese resto ya no se podría ni reintentar."""
+    for modelo, _, _ in _ORIGEN_CONTEO.values():
+        existe = (db.query(modelo.lote_id)
+                  .filter(modelo.lote_id == lote_id,
+                          modelo.ciclo_codigo != ciclo_codigo)
+                  .first())
+        if existe is not None:
+            return True
+    return False
+
+
+def _cerrar_lotes(db: Session, lotes: list[int], detalle: str, ciclo_codigo: str,
+                  lotes_con_filas_aportadas: set[int]) -> list[int]:
     """§7.1 paso 4: marca como INTEGRADO los lotes que estaban en VALIDADO.
 
     Solo VALIDADO → INTEGRADO. Un lote RECHAZADO no se rescata por la puerta
     de atrás, y uno ya INTEGRADO se deja como está (la re-ejecución del
     proceso es idempotente por diseño del contrato).
+
+    Dos condiciones adicionales, ambas necesarias para que INTEGRADO signifique
+    lo que dice:
+    1. El lote aportó al menos una fila efectivamente creada o actualizada en
+       ESTA corrida (`lotes_con_filas_aportadas`, construido en `integrar_todo`
+       a partir de `ConteoHecho.lotes_aportados`). Sin esto, un lote cuyas
+       filas se omitieron TODAS (p. ej. dimensión sin sincronizar) quedaba
+       INTEGRADO con «0 nuevas, 0 actualizadas» en el mensaje.
+    2. El lote no tiene filas de OTRO ciclo pendientes
+       (`_lote_tiene_filas_de_otro_ciclo`). Sin esto, un lote con filas de dos
+       ciclos quedaba INTEGRADO al procesar solo uno, dejando el resto
+       huérfano y sin forma de reintentarse.
 
     Escribir `estado`/`mensaje` no viola la prohibición sobre `ext`: esa
     prohibición es sobre el ESQUEMA. El contrato asigna esos dos campos a
@@ -366,6 +517,10 @@ def _cerrar_lotes(db: Session, lotes: list[int], detalle: str) -> list[int]:
     for lote in (db.query(ExtControlCarga)
                  .filter(ExtControlCarga.lote_id.in_(lotes)).all()):
         if (lote.estado or "").strip().upper() != "VALIDADO":
+            continue
+        if lote.lote_id not in lotes_con_filas_aportadas:
+            continue
+        if _lote_tiene_filas_de_otro_ciclo(db, lote.lote_id, ciclo_codigo):
             continue
         lote.estado = "INTEGRADO"
         lote.mensaje = detalle[:500]
@@ -390,8 +545,15 @@ def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
 
     hallazgos: list[Hallazgo] = []
     conteos: list[ConteoHecho] = []
+    # Los lotes del ciclo (y sus estados) se resuelven UNA sola vez para las
+    # cuatro llamadas de abajo — no una consulta a `ExtControlCarga` por fila
+    # ni una por integrador. `_lotes_del_ciclo` solo lee `ext`, así que da
+    # igual calcularlo antes o después de integrar.
+    lotes_del_ciclo = _lotes_del_ciclo(db, pais_codigo, ciclo_codigo)
+    estados_lote = _resolver_estados_lotes(db, set(lotes_del_ciclo))
     for _, integrar in _INTEGRADORES:
-        conteos.append(integrar(db, pais_codigo, ciclo_codigo, hallazgos))
+        conteos.append(integrar(db, pais_codigo, ciclo_codigo, hallazgos,
+                                estados_lote))
 
     # `calcular_indicadores` ya se protege solo contra el ciclo cerrado: devuelve
     # `omitido_ciclo_cerrado=True` sin borrar ni escribir nada (si borrara, se
@@ -409,9 +571,12 @@ def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
     detalle = "; ".join(
         f"{c.hecho}: {c.integrados} nuevas, {c.actualizados} actualizadas"
         for c in conteos)
+    lotes_con_filas_aportadas: set[int] = set()
+    for c in conteos:
+        lotes_con_filas_aportadas |= c.lotes_aportados
     cerrados = _cerrar_lotes(
-        db, _lotes_del_ciclo(db, pais_codigo, ciclo_codigo),
-        f"Integrado en VISTA. {detalle}")
+        db, lotes_del_ciclo, f"Integrado en VISTA. {detalle}",
+        ciclo_codigo, lotes_con_filas_aportadas)
 
     db.commit()
 

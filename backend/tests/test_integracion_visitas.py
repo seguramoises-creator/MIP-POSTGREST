@@ -587,3 +587,205 @@ def test_reintegrar_no_revierte_el_estado_del_lote(farmacia):
 
     assert r["lotes_cerrados"] == []          # ya estaba cerrado
     assert db.query(ExtControlCarga).filter_by(lote_id=1001).one().estado == "INTEGRADO"
+
+
+# ===========================================================================
+# DEFECTO 1 (CRITICAL) — un lote no VALIDADO/INTEGRADO no debe integrarse.
+# ===========================================================================
+
+def test_lote_rechazado_omite_las_filas_con_hallazgo(farmacia):
+    """Ningún integrador miraba `ExtControlCarga.estado`: un lote RECHAZADO por
+    la validación del sub-proyecto 1 se integraba igual. Ahora las filas de un
+    lote que no está en VALIDADO/INTEGRADO se omiten con un hallazgo de
+    severidad error, y ni `DIM_TargetMedico` ni `FACT_Visita` reciben nada."""
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.query(ExtControlCarga).filter_by(lote_id=1001).one().estado = "RECHAZADO"
+    db.commit()
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    panel = next(h for h in r["hechos"] if h["hecho"] == "panelmedico")
+    visita = next(h for h in r["hechos"] if h["hecho"] == "factvisitamedico")
+    assert panel["integrados"] == 0
+    assert panel["omitidos"] == 1
+    assert visita["integrados"] == 0
+    assert visita["omitidos"] == 1
+    assert db.query(TargetMedico).count() == 0
+    assert db.query(FactVisita).count() == 0
+    assert any(h["severidad"] == viz.SEVERIDAD_ERROR and "RECHAZADO" in h["problema"]
+               for h in r["hallazgos"])
+    assert r["lotes_cerrados"] == []
+    assert db.query(ExtControlCarga).filter_by(lote_id=1001).one().estado == "RECHAZADO"
+
+
+def test_lote_validado_si_integra_normalmente(farmacia):
+    """Camino normal: un lote VALIDADO sigue integrando sus filas exactamente
+    como antes — el guard del DEFECTO 1 no debe bloquear el flujo sano."""
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.commit()
+    assert (db.query(ExtControlCarga).filter_by(lote_id=1001).one().estado
+            == "VALIDADO")
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    panel = next(h for h in r["hechos"] if h["hecho"] == "panelmedico")
+    visita = next(h for h in r["hechos"] if h["hecho"] == "factvisitamedico")
+    assert panel["integrados"] == 1
+    assert visita["integrados"] == 1
+    assert r["lotes_cerrados"] == [1001]
+
+
+def test_lote_con_estado_en_minuscula_tambien_integra(farmacia):
+    """El estado se compara tolerante a caja (`.strip().upper()`), igual que ya
+    hacía el guard de cierre de lote original: el origen puede mandar
+    variaciones de caja en el estado."""
+    db = farmacia["db"]
+    _panel(db)
+    db.query(ExtControlCarga).filter_by(lote_id=1001).one().estado = "validado"
+    db.commit()
+
+    conteo = viz.integrar_panel_medico(db, "DO", "C01-2026", [])
+    db.commit()
+
+    assert conteo.integrados == 1
+    assert conteo.omitidos == 0
+
+
+# ===========================================================================
+# DEFECTO 2 (IMPORTANT) — claves de MapeoExterno.codigo_externo que desbordan
+# String(60) se omiten, no tumban la corrida.
+# ===========================================================================
+
+def test_panel_medico_clave_larga_se_omite_no_trunca(escenario):
+    """La clave `ciclo/rm/medico` puede superar los 60 caracteres de
+    `MapeoExterno.codigo_externo`. Antes de la corrección esto tumbaba TODA la
+    corrida con un DataError de PostgreSQL (rollback del ciclo completo); ahora
+    la fila se omite con un hallazgo y el resto del lote entra normalmente.
+
+    El representante se mapea a mano (como haría el sub-proyecto 2) para que
+    la fila llegue hasta la construcción de la clave de `MapeoExterno` en vez
+    de omitirse antes por falta de sincronización — si no, el test no
+    ejercería el desbordamiento que reproduce el defecto.
+    """
+    db = escenario["db"]
+    rm_largo = "RM" + "9" * 28       # 30 chars: el máximo de dimrepresentante
+    medico_largo = "MD" + "8" * 38   # 40 chars: el máximo de dimmedico
+    db.add(ExtDimRepresentante(pais_codigo="DO", rm_codigo=rm_largo,
+                               nombre="Representante Largo", activo=True))
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo=medico_largo,
+                        nombre="Doctor Largo", activo=True))
+    db.flush()
+    db.add(MapeoExterno(entidad=ENT_REPRESENTANTE, pais_codigo="DO",
+                        codigo_externo=rm_largo, id_interno=escenario["rm"].id))
+    db.add(ExtPanelMedico(
+        lote_id=1001, pais_codigo="DO", ciclo_codigo="C01-2026",
+        rm_codigo=rm_largo, medico_codigo=medico_largo,
+        frecuencia_objetivo="F1", prioridad="TOP", visitas_programadas=2,
+        activo=True))
+    _panel(db)  # una fila normal (MD01) que sí debe entrar
+    db.commit()
+    hallazgos = []
+
+    conteo = viz.integrar_panel_medico(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert conteo.integrados == 1   # la fila normal sí entró
+    assert conteo.omitidos == 1     # la de clave larga se omitió, no rompió nada
+    assert db.query(TargetMedico).count() == 1
+    assert any(h.severidad == viz.SEVERIDAD_ERROR and "60 caracteres" in h.problema
+               for h in hallazgos)
+
+
+# ===========================================================================
+# DEFECTO 3 (IMPORTANT) — `_cerrar_lotes` solo marca INTEGRADO si el lote
+# aportó filas Y no le quedan filas de otro ciclo.
+# ===========================================================================
+
+def test_lote_sigue_validado_si_no_integro_ninguna_fila(escenario):
+    """Sin dimensiones sincronizadas, todas las filas del lote se omiten (0
+    integradas). El lote NO debe pasar a INTEGRADO: antes quedaba marcado
+    igual, con «0 nuevas, 0 actualizadas» en el mensaje, y como `validar_lote`
+    (sub-proyecto 1) rechaza re-validar un lote INTEGRADO, quedaba muerto."""
+    db = escenario["db"]
+    # Un médico que existe en `ext` pero SIN mapeo (dimensión no sincronizada).
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD99",
+                        nombre="Doctor Sin Sincronizar", activo=True))
+    db.flush()
+    _visita(db, "V-0001", medico="MD99")
+    db.commit()
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    visita = next(h for h in r["hechos"] if h["hecho"] == "factvisitamedico")
+    assert visita["integrados"] == 0
+    assert visita["omitidos"] == 1
+    assert r["lotes_cerrados"] == []
+    lote = db.query(ExtControlCarga).filter_by(lote_id=1001).one()
+    assert lote.estado == "VALIDADO"
+
+
+def test_lote_no_se_cierra_si_tiene_filas_de_otro_ciclo(farmacia):
+    """Un mismo lote puede traer filas de más de un ciclo (p. ej. un corte de
+    mes a mitad del envío). Integrar solo el ciclo actual no debe cerrar el
+    lote — las filas del otro ciclo quedarían huérfanas y, como el lote ya
+    estaría INTEGRADO, ni siquiera se podrían re-validar."""
+    db = farmacia["db"]
+    _visita(db, "V-0001")   # ciclo C01-2026, lote 1001
+
+    # Un segundo ciclo, sincronizado, con una fila del MISMO lote 1001.
+    ciclo2 = Ciclo(pais_codigo="DO", anio=2026, numero=2, nombre="Ciclo 2",
+                  fecha_inicio=date(2026, 2, 1), fecha_fin=date(2026, 2, 28),
+                  dias_laborables=20, cerrado=False)
+    db.add(ciclo2)
+    db.flush()
+    db.add(ExtDimCiclo(pais_codigo="DO", ciclo_codigo="C02-2026", anio=2026,
+                       numero=2, fecha_inicio=date(2026, 2, 1),
+                       fecha_fin=date(2026, 2, 28), dias_laborables=20,
+                       cerrado=False))
+    db.add(MapeoExterno(entidad=ENT_CICLO, pais_codigo="DO",
+                        codigo_externo="C02-2026", id_interno=ciclo2.id))
+    db.add(ExtFactVisitaMedico(
+        lote_id=1001, origen_id="V-0002", pais_codigo="DO",
+        ciclo_codigo="C02-2026", rm_codigo="VM01", medico_codigo="MD01",
+        fecha_visita=date(2026, 2, 15), tipo_visita="V", ejecutada=True,
+        acompanado=False))
+    db.commit()
+
+    r = viz.integrar_todo(db, "DO", "C01-2026")
+
+    visita = next(h for h in r["hechos"] if h["hecho"] == "factvisitamedico")
+    assert visita["integrados"] == 1              # la fila de C01-2026 sí integró
+    assert db.query(FactVisita).count() == 1
+    assert r["lotes_cerrados"] == []               # pero el lote no se cierra
+    lote = db.query(ExtControlCarga).filter_by(lote_id=1001).one()
+    assert lote.estado == "VALIDADO"
+
+
+# ===========================================================================
+# DEFECTO 4 (MINOR) — visita a farmacia fuera de target: aviso, no error.
+# ===========================================================================
+
+def test_visita_farmacia_fuera_de_target_es_aviso_no_error(farmacia):
+    """Una visita a una farmacia que no está en el target del ciclo es ruido
+    normal (un VM puede visitar una farmacia no programada), no un error de
+    integración: la severidad baja de `error` a `aviso`."""
+    db = farmacia["db"]
+    db.add(ExtFactVisitaFarmacia(
+        lote_id=1001, origen_id="VF-0099", pais_codigo="DO",
+        ciclo_codigo="C01-2026", rm_codigo="VM01", farmacia_codigo="FAR01",
+        fecha_visita=date(2026, 1, 20), ejecutada=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = viz.integrar_visitas_farmacia(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert conteo.integrados == 0
+    assert conteo.omitidos == 1
+    assert db.query(FactVisitaFarmacia).count() == 0
+    h = next(h for h in hallazgos if h.origen_id == "VF-0099")
+    assert h.severidad == viz.SEVERIDAD_AVISO
