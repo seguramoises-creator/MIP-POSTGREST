@@ -76,6 +76,22 @@ Se reutiliza `Config.MapeoExterno` con las entidades `visita_medico` y `visita_f
 - `maestro_farmacia_id` se resuelve por el mapeo de la entidad `farmacia`.
 - `ciclos_sin_visita` **no se toca**: lo calcula el rodaje de cierre de ciclo de VISTA.
 
+**`Visita.DIM_MedicoVisita`** (desde `panelmedico`) — **añadido tras la revisión final**:
+El `panelmedico` alimenta **dos** destinos, no uno: `Config.DIM_TargetMedico` (universo del módulo 4DX) y `Visita.DIM_MedicoVisita` (panel del módulo de Visita). La primera versión de este spec solo escribía el primero, y esa asimetría dejó al módulo de Visita sin datos — mientras que para farmacias sí se hacía bien (`targetfarmacia` → `DIM_FarmaciaVisita`). Mismo criterio que allí: `estado_aprobacion = 'APROBADO'`, porque lo que viene del SFA es maestro oficial y **no entra a la cola de aprobación VM→GD**.
+- `maestro_medico_id` se resuelve por el mapeo de la entidad `medico` (el puente entre `Config.DIM_Medico` y el panel).
+- `ciclos_sin_visita` **no se toca**: lo calcula el rodaje de cierre de ciclo de VISTA.
+
+**`Visita.FactVisita`** (desde `factvisitamedico`) — **añadido tras la revisión final**:
+`factvisitamedico` también alimenta **dos** destinos: `DW.FACT_Visita` (que consume Cobertura Predictiva/4DX) y `Visita.FactVisita` (clase `VisitaRegistro`, que consume el módulo de Visita). Al cerrar la captura manual, los dos endpoints apagados eran los **únicos escritores** de la segunda, y sin esto quedaban congelados en cero: Cobertura del módulo Visita, **Costo/ROI**, parrilla, las **visitas acompañadas** que alimentan Coaching MORE, el estado por médico del Panel y el panel de salud del ciclo. El §4 promete que esos módulos siguen funcionando; esto es lo que lo cumple.
+- `medico_id` ← la cadena `medico_codigo` → mapeo `medico` → `Config.DIM_Medico.id` → la fila de `DIM_MedicoVisita` de **ese `vm_id`**. Como el panel se integra en el mismo paso (arriba), la fila existe. Si aun así no se encuentra, se omite con hallazgo `error` en vez de crear un panel a espaldas del flujo de aprobación.
+- `tipo_visita` ← el valor real del contrato (`V`/`R`), **también cuando `ejecutada` es falso**. El flujo manual grababa siempre `'V'` en las no-visitas, pero era una limitación de su pantalla, no una regla: el dato de Mallén es más fiel.
+- `acompanado` ← directo; es lo que consume Coaching MORE.
+- **`gerente_codigo` se descarta**, con nota: `VisitaRegistro` no tiene columna para "quién acompañó" y añadirla está prohibido en este sub-proyecto. Coaching resuelve el gerente por `RepresentanteMedico.gerente_id`, así que no se pierde función.
+- `registrado_por`, `comentario`, `productos`, GPS y foto quedan nulos: no los registró un usuario de VISTA y el contrato no los envía.
+- Idempotencia con una entidad de mapeo **nueva** (p. ej. `visita_medico_registro`): reutilizar `visita_medico` colisionaría, porque `MapeoExterno` es único por `(entidad, país, código)` y ese `origen_id` ya apunta a la fila de `DW.FACT_Visita`.
+
+> **Limitación conocida, documentada a propósito:** el gate de Coaching MORE cuenta las acompañadas **del día local de hoy** (`ventana_dia_local`). Con carga diferida (T+1), las visitas acompañadas de Mallén no habilitarán la hoja de coaching el mismo día. Arreglarlo exige tocar el módulo de coaching, que está fuera del alcance de este sub-proyecto.
+
 **`Visita.FactVisitaFarmacia`** (desde `factvisitafarmacia`):
 - `registrado_por` queda `NULL` (no lo registró un usuario de VISTA).
 - `fecha_hora` ← `fecha_visita` a las 00:00; el contrato solo trae fecha, no hora.
@@ -111,6 +127,14 @@ Consecuencia directa: `visitas_programadas` **no participa en el cálculo** y **
 **Escritura idempotente:** delete-then-insert de las filas de `FACT_ResultadoIndicador` de esos cuatro indicadores para el `(rm_id, ciclo_id)` procesado. No se tocan los otros cuatro indicadores, que siguen llegando por su vía.
 
 **Los puntos no se calculan aquí:** se escribe `resultado_real` y el motor existente (`motor_calculo_service.completar_puntajes`) hace la conversión a puntos, igual que con los datos del Excel. Así el camino de puntuación sigue siendo uno solo.
+
+**LA UNIDAD: `resultado_real` va como FRACCIÓN 0-1, no como porcentaje.** Los cuatro indicadores tienen `DIM_Indicador.escala = 1`, y el motor hace `valor_pct = real * 100 if escala == 1 else real` (`motor_calculo_service.py:35`) antes de acotar a `[0,100]`. Escribir `50.0` queriendo decir 50% produce `5000` → acotado a `100` → **puntuación perfecta con la mitad de la cobertura**, y el 30% del peso del Score deja de discriminar.
+
+> Lo descubrió la revisión final, después de que el defecto pasara **seis revisiones por tarea**: todos los tests afirmaban sobre `resultado_real` —el valor contra sí mismo— y **ninguno corría `completar_puntajes` después**. La regla que queda: **un valor que otro motor consume se testea atravesando ese motor**, afirmando sobre lo que sale al final (`puntos_obtenidos`), no sobre lo que uno acaba de escribir. Ojo: el `CLAUDE.md` heredado afirma lo contrario sobre `escala`; está desactualizado, manda el código.
+
+**`PROM_DIARIO` se normaliza contra `DIM_MetaIndicador`.** La tasa cruda del §2.1 (médicos distintos ÷ días laborables) no es una fracción de logro: 0.05 médicos/día se leería como "5% de cumplimiento" y 2.25 saturaría al 100%. Se divide entre la meta del indicador (`meta_100`, y si no `objetivo` — el mismo orden que aplica `completar_puntajes`). **Si no hay meta configurada, no se escribe la fila** y se emite hallazgo `error`: escribir la tasa cruda sería peor que no escribir nada. Hay que cargar esa meta antes del primer lote real.
+
+**Universo vacío ≠ cobertura cero.** Si un RM no tiene panel de esa frecuencia o no tiene target de farmacias, **no se escribe la fila** de ese indicador (hallazgo `aviso`) y el delete-then-insert se acota a los indicadores que sí se escriben. Si el denominador tiene entidades pero ninguna fue visitada, **sí se escribe 0**: eso es cobertura cero real y debe penalizar. Sin esta distinción, un lote parcial —traer el panel antes que las visitas, que es el escenario más probable del estreno— pondría en 0 el Score de RMs que tenían 90%.
 
 ### 3.5 Paso 3 del §7.1 — disparar el recálculo del Score
 
