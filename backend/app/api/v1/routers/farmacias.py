@@ -147,18 +147,6 @@ def _raise_negocio(e: ValueError) -> None:
     raise HTTPException(status.HTTP_409_CONFLICT, msg)
 
 
-def _raise_captura_error(e: ValueError) -> None:
-    """Traduce un ValueError del registro de visita a farmacia: F22 (panel no
-    aprobado/maestro no activa) y ciclo cerrado son conflictos de estado (409);
-    el resto (p.ej. 'No hay ciclo activo') son errores de negocio (400)."""
-    if isinstance(e, visita_svc.PanelNoAprobadoError):
-        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
-    msg = str(e)
-    if "cerrado" in msg.lower() or "solo lectura" in msg.lower():
-        raise HTTPException(status.HTTP_409_CONFLICT, msg)
-    raise HTTPException(status.HTTP_400_BAD_REQUEST, msg)
-
-
 # ─────────────────────────────────────────────────────────────────────────
 # Búsqueda anti-dup del maestro (F25/F09) — VM+
 # ─────────────────────────────────────────────────────────────────────────
@@ -362,17 +350,6 @@ def cobertura_farmacias(
 # módulo de Visita (mismo VM, misma auto-scope), reusando el recurso
 # farmacia.panel con la acción REGISTER — no se crea ningún recurso nuevo.
 # ─────────────────────────────────────────────────────────────────────────
-
-def _cargar_panel_del_vm(db: Session, panel_id: int, vm_id: int) -> FarmaciaVisita:
-    """Carga el registro de panel y verifica que pertenece al VM que llama
-    (403 si no) — mismo criterio de auto-scope que el resto del router."""
-    panel = db.query(FarmaciaVisita).filter(FarmaciaVisita.id == panel_id).first()
-    if panel is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Panel de farmacia ID={panel_id} no encontrado.")
-    if panel.vm_id != vm_id:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Esta farmacia no pertenece a tu panel.")
-    return panel
-
 
 @router.post("/{panel_id}/visita", response_model=dict, status_code=status.HTTP_201_CREATED,
              summary="Registrar visita a una farmacia del panel (AD-HOC, guard F22)")
