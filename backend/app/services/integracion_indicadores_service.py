@@ -38,6 +38,27 @@ otra vez (`5000`) y la acotaría a 100: cualquier cobertura por encima del 1%
 saturaba a puntaje perfecto. Por eso `_pct` y `_promedio_diario` devuelven
 fracciones 0-1 — la multiplicación por 100 es responsabilidad exclusiva del
 motor, una sola vez.
+
+«SIN UNIVERSO» NO ES «COBERTURA CERO»: NO SE ESCRIBE LA FILA
+--------------------------------------------------------------
+Un lote parcial (por ejemplo, dimensiones+panel sin visitas todavía, o un RM
+que legítimamente no tiene panel F2 o target de farmacias) deja el
+DENOMINADOR de un indicador en cero. Escribir `0` ahí no es medir cobertura
+cero: es afirmar «no cubrió nada» sobre algo que no había que medir, y ese
+cero pesa igual que una cobertura real en el Score. Peor aún: como el
+delete-then-insert de más abajo primero borra, ese cero también se comía
+cualquier valor previo del indicador (p. ej. el histórico cargado por Excel).
+
+Por eso `_cobertura_medicos`/`_cobertura_farmacias` devuelven `None` (no
+`Decimal("0")`) cuando el universo (panel o target) está vacío, y
+`calcular_indicadores` NO escribe esa fila — deja intacto lo que hubiera antes
+en `FACT_ResultadoIndicador` para ese indicador — y en vez de eso reporta un
+`Hallazgo` de severidad aviso. El delete-then-insert se acota, por RM, a los
+indicadores que sí se van a reemplazar: nunca borra uno que no va a reponer.
+
+Distinto es el caso de universo CON entidades pero ninguna visitada
+(denominador > 0, numerador 0): eso sí es cobertura cero real y sí se
+escribe `0` — penaliza, como debe.
 """
 from decimal import Decimal
 
@@ -65,8 +86,14 @@ CODIGOS: tuple[str, ...] = (COB_MD_F1, COB_MD_F2, PROM_DIARIO, COB_FARMACIAS)
 
 def _pct(cubiertos: int, universo: int) -> Decimal:
     """Cobertura como FRACCIÓN 0-1 (no 0-100): ver la nota de módulo sobre la
-    unidad de `resultado_real`. Universo vacío → 0, no división por cero: un
-    RM sin panel no tiene cobertura, no tiene cobertura indefinida.
+    unidad de `resultado_real`.
+
+    Los llamadores (`_cobertura_medicos`/`_cobertura_farmacias`) ya filtran el
+    universo vacío antes de llegar aquí y devuelven `None` en ese caso — un
+    universo vacío no es cobertura cero, es «nada que medir» (ver la nota de
+    módulo «SIN UNIVERSO NO ES COBERTURA CERO»). El `if universo <= 0` que
+    sigue es solo un resguardo defensivo contra división por cero, no la vía
+    normal para llegar a `0`.
 
     Se quantiza a 4 decimales, no a 2: el porcentaje viejo usaba 2 decimales
     (granularidad de 0.01%). Una fracción 0-1 necesita 4 decimales para
@@ -107,13 +134,18 @@ def _medicos_visitados(db: Session, pais_codigo: str, ciclo_codigo: str,
 
 def _cobertura_medicos(db: Session, pais_codigo: str, ciclo_codigo: str,
                        rm_codigo: str, frecuencia: str,
-                       visitados: set[str]) -> Decimal:
+                       visitados: set[str]) -> Decimal | None:
     """Médicos distintos visitados de esa frecuencia / médicos de esa
-    frecuencia en el panel × 100.
+    frecuencia en el panel.
 
     El numerador se intersecta con el panel de ESTA frecuencia: una visita a
     un médico F2 no puede sumar a la cobertura F1. Los no visitados siguen en
     el denominador — no visitar no reduce el universo.
+
+    Devuelve `None`, no `Decimal("0")`, si el panel de esta frecuencia está
+    vacío: sin universo no hay nada que medir (ver la nota de módulo «SIN
+    UNIVERSO NO ES COBERTURA CERO»). El llamador es quien decide qué hacer con
+    ese `None` (no escribir la fila, avisar).
     """
     panel = {f[0] for f in db.query(ExtPanelMedico.medico_codigo)
              .filter(ExtPanelMedico.pais_codigo == pais_codigo,
@@ -122,7 +154,7 @@ def _cobertura_medicos(db: Session, pais_codigo: str, ciclo_codigo: str,
                      ExtPanelMedico.frecuencia_objetivo == frecuencia,
                      ExtPanelMedico.activo.is_(True)).distinct().all()}
     if not panel:
-        return Decimal("0")
+        return None
     return _pct(len(panel & visitados), len(panel))
 
 
@@ -174,15 +206,19 @@ def _promedio_diario(visitados: set[str], dias_laborables: int,
 
 
 def _cobertura_farmacias(db: Session, pais_codigo: str, ciclo_codigo: str,
-                         rm_codigo: str) -> Decimal:
-    """Farmacias distintas visitadas / farmacias en el target × 100."""
+                         rm_codigo: str) -> Decimal | None:
+    """Farmacias distintas visitadas / farmacias en el target.
+
+    `None`, no `Decimal("0")`, si el RM no tiene target de farmacias — mismo
+    criterio que `_cobertura_medicos` (ver la nota de módulo).
+    """
     target = {f[0] for f in db.query(ExtTargetFarmacia.farmacia_codigo)
               .filter(ExtTargetFarmacia.pais_codigo == pais_codigo,
                       ExtTargetFarmacia.ciclo_codigo == ciclo_codigo,
                       ExtTargetFarmacia.rm_codigo == rm_codigo,
                       ExtTargetFarmacia.activo.is_(True)).distinct().all()}
     if not target:
-        return Decimal("0")
+        return None
 
     visitadas = {f[0] for f in db.query(ExtFactVisitaFarmacia.farmacia_codigo)
                  .filter(ExtFactVisitaFarmacia.pais_codigo == pais_codigo,
@@ -201,8 +237,10 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
     `motor_calculo_service`, igual que con los datos que llegaban por Excel. Así
     el camino de puntuación sigue siendo uno solo.
 
-    Delete-then-insert acotado a estos 4 códigos y a los RM procesados: los otros
-    indicadores del ciclo no se rozan.
+    Delete-then-insert acotado, por RM, a los indicadores que SÍ se van a
+    reemplazar: ni los otros códigos del ciclo, ni los indicadores de este RM
+    sin universo (panel/target vacío, ver la nota de módulo) se rozan — un
+    universo vacío no borra ni pisa lo que hubiera antes.
 
     REGLA DE NEGOCIO: los ciclos cerrados son snapshots históricos inmutables
     (misma regla que aplica `recalculo_service.validar_ciclo_abierto` en el
@@ -286,34 +324,56 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
 
         rms_calculados += 1
         visitados = _medicos_visitados(db, pais_codigo, ciclo_codigo, rm_codigo)
-        valores = {
-            COB_MD_F1: _cobertura_medicos(db, pais_codigo, ciclo_codigo,
-                                          rm_codigo, "F1", visitados),
-            COB_MD_F2: _cobertura_medicos(db, pais_codigo, ciclo_codigo,
-                                          rm_codigo, "F2", visitados),
-            COB_FARMACIAS: _cobertura_farmacias(db, pais_codigo, ciclo_codigo,
-                                                rm_codigo),
+
+        # `None` = sin universo (panel/target vacío para este RM): no hay
+        # nada que medir, así que el código queda fuera de `valores` y, más
+        # abajo, fuera de lo que se borra e inserta. Se reporta como aviso,
+        # no error: no es una falla de configuración, es una carga parcial o
+        # un RM legítimamente sin ese universo.
+        candidatos: dict[str, tuple[Decimal | None, str]] = {
+            COB_MD_F1: (_cobertura_medicos(db, pais_codigo, ciclo_codigo,
+                                           rm_codigo, "F1", visitados),
+                        "no tiene panel médico F1"),
+            COB_MD_F2: (_cobertura_medicos(db, pais_codigo, ciclo_codigo,
+                                           rm_codigo, "F2", visitados),
+                        "no tiene panel médico F2"),
+            COB_FARMACIAS: (_cobertura_farmacias(db, pais_codigo, ciclo_codigo,
+                                                 rm_codigo),
+                            "no tiene target de farmacias"),
         }
+        valores: dict[str, Decimal] = {}
+        for codigo, (valor, motivo) in candidatos.items():
+            if valor is None:
+                hallazgos.append(Hallazgo(
+                    "indicador", rm_codigo,
+                    f"El representante «{rm_codigo}» {motivo} en "
+                    f"{pais_codigo}/{ciclo_codigo}; no se calculó {codigo} "
+                    f"(sin universo, no se pisa lo que hubiera antes).",
+                    SEVERIDAD_AVISO))
+            else:
+                valores[codigo] = valor
         # Sin meta utilizable no hay ratio que calcular: PROM_DIARIO se queda
         # fuera de `valores` y, más abajo, fuera de lo que se escribe.
         if prom_diario_meta is not None:
             valores[PROM_DIARIO] = _promedio_diario(
                 visitados, ciclo_ext.dias_laborables, prom_diario_meta)
 
-        indicador_ids = [ids[c] for c in CODIGOS if c in ids]
+        # Delete-then-insert acotado a los códigos que SÍ se van a reemplazar
+        # ahora: un indicador sin universo no se borra, porque no se repone.
+        codigos_a_escribir = [c for c in CODIGOS if c in valores and c in ids]
+        indicador_ids = [ids[c] for c in codigos_a_escribir]
         if indicador_ids:
             (db.query(ResultadoIndicador)
              .filter(ResultadoIndicador.rm_id == rm_id,
                      ResultadoIndicador.ciclo_id == ciclo_id,
                      ResultadoIndicador.indicador_id.in_(indicador_ids))
              .delete(synchronize_session=False))
-        for codigo, valor in valores.items():
-            if codigo not in ids:
-                continue
+        for codigo in codigos_a_escribir:
             db.add(ResultadoIndicador(
                 rm_id=rm_id, pais_codigo=rm.pais_codigo, linea_id=rm.linea_id,
                 gerente_id=rm.gerente_id, ciclo_id=ciclo_id,
-                indicador_id=ids[codigo], resultado_real=valor, activo=True))
+                indicador_id=ids[codigo], resultado_real=valores[codigo],
+                activo=True))
             filas_escritas += 1
 
     logger.info(f"Indicadores de visita {pais_codigo}/{ciclo_codigo}: "

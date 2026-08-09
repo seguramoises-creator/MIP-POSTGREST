@@ -27,8 +27,9 @@ from app.models.dimensiones import (
 )
 from app.models.hechos import ResultadoIndicador
 from app.models.integracion_ext import (
-    ExtControlCarga, ExtDimCiclo, ExtDimMedico, ExtDimPais, ExtDimRepresentante,
-    ExtFactVisitaMedico, ExtPanelMedico,
+    ExtControlCarga, ExtDimCiclo, ExtDimFarmacia, ExtDimMedico, ExtDimPais,
+    ExtDimRepresentante, ExtFactVisitaFarmacia, ExtFactVisitaMedico,
+    ExtPanelMedico, ExtTargetFarmacia,
 )
 from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE, MapeoExterno
 from app.services import integracion_indicadores_service as ind
@@ -172,6 +173,23 @@ def _visitas(db, medico, cuantas, ejecutada=True, desde=1):
             ejecutada=ejecutada, acompanado=False))
 
 
+def _farmacia(db, farmacia, programadas=1):
+    # Mismo motivo que `_panel`: `targetfarmacia` lleva FK a `ext.dimfarmacia`.
+    db.add(ExtDimFarmacia(pais_codigo="DO", farmacia_codigo=farmacia,
+                          nombre=f"Farmacia {farmacia}", activo=True))
+    db.add(ExtTargetFarmacia(
+        lote_id=1001, pais_codigo="DO", ciclo_codigo="C01-2026", rm_codigo="VM01",
+        farmacia_codigo=farmacia, visitas_programadas=programadas, activo=True))
+
+
+def _visitas_farmacia(db, farmacia, cuantas, ejecutada=True, desde=1):
+    for i in range(cuantas):
+        db.add(ExtFactVisitaFarmacia(
+            lote_id=1001, origen_id=f"VF-{farmacia}-{i}", pais_codigo="DO",
+            ciclo_codigo="C01-2026", rm_codigo="VM01", farmacia_codigo=farmacia,
+            fecha_visita=date(2026, 1, desde + i), ejecutada=ejecutada))
+
+
 def test_cobertura_cuenta_medicos_distintos_no_visitas(base):
     """El caso que fija «médicos distintos visitados» (§2.1 del requerimiento).
 
@@ -289,10 +307,21 @@ def test_visitas_programadas_nulo_no_afecta_el_calculo(base):
     """`visitas_programadas` no entra en la fórmula, así que un nulo no rompe
     nada ni genera hallazgo: no hay frecuencia que exigir. La fixture `base`
     ya deja configurada la meta de PROM_DIARIO, así que tampoco dispara el
-    hallazgo de la corrección C2."""
+    hallazgo de la corrección C2.
+
+    Se completa el universo de F2 y farmacias (aunque no es lo que este test
+    quiere ejercitar) para que `assert hallazgos == []` siga probando
+    específicamente lo suyo — que `visitas_programadas=None` no genera
+    ningún hallazgo — sin mezclarse con los avisos de «sin universo» de la
+    corrección C3, que se prueban aparte.
+    """
     db = base["db"]
     _panel(db, "MD01", "F1", None)
     _visitas(db, "MD01", 1)
+    _panel(db, "MD02", "F2", 1)
+    _visitas(db, "MD02", 1, desde=5)
+    _farmacia(db, "FAR01")
+    _visitas_farmacia(db, "FAR01", 1)
     db.commit()
     hallazgos = []
 
@@ -304,7 +333,15 @@ def test_visitas_programadas_nulo_no_afecta_el_calculo(base):
 
 
 def test_recalcular_no_duplica_ni_toca_otros_indicadores(base):
-    """Delete-then-insert acotado a los 4 códigos: los otros no se rozan."""
+    """Delete-then-insert acotado a los 4 códigos: los otros no se rozan.
+
+    Se completa el universo de los 4 indicadores (F1, F2 y farmacias, además
+    de la meta de PROM_DIARIO que ya trae la fixture) para que los 4 se
+    calculen de verdad y la cuenta `4 calculados + VENTAS` siga siendo
+    literal — si solo se cargara F1, la corrección C3 dejaría a F2 y
+    farmacias sin fila (sin universo), y esta prueba dejaría de probar lo
+    que dice probar.
+    """
     db = base["db"]
     otro = Indicador(pais_codigo="DO", codigo="VENTAS", nombre="Ventas",
                      modulo="COMERCIAL", tipo_periodo="MES")
@@ -316,6 +353,10 @@ def test_recalcular_no_duplica_ni_toca_otros_indicadores(base):
                               resultado_real=88, activo=True))
     _panel(db, "MD01", "F1", 1)
     _visitas(db, "MD01", 1)
+    _panel(db, "MD02", "F2", 1)
+    _visitas(db, "MD02", 1, desde=5)
+    _farmacia(db, "FAR01")
+    _visitas_farmacia(db, "FAR01", 1)
     db.commit()
     ind.calcular_indicadores(db, "DO", "C01-2026", [])
     db.commit()
@@ -353,11 +394,20 @@ def test_ciclo_cerrado_no_borra_puntos_ya_calculados(base):
     Secuencia: ciclo abierto → se calculan los indicadores → el motor llena
     `puntos_obtenidos` → se cierra el ciclo → llega un lote tardío y alguien
     vuelve a integrar. Las 4 filas y sus puntos deben seguir intactos.
+
+    Se completa el universo de los 4 indicadores (F1, F2, farmacias) para que
+    la primera integración de verdad escriba las 4 filas — con la corrección
+    C3, un universo vacío ya no escribe fila, así que sin este dato la
+    prueba dejaría de partir de "4 filas".
     """
     db = base["db"]
     rm_id, ciclo_id = base["rm"].id, base["ciclo"].id
     _panel(db, "MD01", "F1", 1)
     _visitas(db, "MD01", 1)
+    _panel(db, "MD02", "F2", 1)
+    _visitas(db, "MD02", 1, desde=5)
+    _farmacia(db, "FAR01")
+    _visitas_farmacia(db, "FAR01", 1)
     db.commit()
 
     ind.calcular_indicadores(db, "DO", "C01-2026", [])
@@ -412,10 +462,19 @@ def test_ciclo_abierto_reporta_omitido_ciclo_cerrado_false(base):
 
 def test_rms_solo_cuenta_los_efectivamente_calculados(base):
     """`rms` no debe contar representantes sin mapeo: si no se calculó nada
-    para ellos, el panel del operador no puede decir que sí se calculó."""
+    para ellos, el panel del operador no puede decir que sí se calculó.
+
+    Se completa el universo de F1, F2 y farmacias para VM01 para que
+    `filas == 4` siga siendo literal bajo la corrección C3 (un universo
+    vacío ya no escribe fila).
+    """
     db = base["db"]
     _panel(db, "MD01", "F1", 1)
     _visitas(db, "MD01", 1)
+    _panel(db, "MD02", "F2", 1)
+    _visitas(db, "MD02", 1, desde=5)
+    _farmacia(db, "FAR01")
+    _visitas_farmacia(db, "FAR01", 1)
     # Un segundo RM con actividad en `ext` pero SIN mapeo interno: no debe
     # sumar a `rms`, solo generar su propio hallazgo de error.
     db.add(ExtDimRepresentante(pais_codigo="DO", rm_codigo="VM02",
@@ -540,7 +599,12 @@ def test_prom_diario_sin_meta_no_escribe_fila_y_emite_hallazgo_error(base):
     nada (se leería como un cumplimiento ridículamente bajo), así que no se
     escribe la fila y se reporta un hallazgo de error señalando qué falta
     configurar. La fixture `base` deja una meta por defecto para el resto de
-    las pruebas; aquí se retira a propósito para probar este camino."""
+    las pruebas; aquí se retira a propósito para probar este camino.
+
+    Se completa el universo de F1, F2 y farmacias (corrección C3) para que
+    `filas == 3` siga siendo exactamente COB_MD_F1+COB_MD_F2+COB_FARMACIAS,
+    sin depender de que además falte alguno de esos universos.
+    """
     db = base["db"]
     ind_prom_id = base["indicadores"][ind.PROM_DIARIO].id
     db.query(MetaIndicador).filter(MetaIndicador.indicador_id == ind_prom_id).delete()
@@ -548,6 +612,10 @@ def test_prom_diario_sin_meta_no_escribe_fila_y_emite_hallazgo_error(base):
 
     _panel(db, "MD01", "F1", 1)
     _visitas(db, "MD01", 1)
+    _panel(db, "MD02", "F2", 1)
+    _visitas(db, "MD02", 1, desde=5)
+    _farmacia(db, "FAR01")
+    _visitas_farmacia(db, "FAR01", 1)
     db.commit()
 
     hallazgos = []
@@ -566,3 +634,130 @@ def test_prom_diario_sin_meta_no_escribe_fila_y_emite_hallazgo_error(base):
               if h.severidad == "error" and h.origen_id == ind.PROM_DIARIO]
     assert len(errores) == 1
     assert "meta" in errores[0].problema.lower()
+
+
+# ---------------------------------------------------------------------------
+# Corrección C3 (defecto CRITICAL): «sin universo» no es «cobertura cero».
+# Un lote parcial (dimensiones+panel sin visitas todavía, o un RM legítimamente
+# sin panel F2 / sin target de farmacias) no debe escribir 0 y pisar lo que
+# hubiera antes en `FACT_ResultadoIndicador` — debe dejar la fila intacta y
+# solo avisar. Universo CON entidades pero ninguna visitada sigue siendo
+# cobertura cero real y sí se escribe. Ver la nota de módulo «SIN UNIVERSO NO
+# ES COBERTURA CERO» en `integracion_indicadores_service.py`.
+# ---------------------------------------------------------------------------
+
+def test_lote_parcial_no_pisa_valores_previos_con_ceros(base):
+    """El defecto CRITICAL que este test delata.
+
+    Simula el histórico que trae el Excel: los 4 indicadores del RM ya
+    tienen 0.9 (90% de cobertura/logro) escritos a mano, como si vinieran de
+    una carga anterior. Se integra un lote que trae SOLO panel F1 (ni panel
+    F2, ni target de farmacias, ni una sola visita todavía) — el escenario
+    más probable del estreno con Mallén, donde dimensiones y panel llegan
+    antes que los hechos.
+
+    COB_MD_F1 SÍ se recalcula: su panel llegó (1 médico), nadie lo visitó
+    todavía, así que 0.0 es una cobertura cero real (ver
+    `test_universo_con_medicos_pero_ninguno_visitado_escribe_cero`).
+    COB_MD_F2 y COB_FARMACIAS NO tienen panel/target en este lote: deben
+    seguir en 0.9, intactos — nadie los tocó. PROM_DIARIO se deja sin meta
+    a propósito en este test (se retira la que trae la fixture) para aislar
+    el efecto de la corrección C3 de la regla ya existente de PROM_DIARIO
+    (sin meta, tampoco se escribe): así los cuatro valores previos quedan
+    intactos salvo el que de verdad tiene un universo real que medir.
+
+    Contra el código viejo (`_cobertura_medicos`/`_cobertura_farmacias`
+    devolviendo `Decimal("0")` en vez de `None` cuando el panel/target está
+    vacío) este test falla: F2 y COB_FARMACIAS salen en 0.0, no en 0.9,
+    porque el delete-then-insert los pisaba con ceros aunque no hubiera
+    nada que medir. Evidencia de la reversión en
+    `.superpowers/sdd/fix-c3-report.md`.
+    """
+    db = base["db"]
+    rm_id, ciclo_id = base["rm"].id, base["ciclo"].id
+    indicadores = base["indicadores"]
+
+    # Sin meta de PROM_DIARIO: aísla la corrección C3 (ver docstring).
+    db.query(MetaIndicador).filter(
+        MetaIndicador.indicador_id == indicadores[ind.PROM_DIARIO].id).delete()
+    db.commit()
+
+    # El "histórico del Excel": 0.9 en los 4, escrito a mano.
+    for codigo in ind.CODIGOS:
+        db.add(ResultadoIndicador(
+            rm_id=rm_id, pais_codigo="DO", linea_id=base["rm"].linea_id,
+            ciclo_id=ciclo_id, indicador_id=indicadores[codigo].id,
+            resultado_real=Decimal("0.9"), activo=True))
+    db.commit()
+
+    # El lote parcial: solo panel F1, sin visitas.
+    _panel(db, "MD01", "F1", 1)
+    db.commit()
+
+    hallazgos = []
+    ind.calcular_indicadores(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert _valor(db, rm_id, ciclo_id, "COB_MD_F1") == 0.0      # cobertura cero real
+    assert _valor(db, rm_id, ciclo_id, "COB_MD_F2") == 0.9      # sin universo: intacto
+    assert _valor(db, rm_id, ciclo_id, "COB_FARMACIAS") == 0.9  # sin universo: intacto
+    assert _valor(db, rm_id, ciclo_id, "PROM_DIARIO") == 0.9    # sin meta: intacto (regla previa)
+
+    avisos = [h for h in hallazgos if h.severidad == "aviso" and h.origen_id == "VM01"]
+    assert any("COB_MD_F2" in h.problema for h in avisos)
+    assert any("COB_FARMACIAS" in h.problema for h in avisos)
+
+
+def test_universo_con_medicos_pero_ninguno_visitado_escribe_cero(base):
+    """Distinto del caso «sin universo»: aquí el panel F1 SÍ existe (2
+    médicos), solo que ninguno fue visitado todavía. Eso es cobertura cero
+    REAL — debe penalizar — así que se escribe `0.0`, no se omite la fila
+    ni se genera el aviso de «sin universo» para F1."""
+    db = base["db"]
+    _panel(db, "MD01", "F1", 1)
+    _panel(db, "MD02", "F1", 1)
+    db.commit()
+
+    hallazgos = []
+    ind.calcular_indicadores(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert _valor(db, base["rm"].id, base["ciclo"].id, "COB_MD_F1") == 0.0
+
+    avisos_f1 = [h for h in hallazgos
+                if h.origen_id == "VM01" and "COB_MD_F1" in h.problema]
+    assert avisos_f1 == []
+
+
+def test_sin_panel_f2_no_escribe_fila_y_avisa(base):
+    """Un RM con panel F1 pero sin panel F2 en absoluto: se escribe F1 (con
+    su cobertura real), NO se escribe fila para F2 (sin universo, no hay
+    0 que pisar nada) y se reporta exactamente un hallazgo de severidad
+    aviso señalando que F2 no se calculó por falta de panel."""
+    db = base["db"]
+    _panel(db, "MD01", "F1", 1)
+    _visitas(db, "MD01", 1)
+    db.commit()
+
+    hallazgos = []
+    resultado = ind.calcular_indicadores(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert _valor(db, base["rm"].id, base["ciclo"].id, "COB_MD_F1") == 1.0
+    assert _valor(db, base["rm"].id, base["ciclo"].id, "COB_MD_F2") is None
+
+    fila_f2 = (db.query(ResultadoIndicador)
+               .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
+               .filter(ResultadoIndicador.rm_id == base["rm"].id,
+                       ResultadoIndicador.ciclo_id == base["ciclo"].id,
+                       Indicador.codigo == "COB_MD_F2").first())
+    assert fila_f2 is None
+
+    avisos_f2 = [h for h in hallazgos
+                if h.severidad == "aviso" and h.origen_id == "VM01"
+                and "COB_MD_F2" in h.problema]
+    assert len(avisos_f2) == 1
+    # PROM_DIARIO (meta==1 de la fixture) y COB_FARMACIAS (sin target: aviso
+    # aparte) también entran en juego, pero no son lo que esta prueba cuida;
+    # el punto es que `filas` cuenta exactamente lo que sí se escribió.
+    assert resultado["filas"] == 2   # COB_MD_F1 + PROM_DIARIO (sin F2, sin farmacias)
