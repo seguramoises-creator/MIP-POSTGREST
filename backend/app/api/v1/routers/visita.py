@@ -602,6 +602,10 @@ def publicar_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
             db, _vm_registro(current_user, vm_id), ciclo_id, getattr(current_user, "id", None))
     except visita_planeacion_service.PlaneacionPublicadaError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    except visita_planeacion_service.TopSinPlanearError as e:
+        # 409, no 400: la planeación no está en condiciones de publicarse (conflicto de
+        # estado), no un error de validación del payload.
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
     except ValueError as e:
         _raise_captura_error(e)
 

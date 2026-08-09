@@ -40,6 +40,9 @@ from app.services import cobertura_farmacia_service
 from app.services import integracion_visitas_service as viz
 from app.services import visita_cobertura_service
 from app.models.visita import AvisoTopEnviado
+from app.models.visita import PlaneacionCiclo
+from app.schemas.visita import PlaneacionItem
+from app.services import visita_planeacion_service as plan
 
 BD_PRUEBA = "vista_test_medicos_top"
 
@@ -215,3 +218,100 @@ def test_medico_de_alta_manual_no_es_top(escenario):
     db.commit()
 
     assert m.es_top is False
+
+
+def _medico(db, escenario, nombre, es_top, estado="APROBADO"):
+    m = MedicoVisita(vm_id=escenario["rm"].id, nombre_completo=nombre,
+                     es_top=es_top, estado_aprobacion=estado, activo=True)
+    db.add(m)
+    db.flush()
+    return m
+
+
+def _planear(db, escenario, medico, tipo="V", semana=1, dia="Lunes"):
+    db.add(PlaneacionCiclo(vm_id=escenario["rm"].id, ciclo_id=escenario["ciclo"].id,
+                           medico_id=medico.id, tipo_visita=tipo, semana=semana,
+                           dia_semana=dia))
+    db.flush()
+
+
+def test_publicar_falla_si_falta_un_top(escenario):
+    db = escenario["db"]
+    top = _medico(db, escenario, "DOCTOR TOP", True)
+    otro = _medico(db, escenario, "DOCTOR NORMAL", False)
+    _planear(db, escenario, otro)
+    db.commit()
+
+    with pytest.raises(plan.TopSinPlanearError) as exc:
+        plan.publicar_planeacion(db, escenario["rm"].id, escenario["ciclo"].id, None)
+
+    assert "DOCTOR TOP" in str(exc.value)
+    assert top.id is not None
+
+
+def test_publicar_ok_si_estan_todos_los_top(escenario):
+    db = escenario["db"]
+    top = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, top)
+    db.commit()
+
+    r = plan.publicar_planeacion(db, escenario["rm"].id, escenario["ciclo"].id, None)
+
+    assert r["publicada"] is True
+
+
+def test_un_top_con_alta_pendiente_no_bloquea(escenario):
+    """El caso que distingue `cuenta_en_ciclo` de `activo`.
+
+    Un TOP cuya alta el Gerente aún no aprobó NO cuenta en el ciclo: exigir
+    planearlo dejaría al representante bloqueado sin poder hacer nada.
+    """
+    db = escenario["db"]
+    _medico(db, escenario, "DOCTOR PENDIENTE", True, estado="PENDIENTE_ALTA")
+    otro = _medico(db, escenario, "DOCTOR NORMAL", False)
+    _planear(db, escenario, otro)
+    db.commit()
+
+    r = plan.publicar_planeacion(db, escenario["rm"].id, escenario["ciclo"].id, None)
+
+    assert r["publicada"] is True
+
+
+def test_resumen_lista_los_top_sin_planear(escenario):
+    db = escenario["db"]
+    _medico(db, escenario, "DOCTOR TOP", True)
+    db.commit()
+
+    r = plan.resumen_planeacion(db, escenario["rm"].id, escenario["ciclo"].id)
+
+    assert [x["nombre"] for x in r["top_sin_planear"]] == ["DOCTOR TOP"]
+
+
+def test_top_planeado_solo_con_vista_avisa_pero_no_bloquea(escenario):
+    """§7.3 exige que el TOP esté «incluido» — con V basta para publicar.
+    §3.4 dice que no puede terminar sin V y R, así que se avisa."""
+    db = escenario["db"]
+    top = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, top, tipo="V")
+    db.commit()
+
+    r = plan.resumen_planeacion(db, escenario["rm"].id, escenario["ciclo"].id)
+    pub = plan.publicar_planeacion(db, escenario["rm"].id, escenario["ciclo"].id, None)
+
+    assert [x["nombre"] for x in r["top_sin_revisita"]] == ["DOCTOR TOP"]
+    assert pub["publicada"] is True
+
+
+def test_guardar_borrador_nunca_se_bloquea_por_top(escenario):
+    """El bloqueo es solo al publicar: el representante guarda cuantas veces quiera."""
+    db = escenario["db"]
+    _medico(db, escenario, "DOCTOR TOP", True)
+    otro = _medico(db, escenario, "DOCTOR NORMAL", False)
+    db.commit()
+
+    n = plan.guardar_planeacion(
+        db, escenario["rm"].id, escenario["ciclo"].id,
+        [PlaneacionItem(medico_id=otro.id, tipo_visita="V", semana=1, dia_semana="Lunes")],
+        None)
+
+    assert n == 1

@@ -25,6 +25,12 @@ class PlaneacionPublicadaError(Exception):
     """La planeación ya está publicada: es dato base de cálculo y no se puede modificar."""
 
 
+class TopSinPlanearError(Exception):
+    """La planeación omite médicos TOP. §7.3 del requerimiento de Mallén: al
+    publicar, VISTA verifica que todos los TOP del panel estén incluidos y, si
+    falta alguno, no permite publicar y muestra cuáles faltan."""
+
+
 def _guard_ciclo_abierto(db, ciclo_id):
     """Bloquea escrituras sobre ciclos cerrados (inmutables)."""
     try:
@@ -53,6 +59,42 @@ def _guard_no_publicada(db: Session, vm_id: int, ciclo_id: int) -> None:
             "desbloquearla indicando el motivo.")
 
 
+def _medicos_del_ciclo(db: Session, vm_id: int, ciclo_id: int) -> list[MedicoVisita]:
+    """Los médicos del panel que CUENTAN en el ciclo.
+
+    Filtra por `cuenta_en_ciclo` y no por `activo` a secas: con `activo` se
+    incluirían altas pendientes de aprobación y bajas ya efectivas, y se
+    exigiría planear médicos sobre los que el representante no puede actuar.
+    """
+    from app.services.visita_aprobacion_service import ordenes_ciclo, cuenta_en_ciclo
+    ordenes = ordenes_ciclo(db)
+    ciclo_orden = ordenes.get(ciclo_id)
+    medicos = db.query(MedicoVisita).filter(MedicoVisita.vm_id == vm_id).all()
+    return [m for m in medicos if cuenta_en_ciclo(m, ciclo_orden, ordenes)]
+
+
+def top_sin_planear(db: Session, vm_id: int, ciclo_id: int) -> list[dict]:
+    """Médicos TOP del ciclo que no tienen NINGUNA fila en la planeación."""
+    planeados = {p.medico_id for p in db.query(PlaneacionCiclo).filter(
+        PlaneacionCiclo.vm_id == vm_id, PlaneacionCiclo.ciclo_id == ciclo_id).all()}
+    return [{"id": m.id, "nombre": m.nombre_completo}
+            for m in _medicos_del_ciclo(db, vm_id, ciclo_id)
+            if m.es_top and m.id not in planeados]
+
+
+def top_sin_revisita(db: Session, vm_id: int, ciclo_id: int) -> list[dict]:
+    """TOP planeados pero sin Revisita. Se AVISA, no se bloquea: el §7.3 solo
+    exige que estén «incluidos», pero el §3.4 dice que un TOP no puede terminar
+    sin visita y revisita — planearlo solo con V es planear el incumplimiento."""
+    plan_ = db.query(PlaneacionCiclo).filter(
+        PlaneacionCiclo.vm_id == vm_id, PlaneacionCiclo.ciclo_id == ciclo_id).all()
+    planeados = {p.medico_id for p in plan_}
+    con_revisita = {p.medico_id for p in plan_ if p.tipo_visita == "R"}
+    return [{"id": m.id, "nombre": m.nombre_completo}
+            for m in _medicos_del_ciclo(db, vm_id, ciclo_id)
+            if m.es_top and m.id in planeados and m.id not in con_revisita]
+
+
 def publicar_planeacion(db: Session, vm_id: int, ciclo_id: int | None, usuario_id: int | None) -> dict:
     """Congela la planeación del (vm, ciclo). Irreversible salvo desbloqueo del ADMIN."""
     ciclo_id = ciclo_id or ciclo_por_defecto(db, vm_id)
@@ -64,6 +106,12 @@ def publicar_planeacion(db: Session, vm_id: int, ciclo_id: int | None, usuario_i
         PlaneacionCiclo.vm_id == vm_id, PlaneacionCiclo.ciclo_id == ciclo_id).count()
     if n == 0:
         raise ValueError("No hay planeación que publicar: guarda al menos un médico primero.")
+    faltantes = top_sin_planear(db, vm_id, ciclo_id)
+    if faltantes:
+        nombres = ", ".join(f["nombre"] for f in faltantes)
+        raise TopSinPlanearError(
+            f"No se puede publicar: faltan {len(faltantes)} médico(s) TOP en la "
+            f"planeación del ciclo. Agrégalos y vuelve a intentarlo: {nombres}.")
     db.add(PlaneacionEvento(vm_id=vm_id, ciclo_id=ciclo_id, evento="PUBLICADA",
                             usuario_id=usuario_id, items=n))
     db.commit()
@@ -171,10 +219,14 @@ def resumen_planeacion(db: Session, vm_id: int, ciclo_id: int | None) -> dict:
     con_revisita = {p.medico_id for p in plan if p.tipo_visita == "R"}
     cat_a_sin_revisita = len(cat_a - con_revisita)
     total = len(plan)
+    sin_planear = top_sin_planear(db, vm_id, ciclo_id)
+    sin_revisita = top_sin_revisita(db, vm_id, ciclo_id)
     return {
         "ciclo_id": ciclo_id, "panel": panel, "total_planeadas": total,
         "medicos_planeados": len(con_vista),
         "cobertura_planeada_pct": round(len(con_vista) / panel * 100, 1) if panel else 0.0,
         "cat_a_sin_revisita": cat_a_sin_revisita,
         "carga_por_dia": round(total / CICLO_DIAS_DEFAULT, 1),
+        "top_sin_planear": sin_planear,
+        "top_sin_revisita": sin_revisita,
     }
