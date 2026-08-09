@@ -179,6 +179,12 @@ def _omitir_por_lote(conteo: ConteoHecho, hallazgos: list, hecho: str,
         f"no VALIDADO/INTEGRADO; la fila se omitió.", SEVERIDAD_ERROR))
 
 
+def _es_top(prioridad: str | None) -> bool:
+    """`ext.panelmedico.prioridad` → booleano. Tolerante a la caja: el origen ya
+    ha demostrado mandar variaciones."""
+    return (prioridad or "").strip().upper() == "TOP"
+
+
 def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
                           hallazgos: list,
                           estados_lote: dict[int, str] | None = None) -> ConteoHecho:
@@ -298,7 +304,7 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
                 vm_id=rid, maestro_medico_id=mid, codigo=f.medico_codigo,
                 nombre_completo=(nombre or "").strip().upper(),
                 activo=f.activo, estado_aprobacion="APROBADO",
-                ciclo_alta_id=cid)
+                ciclo_alta_id=cid, es_top=_es_top(f.prioridad))
             db.add(nuevo)
             db.flush()
             return nuevo
@@ -317,6 +323,11 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
         # limpiarlo, un panel que el SFA acaba de aprobar seguiría mostrando el
         # motivo de rechazo viejo en el panel del VM.
         panel.motivo = None
+        # Se reafirma SIEMPRE, como `activo` y `estado_aprobacion`: la prioridad
+        # es dato maestro del SFA. Un médico que pasa de TOP a REGULAR entre
+        # ciclos tiene que dejar de serlo. (A diferencia de `nombre_completo`,
+        # que solo se escribe al crear para no pisar correcciones del GD.)
+        panel.es_top = _es_top(fila.prioridad)
         # `ciclos_sin_visita` NO se toca aquí (ni al crear ni al adoptar): lo
         # calcula el rodaje de cierre de ciclo (Ruptura de Secuencia), no la
         # integración. `nombre_completo` tampoco se reafirma en el camino de

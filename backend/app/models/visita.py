@@ -11,6 +11,7 @@ from decimal import Decimal
 
 from sqlalchemy import (
     String, Boolean, Integer, DateTime, Date, ForeignKey, CHAR, Index, Numeric, LargeBinary,
+    UniqueConstraint, text as sa_text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -52,6 +53,13 @@ class MedicoVisita(Base):
     # representante NO tiene categoría hasta que el Gerente de Distrito aprueba y el motor
     # la calcula. NULL = capturado, aún sin clasificar.
     categoria: Mapped[str | None] = mapped_column(CHAR(1), nullable=True)
+    # Prioridad TOP del SFA de Mallén (`ext.panelmedico.prioridad`). NO es la
+    # categoría A/B/C ni el potencial de prescripción: el §11.5 del requerimiento
+    # avisa literalmente que "marcar TOP no es marcar categoría A" — son tres
+    # criterios ortogonales que el contrato envía en tres columnas separadas.
+    # Sin dato = NO es TOP (los médicos de alta manual nunca pasan por `ext`).
+    es_top: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                         server_default=sa_text("false"))
     # Ubicación / zonificación
     centro_trabajo: Mapped[str | None] = mapped_column(String(200), nullable=True)   # clínica u hospital
     institucion_tipo: Mapped[str | None] = mapped_column(String(20), nullable=True)  # Pública / Privada
@@ -481,3 +489,34 @@ class FactVisitaFarmacia(Base):
     foto: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     foto_mime: Mapped[str | None] = mapped_column(String(40), nullable=True)
     registrado_por: Mapped[int | None] = mapped_column(Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+
+
+AVISO_RECORDATORIO = "RECORDATORIO"
+AVISO_ESCALAMIENTO = "ESCALAMIENTO"
+
+
+class AvisoTopEnviado(Base):
+    """Un aviso de médico TOP ya enviado. Existe para NO reenviarlo.
+
+    El job de TOP es un cron diario de reconciliación: sin esta tabla mandaría
+    el mismo correo cada mañana mientras la visita siguiera vencida. El proyecto
+    no tenía ningún registro de notificaciones enviadas, así que se crea aquí.
+
+    Append-only, como `PlaneacionEvento`: si el representante finalmente ejecuta
+    la visita, el aviso ya enviado sigue siendo historia y no se borra.
+    """
+    __tablename__ = "AvisoTopEnviado"
+    __table_args__ = (
+        UniqueConstraint("vm_id", "ciclo_id", "medico_id", "tipo_visita", "tipo_aviso",
+                         name="UQ_AvisoTop_clave"),
+        {"schema": "Visita"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    vm_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_RM.id"), nullable=False)
+    ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
+    medico_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Visita.DIM_MedicoVisita.id"), nullable=False)
+    tipo_visita: Mapped[str] = mapped_column(CHAR(1), nullable=False)      # V / R
+    tipo_aviso: Mapped[str] = mapped_column(String(20), nullable=False)    # RECORDATORIO / ESCALAMIENTO
+    fecha_envio: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_ahora)
