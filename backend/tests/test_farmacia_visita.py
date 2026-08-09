@@ -247,69 +247,66 @@ def _db_con_panel(panel):
     return db
 
 
-def test_registrar_visita_panel_de_otro_vm_403():
+
+# Task 5 (integración Mallén) cerró POST /farmacias/{panel_id}/visita: las visitas
+# entran por el SFA (esquema `ext`), no por VISTA. Los cuatro tests que existían
+# aquí antes del cierre — ownership 403, el mapeo F22→409, el mapeo de ciclo
+# cerrado→409 y el 201 de éxito — ejercitaban ramas de código (auto-scope,
+# `_cargar_panel_del_vm`, `visita_svc.registrar_visita`) que el endpoint cerrado
+# ya no alcanza: el `raise HTTPException(409, ...)` es ahora la primera línea del
+# cuerpo. Dejarlos como estaban los habría hecho pasar por casualidad (siempre
+# 409) sin probar nada real, así que se reemplazan por los dos de abajo. Ver
+# test_captura_visitas_cerrada.py para el contrato general de los 5 endpoints.
+
+def test_registrar_visita_farmacia_cerrada_409_no_escribe(monkeypatch):
+    """El endpoint está cerrado: responde 409 con motivo legible y no llega a
+    tocar el servicio ni la base de datos."""
+    panel = _panel(vm_id=7)
+    db = _db_con_panel(panel)
+    registrar = MagicMock()
+    monkeypatch.setattr(mod.visita_svc, "registrar_visita", registrar)
+
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
+    r = client.post("/api/v1/farmacias/1/visita", json={"comentario": "Visita de rutina hoy"})
+
+    assert r.status_code == 409
+    detalle = r.json()["detail"]
+    assert "SFA" in detalle or "Mall" in detalle
+    registrar.assert_not_called()
+    db.add.assert_not_called()
+    db.commit.assert_not_called()
+
+
+def test_registrar_visita_farmacia_cerrada_409_sin_importar_dueno_del_panel():
+    """Antes esto daba 403 por ownership (panel de otro VM); el cierre corta
+    antes de llegar a ese chequeo, así que ahora da 409 igual."""
     panel = _panel(vm_id=999)  # pertenece a otro VM
     db = _db_con_panel(panel)
     client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
     r = client.post("/api/v1/farmacias/1/visita", json={"comentario": "Visita de rutina hoy"})
-    assert r.status_code == 403
-
-
-def test_registrar_visita_f22_409_via_router(monkeypatch):
-    panel = _panel(vm_id=7)
-    db = _db_con_panel(panel)
-
-    def _raise(*a, **k):
-        raise mod.visita_svc.PanelNoAprobadoError(
-            "Esta farmacia todavía no fue aprobada por tu Gerente de Distrito — "
-            "no puedes registrarle visita.")
-    monkeypatch.setattr(mod.visita_svc, "registrar_visita", _raise)
-
-    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
-    r = client.post("/api/v1/farmacias/1/visita", json={"comentario": "Visita de rutina hoy"})
     assert r.status_code == 409
-
-
-def test_registrar_visita_ciclo_cerrado_409_via_router(monkeypatch):
-    panel = _panel(vm_id=7)
-    db = _db_con_panel(panel)
-
-    def _raise(*a, **k):
-        raise ValueError("El ciclo está cerrado — solo lectura")
-    monkeypatch.setattr(mod.visita_svc, "registrar_visita", _raise)
-
-    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
-    r = client.post("/api/v1/farmacias/1/visita", json={"comentario": "Visita de rutina hoy"})
-    assert r.status_code == 409
-
-
-def test_registrar_visita_ok_via_router(monkeypatch):
-    panel = _panel(vm_id=7)
-    db = _db_con_panel(panel)
-    creada = SimpleNamespace(id=10, vm_id=7, ciclo_id=42, farmacia_id=1, ejecutada=True, fecha_hora=None)
-    monkeypatch.setattr(mod.visita_svc, "registrar_visita", lambda *a, **k: creada)
-
-    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
-    r = client.post("/api/v1/farmacias/1/visita", json={"comentario": "Visita de rutina hoy"})
-    assert r.status_code == 201
-    body = r.json()
-    assert body["id"] == 10
-    assert body["farmacia_id"] == 1
 
 
 def test_registrar_visita_rol_sin_permiso_403():
-    # farmacia.panel: FINANZAS no tiene REGISTER
+    # farmacia.panel: FINANZAS no tiene REGISTER. Este 403 lo produce el guard
+    # RBAC (Depends), que se evalúa ANTES del cuerpo cerrado — no cambia con
+    # el cierre del endpoint.
     client = _client(U(Rol.FINANZAS))
     r = client.post("/api/v1/farmacias/1/visita", json={"comentario": "Visita de rutina hoy"})
     assert r.status_code == 403
 
 
-# ── Foto vía router — scope de dueño (IDOR, hallazgo crítico 1) ──────────────
+# ── Foto vía router ────────────────────────────────────────────────────────
 # `_cargar_visita_farmacia_scoped` (farmacias.py) resuelve la visita por `visita_id`
-# y verifica que quien pide subir/leer la foto es su dueño (VM), su GD, o ADMIN.
-# Antes `subir_foto_visita_farmacia`/`obtener_foto_visita_farmacia` NO verificaban
-# nada: cualquier VM autenticado podía leer/sobrescribir la foto de OTRO VM con solo
-# adivinar el `visita_id`.
+# y verifica que quien pide LEER la foto es su dueño (VM), su GD, o ADMIN — eso
+# sigue vigente (hallazgo crítico 1, IDOR) porque GET no se tocó en el cierre.
+#
+# Task 5 (integración Mallén) cerró POST /farmacias/{visita_id}/foto (subir):
+# igual que registrar_visita_farmacia, el cuerpo ahora es un 409 inmediato, así
+# que ya no llega a `_cargar_visita_farmacia_scoped` ni a `guardar_foto_visita`.
+# Los tests de subida de abajo (tipo inválido→400, tamaño excedido→400, éxito→201)
+# quedaron obsoletos por la misma razón que en el bloque de arriba y se
+# reemplazan por los dos "cerrada_409" que siguen.
 
 def _visita_farmacia(**over):
     base = dict(id=1, vm_id=7)
@@ -317,37 +314,29 @@ def _visita_farmacia(**over):
     return SimpleNamespace(**base)
 
 
-def test_subir_foto_visita_farmacia_tipo_invalido_400(monkeypatch):
-    def _raise(*a, **k):
-        raise ValueError("El archivo no es una imagen JPEG/PNG válida")
-    monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", _raise)
-
-    db = _db_con_panel(_visita_farmacia(vm_id=7))
-    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
-    r = client.post("/api/v1/farmacias/1/foto",
-                    files={"archivo": ("x.pdf", b"%PDF-1.4", "application/pdf")})
-    assert r.status_code == 400
-
-
-def test_subir_foto_visita_farmacia_excede_tamano_400(monkeypatch):
-    def _raise(*a, **k):
-        raise ValueError("La foto excede el tamaño máximo (3 MB)")
-    monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", _raise)
-
+def test_subir_foto_visita_farmacia_cerrada_409_no_escribe(monkeypatch):
+    """El endpoint está cerrado: responde 409 y no llega a tocar el servicio
+    de guardado de foto ni la base de datos."""
+    guardar = MagicMock()
+    monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", guardar)
     db = _db_con_panel(_visita_farmacia(vm_id=7))
     client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
     r = client.post("/api/v1/farmacias/1/foto",
                     files={"archivo": ("x.jpg", _JPEG, "image/jpeg")})
-    assert r.status_code == 400
+    assert r.status_code == 409
+    detalle = r.json()["detail"]
+    assert "SFA" in detalle or "Mall" in detalle
+    guardar.assert_not_called()
 
 
-def test_subir_foto_visita_farmacia_ok(monkeypatch):
-    monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", lambda *a, **k: None)
-    db = _db_con_panel(_visita_farmacia(vm_id=7))
+def test_subir_foto_visita_farmacia_cerrada_409_sin_importar_dueno():
+    """Antes esto daba 403 (IDOR, foto de otro VM); el cierre corta antes de
+    llegar a `_cargar_visita_farmacia_scoped`, así que ahora da 409 igual."""
+    db = _db_con_panel(_visita_farmacia(vm_id=999))  # de otro VM
     client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
     r = client.post("/api/v1/farmacias/1/foto",
                     files={"archivo": ("x.jpg", _JPEG, "image/jpeg")})
-    assert r.status_code == 201
+    assert r.status_code == 409
 
 
 def test_obtener_foto_visita_farmacia_404_sin_foto(monkeypatch):
@@ -375,16 +364,10 @@ def test_visita_farmacia_inexistente_404(monkeypatch):
     assert r.status_code == 404
 
 
-def test_subir_foto_visita_farmacia_de_otro_vm_403(monkeypatch):
-    """VM_A (rm_id=7) intenta subir la foto de una visita de VM_B (vm_id=999)."""
-    guardar = MagicMock()
-    monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", guardar)
-    db = _db_con_panel(_visita_farmacia(vm_id=999))
-    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
-    r = client.post("/api/v1/farmacias/1/foto",
-                    files={"archivo": ("x.jpg", _JPEG, "image/jpeg")})
-    assert r.status_code == 403
-    guardar.assert_not_called()
+# (El caso "subir foto de otro VM" quedó cubierto por
+#  test_subir_foto_visita_farmacia_cerrada_409_sin_importar_dueno arriba: el
+#  cierre corta antes de llegar al chequeo de dueño, así que ya no hay un 403
+#  de IDOR que probar en la subida — solo en la lectura, que sigue abajo.)
 
 
 def test_obtener_foto_visita_farmacia_de_otro_vm_403(monkeypatch):
@@ -398,13 +381,17 @@ def test_obtener_foto_visita_farmacia_de_otro_vm_403(monkeypatch):
     obtener.assert_not_called()
 
 
-def test_subir_foto_visita_farmacia_admin_ok_aunque_sea_de_otro_vm(monkeypatch):
-    monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", lambda *a, **k: None)
+def test_subir_foto_visita_farmacia_cerrada_409_tambien_para_admin(monkeypatch):
+    """El cierre es GLOBAL (Task 5): ni siquiera ADMIN puede subir una foto de
+    visita nueva, sea cual sea el VM dueño."""
+    guardar = MagicMock()
+    monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", guardar)
     db = _db_con_panel(_visita_farmacia(vm_id=999))
     client = _client(U(Rol.ADMIN), db=db)
     r = client.post("/api/v1/farmacias/1/foto",
                     files={"archivo": ("x.jpg", _JPEG, "image/jpeg")})
-    assert r.status_code == 201
+    assert r.status_code == 409
+    guardar.assert_not_called()
 
 
 def test_obtener_foto_visita_farmacia_admin_ok_aunque_sea_de_otro_vm(monkeypatch):

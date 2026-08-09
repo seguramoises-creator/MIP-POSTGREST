@@ -206,16 +206,25 @@ def test_lsii_router_evaluar_traduce_409(monkeypatch):
     assert exc_info.value.status_code == 409
 
 
-def test_visita_router_registrar_traduce_409(monkeypatch):
+def test_visita_router_registrar_cerrado_409_no_llama_al_servicio(monkeypatch):
+    """Task 5 (integración Mallén) cerró POST /visita/registrar por completo: ya
+    no traduce el ValueError("...cerrado...") del guard de ciclo, porque el
+    cuerpo del endpoint nunca llega a invocar `visita_registro_service.registrar_visita`
+    — el 409 lo levanta el propio endpoint, incondicionalmente.
+
+    Este test reemplaza al histórico `test_visita_router_registrar_traduce_409`,
+    que monkeycheaba `rs.registrar_visita` para simular el guard de ciclo cerrado:
+    tras el cierre ese monkeypatch queda muerto (la función nunca se llama) y el
+    test seguía "pasando" solo porque el nuevo cuerpo también da 409 por una
+    razón completamente distinta — probaba una traducción que ya no existe."""
     from fastapi import HTTPException
     from app.api.v1.routers import visita as visita_router
     from app.schemas.visita import VisitaRegistrar
 
     import app.services.visita_registro_service as rs
 
-    def _falla_cerrado(*a, **k):
-        raise ValueError("El ciclo está cerrado — solo lectura")
-    monkeypatch.setattr(rs, "registrar_visita", _falla_cerrado)
+    registrar = MagicMock()
+    monkeypatch.setattr(rs, "registrar_visita", registrar)
 
     datos = VisitaRegistrar(medico_id=1, tipo_visita="V", comentario="visita normal de rutina")
     current_user = SimpleNamespace(id=1, rol=SimpleNamespace(value="ADMIN"))
@@ -224,6 +233,9 @@ def test_visita_router_registrar_traduce_409(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         visita_router.registrar_visita(datos, vm_id=1, db=db, current_user=current_user)
     assert exc_info.value.status_code == 409
+    detalle = exc_info.value.detail
+    assert "SFA" in detalle or "Mall" in detalle
+    registrar.assert_not_called()
 
 
 def test_visita_router_planeacion_traduce_409(monkeypatch):

@@ -383,19 +383,17 @@ def registrar_visita_farmacia(
     db: Session = Depends(get_db),
     current_user: Usuario = RegistrarPanel,
 ):
-    vm = _scope_vm(current_user, vm_id)
-    if not vm:
-        raise HTTPException(400, "Indica el VM (vm_id).")
-    panel = _cargar_panel_del_vm(db, panel_id, vm)
-    try:
-        v = visita_svc.registrar_visita(db, vm, panel, body, usuario_id=current_user.id)
-    except ValueError as e:
-        _raise_captura_error(e)
-    return {
-        "id": v.id, "vm_id": v.vm_id, "ciclo_id": v.ciclo_id, "farmacia_id": v.farmacia_id,
-        "ejecutada": v.ejecutada,
-        "hora": v.fecha_hora.isoformat() if v.fecha_hora else None,
-    }
+    """La captura de visitas está cerrada: las visitas provienen del SFA de
+    Mallén (esquema `ext`) y se integran desde ahí.
+
+    Se conserva el endpoint devolviendo 409 en vez de borrarlo para que un
+    cliente antiguo reciba un motivo legible en lugar de un 404 sin explicación.
+    """
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        "El registro de visitas está cerrado: las visitas provienen del SFA de "
+        "Mallén y se integran automáticamente. Lo ya registrado sigue disponible "
+        "para consulta.")
 
 
 @router.post("/{visita_id}/foto", response_model=dict, status_code=status.HTTP_201_CREATED,
@@ -404,15 +402,17 @@ async def subir_foto_visita_farmacia(
     visita_id: int, archivo: UploadFile = File(...),
     db: Session = Depends(get_db), current_user: Usuario = RegistrarPanel,
 ):
-    # Hallazgo crítico 1 (IDOR): verifica dueño/equipo ANTES de escribir la foto —
-    # antes se resolvía solo por `id`, sin comprobar que la visita fuera del VM.
-    _cargar_visita_farmacia_scoped(db, current_user, visita_id)
-    contenido = await archivo.read()
-    try:
-        visita_svc.guardar_foto_visita(db, visita_id, contenido, archivo.content_type or "image/jpeg")
-    except ValueError as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
-    return {"id": visita_id, "bytes": len(contenido)}
+    """La captura de visitas está cerrada: las visitas provienen del SFA de
+    Mallén (esquema `ext`) y se integran desde ahí.
+
+    Se conserva el endpoint devolviendo 409 en vez de borrarlo para que un
+    cliente antiguo reciba un motivo legible en lugar de un 404 sin explicación.
+    """
+    raise HTTPException(
+        status.HTTP_409_CONFLICT,
+        "El registro de visitas está cerrado: las visitas provienen del SFA de "
+        "Mallén y se integran automáticamente. Lo ya registrado sigue disponible "
+        "para consulta.")
 
 
 @router.get("/{visita_id}/foto", summary="Obtener la foto de una visita a farmacia")
