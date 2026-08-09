@@ -27,13 +27,24 @@ Una versión anterior de este módulo exigía la frecuencia completa
 (`>= visitas_programadas`). Venía del RFI del 22-jul, que el requerimiento v2
 reemplazó. Se corrigió porque los números de VISTA deben cuadrar con los de
 Mallén, y el documento acordado es el v2.
+
+UNIDAD DE `resultado_real`: FRACCIÓN 0-1, NO PORCENTAJE 0-100
+----------------------------------------------------------------
+Los 4 indicadores están dados de alta con `DIM_Indicador.escala == 1`. Con esa
+escala, `motor_calculo_service._calc_puntajes_filas` hace
+`valor_pct = resultado_real * 100` antes de acotar a [0,100]. Si aquí se
+escribiera ya en porcentaje (p. ej. `50.0` por 50%), el motor la multiplicaría
+otra vez (`5000`) y la acotaría a 100: cualquier cobertura por encima del 1%
+saturaba a puntaje perfecto. Por eso `_pct` y `_promedio_diario` devuelven
+fracciones 0-1 — la multiplicación por 100 es responsabilidad exclusiva del
+motor, una sola vez.
 """
 from decimal import Decimal
 
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.models.dimensiones import Ciclo, Indicador, RepresentanteMedico
+from app.models.dimensiones import Ciclo, Indicador, MetaIndicador, RepresentanteMedico
 from app.models.hechos import ResultadoIndicador
 from app.models.integracion_ext import (
     ExtDimCiclo, ExtFactVisitaFarmacia, ExtFactVisitaMedico, ExtPanelMedico,
@@ -53,11 +64,18 @@ CODIGOS: tuple[str, ...] = (COB_MD_F1, COB_MD_F2, PROM_DIARIO, COB_FARMACIAS)
 
 
 def _pct(cubiertos: int, universo: int) -> Decimal:
-    """Cobertura en porcentaje. Universo vacío → 0, no división por cero: un RM
-    sin panel no tiene cobertura, no tiene cobertura indefinida."""
+    """Cobertura como FRACCIÓN 0-1 (no 0-100): ver la nota de módulo sobre la
+    unidad de `resultado_real`. Universo vacío → 0, no división por cero: un
+    RM sin panel no tiene cobertura, no tiene cobertura indefinida.
+
+    Se quantiza a 4 decimales, no a 2: el porcentaje viejo usaba 2 decimales
+    (granularidad de 0.01%). Una fracción 0-1 necesita 4 decimales para
+    conservar esa misma granularidad — con 2 decimales, 50% y 50.4% colapsan
+    los dos en `0.50`.
+    """
     if universo <= 0:
         return Decimal("0")
-    return (Decimal(cubiertos) * 100 / Decimal(universo)).quantize(Decimal("0.01"))
+    return (Decimal(cubiertos) / Decimal(universo)).quantize(Decimal("0.0001"))
 
 
 def _indicadores_del_pais(db: Session, pais_codigo: str) -> dict[str, int]:
@@ -108,16 +126,51 @@ def _cobertura_medicos(db: Session, pais_codigo: str, ciclo_codigo: str,
     return _pct(len(panel & visitados), len(panel))
 
 
-def _promedio_diario(visitados: set[str], dias_laborables: int) -> Decimal:
-    """§2.1: «MÉDICOS visitados dividido entre los días laborables del ciclo».
+def _meta_base_prom_diario(db: Session, indicador_id: int) -> Decimal | None:
+    """Base de normalización para PROM_DIARIO, leída de `Config.DIM_MetaIndicador`.
 
-    Médicos distintos, no visitas: un médico visitado tres veces aporta 1.
-    Se reutiliza el mismo conjunto que la cobertura, así los dos indicadores
-    no pueden divergir en qué cuenta como visitado.
+    Mismo orden de preferencia que `motor_calculo_service.completar_puntajes`
+    (líneas ~66-74): `meta_100` si está, si no `objetivo`. Sin meta activa, sin
+    ninguno de los dos campos, o con un valor <= 0 → no hay base utilizable
+    (None): no se puede construir un ratio con eso.
+    """
+    m = (db.query(MetaIndicador)
+         .filter(MetaIndicador.indicador_id == indicador_id,
+                 MetaIndicador.activo.is_(True)).first())
+    if m is None:
+        return None
+    base = None
+    if m.meta_100 is not None:
+        base = Decimal(str(m.meta_100))
+    elif m.objetivo is not None:
+        base = Decimal(str(m.objetivo))
+    if base is None or base <= 0:
+        return None
+    return base
+
+
+def _promedio_diario(visitados: set[str], dias_laborables: int,
+                     meta: Decimal) -> Decimal:
+    """§2.1: «MÉDICOS visitados dividido entre los días laborables del ciclo»,
+    normalizado contra la meta configurada (`meta`, ver `_meta_base_prom_diario`).
+
+    La tasa cruda (médicos/día) no es una fracción de logro por sí sola — con
+    `escala == 1` el motor la interpretaría como tal (0.05 médicos/día → «5%
+    de cumplimiento»; 2.25 médicos/día saturaría al 100%). Dividir entre la
+    meta la convierte en la fracción de logro que el motor sí espera.
+
+    Médicos distintos, no visitas: un médico visitado tres veces aporta 1. Se
+    reutiliza el mismo conjunto que la cobertura, así los dos indicadores no
+    pueden divergir en qué cuenta como visitado.
+
+    NO se acota el resultado: un RM que sobrecumple la meta debe verse en los
+    datos como sobrecumplimiento real. El motor ya acota a [0,100] después de
+    multiplicar por 100 — acotar aquí lo escondería antes de que llegue ahí.
     """
     if dias_laborables <= 0:
         return Decimal("0")
-    return (Decimal(len(visitados)) / Decimal(dias_laborables)).quantize(Decimal("0.01"))
+    tasa = Decimal(len(visitados)) / Decimal(dias_laborables)
+    return (tasa / meta).quantize(Decimal("0.0001"))
 
 
 def _cobertura_farmacias(db: Session, pais_codigo: str, ciclo_codigo: str,
@@ -186,6 +239,21 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
             f"no se calculó. Créalo en Administración → Indicadores.",
             SEVERIDAD_ERROR))
 
+    # PROM_DIARIO necesita una meta configurada para convertirse en fracción
+    # de logro (ver `_promedio_diario`). Se resuelve una sola vez para todo el
+    # país/ciclo -- la meta no varía por RM -- y si falta, ningún RM escribe
+    # esa fila: una tasa cruda sin normalizar sería peor que no escribir nada
+    # (se leería como un cumplimiento ridículamente bajo).
+    prom_diario_meta = None
+    if PROM_DIARIO in ids:
+        prom_diario_meta = _meta_base_prom_diario(db, ids[PROM_DIARIO])
+        if prom_diario_meta is None:
+            hallazgos.append(Hallazgo(
+                "indicador", PROM_DIARIO,
+                f"Falta configurar la meta de {PROM_DIARIO} en {pais_codigo} "
+                f"(Administración → Metas); no se calculó para ningún "
+                f"representante.", SEVERIDAD_ERROR))
+
     # Los RM con actividad: los del panel más los que solo tienen farmacias.
     rms = {f[0] for f in db.query(ExtPanelMedico.rm_codigo)
            .filter(ExtPanelMedico.pais_codigo == pais_codigo,
@@ -223,10 +291,14 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
                                           rm_codigo, "F1", visitados),
             COB_MD_F2: _cobertura_medicos(db, pais_codigo, ciclo_codigo,
                                           rm_codigo, "F2", visitados),
-            PROM_DIARIO: _promedio_diario(visitados, ciclo_ext.dias_laborables),
             COB_FARMACIAS: _cobertura_farmacias(db, pais_codigo, ciclo_codigo,
                                                 rm_codigo),
         }
+        # Sin meta utilizable no hay ratio que calcular: PROM_DIARIO se queda
+        # fuera de `valores` y, más abajo, fuera de lo que se escribe.
+        if prom_diario_meta is not None:
+            valores[PROM_DIARIO] = _promedio_diario(
+                visitados, ciclo_ext.dias_laborables, prom_diario_meta)
 
         indicador_ids = [ids[c] for c in CODIGOS if c in ids]
         if indicador_ids:
