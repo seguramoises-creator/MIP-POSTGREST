@@ -86,7 +86,9 @@ El rótulo es **"TOP"**, nunca "Prioridad": `ParrillaPromocional.prioridad` ya o
 
 `PlaneacionCiclo` **no guarda fechas**: guarda `semana` (1-4) y `dia_semana` (`"Lunes"`…`"Viernes"`, texto libre sin FK). Para saber si una visita programada "venció" hay que traducir `(ciclo.fecha_inicio, semana, dia_semana)` a una fecha de calendario real, saltando fines de semana y feriados.
 
-Ese traductor no existe hoy. Se escribe reutilizando `cobertura_predictiva_service._networkdays` y `_feriados_pais`, que **sí consultan `Config.DIM_Feriado`**.
+Ese traductor no existe hoy. **Precisión añadida al escribir el plan:** la fecha planeada se deriva por **calendario puro** — lunes de la semana que contiene `fecha_inicio`, más `(semana-1)` semanas, más el desplazamiento del día — y se acota al rango `[fecha_inicio, fecha_fin]` del ciclo. Los feriados **no mueven** la fecha planeada: si alguien planeó para un día que resultó feriado, la fecha sigue siendo esa; lo que se mide en días hábiles es el **vencimiento** posterior.
+
+Los feriados entran, por tanto, en dos sitios distintos: al contar los días hábiles transcurridos desde la fecha planeada (para el recordatorio) y al calcular el porcentaje del ciclo (para el escalamiento). Ahí sí se usan `cobertura_predictiva_service._networkdays` y `_feriados_pais`, que **sí consultan `Config.DIM_Feriado`**.
 
 > **Trampa a evitar:** hay una segunda implementación de días hábiles en `visita_cobertura_service._dias_habiles` que solo excluye sábado y domingo, ignora `DIM_Feriado`, y usa `date.today()` en vez de la hora local del país. **No se usa esa.** Tampoco se refactoriza aquí — está fuera de alcance y toca un servicio en producción.
 
