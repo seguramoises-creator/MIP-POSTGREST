@@ -8,15 +8,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Box, Paper, Typography, Button, Alert, Chip, Table, TableHead, TableBody,
   TableRow, TableCell, Card, CardContent, Grid, CircularProgress, Snackbar,
-  Dialog, DialogTitle, DialogContent, DialogActions, Tooltip,
+  Dialog, DialogTitle, DialogContent, DialogActions, Tooltip, TextField,
 } from '@mui/material';
 import { FactCheck, Visibility, Sync } from '@mui/icons-material';
 import { useCicloStore } from '../../store/ciclo.store';
 import {
   listarLotes, detalleLote, validarLote, resumenLotes,
   sincronizarDimensiones, resumenDimensiones,
+  integrarVisitas, resumenVisitas,
   type EstadoLote, type LoteIntegracion,
   type ConteoDimension, type ResultadoSincronizacion,
+  type ResultadoIntegracionVisitas,
 } from '../../services/integracion.service';
 
 // Motivo real de un error de axios: 422 de FastAPI (detail = [{loc,msg}]) o string.
@@ -136,6 +138,8 @@ export default function LotesIntegracion() {
       <DialogoHallazgos loteId={verLote} onClose={() => setVerLote(null)} />
 
       <SeccionDimensiones paisCodigo={paisCodigo} />
+
+      <SeccionVisitas paisCodigo={paisCodigo} />
 
       <Snackbar open={!!aviso} autoHideDuration={8000} onClose={() => setAviso(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
@@ -314,6 +318,156 @@ function SeccionDimensiones({ paisCodigo }: { paisCodigo: string | null }) {
                   </TableBody>
                 </Table>
               </Box>
+            </Paper>
+          )}
+        </>
+      )}
+    </Box>
+  );
+}
+
+function SeccionVisitas({ paisCodigo }: { paisCodigo: string | null }) {
+  const qc = useQueryClient();
+  const [cicloCodigo, setCicloCodigo] = useState('');
+  const [resultado, setResultado] = useState<ResultadoIntegracionVisitas | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const resumen = useQuery({
+    queryKey: ['integracion-visitas', paisCodigo, cicloCodigo],
+    queryFn: () => resumenVisitas(paisCodigo as string, cicloCodigo),
+    enabled: !!paisCodigo && !!cicloCodigo.trim(),
+  });
+
+  const integrar = useMutation({
+    mutationFn: () => integrarVisitas(paisCodigo as string, cicloCodigo),
+    onSuccess: (r) => {
+      setResultado(r); setError(null);
+      qc.invalidateQueries({ queryKey: ['integracion-visitas'] });
+    },
+    onError: (e) => setError(detalleError(e, 'No se pudieron integrar las visitas.')),
+  });
+
+  if (!paisCodigo) {
+    return <Alert severity="info" sx={{ mt: 4 }}>
+      Selecciona un país en el encabezado para integrar visitas.
+    </Alert>;
+  }
+
+  return (
+    <Box sx={{ mt: 5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>Visitas</Typography>
+        <TextField size="small" label="Ciclo (código de Mallén)" value={cicloCodigo}
+          onChange={(e) => setCicloCodigo(e.target.value)} sx={{ width: 220 }} />
+        <Button variant="contained" startIcon={<Sync />}
+          disabled={!cicloCodigo.trim() || integrar.isPending}
+          onClick={() => integrar.mutate()}>
+          {integrar.isPending ? 'Integrando…' : 'Integrar visitas'}
+        </Button>
+      </Box>
+
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Integrar deja el ciclo completo: los cuatro hechos entran, los indicadores
+        COB_MD_F1, COB_MD_F2, PROM_DIARIO y COB_FARMACIAS se calculan desde ellos,
+        se recalculan Score y ranking, y los lotes quedan marcados como integrados.
+      </Alert>
+
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      {resumen.data && (
+        <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 2 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Hecho</TableCell>
+                <TableCell align="right">En Mallén</TableCell>
+                <TableCell align="right">Integradas</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {resumen.data.map((f) => (
+                <TableRow key={f.hecho}>
+                  <TableCell>{f.hecho}</TableCell>
+                  <TableCell align="right">{f.en_ext}</TableCell>
+                  <TableCell align="right">{f.integradas}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Paper>
+      )}
+
+      {resultado && (
+        <>
+          <Alert severity="success" sx={{ mb: 2 }}>
+            Integración completada. Indicadores calculados para {resultado.indicadores.rms}
+            {' '}representante(s): {resultado.indicadores.filas} valor(es).
+            {resultado.lotes_cerrados.length > 0 &&
+              ` Lote(s) marcados como integrados: ${resultado.lotes_cerrados.join(', ')}.`}
+          </Alert>
+          {/* El recálculo es lo que hace visible la integración en el Score y el
+              ranking. Si se abortó, el operador tiene que saberlo: los hechos
+              entraron pero los tableros siguen mostrando el cálculo anterior. */}
+          {resultado.recalculo.abortado ? (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              Los hechos se integraron, pero el Score y el ranking <b>no</b> se
+              recalcularon: {resultado.recalculo.motivo ?? 'el ciclo está cerrado.'}
+            </Alert>
+          ) : (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Score y ranking recalculados: {resultado.recalculo.rankings_generados ?? 0}
+              {' '}posición(es) de ranking generadas.
+            </Alert>
+          )}
+          <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 2 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Hecho</TableCell>
+                  <TableCell align="right">Integrados</TableCell>
+                  <TableCell align="right">Actualizados</TableCell>
+                  <TableCell align="right">Omitidos</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {resultado.hechos.map((h) => (
+                  <TableRow key={h.hecho}>
+                    <TableCell>{h.hecho}</TableCell>
+                    <TableCell align="right">{h.integrados}</TableCell>
+                    <TableCell align="right">{h.actualizados}</TableCell>
+                    <TableCell align="right">{h.omitidos || '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Paper>
+
+          {resultado.hallazgos.length > 0 && (
+            <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, p: 2 }}>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Esto es lo que hay que enviarle al equipo técnico de Mallén para corregir.
+              </Alert>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Hecho</TableCell><TableCell>Registro</TableCell>
+                    <TableCell>Problema</TableCell><TableCell>Severidad</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {resultado.hallazgos.map((h, i) => (
+                    <TableRow key={`${h.hecho}-${h.origen_id}-${i}`}>
+                      <TableCell>{h.hecho}</TableCell>
+                      <TableCell>{h.origen_id || '—'}</TableCell>
+                      <TableCell>{h.problema}</TableCell>
+                      <TableCell>
+                        <Chip size="small" label={h.severidad}
+                          color={h.severidad === 'error' ? 'error' : 'warning'} />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </Paper>
           )}
         </>

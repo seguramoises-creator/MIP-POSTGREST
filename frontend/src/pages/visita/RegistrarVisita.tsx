@@ -84,6 +84,15 @@ async function comprimirImagen(file: File, maxLado = 2200, calidad = 0.85): Prom
 type SyncEstado = 'local' | 'sincronizado' | 'error';
 interface Registrada extends VisitaHoy { sync: SyncEstado; }
 
+// Sub-proyecto 3 (integración Mallén): el registro manual de visitas quedó
+// cerrado — las visitas ahora llegan del SFA de Mallén y se integran
+// automáticamente (POST /visita/registrar, /visita/no-visita,
+// /visita/muestras y /farmacias/visitar devuelven 409). Los controles de
+// escritura (registrar, no-visita, GPS, foto) se ocultan en ambos
+// formularios (médico y farmacia); lo ya registrado —"Registradas hoy",
+// "Visitas anteriores" y el panel de farmacias— se sigue mostrando tal cual.
+const CAPTURA_VISITAS_CERRADA = true;
+
 export default function RegistrarVisita() {
   const rol = useAuthStore((s) => s.rol);
   const esVM = rol === 'REPRESENTANTE_MEDICO';
@@ -545,7 +554,7 @@ export default function RegistrarVisita() {
               />
             )}
 
-            {!modoNoVisita && (
+            {!CAPTURA_VISITAS_CERRADA && !modoNoVisita && (
               <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" rowGap={1}>
                 <Button size="small" variant="outlined" startIcon={<span>📍</span>}
                         color={gps ? 'success' : 'primary'}
@@ -571,23 +580,25 @@ export default function RegistrarVisita() {
               </Stack>
             )}
 
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ pt: 0.5 }}>
-              <Button variant="contained" fullWidth startIcon={<Save />}
-                      disabled={guardando || (!modoNoVisita && comentario.trim().length < 10)}
-                      onClick={guardar}
-                      sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 800, textTransform: 'none', fontSize: '0.95rem',
-                            boxShadow: '0 8px 18px rgba(15,155,142,0.30)',
-                            background: `linear-gradient(120deg, ${TEAL} 0%, #0b7d72 100%)`,
-                            '&:hover': { background: `linear-gradient(120deg, #0d8a7f 0%, #0a6f66 100%)` },
-                            '&.Mui-disabled': { background: '#cbd5e1', color: '#fff', boxShadow: 'none' } }}>
-                {guardando ? 'Guardando…' : (modoNoVisita ? 'Registrar no-visita' : 'Guardar visita')}
-              </Button>
-              <Button variant="outlined" color={modoNoVisita ? 'primary' : 'error'} startIcon={<EventBusy />}
-                      onClick={() => { setModoNoVisita(!modoNoVisita); setMsg(null); }}
-                      sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 700, textTransform: 'none', borderWidth: 1.5 }}>
-                {modoNoVisita ? 'Fue visita' : 'No visité'}
-              </Button>
-            </Stack>
+            {!CAPTURA_VISITAS_CERRADA && (
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ pt: 0.5 }}>
+                <Button variant="contained" fullWidth startIcon={<Save />}
+                        disabled={guardando || (!modoNoVisita && comentario.trim().length < 10)}
+                        onClick={guardar}
+                        sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 800, textTransform: 'none', fontSize: '0.95rem',
+                              boxShadow: '0 8px 18px rgba(15,155,142,0.30)',
+                              background: `linear-gradient(120deg, ${TEAL} 0%, #0b7d72 100%)`,
+                              '&:hover': { background: `linear-gradient(120deg, #0d8a7f 0%, #0a6f66 100%)` },
+                              '&.Mui-disabled': { background: '#cbd5e1', color: '#fff', boxShadow: 'none' } }}>
+                  {guardando ? 'Guardando…' : (modoNoVisita ? 'Registrar no-visita' : 'Guardar visita')}
+                </Button>
+                <Button variant="outlined" color={modoNoVisita ? 'primary' : 'error'} startIcon={<EventBusy />}
+                        onClick={() => { setModoNoVisita(!modoNoVisita); setMsg(null); }}
+                        sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 700, textTransform: 'none', borderWidth: 1.5 }}>
+                  {modoNoVisita ? 'Fue visita' : 'No visité'}
+                </Button>
+              </Stack>
+            )}
           </Stack>
         </CardContent>
       </Card>
@@ -682,7 +693,7 @@ export default function RegistrarVisita() {
                          onChange={(e) => setFarmComentario(e.target.value)}
                          placeholder="Describe algo relevante que ocurrió en la visita… (opcional)" />
             </Box>
-            {!farmModoNoVisita && (
+            {!CAPTURA_VISITAS_CERRADA && !farmModoNoVisita && (
               <Stack direction="row" spacing={1.25} alignItems="center" flexWrap="wrap" rowGap={1}>
                 <Button size="small" variant="outlined" startIcon={<span>📍</span>}
                         color={farmGps ? 'success' : 'primary'}
@@ -707,23 +718,25 @@ export default function RegistrarVisita() {
                 {farmFotoPreview && <Box component="img" src={farmFotoPreview} alt="foto" sx={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 1, border: '1px solid #ddd' }} />}
               </Stack>
             )}
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ pt: 0.5 }}>
-              <Button variant="contained" fullWidth startIcon={<Save />}
-                      disabled={farmGuardando}
-                      onClick={guardarFarmacia}
-                      sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 800, textTransform: 'none', fontSize: '0.95rem',
-                            boxShadow: '0 8px 18px rgba(15,155,142,0.30)',
-                            background: `linear-gradient(120deg, ${TEAL} 0%, #0b7d72 100%)`,
-                            '&:hover': { background: `linear-gradient(120deg, #0d8a7f 0%, #0a6f66 100%)` },
-                            '&.Mui-disabled': { background: '#cbd5e1', color: '#fff', boxShadow: 'none' } }}>
-                {farmGuardando ? 'Guardando…' : (farmModoNoVisita ? 'Registrar no-visita' : 'Guardar visita')}
-              </Button>
-              <Button variant="outlined" color={farmModoNoVisita ? 'primary' : 'error'} startIcon={<EventBusy />}
-                      onClick={() => { setFarmModoNoVisita(!farmModoNoVisita); setMsg(null); }}
-                      sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 700, textTransform: 'none', borderWidth: 1.5 }}>
-                {farmModoNoVisita ? 'Fue visita' : 'No visité'}
-              </Button>
-            </Stack>
+            {!CAPTURA_VISITAS_CERRADA && (
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ pt: 0.5 }}>
+                <Button variant="contained" fullWidth startIcon={<Save />}
+                        disabled={farmGuardando}
+                        onClick={guardarFarmacia}
+                        sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 800, textTransform: 'none', fontSize: '0.95rem',
+                              boxShadow: '0 8px 18px rgba(15,155,142,0.30)',
+                              background: `linear-gradient(120deg, ${TEAL} 0%, #0b7d72 100%)`,
+                              '&:hover': { background: `linear-gradient(120deg, #0d8a7f 0%, #0a6f66 100%)` },
+                              '&.Mui-disabled': { background: '#cbd5e1', color: '#fff', boxShadow: 'none' } }}>
+                  {farmGuardando ? 'Guardando…' : (farmModoNoVisita ? 'Registrar no-visita' : 'Guardar visita')}
+                </Button>
+                <Button variant="outlined" color={farmModoNoVisita ? 'primary' : 'error'} startIcon={<EventBusy />}
+                        onClick={() => { setFarmModoNoVisita(!farmModoNoVisita); setMsg(null); }}
+                        sx={{ py: 1.25, borderRadius: 2.5, fontWeight: 700, textTransform: 'none', borderWidth: 1.5 }}>
+                  {farmModoNoVisita ? 'Fue visita' : 'No visité'}
+                </Button>
+              </Stack>
+            )}
           </Stack>
         </CardContent>
       </Card>
@@ -786,6 +799,10 @@ export default function RegistrarVisita() {
 
   return (
     <Box sx={{ maxWidth: 620, mx: 'auto', p: { xs: 1.5, sm: 3 } }}>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        El registro de visitas está cerrado: las visitas provienen del SFA de Mallén
+        y se integran automáticamente. Lo ya registrado sigue disponible para consulta.
+      </Alert>
       {/* HERO — encabezado corporativo: título + fecha + Gerente de Distrito, con el
           contexto País/Ciclo y el visitador integrados en un panel interior. Todo
           con flex-wrap: se reacomoda solo en iPhone/iPad/Android. */}
