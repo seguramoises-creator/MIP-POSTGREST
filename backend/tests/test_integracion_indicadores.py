@@ -22,9 +22,7 @@ from app.models import (  # noqa: F401
     hechos, ia_conexion, integracion_ext, integracion_hallazgo, mapeo_externo,
     seguridad_rbac, usuario, visita,
 )
-from app.models.dimensiones import (
-    Ciclo, Indicador, Linea, MetaIndicador, Pais, RepresentanteMedico,
-)
+from app.models.dimensiones import Ciclo, Indicador, Linea, Pais, RepresentanteMedico
 from app.models.hechos import ResultadoIndicador
 from app.models.integracion_ext import (
     ExtControlCarga, ExtDimCiclo, ExtDimFarmacia, ExtDimMedico, ExtDimPais,
@@ -114,14 +112,6 @@ def base(db):
         db.add(fila_ind)
         indicadores[codigo] = fila_ind
     db.flush()
-    # PROM_DIARIO (corrección 2) necesita una meta configurada para
-    # convertirse en fracción de logro; se da de alta con `meta_100 = 1` para
-    # que la mayoría de las pruebas (centradas en «médicos distintos, no
-    # visitas») sigan viendo la misma tasa cruda que antes del fix (dividir
-    # entre 1 no cambia el valor). Las pruebas que sí ejercitan la
-    # normalización usan una meta distinta a propósito.
-    db.add(MetaIndicador(indicador_id=indicadores[ind.PROM_DIARIO].id,
-                         peso=0, meta_100=Decimal("1"), activo=True))
     db.add(ExtDimPais(pais_codigo="DO", nombre="RD", activo=True))
     db.flush()
     db.add(ExtDimCiclo(pais_codigo="DO", ciclo_codigo="C01-2026", anio=2026,
@@ -248,13 +238,10 @@ def test_promedio_diario_cuenta_medicos_distintos_no_visitas(base):
     """§2.1: «MÉDICOS visitados / días laborables», no visitas.
 
     Un médico visitado 10 veces en un ciclo de 20 días → 1/20 = 0.05 de tasa
-    cruda. La fixture `base` da de alta la meta de PROM_DIARIO en
-    `meta_100 = 1` (corrección C2: sin meta no hay con qué normalizar),
-    valor elegido a propósito para que dividir entre la meta no altere el
-    número y este test siga aislando lo que le importa: que cuenta médicos
-    distintos, no visitas (si contara visitas daría 0.5: diez veces más).
-    La normalización contra una meta distinta de 1 se prueba aparte, en
-    `test_motor_prom_diario_mitad_de_meta_da_50_tras_motor`.
+    CRUDA (revertida la normalización contra una meta — ver la nota de módulo
+    «PROM_DIARIO: TASA CRUDA» en `integracion_indicadores_service.py`): este
+    test aísla que cuenta médicos distintos, no visitas (si contara visitas
+    daría 0.5: diez veces más).
     """
     db = base["db"]
     _panel(db, "MD01", "F1", 1)
@@ -268,8 +255,7 @@ def test_promedio_diario_cuenta_medicos_distintos_no_visitas(base):
 
 
 def test_promedio_diario_suma_medicos_distintos(base):
-    """10 médicos distintos visitados / 20 días laborables = 0.5 (meta=1,
-    ver nota en `test_promedio_diario_cuenta_medicos_distintos_no_visitas`)."""
+    """10 médicos distintos visitados / 20 días laborables = 0.5, tasa cruda."""
     db = base["db"]
     for i in range(10):
         _panel(db, f"MD{i:02d}", "F1", 1)
@@ -285,9 +271,8 @@ def test_promedio_diario_suma_medicos_distintos(base):
 def test_las_no_ejecutadas_no_cuentan_pero_su_medico_si(base):
     """No visitar no reduce el universo: el médico sigue en el denominador.
 
-    COB_MD_F1 se lee en fracción 0-1 (corrección C1); PROM_DIARIO usa la
-    meta por defecto de la fixture (`meta_100 = 1`, ver nota de
-    `test_promedio_diario_cuenta_medicos_distintos_no_visitas`).
+    COB_MD_F1 se lee en fracción 0-1 (corrección C1); PROM_DIARIO es tasa
+    cruda (ver `test_promedio_diario_cuenta_medicos_distintos_no_visitas`).
     """
     db = base["db"]
     _panel(db, "MD01", "F1", 1)
@@ -305,9 +290,7 @@ def test_las_no_ejecutadas_no_cuentan_pero_su_medico_si(base):
 
 def test_visitas_programadas_nulo_no_afecta_el_calculo(base):
     """`visitas_programadas` no entra en la fórmula, así que un nulo no rompe
-    nada ni genera hallazgo: no hay frecuencia que exigir. La fixture `base`
-    ya deja configurada la meta de PROM_DIARIO, así que tampoco dispara el
-    hallazgo de la corrección C2.
+    nada ni genera hallazgo: no hay frecuencia que exigir.
 
     Se completa el universo de F2 y farmacias (aunque no es lo que este test
     quiere ejercitar) para que `assert hallazgos == []` siga probando
@@ -335,12 +318,11 @@ def test_visitas_programadas_nulo_no_afecta_el_calculo(base):
 def test_recalcular_no_duplica_ni_toca_otros_indicadores(base):
     """Delete-then-insert acotado a los 4 códigos: los otros no se rozan.
 
-    Se completa el universo de los 4 indicadores (F1, F2 y farmacias, además
-    de la meta de PROM_DIARIO que ya trae la fixture) para que los 4 se
-    calculen de verdad y la cuenta `4 calculados + VENTAS` siga siendo
-    literal — si solo se cargara F1, la corrección C3 dejaría a F2 y
-    farmacias sin fila (sin universo), y esta prueba dejaría de probar lo
-    que dice probar.
+    Se completa el universo de F1, F2 y farmacias (PROM_DIARIO siempre se
+    calcula, no tiene noción de universo) para que los 4 se calculen de
+    verdad y la cuenta `4 calculados + VENTAS` siga siendo literal — si solo
+    se cargara F1, la corrección C3 dejaría a F2 y farmacias sin fila (sin
+    universo), y esta prueba dejaría de probar lo que dice probar.
     """
     db = base["db"]
     otro = Indicador(pais_codigo="DO", codigo="VENTAS", nombre="Ventas",
@@ -564,23 +546,43 @@ def test_motor_100pct_cobertura_da_puntos_completos_tras_motor(base):
     assert fila.puntos_obtenidos == Decimal("30")
 
 
-def test_motor_prom_diario_mitad_de_meta_da_50_tras_motor(base):
-    """Corrección C2: PROM_DIARIO normalizado contra una meta configurada
-    (no 1, para ejercitar de verdad la división, a diferencia de las pruebas
-    de fórmula que usan la meta=1 por defecto de la fixture). Meta = 0.2
-    médicos/día, tasa real = 2 médicos distintos / 20 días = 0.1 (la mitad
-    de la meta) → tras el motor, `resultado_porcentaje == 50`."""
+def _dias_laborables(db, valor):
+    """Reemplaza `dias_laborables` en `ext.dimciclo` para C01-2026 -- lo único
+    que `_promedio_diario` lee de `ciclo_ext` (ver
+    `integracion_indicadores_service.calcular_indicadores`)."""
+    fila = (db.query(ExtDimCiclo)
+            .filter(ExtDimCiclo.pais_codigo == "DO",
+                    ExtDimCiclo.ciclo_codigo == "C01-2026").one())
+    fila.dias_laborables = valor
+
+
+def test_motor_prom_diario_satura_a_100_con_45_medicos_en_40_dias(base):
+    """N1 (CRITICAL, revertido): PROM_DIARIO es TASA CRUDA, sin dividir entre
+    ninguna meta -- ver la nota de módulo «PROM_DIARIO: TASA CRUDA» en
+    `integracion_indicadores_service.py`. `DIM_MetaIndicador.meta_100 = 100`
+    es un marcador de escala del motor, no un objetivo de este indicador.
+
+    Extremo alto del rango histórico real que cargaba el Excel para
+    PROM_DIARIO (0.50-1.11, con `resultado_porcentaje` de 50 a 100): 45
+    médicos distintos visitados en un ciclo de 40 días laborables da una tasa
+    de 1.125 (un representante que cubre ~40-60 fichas distintas en ~40 días).
+    El motor la multiplica x100 (112.5%) y la acota a 100 -- saturar arriba es
+    correcto, no se acota antes de llegar al motor.
+
+    Contra el código que dividía entre `meta_100 = 100`, la tasa caía a
+    ~0.01 (1.125/100) y `resultado_porcentaje` salía en 1, no en 100 -- este
+    test falla contra ese código.
+    """
     db = base["db"]
     ind_prom = base["indicadores"][ind.PROM_DIARIO]
     ind_prom.ponderacion_pct = 10
-    meta = (db.query(MetaIndicador)
-            .filter(MetaIndicador.indicador_id == ind_prom.id).one())
-    meta.meta_100 = Decimal("0.2")
+    _dias_laborables(db, 40)
     db.commit()
 
-    for i in range(2):
-        _panel(db, f"MD{i:02d}", "F1", 1)
-        _visitas(db, f"MD{i:02d}", 1)
+    for i in range(45):
+        medico = f"MD{i:03d}"
+        _panel(db, medico, "F1", 1)
+        _visitas(db, medico, 1)
     db.commit()
 
     ind.calcular_indicadores(db, "DO", "C01-2026", [])
@@ -589,51 +591,38 @@ def test_motor_prom_diario_mitad_de_meta_da_50_tras_motor(base):
     db.commit()
 
     fila = _fila(db, base["rm"].id, base["ciclo"].id, ind.PROM_DIARIO)
+    assert fila.resultado_real == Decimal("1.1250")
+    assert fila.resultado_porcentaje == Decimal("100")
+    assert fila.puntos_obtenidos == Decimal("10")   # completos de 10
+
+
+def test_motor_prom_diario_da_50_con_20_medicos_en_40_dias(base):
+    """El otro extremo del mismo rango histórico real (ver la nota de módulo
+    «PROM_DIARIO: TASA CRUDA»): 20 médicos distintos visitados / 40 días
+    laborables = 0.50 de tasa cruda → tras el motor, `resultado_porcentaje
+    == 50` y la mitad de los puntos -- ni saturado, ni hundido por una
+    división que no debería existir."""
+    db = base["db"]
+    ind_prom = base["indicadores"][ind.PROM_DIARIO]
+    ind_prom.ponderacion_pct = 10
+    _dias_laborables(db, 40)
+    db.commit()
+
+    for i in range(20):
+        medico = f"MD{i:03d}"
+        _panel(db, medico, "F1", 1)
+        _visitas(db, medico, 1)
+    db.commit()
+
+    ind.calcular_indicadores(db, "DO", "C01-2026", [])
+    db.commit()
+    motor_calculo_service.completar_puntajes(db, base["ciclo"].id, "DO")
+    db.commit()
+
+    fila = _fila(db, base["rm"].id, base["ciclo"].id, ind.PROM_DIARIO)
+    assert fila.resultado_real == Decimal("0.5000")
     assert fila.resultado_porcentaje == Decimal("50")
     assert fila.puntos_obtenidos == Decimal("5")   # mitad de 10
-
-
-def test_prom_diario_sin_meta_no_escribe_fila_y_emite_hallazgo_error(base):
-    """Corrección C2: sin meta configurada no hay con qué normalizar la tasa
-    cruda de PROM_DIARIO. Escribirla tal cual sería peor que no escribir
-    nada (se leería como un cumplimiento ridículamente bajo), así que no se
-    escribe la fila y se reporta un hallazgo de error señalando qué falta
-    configurar. La fixture `base` deja una meta por defecto para el resto de
-    las pruebas; aquí se retira a propósito para probar este camino.
-
-    Se completa el universo de F1, F2 y farmacias (corrección C3) para que
-    `filas == 3` siga siendo exactamente COB_MD_F1+COB_MD_F2+COB_FARMACIAS,
-    sin depender de que además falte alguno de esos universos.
-    """
-    db = base["db"]
-    ind_prom_id = base["indicadores"][ind.PROM_DIARIO].id
-    db.query(MetaIndicador).filter(MetaIndicador.indicador_id == ind_prom_id).delete()
-    db.commit()
-
-    _panel(db, "MD01", "F1", 1)
-    _visitas(db, "MD01", 1)
-    _panel(db, "MD02", "F2", 1)
-    _visitas(db, "MD02", 1, desde=5)
-    _farmacia(db, "FAR01")
-    _visitas_farmacia(db, "FAR01", 1)
-    db.commit()
-
-    hallazgos = []
-    resultado = ind.calcular_indicadores(db, "DO", "C01-2026", hallazgos)
-    db.commit()
-
-    assert resultado["filas"] == 3   # COB_MD_F1, COB_MD_F2, COB_FARMACIAS — sin PROM_DIARIO
-
-    fila = (db.query(ResultadoIndicador)
-            .filter(ResultadoIndicador.rm_id == base["rm"].id,
-                    ResultadoIndicador.ciclo_id == base["ciclo"].id,
-                    ResultadoIndicador.indicador_id == ind_prom_id).first())
-    assert fila is None
-
-    errores = [h for h in hallazgos
-              if h.severidad == "error" and h.origen_id == ind.PROM_DIARIO]
-    assert len(errores) == 1
-    assert "meta" in errores[0].problema.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -660,11 +649,12 @@ def test_lote_parcial_no_pisa_valores_previos_con_ceros(base):
     todavía, así que 0.0 es una cobertura cero real (ver
     `test_universo_con_medicos_pero_ninguno_visitado_escribe_cero`).
     COB_MD_F2 y COB_FARMACIAS NO tienen panel/target en este lote: deben
-    seguir en 0.9, intactos — nadie los tocó. PROM_DIARIO se deja sin meta
-    a propósito en este test (se retira la que trae la fixture) para aislar
-    el efecto de la corrección C3 de la regla ya existente de PROM_DIARIO
-    (sin meta, tampoco se escribe): así los cuatro valores previos quedan
-    intactos salvo el que de verdad tiene un universo real que medir.
+    seguir en 0.9, intactos — nadie los tocó. PROM_DIARIO no tiene noción de
+    universo (su denominador es `dias_laborables` del ciclo, siempre
+    presente): con cero médicos visitados en total, sí se recalcula a una
+    tasa cruda real de `0.0` — igual que las coberturas cuando el panel
+    existe pero nadie fue visitado, no es el caso «sin universo» que este
+    test cuida para F2/COB_FARMACIAS.
 
     Contra el código viejo (`_cobertura_medicos`/`_cobertura_farmacias`
     devolviendo `Decimal("0")` en vez de `None` cuando el panel/target está
@@ -676,11 +666,6 @@ def test_lote_parcial_no_pisa_valores_previos_con_ceros(base):
     db = base["db"]
     rm_id, ciclo_id = base["rm"].id, base["ciclo"].id
     indicadores = base["indicadores"]
-
-    # Sin meta de PROM_DIARIO: aísla la corrección C3 (ver docstring).
-    db.query(MetaIndicador).filter(
-        MetaIndicador.indicador_id == indicadores[ind.PROM_DIARIO].id).delete()
-    db.commit()
 
     # El "histórico del Excel": 0.9 en los 4, escrito a mano.
     for codigo in ind.CODIGOS:
@@ -701,7 +686,7 @@ def test_lote_parcial_no_pisa_valores_previos_con_ceros(base):
     assert _valor(db, rm_id, ciclo_id, "COB_MD_F1") == 0.0      # cobertura cero real
     assert _valor(db, rm_id, ciclo_id, "COB_MD_F2") == 0.9      # sin universo: intacto
     assert _valor(db, rm_id, ciclo_id, "COB_FARMACIAS") == 0.9  # sin universo: intacto
-    assert _valor(db, rm_id, ciclo_id, "PROM_DIARIO") == 0.9    # sin meta: intacto (regla previa)
+    assert _valor(db, rm_id, ciclo_id, "PROM_DIARIO") == 0.0    # tasa cruda real: 0 médicos/20 días
 
     avisos = [h for h in hallazgos if h.severidad == "aviso" and h.origen_id == "VM01"]
     assert any("COB_MD_F2" in h.problema for h in avisos)
@@ -757,7 +742,113 @@ def test_sin_panel_f2_no_escribe_fila_y_avisa(base):
                 if h.severidad == "aviso" and h.origen_id == "VM01"
                 and "COB_MD_F2" in h.problema]
     assert len(avisos_f2) == 1
-    # PROM_DIARIO (meta==1 de la fixture) y COB_FARMACIAS (sin target: aviso
-    # aparte) también entran en juego, pero no son lo que esta prueba cuida;
-    # el punto es que `filas` cuenta exactamente lo que sí se escribió.
+    # PROM_DIARIO (tasa cruda, siempre se calcula) y COB_FARMACIAS (sin
+    # target: aviso aparte) también entran en juego, pero no son lo que esta
+    # prueba cuida; el punto es que `filas` cuenta exactamente lo que sí se
+    # escribió.
     assert resultado["filas"] == 2   # COB_MD_F1 + PROM_DIARIO (sin F2, sin farmacias)
+
+
+# ---------------------------------------------------------------------------
+# N2 (defecto CRITICAL): el motor de indicadores debe respetar el mismo gate
+# de lote (VALIDADO/INTEGRADO) que ya aplica `integracion_visitas_service`.
+# Antes de esta corrección, `calcular_indicadores` leía `ext` directo sin
+# mirar `ExtControlCarga.estado` en ninguna de sus 4 consultas ni en el
+# universo de RM con actividad: un lote RECHAZADO por la validación seguía
+# alimentando el Score. Ver la nota de módulo «TAMBIÉN RESPETA EL GATE DE
+# LOTE» en `integracion_indicadores_service.py`.
+# ---------------------------------------------------------------------------
+
+def test_lote_rechazado_no_alimenta_los_indicadores(base):
+    """Reproduce el defecto CRITICAL end-to-end: con el lote 1001 (el único
+    que trae la fixture `base`) en RECHAZADO, ningún hecho de `ext` es
+    utilizable, así que los 4 indicadores deben quedar EXACTAMENTE como
+    estaban -- ni un solo valor se toca, ni se escribe una fila nueva, ni el
+    RM se cuenta como calculado (se queda fuera de `rms` por completo, no
+    solo "sin universo" indicador por indicador).
+
+    Contra el código sin el gate de lote, el panel/visitas de este mismo
+    lote rechazado igual producían una cobertura real (1 de 2 médicos F1
+    visitados → 0.5) que pisaba el 0.95 previo -- este test falla contra ese
+    código.
+    """
+    db = base["db"]
+    rm_id, ciclo_id = base["rm"].id, base["ciclo"].id
+    indicadores = base["indicadores"]
+
+    # Histórico previo, como si viniera de una integración anterior legítima.
+    for codigo in ind.CODIGOS:
+        db.add(ResultadoIndicador(
+            rm_id=rm_id, pais_codigo="DO", linea_id=base["rm"].linea_id,
+            ciclo_id=ciclo_id, indicador_id=indicadores[codigo].id,
+            resultado_real=Decimal("0.95"), activo=True))
+    db.commit()
+
+    # Universo completo (F1, F2, farmacias) en el lote 1001, luego rechazado.
+    _panel(db, "MD01", "F1", 1)
+    _panel(db, "MD02", "F1", 1)
+    _visitas(db, "MD01", 1)   # 1 de 2 -> cobertura real 0.5, si se dejara pasar
+    _farmacia(db, "FAR01")
+    _visitas_farmacia(db, "FAR01", 1)
+    db.query(ExtControlCarga).filter_by(lote_id=1001).one().estado = "RECHAZADO"
+    db.commit()
+
+    hallazgos = []
+    resultado = ind.calcular_indicadores(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert resultado["rms"] == 0
+    assert resultado["filas"] == 0
+    for codigo in ind.CODIGOS:
+        assert _valor(db, rm_id, ciclo_id, codigo) == 0.95
+
+
+def test_lote_rechazado_deja_universo_vacio_no_escribe_cero(base):
+    """Efecto combinado del gate de lote con la regla de universo vacío (ver
+    la nota de módulo «SIN UNIVERSO NO ES COBERTURA CERO»): un panel F2 que
+    SOLO viene de un lote RECHAZADO debe comportarse como si no existiera --
+    sin universo, aviso, SIN escribir `0` -- no como cobertura cero real. El
+    RM sí entra al bucle y SÍ se calcula, porque tiene panel F1 en un lote
+    VALIDADO distinto (1001, el de la fixture).
+
+    Contra el código sin el gate de lote, el panel F2 del lote rechazado
+    entraría igual y COB_MD_F2 saldría en `0.0` (cobertura cero real, panel
+    con 1 médico sin visitar) en vez de quedarse en el `0.95` previo.
+    """
+    db = base["db"]
+    rm_id, ciclo_id = base["rm"].id, base["ciclo"].id
+    indicadores = base["indicadores"]
+
+    db.add(ResultadoIndicador(
+        rm_id=rm_id, pais_codigo="DO", linea_id=base["rm"].linea_id,
+        ciclo_id=ciclo_id, indicador_id=indicadores[ind.COB_MD_F2].id,
+        resultado_real=Decimal("0.95"), activo=True))
+    db.commit()
+
+    _panel(db, "MD01", "F1", 1)   # lote 1001, VALIDADO (el de la fixture)
+    _visitas(db, "MD01", 1)
+    db.add(ExtControlCarga(
+        lote_id=1002, sistema_origen="SFA", modulo="VISITAS", pais_codigo="DO",
+        ciclo_codigo="C01-2026", fecha_extraccion=datetime(2026, 1, 31, 20, 0),
+        fecha_recepcion=datetime(2026, 1, 31, 21, 0), filas_enviadas=1,
+        estado="RECHAZADO"))
+    db.flush()
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD02",
+                        nombre="Doctor MD02", activo=True))
+    db.add(ExtPanelMedico(
+        lote_id=1002, pais_codigo="DO", ciclo_codigo="C01-2026", rm_codigo="VM01",
+        medico_codigo="MD02", frecuencia_objetivo="F2", prioridad="TOP",
+        visitas_programadas=1, activo=True))
+    db.commit()
+
+    hallazgos = []
+    resultado = ind.calcular_indicadores(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert resultado["rms"] == 1
+    assert _valor(db, rm_id, ciclo_id, "COB_MD_F1") == 1.0
+    assert _valor(db, rm_id, ciclo_id, "COB_MD_F2") == 0.95   # intacto, no 0.0
+
+    avisos_f2 = [h for h in hallazgos if h.severidad == "aviso"
+                and h.origen_id == "VM01" and "COB_MD_F2" in h.problema]
+    assert len(avisos_f2) == 1

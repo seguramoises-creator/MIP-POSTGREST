@@ -874,6 +874,56 @@ def test_panel_medico_adopta_panel_pendiente_de_alta(escenario):
     assert panel.motivo is None
 
 
+# ===========================================================================
+# N3 (IMPORTANT, regresión revertida) — el panel dejó de escribir el destino
+# de 4DX (`Config.DIM_TargetMedico`) cuando el médico no está sincronizado.
+# Al añadir el segundo destino (`Visita.DIM_MedicoVisita`), `integrar_panel_
+# medico` empezó a exigir el maestro del médico para la fila COMPLETA y
+# omitía las dos escrituras si faltaba -- antes del segundo destino (`git
+# show b899e87`) el primero SÍ se escribía sin depender del maestro. Es
+# además asimétrico con `integrar_visitas_medico`, que a propósito conserva
+# el destino de 4DX cuando el segundo destino falla (ver
+# `test_visita_sin_panel_de_visita_omite_solo_ese_destino`, arriba).
+# ===========================================================================
+
+def test_panel_medico_sin_maestro_solo_omite_el_segundo_destino(escenario):
+    """MD99 tiene panel en `ext.panelmedico` pero nunca se sincronizó en
+    `Config.DIM_Medico` (a diferencia de MD01, que sí trae `escenario`):
+    `Config.DIM_TargetMedico` debe recibir la fila igual que antes de este
+    fix, `Visita.DIM_MedicoVisita` NO, y debe quedar exactamente un hallazgo
+    señalando que solo el segundo destino se omitió.
+
+    Contra el código con la regresión, `TargetMedico` se queda en 0 filas
+    para MD99 -- este test falla contra ese código.
+    """
+    db = escenario["db"]
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD99",
+                        nombre="Doctor Sin Sincronizar", activo=True))
+    db.flush()
+    db.add(ExtPanelMedico(
+        lote_id=1001, pais_codigo="DO", ciclo_codigo="C01-2026", rm_codigo="VM01",
+        medico_codigo="MD99", frecuencia_objetivo="F1", prioridad="TOP",
+        visitas_programadas=1, activo=True))
+    db.commit()
+    hallazgos = []
+
+    conteo = viz.integrar_panel_medico(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert conteo.integrados == 1
+    assert conteo.omitidos == 0
+    t = db.query(TargetMedico).filter(TargetMedico.medico_codigo == "MD99").one()
+    assert t.rm_id == escenario["rm"].id
+    assert t.ciclo_id == escenario["ciclo"].id
+    assert db.query(MedicoVisita).count() == 0   # el módulo de Visita, no
+
+    errores_md99 = [h for h in hallazgos
+                    if h.severidad == viz.SEVERIDAD_ERROR and h.origen_id == "VM01/MD99"]
+    assert len(errores_md99) == 1
+    assert "MD99" in errores_md99[0].problema
+    assert "DIM_MedicoVisita" in errores_md99[0].problema
+
+
 def test_visita_medico_crea_fila_en_factvisita_del_modulo(panel_listo):
     db = panel_listo["db"]
     db.add(ExtFactVisitaMedico(

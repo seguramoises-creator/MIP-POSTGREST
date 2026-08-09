@@ -183,8 +183,20 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
                           hallazgos: list,
                           estados_lote: dict[int, str] | None = None) -> ConteoHecho:
     """`ext.panelmedico` → DOS destinos: `Config.DIM_TargetMedico` (universo del
-    módulo 4DX) y `Visita.DIM_MedicoVisita` (panel del módulo de Visita, fix del
-    defecto CRITICAL — ver docstring del módulo).
+    módulo 4DX) y, si el médico está sincronizado, `Visita.DIM_MedicoVisita`
+    (panel del módulo de Visita, fix del defecto CRITICAL — ver docstring del
+    módulo).
+
+    El primer destino se escribe SIEMPRE que ciclo y representante estén
+    resueltos — igual que antes de añadir el segundo destino (`git show
+    b899e87`): 4DX no debe perder universo por un médico que el maestro
+    todavía no sincronizó, justo el escenario del estreno con el maestro
+    incompleto. Una regresión posterior hizo depender los DOS destinos de
+    resolver el médico, y omitía la fila entera —incluido `DIM_TargetMedico`—
+    cuando el maestro le faltaba: se revirtió. Solo el segundo destino, que sí
+    necesita el maestro para tomar `nombre_completo`, se omite —con su propio
+    hallazgo— cuando no se puede resolver; mismo patrón, a propósito, que
+    `integrar_visitas_medico` ya usa para su propio segundo destino.
 
     La frecuencia (F1/F2) NO se guarda en ninguno de los dos: ni
     `DIM_TargetMedico` ni `DIM_MedicoVisita` tienen esa columna y no se les
@@ -222,20 +234,6 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
             _falta_ref(hallazgos, "panelmedico", clave, "el representante",
                        fila.rm_codigo)
             continue
-        # `Visita.DIM_MedicoVisita.nombre_completo` es NOT NULL y sale del
-        # maestro (`Config.DIM_Medico`), no de `ext` (§ "el maestro es la
-        # fuente"): sin el médico sincronizado no hay de dónde tomar ese
-        # nombre, así que la fila se omite completa — mismo requisito que ya
-        # exige `integrar_visitas_medico` para el mismo hecho.
-        maestro_medico_id = mapeo.id_mapeado(db, ENT_MEDICO, pais_codigo,
-                                             fila.medico_codigo)
-        maestro_medico = (db.get(Medico, maestro_medico_id)
-                          if maestro_medico_id is not None else None)
-        if maestro_medico is None:
-            conteo.omitidos += 1
-            _falta_ref(hallazgos, "panelmedico", clave, "el médico",
-                       fila.medico_codigo)
-            continue
 
         def _buscar(f=fila, cid=ciclo_id, rid=rm_id):
             return (db.query(TargetMedico)
@@ -260,6 +258,30 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
             TargetMedico, _buscar, _crear)
         registro.programado = fila.activo
         registro.activo = fila.activo
+        # Se cuenta por el destino "primario" (`TargetMedico`, igual que antes
+        # de añadir el segundo destino): entra siempre que ciclo/representante
+        # estén resueltos, sin depender de si el médico también lo está.
+        conteo.anotar(resultado, fila.lote_id)
+
+        # Segundo destino: `Visita.DIM_MedicoVisita.nombre_completo` es NOT
+        # NULL y sale del maestro (`Config.DIM_Medico`), no de `ext` (§ "el
+        # maestro es la fuente"). Sin el médico sincronizado no hay de dónde
+        # tomar ese nombre, así que SOLO este destino se omite -- el universo
+        # de 4DX ya quedó a salvo arriba -- con su propio hallazgo; mismo
+        # patrón que `integrar_visitas_medico` usa para su segundo destino.
+        maestro_medico_id = mapeo.id_mapeado(db, ENT_MEDICO, pais_codigo,
+                                             fila.medico_codigo)
+        maestro_medico = (db.get(Medico, maestro_medico_id)
+                          if maestro_medico_id is not None else None)
+        if maestro_medico is None:
+            hallazgos.append(Hallazgo(
+                "panelmedico", clave,
+                f"El médico «{fila.medico_codigo}» no está sincronizado; se "
+                f"integró a Cobertura Predictiva (Config.DIM_TargetMedico) "
+                f"pero NO al panel del módulo de Visita "
+                f"(Visita.DIM_MedicoVisita). Sincroniza el maestro de "
+                f"médicos primero.", SEVERIDAD_ERROR))
+            continue
 
         def _buscar_panel(rid=rm_id, mid=maestro_medico_id):
             return (db.query(MedicoVisita)
@@ -301,11 +323,9 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
         # adopción/actualización a propósito: si el GD ya corrigió el nombre a
         # mano, un re-envío del mismo panel no debe pisarlo — solo se toma del
         # maestro la primera vez, al crear.
-        # Se cuenta la fila por su destino "primario" (`TargetMedico`, igual
-        # que antes de este fix): las dos escrituras suceden atómicamente para
-        # la misma fila de `ext`, así que un solo `anotar` no falsea el
-        # conteo (evita duplicar el número de "integradas"/"actualizadas").
-        conteo.anotar(resultado, fila.lote_id)
+        # `conteo.anotar` ya se llamó arriba, sobre el destino primario
+        # (`TargetMedico`): no se repite aquí para no duplicar el número de
+        # "integradas"/"actualizadas" de una sola fila de `ext`.
     return conteo
 
 

@@ -39,6 +39,23 @@ saturaba a puntaje perfecto. Por eso `_pct` y `_promedio_diario` devuelven
 fracciones 0-1 — la multiplicación por 100 es responsabilidad exclusiva del
 motor, una sola vez.
 
+PROM_DIARIO: TASA CRUDA, SIN NORMALIZAR CONTRA NINGUNA META
+----------------------------------------------------------------
+Una versión anterior dividía la tasa (médicos distintos / días laborables)
+entre `DIM_MetaIndicador.meta_100`/`objetivo`, asumiendo que esa fila traía el
+objetivo propio de PROM_DIARIO. Fue un error de análisis, revertido: medido
+contra la base real, `meta_100 = 100` para los OCHO indicadores por igual — es
+el marcador de escala que usa el motor (`escala == 1` → ×100), no un objetivo
+por indicador — y los históricos que cargaba el Excel para PROM_DIARIO van de
+0.50 a 1.11, con su `resultado_porcentaje` correspondiente de 50 a 100: el
+sistema siempre esperó la tasa cruda, tal cual la interpreta el motor. Dividir
+entre `meta_100 = 100` hundía el valor (un RM con ~45 médicos en un ciclo de
+~40 días, ~100% de logro real, caía a ~1%) sin emitir un solo hallazgo, porque
+la meta SÍ existía — solo que no era la meta correcta para este indicador. Por
+eso `_promedio_diario` ya no recibe ni busca ninguna meta: médicos distintos
+visitados ÷ días laborables, tal cual, igual que las tres coberturas no dividen
+entre nada más que su propio universo.
+
 «SIN UNIVERSO» NO ES «COBERTURA CERO»: NO SE ESCRIBE LA FILA
 --------------------------------------------------------------
 Un lote parcial (por ejemplo, dimensiones+panel sin visitas todavía, o un RM
@@ -59,13 +76,32 @@ indicadores que sí se van a reemplazar: nunca borra uno que no va a reponer.
 Distinto es el caso de universo CON entidades pero ninguna visitada
 (denominador > 0, numerador 0): eso sí es cobertura cero real y sí se
 escribe `0` — penaliza, como debe.
+
+TAMBIÉN RESPETA EL GATE DE LOTE (VALIDADO/INTEGRADO)
+--------------------------------------------------------------
+`integracion_visitas_service` ya omite las filas de un lote que no esté en
+VALIDADO/INTEGRADO (`_ESTADOS_LOTE_INTEGRABLES`). Este módulo lee los MISMOS
+cuatro hechos de `ext` directamente —no pasa por esos integradores— así que
+tenía su propio agujero: un lote RECHAZADO, sin una sola fila integrada en las
+tablas internas, igual alimentaba estos cuatro indicadores y el Score.
+
+Se reutilizan `_ESTADOS_LOTE_INTEGRABLES`/`_resolver_estados_lotes` de
+`integracion_visitas_service` en vez de escribir un segundo criterio: dos
+definiciones de «lote integrable» sobre el mismo dato es justo lo que hay que
+evitar. `_lotes_integrables` los resuelve UNA sola vez por corrida (no una
+consulta por fila) y el resultado se filtra en cada consulta a `ext`,
+INCLUIDO el universo de RM con actividad (`rms`, más abajo): un RM cuya única
+fuente sea un lote no integrable no debe ni entrar al bucle, para que la regla
+de «sin universo no se pisa lo que hubiera antes» (ver la nota de arriba)
+también lo proteja a él — de lo contrario PROM_DIARIO, que no tiene noción de
+universo, escribiría una tasa cruda de `0` real y pisaría su valor previo.
 """
 from decimal import Decimal
 
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.models.dimensiones import Ciclo, Indicador, MetaIndicador, RepresentanteMedico
+from app.models.dimensiones import Ciclo, Indicador, RepresentanteMedico
 from app.models.hechos import ResultadoIndicador
 from app.models.integracion_ext import (
     ExtDimCiclo, ExtFactVisitaFarmacia, ExtFactVisitaMedico, ExtPanelMedico,
@@ -75,6 +111,7 @@ from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE
 from app.services import integracion_mapeo as mapeo
 from app.services.integracion_visitas_service import (
     SEVERIDAD_AVISO, SEVERIDAD_ERROR, Hallazgo,
+    _ESTADOS_LOTE_INTEGRABLES, _resolver_estados_lotes,
 )
 
 COB_MD_F1 = "COB_MD_F1"
@@ -116,8 +153,9 @@ def _indicadores_del_pais(db: Session, pais_codigo: str) -> dict[str, int]:
 
 
 def _medicos_visitados(db: Session, pais_codigo: str, ciclo_codigo: str,
-                       rm_codigo: str) -> set[str]:
-    """Códigos de los médicos con AL MENOS UNA visita ejecutada en el ciclo.
+                       rm_codigo: str, lotes_integrables: set[int]) -> set[str]:
+    """Códigos de los médicos con AL MENOS UNA visita ejecutada en el ciclo, en
+    un lote VALIDADO/INTEGRADO.
 
     Un `set` es la estructura que expresa la regla: «distintos visitados». Da
     igual cuántas veces aparezca cada médico. Tanto `V` (visita) como `R`
@@ -127,14 +165,15 @@ def _medicos_visitados(db: Session, pais_codigo: str, ciclo_codigo: str,
              .filter(ExtFactVisitaMedico.pais_codigo == pais_codigo,
                      ExtFactVisitaMedico.ciclo_codigo == ciclo_codigo,
                      ExtFactVisitaMedico.rm_codigo == rm_codigo,
-                     ExtFactVisitaMedico.ejecutada.is_(True))
+                     ExtFactVisitaMedico.ejecutada.is_(True),
+                     ExtFactVisitaMedico.lote_id.in_(lotes_integrables))
              .distinct().all())
     return {f[0] for f in filas}
 
 
 def _cobertura_medicos(db: Session, pais_codigo: str, ciclo_codigo: str,
-                       rm_codigo: str, frecuencia: str,
-                       visitados: set[str]) -> Decimal | None:
+                       rm_codigo: str, frecuencia: str, visitados: set[str],
+                       lotes_integrables: set[int]) -> Decimal | None:
     """Médicos distintos visitados de esa frecuencia / médicos de esa
     frecuencia en el panel.
 
@@ -145,78 +184,55 @@ def _cobertura_medicos(db: Session, pais_codigo: str, ciclo_codigo: str,
     Devuelve `None`, no `Decimal("0")`, si el panel de esta frecuencia está
     vacío: sin universo no hay nada que medir (ver la nota de módulo «SIN
     UNIVERSO NO ES COBERTURA CERO»). El llamador es quien decide qué hacer con
-    ese `None` (no escribir la fila, avisar).
+    ese `None` (no escribir la fila, avisar). Un panel cuyas únicas filas
+    vengan de un lote no VALIDADO/INTEGRADO cuenta como universo vacío, igual
+    que si no existiera: `lotes_integrables` filtra eso antes de llegar aquí.
     """
     panel = {f[0] for f in db.query(ExtPanelMedico.medico_codigo)
              .filter(ExtPanelMedico.pais_codigo == pais_codigo,
                      ExtPanelMedico.ciclo_codigo == ciclo_codigo,
                      ExtPanelMedico.rm_codigo == rm_codigo,
                      ExtPanelMedico.frecuencia_objetivo == frecuencia,
-                     ExtPanelMedico.activo.is_(True)).distinct().all()}
+                     ExtPanelMedico.activo.is_(True),
+                     ExtPanelMedico.lote_id.in_(lotes_integrables)).distinct().all()}
     if not panel:
         return None
     return _pct(len(panel & visitados), len(panel))
 
 
-def _meta_base_prom_diario(db: Session, indicador_id: int) -> Decimal | None:
-    """Base de normalización para PROM_DIARIO, leída de `Config.DIM_MetaIndicador`.
-
-    Mismo orden de preferencia que `motor_calculo_service.completar_puntajes`
-    (líneas ~66-74): `meta_100` si está, si no `objetivo`. Sin meta activa, sin
-    ninguno de los dos campos, o con un valor <= 0 → no hay base utilizable
-    (None): no se puede construir un ratio con eso.
-    """
-    m = (db.query(MetaIndicador)
-         .filter(MetaIndicador.indicador_id == indicador_id,
-                 MetaIndicador.activo.is_(True)).first())
-    if m is None:
-        return None
-    base = None
-    if m.meta_100 is not None:
-        base = Decimal(str(m.meta_100))
-    elif m.objetivo is not None:
-        base = Decimal(str(m.objetivo))
-    if base is None or base <= 0:
-        return None
-    return base
-
-
-def _promedio_diario(visitados: set[str], dias_laborables: int,
-                     meta: Decimal) -> Decimal:
-    """§2.1: «MÉDICOS visitados dividido entre los días laborables del ciclo»,
-    normalizado contra la meta configurada (`meta`, ver `_meta_base_prom_diario`).
-
-    La tasa cruda (médicos/día) no es una fracción de logro por sí sola — con
-    `escala == 1` el motor la interpretaría como tal (0.05 médicos/día → «5%
-    de cumplimiento»; 2.25 médicos/día saturaría al 100%). Dividir entre la
-    meta la convierte en la fracción de logro que el motor sí espera.
+def _promedio_diario(visitados: set[str], dias_laborables: int) -> Decimal:
+    """§2.1: «MÉDICOS visitados dividido entre los días laborables del ciclo».
+    Tasa CRUDA, sin normalizar contra ninguna meta — ver la nota de módulo
+    «PROM_DIARIO: TASA CRUDA».
 
     Médicos distintos, no visitas: un médico visitado tres veces aporta 1. Se
     reutiliza el mismo conjunto que la cobertura, así los dos indicadores no
     pueden divergir en qué cuenta como visitado.
 
-    NO se acota el resultado: un RM que sobrecumple la meta debe verse en los
-    datos como sobrecumplimiento real. El motor ya acota a [0,100] después de
+    NO se acota el resultado: un RM que sobrecumple debe verse en los datos
+    como sobrecumplimiento real. El motor ya acota a [0,100] después de
     multiplicar por 100 — acotar aquí lo escondería antes de que llegue ahí.
     """
     if dias_laborables <= 0:
         return Decimal("0")
-    tasa = Decimal(len(visitados)) / Decimal(dias_laborables)
-    return (tasa / meta).quantize(Decimal("0.0001"))
+    return (Decimal(len(visitados)) / Decimal(dias_laborables)).quantize(Decimal("0.0001"))
 
 
 def _cobertura_farmacias(db: Session, pais_codigo: str, ciclo_codigo: str,
-                         rm_codigo: str) -> Decimal | None:
+                         rm_codigo: str,
+                         lotes_integrables: set[int]) -> Decimal | None:
     """Farmacias distintas visitadas / farmacias en el target.
 
     `None`, no `Decimal("0")`, si el RM no tiene target de farmacias — mismo
-    criterio que `_cobertura_medicos` (ver la nota de módulo).
+    criterio que `_cobertura_medicos` (ver la nota de módulo), incluido el
+    filtro de lote integrable en las dos consultas (target y visitadas).
     """
     target = {f[0] for f in db.query(ExtTargetFarmacia.farmacia_codigo)
               .filter(ExtTargetFarmacia.pais_codigo == pais_codigo,
                       ExtTargetFarmacia.ciclo_codigo == ciclo_codigo,
                       ExtTargetFarmacia.rm_codigo == rm_codigo,
-                      ExtTargetFarmacia.activo.is_(True)).distinct().all()}
+                      ExtTargetFarmacia.activo.is_(True),
+                      ExtTargetFarmacia.lote_id.in_(lotes_integrables)).distinct().all()}
     if not target:
         return None
 
@@ -224,9 +240,33 @@ def _cobertura_farmacias(db: Session, pais_codigo: str, ciclo_codigo: str,
                  .filter(ExtFactVisitaFarmacia.pais_codigo == pais_codigo,
                          ExtFactVisitaFarmacia.ciclo_codigo == ciclo_codigo,
                          ExtFactVisitaFarmacia.rm_codigo == rm_codigo,
-                         ExtFactVisitaFarmacia.ejecutada.is_(True))
+                         ExtFactVisitaFarmacia.ejecutada.is_(True),
+                         ExtFactVisitaFarmacia.lote_id.in_(lotes_integrables))
                  .distinct().all()}
     return _pct(len(target & visitadas), len(target))
+
+
+def _lotes_integrables(db: Session, pais_codigo: str, ciclo_codigo: str) -> set[int]:
+    """Los `lote_id` en VALIDADO/INTEGRADO (`_ESTADOS_LOTE_INTEGRABLES`, de
+    `integracion_visitas_service`) entre los que aportan filas a este
+    país/ciclo, en cualquiera de los 4 hechos de `ext` que lee este módulo.
+
+    Resuelto UNA sola vez por corrida (no una consulta por fila ni por RM):
+    primero los `lote_id` presentes en `ext` para este país/ciclo, luego su
+    estado en una sola consulta a `ExtControlCarga` vía
+    `_resolver_estados_lotes`. El resultado se pasa a cada helper de más abajo
+    para filtrar sus consultas.
+    """
+    modelos = (ExtFactVisitaMedico, ExtPanelMedico, ExtTargetFarmacia,
+              ExtFactVisitaFarmacia)
+    lote_ids: set[int] = set()
+    for modelo in modelos:
+        lote_ids |= {f[0] for f in db.query(modelo.lote_id)
+                     .filter(modelo.pais_codigo == pais_codigo,
+                             modelo.ciclo_codigo == ciclo_codigo).distinct().all()}
+    estados = _resolver_estados_lotes(db, lote_ids)
+    return {lid for lid, estado in estados.items()
+            if estado in _ESTADOS_LOTE_INTEGRABLES}
 
 
 def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
@@ -277,28 +317,21 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
             f"no se calculó. Créalo en Administración → Indicadores.",
             SEVERIDAD_ERROR))
 
-    # PROM_DIARIO necesita una meta configurada para convertirse en fracción
-    # de logro (ver `_promedio_diario`). Se resuelve una sola vez para todo el
-    # país/ciclo -- la meta no varía por RM -- y si falta, ningún RM escribe
-    # esa fila: una tasa cruda sin normalizar sería peor que no escribir nada
-    # (se leería como un cumplimiento ridículamente bajo).
-    prom_diario_meta = None
-    if PROM_DIARIO in ids:
-        prom_diario_meta = _meta_base_prom_diario(db, ids[PROM_DIARIO])
-        if prom_diario_meta is None:
-            hallazgos.append(Hallazgo(
-                "indicador", PROM_DIARIO,
-                f"Falta configurar la meta de {PROM_DIARIO} en {pais_codigo} "
-                f"(Administración → Metas); no se calculó para ningún "
-                f"representante.", SEVERIDAD_ERROR))
+    # Gate de lote (ver la nota de módulo «TAMBIÉN RESPETA EL GATE DE LOTE»):
+    # resuelto UNA sola vez para toda la corrida, no por fila ni por RM.
+    lotes_integrables = _lotes_integrables(db, pais_codigo, ciclo_codigo)
 
-    # Los RM con actividad: los del panel más los que solo tienen farmacias.
+    # Los RM con actividad: los del panel más los que solo tienen farmacias,
+    # acotados a lotes VALIDADO/INTEGRADO -- un RM cuya única fuente sea un
+    # lote no integrable no debe ni entrar al bucle (ver la nota de módulo).
     rms = {f[0] for f in db.query(ExtPanelMedico.rm_codigo)
            .filter(ExtPanelMedico.pais_codigo == pais_codigo,
-                   ExtPanelMedico.ciclo_codigo == ciclo_codigo).distinct()}
+                   ExtPanelMedico.ciclo_codigo == ciclo_codigo,
+                   ExtPanelMedico.lote_id.in_(lotes_integrables)).distinct()}
     rms |= {f[0] for f in db.query(ExtTargetFarmacia.rm_codigo)
             .filter(ExtTargetFarmacia.pais_codigo == pais_codigo,
-                    ExtTargetFarmacia.ciclo_codigo == ciclo_codigo).distinct()}
+                    ExtTargetFarmacia.ciclo_codigo == ciclo_codigo,
+                    ExtTargetFarmacia.lote_id.in_(lotes_integrables)).distinct()}
 
     filas_escritas = 0
     rms_calculados = 0
@@ -323,22 +356,25 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
             continue
 
         rms_calculados += 1
-        visitados = _medicos_visitados(db, pais_codigo, ciclo_codigo, rm_codigo)
+        visitados = _medicos_visitados(db, pais_codigo, ciclo_codigo, rm_codigo,
+                                       lotes_integrables)
 
-        # `None` = sin universo (panel/target vacío para este RM): no hay
-        # nada que medir, así que el código queda fuera de `valores` y, más
-        # abajo, fuera de lo que se borra e inserta. Se reporta como aviso,
-        # no error: no es una falla de configuración, es una carga parcial o
-        # un RM legítimamente sin ese universo.
+        # `None` = sin universo (panel/target vacío para este RM, ya filtrado
+        # por lote integrable): no hay nada que medir, así que el código queda
+        # fuera de `valores` y, más abajo, fuera de lo que se borra e inserta.
+        # Se reporta como aviso, no error: no es una falla de configuración, es
+        # una carga parcial o un RM legítimamente sin ese universo.
         candidatos: dict[str, tuple[Decimal | None, str]] = {
             COB_MD_F1: (_cobertura_medicos(db, pais_codigo, ciclo_codigo,
-                                           rm_codigo, "F1", visitados),
+                                           rm_codigo, "F1", visitados,
+                                           lotes_integrables),
                         "no tiene panel médico F1"),
             COB_MD_F2: (_cobertura_medicos(db, pais_codigo, ciclo_codigo,
-                                           rm_codigo, "F2", visitados),
+                                           rm_codigo, "F2", visitados,
+                                           lotes_integrables),
                         "no tiene panel médico F2"),
             COB_FARMACIAS: (_cobertura_farmacias(db, pais_codigo, ciclo_codigo,
-                                                 rm_codigo),
+                                                 rm_codigo, lotes_integrables),
                             "no tiene target de farmacias"),
         }
         valores: dict[str, Decimal] = {}
@@ -352,11 +388,9 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
                     SEVERIDAD_AVISO))
             else:
                 valores[codigo] = valor
-        # Sin meta utilizable no hay ratio que calcular: PROM_DIARIO se queda
-        # fuera de `valores` y, más abajo, fuera de lo que se escribe.
-        if prom_diario_meta is not None:
+        if PROM_DIARIO in ids:
             valores[PROM_DIARIO] = _promedio_diario(
-                visitados, ciclo_ext.dias_laborables, prom_diario_meta)
+                visitados, ciclo_ext.dias_laborables)
 
         # Delete-then-insert acotado a los códigos que SÍ se van a reemplazar
         # ahora: un indicador sin universo no se borra, porque no se repone.
