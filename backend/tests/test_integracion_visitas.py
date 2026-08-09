@@ -31,9 +31,12 @@ from app.models.integracion_ext import (
 from app.models.mapeo_externo import (
     ENT_CICLO, ENT_FARMACIA, ENT_MEDICO, ENT_REPRESENTANTE, MapeoExterno,
 )
-from app.models.visita import FactVisitaFarmacia, FarmaciaVisita
+from app.models.visita import (
+    FactVisitaFarmacia, FarmaciaVisita, MedicoVisita, VisitaRegistro,
+)
 from app.services import cobertura_farmacia_service
 from app.services import integracion_visitas_service as viz
+from app.services import visita_cobertura_service
 
 BD_PRUEBA = "vista_test_visitas_int"
 
@@ -71,7 +74,8 @@ def motor():
 def db(motor):
     Sesion = sessionmaker(bind=motor)
     s = Sesion()
-    for tabla in ('"Visita"."FactVisitaFarmacia"', '"Visita"."DIM_FarmaciaVisita"',
+    for tabla in ('"Visita"."FactVisita"', '"Visita"."FactVisitaFarmacia"',
+                  '"Visita"."DIM_MedicoVisita"', '"Visita"."DIM_FarmaciaVisita"',
                   '"Config"."DIM_Farmacia"', "ext.factvisitafarmacia",
                   "ext.targetfarmacia", "ext.dimfarmacia",
                   '"DW"."FACT_Visita"', '"Config"."DIM_TargetMedico"',
@@ -142,6 +146,23 @@ def _panel(db, medico="MD01", frecuencia="F1", programadas=2):
     db.flush()
 
 
+@pytest.fixture
+def panel_listo(escenario):
+    """`escenario` + el panel de `Visita.DIM_MedicoVisita` ya integrado para
+    MD01/VM01, vía el integrador real (no sembrado a mano): desde el fix del
+    defecto CRITICAL, `integrar_visitas_medico` exige que el médico ya tenga
+    panel ahí (lo deja `integrar_panel_medico`, que corre antes en
+    `_INTEGRADORES`) para poder escribir en `Visita.FactVisita`. Los tests que
+    ejercitan `integrar_visitas_medico` en aislado (sin pasar por
+    `integrar_todo`) necesitan este precondición sembrada."""
+    db = escenario["db"]
+    _panel(db)
+    db.commit()
+    viz.integrar_panel_medico(db, "DO", "C01-2026", [])
+    db.commit()
+    return escenario
+
+
 def _visita(db, origen_id, medico="MD01", ejecutada=True, tipo="V", dia=15):
     db.add(ExtFactVisitaMedico(
         lote_id=1001, origen_id=origen_id, pais_codigo="DO",
@@ -172,8 +193,8 @@ def test_panel_crea_el_target_medico(escenario):
     assert t.potencial is None
 
 
-def test_visita_ejecutada_entra_como_realizada(escenario):
-    db = escenario["db"]
+def test_visita_ejecutada_entra_como_realizada(panel_listo):
+    db = panel_listo["db"]
     _visita(db, "V-0001")
     db.commit()
     hallazgos = []
@@ -189,8 +210,8 @@ def test_visita_ejecutada_entra_como_realizada(escenario):
     assert v.carga_excel_id is None
 
 
-def test_visita_no_ejecutada_entra_como_cancelada(escenario):
-    db = escenario["db"]
+def test_visita_no_ejecutada_entra_como_cancelada(panel_listo):
+    db = panel_listo["db"]
     _visita(db, "V-0002", ejecutada=False)
     db.commit()
     hallazgos = []
@@ -201,10 +222,10 @@ def test_visita_no_ejecutada_entra_como_cancelada(escenario):
     assert db.query(FactVisita).one().estado_visita == "Cancelada"
 
 
-def test_reintegrar_no_duplica_visitas(escenario):
+def test_reintegrar_no_duplica_visitas(panel_listo):
     """El origen_id del contrato es la clave de idempotencia: reenviar el mismo
     lote corrige, no duplica."""
-    db = escenario["db"]
+    db = panel_listo["db"]
     _visita(db, "V-0001")
     db.commit()
     hallazgos = []
@@ -219,10 +240,10 @@ def test_reintegrar_no_duplica_visitas(escenario):
     assert db.query(FactVisita).count() == 1
 
 
-def test_visita_con_medico_sin_sincronizar_se_omite(escenario):
+def test_visita_con_medico_sin_sincronizar_se_omite(panel_listo):
     """Una referencia sin mapeo NO se resuelve al vuelo: eso es trabajo de la
     sincronización de dimensiones. Se omite y el resto del lote sí entra."""
-    db = escenario["db"]
+    db = panel_listo["db"]
     db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD99",
                         nombre="Doctor Sin Sincronizar", activo=True))
     db.flush()
@@ -489,11 +510,11 @@ def test_resumen_no_mezcla_ciclos_del_mismo_pais(farmacia):
     assert visita_c02["integradas"] == 1
 
 
-def test_resumen_integradas_iguala_en_ext_y_baja_con_omitidos(escenario):
+def test_resumen_integradas_iguala_en_ext_y_baja_con_omitidos(panel_listo):
     """Cuando todo se integra bien, `integradas` coincide con `en_ext`. Si una
     fila se omite por falta de dimensión (médico sin sincronizar), no entra a
     `MapeoExterno` y `integradas` debe quedar por debajo de `en_ext`."""
-    db = escenario["db"]
+    db = panel_listo["db"]
     db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MD99",
                         nombre="Doctor Sin Sincronizar", activo=True))
     db.flush()
@@ -734,6 +755,7 @@ def test_lote_no_se_cierra_si_tiene_filas_de_otro_ciclo(farmacia):
     lote — las filas del otro ciclo quedarían huérfanas y, como el lote ya
     estaría INTEGRADO, ni siquiera se podrían re-validar."""
     db = farmacia["db"]
+    _panel(db)               # el médico necesita panel para el segundo destino
     _visita(db, "V-0001")   # ciclo C01-2026, lote 1001
 
     # Un segundo ciclo, sincronizado, con una fila del MISMO lote 1001.
@@ -789,3 +811,187 @@ def test_visita_farmacia_fuera_de_target_es_aviso_no_error(farmacia):
     assert db.query(FactVisitaFarmacia).count() == 0
     h = next(h for h in hallazgos if h.origen_id == "VF-0099")
     assert h.severidad == viz.SEVERIDAD_AVISO
+
+
+# ===========================================================================
+# DEFECTO CRITICAL — el módulo de Visita tiene sus propias tablas
+# (Visita.DIM_MedicoVisita / Visita.FactVisita), distintas de las de Cobertura
+# Predictiva (Config.DIM_TargetMedico / DW.FACT_Visita). La integración solo
+# alimentaba las segundas; Cobertura del módulo Visita, Costo/ROI, parrilla,
+# acompañadas de Coaching MORE y el panel de salud del ciclo se quedaban
+# congelados en cero. Ver docstring de `integracion_visitas_service`.
+# ===========================================================================
+
+def test_panel_medico_crea_fila_en_dim_medicovisita(escenario):
+    db = escenario["db"]
+    _panel(db)
+    db.commit()
+    hallazgos = []
+
+    viz.integrar_panel_medico(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert db.query(MedicoVisita).count() == 1
+    panel = db.query(MedicoVisita).one()
+    assert panel.vm_id == escenario["rm"].id
+    assert panel.maestro_medico_id == escenario["medico"].id
+    assert panel.estado_aprobacion == "APROBADO"
+    assert panel.nombre_completo == escenario["medico"].nombre.upper()
+    assert panel.activo is True
+    # Los dos destinos nacen de la MISMA fila de `ext.panelmedico`: el de 4DX
+    # (`Config.DIM_TargetMedico`) sigue escribiéndose como antes del fix.
+    assert db.query(TargetMedico).count() == 1
+
+
+def test_panel_medico_adopta_panel_pendiente_de_alta(escenario):
+    """Si el VM ya había dado de alta este médico a mano, el panel existe en
+    PENDIENTE_ALTA. La integración del SFA debe ADOPTARLO (mismo id, no lo
+    duplica) y reafirmar APROBADO — igual que ya exige `integrar_target_farmacia`
+    con `DIM_FarmaciaVisita` (esa trampa —reasignar solo unos campos tras
+    `resolver()` y dejar otros sin sincronizar— ya costó dos rondas ahí)."""
+    db = escenario["db"]
+    panel_previo = MedicoVisita(
+        vm_id=escenario["rm"].id, maestro_medico_id=escenario["medico"].id,
+        nombre_completo="DOCTOR UNO", estado_aprobacion="PENDIENTE_ALTA",
+        activo=True, motivo="Dirección no verificable")
+    db.add(panel_previo)
+    db.commit()
+    panel_id = panel_previo.id
+
+    _panel(db)
+    db.commit()
+    hallazgos = []
+
+    viz.integrar_panel_medico(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert db.query(MedicoVisita).count() == 1
+    panel = db.query(MedicoVisita).one()
+    assert panel.id == panel_id
+    assert panel.estado_aprobacion == "APROBADO"
+    # El motivo del rechazo/observación anterior se limpia: un panel que el SFA
+    # acaba de aprobar no debe seguir mostrando el motivo viejo.
+    assert panel.motivo is None
+
+
+def test_visita_medico_crea_fila_en_factvisita_del_modulo(panel_listo):
+    db = panel_listo["db"]
+    db.add(ExtFactVisitaMedico(
+        lote_id=1001, origen_id="V-0007", pais_codigo="DO",
+        ciclo_codigo="C01-2026", rm_codigo="VM01", medico_codigo="MD01",
+        fecha_visita=date(2026, 1, 10), tipo_visita="V", ejecutada=True,
+        acompanado=True))
+    db.commit()
+    hallazgos = []
+
+    viz.integrar_visitas_medico(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    panel = db.query(MedicoVisita).filter(
+        MedicoVisita.vm_id == panel_listo["rm"].id,
+        MedicoVisita.maestro_medico_id == panel_listo["medico"].id).one()
+    v = db.query(VisitaRegistro).one()
+    assert v.medico_id == panel.id
+    assert v.vm_id == panel_listo["rm"].id
+    assert v.ciclo_id == panel_listo["ciclo"].id
+    assert v.tipo_visita == "V"
+    assert v.acompanado is True   # lo que consume Coaching MORE
+    assert v.ejecutada is True
+
+
+def test_visita_no_ejecutada_guarda_el_tipo_real_no_siempre_v(panel_listo):
+    """El flujo manual grababa siempre 'V' en las no-visitas, pero era una
+    limitación de su pantalla, no una regla de negocio: el `tipo_visita` real
+    del contrato (V/R) se respeta también cuando `ejecutada` es falso."""
+    db = panel_listo["db"]
+    _visita(db, "V-0009", ejecutada=False, tipo="R")
+    db.commit()
+    hallazgos = []
+
+    viz.integrar_visitas_medico(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    v = db.query(VisitaRegistro).one()
+    assert v.tipo_visita == "R"
+    assert v.ejecutada is False
+
+
+def test_visita_sin_panel_de_visita_omite_solo_ese_destino(escenario):
+    """El médico está sincronizado (`ENT_MEDICO`) pero su panel nunca se
+    integró en `Visita.DIM_MedicoVisita` (p. ej. llegó tarde a `panelmedico`):
+    la visita SÍ entra a 4DX (`DW.FACT_Visita`) —no depende del panel— pero el
+    segundo destino se omite con un hallazgo de error. No se crea el panel al
+    vuelo desde aquí: saltarse la aprobación VM→GD sería peor que perder la fila."""
+    db = escenario["db"]
+    _visita(db, "V-0001")
+    db.commit()
+    hallazgos = []
+
+    conteo = viz.integrar_visitas_medico(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert conteo.integrados == 1                  # 4DX sí recibió el dato
+    assert db.query(FactVisita).count() == 1
+    assert db.query(VisitaRegistro).count() == 0    # el módulo de Visita, no
+    assert any(h.severidad == viz.SEVERIDAD_ERROR and "panel" in h.problema
+               for h in hallazgos)
+
+
+def test_reintegrar_no_duplica_panel_ni_visita_del_modulo(panel_listo):
+    db = panel_listo["db"]
+    _visita(db, "V-0001")
+    db.commit()
+    viz.integrar_panel_medico(db, "DO", "C01-2026", [])
+    viz.integrar_visitas_medico(db, "DO", "C01-2026", [])
+    db.commit()
+
+    viz.integrar_panel_medico(db, "DO", "C01-2026", [])
+    viz.integrar_visitas_medico(db, "DO", "C01-2026", [])
+    db.commit()
+
+    assert db.query(MedicoVisita).count() == 1
+    assert db.query(VisitaRegistro).count() == 1
+
+
+def test_integrar_todo_puebla_los_dos_destinos_de_medico(farmacia):
+    """`integrar_todo` corre `panelmedico` antes que `factvisitamedico`
+    (`_INTEGRADORES`): el panel queda listo a tiempo para que la visita
+    encuentre su `medico_id`, sin que el llamador tenga que orquestar el orden
+    a mano."""
+    db = farmacia["db"]
+    _panel(db)
+    _visita(db, "V-0001")
+    db.commit()
+
+    viz.integrar_todo(db, "DO", "C01-2026")
+
+    assert db.query(MedicoVisita).count() == 1
+    assert db.query(VisitaRegistro).count() == 1
+
+
+def test_defecto_cerrado_cobertura_del_modulo_visita_deja_de_estar_en_cero(panel_listo):
+    """El test que demuestra que el defecto CRITICAL está cerrado.
+
+    Antes de este fix, `Visita.FactVisita`/`Visita.DIM_MedicoVisita` nunca se
+    poblaban desde la integración, así que `visita_cobertura_service.
+    resumen_cobertura` —el consumidor real del dashboard de Cobertura del
+    módulo de Visita— devolvía panel=0/visitados=0 para un RM con datos de
+    Mallén, aunque Cobertura Predictiva (4DX) sí mostrara actividad normal.
+
+    Verificado manualmente revirtiendo los dos bloques que escriben
+    `Visita.DIM_MedicoVisita`/`Visita.FactVisita` en `integracion_visitas_service`
+    (dejando solo `Config.DIM_TargetMedico`/`DW.FACT_Visita` intactos): con esa
+    reversión este test falla con `panel == 0`.
+    """
+    db = panel_listo["db"]
+    _visita(db, "V-0001")
+    db.commit()
+    viz.integrar_visitas_medico(db, "DO", "C01-2026", [])
+    db.commit()
+
+    resumen = visita_cobertura_service.resumen_cobertura(
+        db, ciclo_id=panel_listo["ciclo"].id, vm_id=panel_listo["rm"].id)
+
+    assert resumen["panel"] > 0
+    assert resumen["visitados"] > 0
+    assert resumen["pct_cobertura"] > 0

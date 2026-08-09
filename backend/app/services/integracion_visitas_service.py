@@ -2,14 +2,32 @@
 
 QUÉ ALIMENTA CADA COSA
 -----------------------
-Poblar `DIM_TargetMedico` y `DW.FACT_Visita` alimenta el módulo de Cobertura
-Predictiva (4DX) y sus dashboards en vivo. **No alimenta los ocho indicadores del
-Score**: esos los calcula `integracion_indicadores_service` a partir de `ext`,
-porque VISTA nunca los derivó de visitas — llegaban ya calculados en un Excel.
+VISTA tiene DOS tablas de visita distintas, y cada hecho de `ext` alimenta a
+las DOS (fix del defecto CRITICAL: antes solo se escribía la primera).
+
+- `panelmedico` → `Config.DIM_TargetMedico` (universo del módulo Cobertura
+  Predictiva/4DX) **y** `Visita.DIM_MedicoVisita` (panel del módulo de Visita).
+- `factvisitamedico` → `DW.FACT_Visita` (bitácora de 4DX) **y**
+  `Visita.FactVisita` (registro que consume el módulo de Visita: Cobertura,
+  Costo/ROI, parrilla y las visitas acompañadas que alimentan Coaching MORE).
+
+Sin el segundo destino de cada par, Cobertura Predictiva mostraba actividad
+normal mientras el módulo de Visita se quedaba congelado en cero — los dos
+endpoints de captura manual que antes escribían `Visita.DIM_MedicoVisita`/
+`Visita.FactVisita` se apagaron, y nada más los reemplazó hasta este fix.
+
+**No alimenta los ocho indicadores del Score**: esos los calcula
+`integracion_indicadores_service` a partir de `ext`, porque VISTA nunca los
+derivó de visitas — llegaban ya calculados en un Excel.
 
 Una fila cuya dimensión no esté sincronizada se OMITE con hallazgo, nunca se
 resuelve al vuelo: adoptar o crear dimensiones es trabajo del sub-proyecto 2 y
-duplicar esa lógica aquí llevaría a dos verdades sobre la misma identidad.
+duplicar esa lógica aquí llevaría a dos verdades sobre la misma identidad. Lo
+mismo aplica al panel de Visita: `integrar_visitas_medico` exige que el médico
+ya tenga fila en `Visita.DIM_MedicoVisita` (la deja `integrar_panel_medico`,
+que corre antes en `_INTEGRADORES`) — si no la encuentra, omite solo ese
+segundo destino con hallazgo; el numerador de 4DX (`DW.FACT_Visita`) entra
+igual, porque no depende del panel de Visita.
 
 Tampoco se integra una fila cuyo LOTE no esté en VALIDADO/INTEGRADO (ver
 `_ESTADOS_LOTE_INTEGRABLES`): el sub-proyecto 1 valida el lote y lo puede
@@ -23,7 +41,7 @@ from loguru import logger
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.dimensiones import TargetMedico
+from app.models.dimensiones import Medico, TargetMedico
 from app.models.hechos import Visita as FactVisita
 from app.models.integracion_ext import (
     ExtControlCarga, ExtFactVisitaFarmacia, ExtFactVisitaMedico, ExtPanelMedico,
@@ -32,7 +50,9 @@ from app.models.integracion_ext import (
 from app.models.mapeo_externo import (
     ENT_CICLO, ENT_FARMACIA, ENT_MEDICO, ENT_REPRESENTANTE, MapeoExterno,
 )
-from app.models.visita import FactVisitaFarmacia, FarmaciaVisita
+from app.models.visita import (
+    FactVisitaFarmacia, FarmaciaVisita, MedicoVisita, VisitaRegistro,
+)
 from app.services import integracion_mapeo as mapeo
 
 SEVERIDAD_ERROR = "error"
@@ -41,6 +61,16 @@ SEVERIDAD_AVISO = "aviso"
 #: Entidades propias de este sub-proyecto en `MapeoExterno`.
 ENT_TARGET_MEDICO = "target_medico"
 ENT_VISITA_MEDICO = "visita_medico"
+
+#: Entidades NUEVAS para el segundo destino de cada hecho de médico (el fix del
+#: defecto CRITICAL, ver docstring del módulo). NO reutilizan
+#: `ENT_TARGET_MEDICO`/`ENT_VISITA_MEDICO`: esas ya apuntan a
+#: `Config.DIM_TargetMedico`/`DW.FACT_Visita` con las mismas claves naturales
+#: (ciclo/rm/médico y origen_id respectivamente); compartir la entidad haría que
+#: `mapeo.resolver` buscara el `id_interno` en la tabla equivocada y corrompería
+#: el mapeo de ambos destinos.
+ENT_PANEL_MEDICO_VISITA = "panel_medico_visita"
+ENT_VISITA_MEDICO_REGISTRO = "visita_medico_registro"
 
 #: `MapeoExterno.codigo_externo` es String(60). Las claves compuestas que arman
 #: `integrar_panel_medico`/`integrar_target_farmacia` (ciclo/rm/entidad) pueden
@@ -152,10 +182,17 @@ def _omitir_por_lote(conteo: ConteoHecho, hallazgos: list, hecho: str,
 def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
                           hallazgos: list,
                           estados_lote: dict[int, str] | None = None) -> ConteoHecho:
-    """`ext.panelmedico` → `Config.DIM_TargetMedico` (universo del módulo 4DX).
+    """`ext.panelmedico` → DOS destinos: `Config.DIM_TargetMedico` (universo del
+    módulo 4DX) y `Visita.DIM_MedicoVisita` (panel del módulo de Visita, fix del
+    defecto CRITICAL — ver docstring del módulo).
 
-    La frecuencia (F1/F2) NO se guarda: `DIM_TargetMedico` no tiene esa columna y
-    no se le añade. El motor de indicadores la lee de `ext`, que es su origen.
+    La frecuencia (F1/F2) NO se guarda en ninguno de los dos: ni
+    `DIM_TargetMedico` ni `DIM_MedicoVisita` tienen esa columna y no se les
+    añade. El motor de indicadores la lee de `ext`, que es su origen.
+
+    El segundo destino entra como APROBADO, igual que `integrar_target_farmacia`
+    con `DIM_FarmaciaVisita`: es maestro oficial del SFA y no pasa por la cola
+    de aprobación VM→GD que existe para las altas que pide un representante.
     """
     conteo = ConteoHecho("panelmedico")
     filas = (db.query(ExtPanelMedico)
@@ -185,6 +222,20 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
             _falta_ref(hallazgos, "panelmedico", clave, "el representante",
                        fila.rm_codigo)
             continue
+        # `Visita.DIM_MedicoVisita.nombre_completo` es NOT NULL y sale del
+        # maestro (`Config.DIM_Medico`), no de `ext` (§ "el maestro es la
+        # fuente"): sin el médico sincronizado no hay de dónde tomar ese
+        # nombre, así que la fila se omite completa — mismo requisito que ya
+        # exige `integrar_visitas_medico` para el mismo hecho.
+        maestro_medico_id = mapeo.id_mapeado(db, ENT_MEDICO, pais_codigo,
+                                             fila.medico_codigo)
+        maestro_medico = (db.get(Medico, maestro_medico_id)
+                          if maestro_medico_id is not None else None)
+        if maestro_medico is None:
+            conteo.omitidos += 1
+            _falta_ref(hallazgos, "panelmedico", clave, "el médico",
+                       fila.medico_codigo)
+            continue
 
         def _buscar(f=fila, cid=ciclo_id, rid=rm_id):
             return (db.query(TargetMedico)
@@ -209,6 +260,51 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
             TargetMedico, _buscar, _crear)
         registro.programado = fila.activo
         registro.activo = fila.activo
+
+        def _buscar_panel(rid=rm_id, mid=maestro_medico_id):
+            return (db.query(MedicoVisita)
+                    .filter(MedicoVisita.vm_id == rid,
+                            MedicoVisita.maestro_medico_id == mid)
+                    .first())
+
+        def _crear_panel(f=fila, rid=rm_id, mid=maestro_medico_id, cid=ciclo_id,
+                         nombre=maestro_medico.nombre):
+            # Los campos sin origen claro (frecuencia_visita, especialidad,
+            # ubicación, contacto...) quedan NULL/default: `ext.panelmedico` no
+            # los trae y adivinarlos sería peor que dejarlos vacíos.
+            nuevo = MedicoVisita(
+                vm_id=rid, maestro_medico_id=mid, codigo=f.medico_codigo,
+                nombre_completo=(nombre or "").strip().upper(),
+                activo=f.activo, estado_aprobacion="APROBADO",
+                ciclo_alta_id=cid)
+            db.add(nuevo)
+            db.flush()
+            return nuevo
+
+        panel, _resultado_panel = mapeo.resolver(
+            db, ENT_PANEL_MEDICO_VISITA, pais_codigo, clave_mapeo,
+            MedicoVisita, _buscar_panel, _crear_panel)
+        panel.activo = fila.activo
+        # El panel puede haber sido ADOPTADO desde un alta que el VM ya había
+        # solicitado a mano (PENDIENTE_ALTA/RECHAZADO): el SFA es maestro
+        # oficial y no pasa por la cola VM→GD, así que se reafirma APROBADO
+        # también en el camino de adopción/actualización, no solo al crear —
+        # mismo patrón que `integrar_target_farmacia` con `DIM_FarmaciaVisita`.
+        panel.estado_aprobacion = "APROBADO"
+        # `motivo` guarda el texto con que el GD rechazó el alta. Sin
+        # limpiarlo, un panel que el SFA acaba de aprobar seguiría mostrando el
+        # motivo de rechazo viejo en el panel del VM.
+        panel.motivo = None
+        # `ciclos_sin_visita` NO se toca aquí (ni al crear ni al adoptar): lo
+        # calcula el rodaje de cierre de ciclo (Ruptura de Secuencia), no la
+        # integración. `nombre_completo` tampoco se reafirma en el camino de
+        # adopción/actualización a propósito: si el GD ya corrigió el nombre a
+        # mano, un re-envío del mismo panel no debe pisarlo — solo se toma del
+        # maestro la primera vez, al crear.
+        # Se cuenta la fila por su destino "primario" (`TargetMedico`, igual
+        # que antes de este fix): las dos escrituras suceden atómicamente para
+        # la misma fila de `ext`, así que un solo `anotar` no falsea el
+        # conteo (evita duplicar el número de "integradas"/"actualizadas").
         conteo.anotar(resultado, fila.lote_id)
     return conteo
 
@@ -216,10 +312,28 @@ def integrar_panel_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
 def integrar_visitas_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
                             hallazgos: list,
                             estados_lote: dict[int, str] | None = None) -> ConteoHecho:
-    """`ext.factvisitamedico` → `DW.FACT_Visita` (bitácora del módulo 4DX).
+    """`ext.factvisitamedico` → DOS destinos: `DW.FACT_Visita` (bitácora del
+    módulo 4DX) y `Visita.FactVisita` (registro que consume el módulo de
+    Visita: Cobertura, Costo/ROI, parrilla y acompañadas de Coaching MORE — fix
+    del defecto CRITICAL, ver docstring del módulo).
 
     `origen_id` es la clave de idempotencia que garantiza el contrato: reenviar
-    el mismo registro corrige la fila, no la duplica.
+    el mismo registro corrige la fila, no la duplica (para los dos destinos,
+    cada uno con su propia entidad de `MapeoExterno`).
+
+    El segundo destino exige que el médico ya tenga panel en
+    `Visita.DIM_MedicoVisita` — lo deja `integrar_panel_medico`, que corre
+    antes en `_INTEGRADORES`, así que la fila normalmente existirá. Si no la
+    encuentra, esa mitad se omite con hallazgo de error (no se crea el panel al
+    vuelo desde aquí: saltarse el flujo de aprobación VM→GD sería peor que
+    perder la fila); el primer destino (`DW.FACT_Visita`, que no depende del
+    panel) entra igual.
+
+    `gerente_codigo` del contrato se descarta a propósito: `Visita.FactVisita`
+    no tiene columna para "quién acompañó" y no se le añade aquí. No se pierde
+    función — Coaching resuelve el gerente de una visita acompañada por
+    `RepresentanteMedico.gerente_id`, no por lo que reporte el contrato de
+    Mallén.
     """
     conteo = ConteoHecho("factvisitamedico")
     filas = (db.query(ExtFactVisitaMedico)
@@ -251,7 +365,9 @@ def integrar_visitas_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
         # El médico se referencia por CÓDIGO en FACT_Visita, no por id, pero se
         # exige que esté sincronizado: una visita a un médico que VISTA no conoce
         # inflaría la cobertura con un contacto que no se puede auditar.
-        if mapeo.id_mapeado(db, ENT_MEDICO, pais_codigo, fila.medico_codigo) is None:
+        maestro_medico_id = mapeo.id_mapeado(db, ENT_MEDICO, pais_codigo,
+                                             fila.medico_codigo)
+        if maestro_medico_id is None:
             conteo.omitidos += 1
             _falta_ref(hallazgos, "factvisitamedico", fila.origen_id,
                        "el médico", fila.medico_codigo)
@@ -277,7 +393,57 @@ def integrar_visitas_medico(db: Session, pais_codigo: str, ciclo_codigo: str,
         registro.fecha_visita = fila.fecha_visita
         registro.tipo_contacto = fila.tipo_visita
         registro.estado_visita = "Realizada" if fila.ejecutada else "Cancelada"
+        # Se cuenta por el destino de 4DX (igual que antes de este fix): las
+        # dos escrituras son una sola acción lógica sobre la misma fila de
+        # `ext`, así que un solo `anotar` evita duplicar "integradas". El
+        # segundo destino, si falla por falta de panel, se informa aparte con
+        # su propio hallazgo más abajo, sin tocar este conteo — 4DX sí recibió
+        # el dato, la omisión es solo del módulo de Visita.
         conteo.anotar(resultado, fila.lote_id)
+
+        panel = (db.query(MedicoVisita)
+                .filter(MedicoVisita.vm_id == rm_id,
+                        MedicoVisita.maestro_medico_id == maestro_medico_id)
+                .first())
+        if panel is None:
+            hallazgos.append(Hallazgo(
+                "factvisitamedico", fila.origen_id,
+                f"El médico «{fila.medico_codigo}» no tiene panel en "
+                f"Visita.DIM_MedicoVisita para el representante «{fila.rm_codigo}»"
+                f"; la visita se integró a Cobertura Predictiva pero NO al "
+                f"módulo de Visita. Sincroniza el panel (panelmedico) primero.",
+                SEVERIDAD_ERROR))
+            continue
+
+        def _buscar_registro():
+            return None  # la identidad la lleva el mapeo por origen_id
+
+        def _crear_registro(f=fila, cid=ciclo_id, rid=rm_id, mid=panel.id):
+            nuevo = VisitaRegistro(
+                vm_id=rid, ciclo_id=cid, medico_id=mid,
+                tipo_visita=f.tipo_visita,
+                fecha_hora=datetime(f.fecha_visita.year, f.fecha_visita.month,
+                                    f.fecha_visita.day),
+                ejecutada=f.ejecutada, acompanado=f.acompanado,
+                causa_no_visita=f.causa_no_visita,
+                # No lo capturó un usuario de VISTA y el contrato no lo manda:
+                # registrado_por/comentario/productos/latitud/longitud/foto/
+                # foto_mime quedan todos NULL (sin origen).
+                registrado_por=None)
+            db.add(nuevo)
+            db.flush()
+            return nuevo
+
+        registro_v, _resultado_v = mapeo.resolver(
+            db, ENT_VISITA_MEDICO_REGISTRO, pais_codigo, fila.origen_id,
+            VisitaRegistro, _buscar_registro, _crear_registro)
+        registro_v.medico_id = panel.id
+        registro_v.tipo_visita = fila.tipo_visita
+        registro_v.fecha_hora = datetime(
+            fila.fecha_visita.year, fila.fecha_visita.month, fila.fecha_visita.day)
+        registro_v.ejecutada = fila.ejecutada
+        registro_v.acompanado = fila.acompanado
+        registro_v.causa_no_visita = fila.causa_no_visita
     logger.info(f"Visitas médicas {pais_codigo}/{ciclo_codigo}: "
                 f"{conteo.integrados} nuevas, {conteo.omitidos} omitidas")
     return conteo
