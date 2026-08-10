@@ -144,6 +144,7 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
     visitados = con_revisita = 0
     cat = {c: {"total": 0, "visitados": 0, "completos": 0} for c in ("A", "B", "C")}
     sin_visita, falta_revisita = [], []
+    top_sin_visita, top_falta_revisita = [], []   # TOP: §7.3 regla 2
     for m in medicos:
         d = mapa.get(m.id)
         vis = bool(d and (d["v"] or d["r"]))
@@ -160,10 +161,17 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
         if comp:
             con_revisita += 1
         elif not vis:
-            sin_visita.append({"id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria,
-                               "especialidad_id": m.especialidad_id})
+            item = {"id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria,
+                    "especialidad_id": m.especialidad_id, "es_top": m.es_top}
+            sin_visita.append(item)
+            if m.es_top:
+                top_sin_visita.append(item)
         if vis and not comp:  # solo Vista, falta Revisita
-            falta_revisita.append({"id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria})
+            item = {"id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria,
+                    "es_top": m.es_top}
+            falta_revisita.append(item)
+            if m.es_top:
+                top_falta_revisita.append(item)
     return {
         "panel": total, "visitados": visitados, "con_revisita": con_revisita,
         "sin_visitar": total - visitados,
@@ -171,6 +179,7 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
         "pct_completa": _pct(con_revisita, total),
         "pct_gap": round(100 - _pct(visitados, total), 1),
         "categorias": cat, "sin_visita": sin_visita, "falta_revisita": falta_revisita,
+        "top_sin_visita": top_sin_visita, "top_falta_revisita": top_falta_revisita,
     }
 
 
@@ -185,7 +194,8 @@ def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | Non
     if ciclo_id is None:
         return {"ciclo_id": None, "panel": 0, "visitados": 0, "con_revisita": 0,
                 "sin_visitar": 0, "pct_cobertura": 0, "pct_completa": 0, "pct_gap": 0,
-                "categorias": {}, "sin_visita": [], "falta_revisita": [], "ruptura": []}
+                "categorias": {}, "sin_visita": [], "falta_revisita": [], "ruptura": [],
+                "top_sin_visita": [], "top_falta_revisita": []}
     base = _cobertura_base(db, ciclo_id, vm_id, gerente_id, linea_id, solo_ruptura, pais_codigo)
     # Ruptura de secuencia (≥3 ciclos sin visita) — respeta los mismos filtros de scope.
     rq = db.query(MedicoVisita).filter(

@@ -38,7 +38,7 @@ from app.models.visita import (
 )
 from app.services import cobertura_farmacia_service
 from app.services import integracion_visitas_service as viz
-from app.services import visita_cobertura_service
+from app.services import visita_cobertura_service as cob
 from app.models.visita import AvisoTopEnviado
 from app.models.visita import PlaneacionCiclo
 from app.schemas.visita import PlaneacionItem
@@ -81,8 +81,8 @@ def db(motor):
     Sesion = sessionmaker(bind=motor)
     s = Sesion()
     for tabla in ('"Visita"."AvisoTopEnviado"', '"Visita"."PlaneacionEvento"',
-                  '"Visita"."PlaneacionCiclo"', '"Visita"."DIM_MedicoVisita"',
-                  '"Visita"."FactVisita"', '"Visita"."FactVisitaFarmacia"',
+                  '"Visita"."PlaneacionCiclo"', '"Visita"."FactVisita"',
+                  '"Visita"."DIM_MedicoVisita"', '"Visita"."FactVisitaFarmacia"',
                   '"Visita"."DIM_FarmaciaVisita"',
                   '"Config"."DIM_Farmacia"', "ext.factvisitafarmacia",
                   "ext.targetfarmacia", "ext.dimfarmacia",
@@ -346,3 +346,57 @@ def test_guardar_borrador_nunca_se_bloquea_por_top(escenario):
         None)
 
     assert n == 1
+
+
+def _visita_reg(db, escenario, medico, tipo="V"):
+    db.add(VisitaRegistro(vm_id=escenario["rm"].id, ciclo_id=escenario["ciclo"].id,
+                          medico_id=medico.id, tipo_visita=tipo, ejecutada=True,
+                          fecha_hora=datetime(2026, 1, 15, 10, 0)))
+    db.flush()
+
+
+def test_top_sin_visita_sale_en_su_lista(escenario):
+    db = escenario["db"]
+    _medico(db, escenario, "DOCTOR TOP", True)
+    db.commit()
+
+    r = cob.resumen_cobertura(db, ciclo_id=escenario["ciclo"].id, vm_id=escenario["rm"].id)
+
+    assert [x["nombre"] for x in r["top_sin_visita"]] == ["DOCTOR TOP"]
+    assert r["top_falta_revisita"] == []
+
+
+def test_top_con_vista_sin_revisita(escenario):
+    db = escenario["db"]
+    top = _medico(db, escenario, "DOCTOR TOP", True)
+    _visita_reg(db, escenario, top, tipo="V")
+    db.commit()
+
+    r = cob.resumen_cobertura(db, ciclo_id=escenario["ciclo"].id, vm_id=escenario["rm"].id)
+
+    assert r["top_sin_visita"] == []
+    assert [x["nombre"] for x in r["top_falta_revisita"]] == ["DOCTOR TOP"]
+
+
+def test_medico_normal_no_entra_en_las_listas_top(escenario):
+    db = escenario["db"]
+    _medico(db, escenario, "DOCTOR NORMAL", False)
+    db.commit()
+
+    r = cob.resumen_cobertura(db, ciclo_id=escenario["ciclo"].id, vm_id=escenario["rm"].id)
+
+    assert [x["nombre"] for x in r["sin_visita"]] == ["DOCTOR NORMAL"]
+    assert r["top_sin_visita"] == []
+
+
+def test_visita_no_ejecutada_no_cubre_al_top(escenario):
+    db = escenario["db"]
+    top = _medico(db, escenario, "DOCTOR TOP", True)
+    db.add(VisitaRegistro(vm_id=escenario["rm"].id, ciclo_id=escenario["ciclo"].id,
+                          medico_id=top.id, tipo_visita="V", ejecutada=False,
+                          fecha_hora=datetime(2026, 1, 15, 10, 0)))
+    db.commit()
+
+    r = cob.resumen_cobertura(db, ciclo_id=escenario["ciclo"].id, vm_id=escenario["rm"].id)
+
+    assert [x["nombre"] for x in r["top_sin_visita"]] == ["DOCTOR TOP"]
