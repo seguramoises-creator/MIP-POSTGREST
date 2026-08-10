@@ -364,6 +364,10 @@ def test_top_sin_visita_sale_en_su_lista(escenario):
 
     assert [x["nombre"] for x in r["top_sin_visita"]] == ["DOCTOR TOP"]
     assert r["top_falta_revisita"] == []
+    # Las listas TOP son un SUBCONJUNTO, no un reemplazo: el TOP tiene que
+    # seguir contando en la lista general. Sin este assert, sacarlo de
+    # `sin_visita` no haría fallar ningún test.
+    assert "DOCTOR TOP" in [x["nombre"] for x in r["sin_visita"]]
 
 
 def test_top_con_vista_sin_revisita(escenario):
@@ -376,6 +380,8 @@ def test_top_con_vista_sin_revisita(escenario):
 
     assert r["top_sin_visita"] == []
     assert [x["nombre"] for x in r["top_falta_revisita"]] == ["DOCTOR TOP"]
+    # Subconjunto, no reemplazo (ver el test anterior).
+    assert "DOCTOR TOP" in [x["nombre"] for x in r["falta_revisita"]]
 
 
 def test_medico_normal_no_entra_en_las_listas_top(escenario):
