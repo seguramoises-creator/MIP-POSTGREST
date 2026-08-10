@@ -23,7 +23,7 @@ from app.models import (  # noqa: F401
 )
 from app.services import visita_top_service as top
 from app.models.dimensiones import (
-    Ciclo, Farmacia, Linea, Medico, Pais, RepresentanteMedico, TargetMedico,
+    Ciclo, Farmacia, Gerente, Linea, Medico, Pais, RepresentanteMedico, TargetMedico,
 )
 from app.models.hechos import Visita as FactVisita
 from app.models.integracion_ext import (
@@ -92,6 +92,7 @@ def db(motor):
                   "ext.panelmedico", "ext.controlcarga", "ext.dimmedico",
                   "ext.dimrepresentante", "ext.dimciclo", "ext.dimpais",
                   '"Config"."DIM_Medico"', '"Config"."DIM_RM"',
+                  '"Config"."DIM_Gerente"',
                   '"Config"."DIM_Ciclo"', '"Config"."DIM_Linea"',
                   '"Config"."DIM_Pais"'):
         s.execute(text(f"DELETE FROM {tabla}"))
@@ -114,7 +115,14 @@ def escenario(db):
     linea = Linea(pais_codigo="DO", codigo="CARD", nombre="Cardiología")
     db.add(linea)
     db.flush()
-    rm = RepresentanteMedico(pais_codigo="DO", linea_id=linea.id,
+    # Gerente de Distrito por defecto: la Tarea 5 (avisos de médicos TOP) escala
+    # al gerente del RM, así que el escenario base ya trae uno con correo. El
+    # test que necesita el caso "sin gerente" lo anula explícitamente (rm.gerente_id = None).
+    gerente = Gerente(pais_codigo="DO", codigo="GD01", nombre="Gerente Uno",
+                      email="gerente@ejemplo.com", tipo="DISTRITO")
+    db.add(gerente)
+    db.flush()
+    rm = RepresentanteMedico(pais_codigo="DO", linea_id=linea.id, gerente_id=gerente.id,
                              codigo="VM01", nombre="Representante Uno")
     ciclo = Ciclo(pais_codigo="DO", anio=2026, numero=1, nombre="Ciclo 1",
                   fecha_inicio=date(2026, 1, 1), fecha_fin=date(2026, 1, 31),
@@ -521,6 +529,106 @@ def test_escalamiento_solo_para_top_sin_cubrir(escenario):
     r = top.pendientes_escalamiento(db, escenario["ciclo"])
 
     assert [x["medico"] for x in r] == ["DOCTOR TOP"]
+
+
+from app.models.visita import AVISO_ESCALAMIENTO, AVISO_RECORDATORIO
+
+
+def test_procesar_avisos_registra_y_no_repite(escenario, monkeypatch):
+    """El test que justifica la tabla `AvisoTopEnviado`: sin ella, el cron
+    diario reenviaría el mismo correo cada mañana."""
+    db = escenario["db"]
+    enviados = []
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda *a, **k: (enviados.append(a) or True))
+    escenario["rm"].email = "rm@ejemplo.com"
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+
+    r1 = top.procesar_avisos(db, hoy=date(2026, 1, 20))
+    r2 = top.procesar_avisos(db, hoy=date(2026, 1, 20))
+
+    assert r1["recordatorios"] == 1
+    assert r2["recordatorios"] == 0          # no se repite
+    assert len(enviados) == 1
+    assert db.query(AvisoTopEnviado).filter_by(tipo_aviso=AVISO_RECORDATORIO).count() == 1
+
+
+def test_no_registra_si_el_correo_no_salio(escenario, monkeypatch):
+    """Marcar como enviado lo que no salió dejaría al representante sin aviso
+    para siempre, en silencio."""
+    db = escenario["db"]
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda *a, **k: False)
+    escenario["rm"].email = "rm@ejemplo.com"
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+
+    r = top.procesar_avisos(db, hoy=date(2026, 1, 20))
+
+    assert r["recordatorios"] == 0
+    assert db.query(AvisoTopEnviado).count() == 0
+
+
+def test_ciclo_cerrado_no_genera_avisos(escenario, monkeypatch):
+    db = escenario["db"]
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda *a, **k: True)
+    escenario["rm"].email = "rm@ejemplo.com"
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    escenario["ciclo"].cerrado = True
+    db.commit()
+
+    r = top.procesar_avisos(db, hoy=date(2026, 1, 20))
+
+    assert r["recordatorios"] == 0
+    assert db.query(AvisoTopEnviado).count() == 0
+
+
+def test_escalamiento_solo_pasado_el_umbral(escenario, monkeypatch):
+    db = escenario["db"]
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda *a, **k: True)
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_escalado",
+        lambda *a, **k: True)
+    escenario["rm"].email = "rm@ejemplo.com"
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+
+    # 15-ene = 50% del ciclo, por debajo del umbral de 70
+    r_antes = top.procesar_avisos(db, hoy=date(2026, 1, 15))
+    # 28-ene ya supera el 70%
+    r_despues = top.procesar_avisos(db, hoy=date(2026, 1, 28))
+
+    assert r_antes["escalamientos"] == 0
+    assert r_despues["escalamientos"] == 1
+    assert db.query(AvisoTopEnviado).filter_by(tipo_aviso=AVISO_ESCALAMIENTO).count() == 1
+
+
+def test_representante_sin_gerente_no_tumba_el_job(escenario, monkeypatch):
+    db = escenario["db"]
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda *a, **k: True)
+    escenario["rm"].email = "rm@ejemplo.com"
+    escenario["rm"].gerente_id = None
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+
+    r = top.procesar_avisos(db, hoy=date(2026, 1, 28))
+
+    assert r["escalamientos"] == 0
+    assert r["recordatorios"] == 1   # el recordatorio al RM sí sale
 
 
 def test_una_visita_no_cubre_una_revisita_planeada(escenario):

@@ -130,3 +130,96 @@ def pendientes_escalamiento(db: Session, ciclo: Ciclo) -> list[dict]:
                        "medico": m.nombre_completo, "tipo_visita": p.tipo_visita,
                        "fecha_planeada": fecha_planeada(ciclo, p.semana, p.dia_semana)})
     return salida
+
+
+#: Claves de configuración (editables desde Administración, tabla de config en BD).
+#: Los defaults son una posición razonable, NO una decisión del cliente: el
+#: pendiente nº 8 del §10 del requerimiento sigue abierto con Mallén.
+CFG_DIAS_RECORDATORIO = "top_dias_recordatorio"
+CFG_PCT_ESCALAMIENTO = "top_pct_ciclo_escalamiento"
+DIAS_RECORDATORIO_DEFAULT = 2
+PCT_ESCALAMIENTO_DEFAULT = 70
+
+
+def _ya_avisado(db: Session, ciclo_id: int, tipo_aviso: str) -> set[tuple]:
+    from app.models.visita import AvisoTopEnviado
+    filas = (db.query(AvisoTopEnviado.vm_id, AvisoTopEnviado.medico_id,
+                      AvisoTopEnviado.tipo_visita)
+             .filter(AvisoTopEnviado.ciclo_id == ciclo_id,
+                     AvisoTopEnviado.tipo_aviso == tipo_aviso).all())
+    return {(v, m, t) for v, m, t in filas}
+
+
+def _marcar(db: Session, ciclo_id: int, items: list[dict], tipo_aviso: str) -> None:
+    from app.models.visita import AvisoTopEnviado
+    for it in items:
+        db.add(AvisoTopEnviado(vm_id=it["vm_id"], ciclo_id=ciclo_id,
+                               medico_id=it["medico_id"],
+                               tipo_visita=it["tipo_visita"], tipo_aviso=tipo_aviso))
+
+
+def procesar_avisos(db: Session, hoy: date | None = None) -> dict:
+    """Recorre los ciclos ABIERTOS y manda lo que toque, una sola vez por caso.
+
+    Es un cron de RECONCILIACIÓN, no un temporizador: cada corrida vuelve a
+    preguntarle a la base qué está vencido. Por eso sobrevive a los reinicios
+    del contenedor, a diferencia de un job agendado en memoria.
+    """
+    from app.models.dimensiones import Gerente, RepresentanteMedico
+    from app.models.visita import AVISO_ESCALAMIENTO, AVISO_RECORDATORIO
+    from app.services import config_service, notification_service
+
+    hoy = hoy or date.today()
+    dias_gracia = config_service.obtener_int(db, CFG_DIAS_RECORDATORIO,
+                                             DIAS_RECORDATORIO_DEFAULT)
+    pct_umbral = config_service.obtener_int(db, CFG_PCT_ESCALAMIENTO,
+                                            PCT_ESCALAMIENTO_DEFAULT)
+    n_rec = n_esc = 0
+
+    # Ciclos CERRADOS no se procesan: son snapshots inmutables y nadie puede ya
+    # actuar sobre ellos.
+    for ciclo in db.query(Ciclo).filter(Ciclo.cerrado == False).all():  # noqa: E712
+        # ── Recordatorio al representante ────────────────────────────────
+        avisados = _ya_avisado(db, ciclo.id, AVISO_RECORDATORIO)
+        pend = [p for p in pendientes_recordatorio(db, ciclo, hoy, dias_gracia)
+                if (p["vm_id"], p["medico_id"], p["tipo_visita"]) not in avisados]
+        por_vm: dict[int, list] = {}
+        for p in pend:
+            por_vm.setdefault(p["vm_id"], []).append(p)
+        for vm_id, items in por_vm.items():
+            rm = db.query(RepresentanteMedico).filter(
+                RepresentanteMedico.id == vm_id).first()
+            if rm is None or not rm.email:
+                logger.warning(f"TOP: representante {vm_id} sin correo; no se avisa")
+                continue
+            if notification_service.notificar_top_pendiente(rm.email, rm.nombre, items):
+                _marcar(db, ciclo.id, items, AVISO_RECORDATORIO)
+                n_rec += len(items)
+
+        # ── Escalamiento al Gerente de Distrito ──────────────────────────
+        if pct_ciclo_transcurrido(db, ciclo, hoy) < pct_umbral:
+            continue
+        avisados_esc = _ya_avisado(db, ciclo.id, AVISO_ESCALAMIENTO)
+        pend_esc = [p for p in pendientes_escalamiento(db, ciclo)
+                    if (p["vm_id"], p["medico_id"], p["tipo_visita"]) not in avisados_esc]
+        por_gerente: dict[int, dict] = {}
+        for p in pend_esc:
+            rm = db.query(RepresentanteMedico).filter(
+                RepresentanteMedico.id == p["vm_id"]).first()
+            if rm is None or rm.gerente_id is None:
+                logger.warning(f"TOP: representante {p['vm_id']} sin gerente; no se escala")
+                continue
+            por_gerente.setdefault(rm.gerente_id, {}).setdefault(rm.nombre, []).append(p)
+        for gerente_id, por_rm in por_gerente.items():
+            g = db.query(Gerente).filter(Gerente.id == gerente_id).first()
+            if g is None or not g.email:
+                logger.warning(f"TOP: gerente {gerente_id} sin correo; no se escala")
+                continue
+            if notification_service.notificar_top_escalado(g.email, g.nombre, por_rm):
+                planos = [x for lista in por_rm.values() for x in lista]
+                _marcar(db, ciclo.id, planos, AVISO_ESCALAMIENTO)
+                n_esc += len(planos)
+
+    db.commit()
+    logger.info(f"Avisos de médicos TOP: {n_rec} recordatorios, {n_esc} escalamientos")
+    return {"recordatorios": n_rec, "escalamientos": n_esc}

@@ -620,6 +620,54 @@ def notificar_correcciones_examen(db, examen_id: int) -> int:
     return contador
 
 
+def notificar_top_pendiente(destinatario: str, nombre_rm: str,
+                            medicos: list) -> bool:
+    """Recuerda al representante que tiene visitas a médicos TOP vencidas sin
+    ejecutar (§7.3 regla 3). Best-effort: nunca bloquea el job."""
+    if not _habilitado() or not destinatario:
+        return False
+    filas = "".join(
+        f"<li><strong>{m['medico']}</strong> — {'Revisita' if m['tipo_visita'] == 'R' else 'Visita'}"
+        f" planeada para el {m['fecha_planeada'].strftime('%d/%m/%Y')}</li>"
+        for m in medicos)
+    cuerpo = f"""<html><body style="font-family:Arial,sans-serif;color:#333;">
+  <h2 style="color:{_COLOR_TITULO};">Médicos TOP pendientes de visita</h2>
+  <p>Hola <strong>{nombre_rm}</strong>, estas visitas a médicos <strong>TOP</strong>
+     ya pasaron su fecha planeada y siguen sin registrarse:</p>
+  <ul>{filas}</ul>
+  <p>Los médicos TOP no pueden cerrar el ciclo sin visita y revisita. Entra a la
+     plataforma para reprogramarlas o registrarlas.</p>
+  {_pie_pagina()}
+</body></html>"""
+    return _enviar(destinatario, f"Médicos TOP pendientes ({len(medicos)})", cuerpo)
+
+
+def notificar_top_escalado(destinatario: str, nombre_gerente: str,
+                           por_representante: dict) -> bool:
+    """Escala al Gerente de Distrito los médicos TOP que siguen sin cubrir con el
+    ciclo ya avanzado (§7.3 regla 3). Best-effort."""
+    if not _habilitado() or not destinatario:
+        return False
+    bloques = "".join(
+        f"<h3 style=\"margin-bottom:4px;\">{rm}</h3><ul>"
+        + "".join(f"<li><strong>{m['medico']}</strong> — "
+                  f"{'Revisita' if m['tipo_visita'] == 'R' else 'Visita'}</li>"
+                  for m in medicos)
+        + "</ul>"
+        for rm, medicos in por_representante.items())
+    total = sum(len(v) for v in por_representante.values())
+    cuerpo = f"""<html><body style="font-family:Arial,sans-serif;color:#333;">
+  <h2 style="color:{_COLOR_TITULO};">Médicos TOP sin cubrir — requiere seguimiento</h2>
+  <p>Hola <strong>{nombre_gerente}</strong>, el ciclo ya está avanzado y estos médicos
+     <strong>TOP</strong> siguen sin visita registrada en su distrito:</p>
+  {bloques}
+  <p>Se avisó previamente a cada representante. Conviene revisarlo con ellos antes
+     del cierre del ciclo.</p>
+  {_pie_pagina()}
+</body></html>"""
+    return _enviar(destinatario, f"Médicos TOP sin cubrir ({total}) — seguimiento", cuerpo)
+
+
 def notificar_codigo_recuperacion(destinatario: str, nombre: str, codigo: str, minutos: int = 15) -> bool:
     """Envía el código de recuperación de contraseña ("Olvidó su contraseña").
 

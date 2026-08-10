@@ -57,3 +57,33 @@ def programar_correcciones(examen_id: int, fecha_limite: datetime) -> None:
         logger.info(f"Correcciones examen {examen_id} programadas para {run_date.isoformat()}")
     except Exception as e:  # noqa: BLE001
         logger.error(f"No se pudo programar correcciones examen {examen_id}: {e}")
+
+
+def _job_medicos_top() -> None:
+    """Ejecuta los avisos de médicos TOP con su propia sesión de BD."""
+    from app.db.database import SessionLocal
+    from app.services import visita_top_service
+    db = SessionLocal()
+    try:
+        visita_top_service.procesar_avisos(db)
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Job de médicos TOP falló: {e}")
+    finally:
+        db.close()
+
+
+def programar_medicos_top() -> None:
+    """Cron diario de RECONCILIACIÓN de médicos TOP (§7.3 regla 3).
+
+    Es un cron y no un temporizador por visita a propósito: el scheduler usa
+    `MemoryJobStore`, así que cualquier reinicio del contenedor perdería los
+    jobs agendados en silencio. Un cron se re-registra en cada arranque y cada
+    corrida vuelve a preguntarle a la base qué está vencido.
+    """
+    try:
+        get_scheduler().add_job(
+            _job_medicos_top, "cron", hour=7, minute=0,
+            id="medicos-top-diario", replace_existing=True, misfire_grace_time=3600)
+        logger.info("Job diario de médicos TOP programado (07:00 UTC)")
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"No se pudo programar el job de médicos TOP: {e}")

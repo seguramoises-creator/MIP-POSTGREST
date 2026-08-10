@@ -57,6 +57,7 @@ async def lifespan(app: FastAPI):
     try:
         from app.core import scheduler
         scheduler.iniciar()
+        scheduler.programar_medicos_top()
     except Exception as e:  # noqa: BLE001
         logger.warning(f"No se pudo iniciar el scheduler: {e}")
 
