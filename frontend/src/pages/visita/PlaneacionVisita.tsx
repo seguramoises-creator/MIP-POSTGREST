@@ -25,6 +25,14 @@ function msgError(e: unknown, fallback: string): string {
   return fallback;
 }
 
+// M1: con un panel entero marcado TOP, concatenar todos los nombres vuelve la
+// alerta una cadena de miles de caracteres. Se capa igual que las listas
+// vecinas de esta pantalla (`.slice(0, 30)`).
+function formatearNombres(nombres: string[], tope = 30): string {
+  if (nombres.length <= tope) return nombres.join(', ');
+  return `${nombres.slice(0, tope).join(', ')} y ${nombres.length - tope} más`;
+}
+
 // Estado por médico: semana + día de la Vista, y (opcional) Revisita con su semana + día.
 interface Fila { vSemana: number; vDia: string; revisita: boolean; rSemana: number; rDia: string; }
 const F0: Fila = { vSemana: 0, vDia: '', revisita: false, rSemana: 0, rDia: '' };
@@ -333,13 +341,13 @@ export default function PlaneacionVisita() {
       {!!resumen?.top_sin_planear?.length && (
         <Alert severity="error" sx={{ mb: 2 }}>
           No podrás publicar hasta incluir {resumen.top_sin_planear.length} médico(s){' '}
-          <strong>TOP</strong>: {resumen.top_sin_planear.map((m) => m.nombre).join(', ')}.
+          <strong>TOP</strong>: {formatearNombres(resumen.top_sin_planear.map((m) => m.nombre))}.
         </Alert>
       )}
       {!!resumen?.top_sin_revisita?.length && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           {resumen.top_sin_revisita.length} médico(s) <strong>TOP</strong> están planeados sin
-          Revisita: {resumen.top_sin_revisita.map((m) => m.nombre).join(', ')}. Un TOP no debería
+          Revisita: {formatearNombres(resumen.top_sin_revisita.map((m) => m.nombre))}. Un TOP no debería
           cerrar el ciclo sin visita y revisita.
         </Alert>
       )}

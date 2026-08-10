@@ -89,21 +89,65 @@ def _ejecutadas(db: Session, ciclo_id: int) -> set[tuple[int, str]]:
 
 
 def _plan_top(db: Session, ciclo_id: int) -> list[tuple[PlaneacionCiclo, MedicoVisita]]:
-    """Filas de planeación del ciclo cuyo médico es TOP."""
-    return (db.query(PlaneacionCiclo, MedicoVisita)
-            .join(MedicoVisita, MedicoVisita.id == PlaneacionCiclo.medico_id)
-            .filter(PlaneacionCiclo.ciclo_id == ciclo_id,
-                    MedicoVisita.es_top == True).all())  # noqa: E712
+    """Filas de planeación del ciclo cuyo médico es TOP, sigue vigente en el panel
+    para este ciclo Y admite Registro de Visita.
+
+    Dos filtros, DISTINTOS a propósito (C2 + I3 de la revisión final):
+
+    1. `cuenta_en_ciclo` (mismo patrón que usan `visita_planeacion_service.
+       _medicos_del_ciclo` y `visita_cobertura_service._cobertura_base`): un TOP
+       con `activo=False` o con el alta aún pendiente/rechazada no forma parte
+       del panel efectivo de este ciclo — no se le puede reclamar nada.
+    2. `estado_aprobacion == "APROBADO"`: MÁS estricto que `cuenta_en_ciclo` a
+       secas. `cuenta_en_ciclo` SÍ admite `PENDIENTE_BAJA` (planear la baja de
+       un TOP es legítimo, y por eso el bloqueo de publicación —que reutiliza
+       `cuenta_en_ciclo` tal cual, sin este segundo filtro— lo sigue exigiendo
+       planeado). Pero `visita_registro_service._medico_del_vm` exige
+       `estado_aprobacion == "APROBADO"` para dejar registrar la visita: avisar
+       sobre un médico en PENDIENTE_BAJA le reclamaría al representante —y lo
+       expondría ante su gerente— por algo que el propio sistema le rechazaría.
+       NO se "unifican" estos dos criterios: resuelven preguntas distintas
+       (¿cuenta en el panel? vs. ¿se le puede registrar una visita hoy?).
+    """
+    from app.services.visita_aprobacion_service import ordenes_ciclo, cuenta_en_ciclo
+    ordenes = ordenes_ciclo(db)
+    ciclo_orden = ordenes.get(ciclo_id)
+    filas = (db.query(PlaneacionCiclo, MedicoVisita)
+             .join(MedicoVisita, MedicoVisita.id == PlaneacionCiclo.medico_id)
+             .filter(PlaneacionCiclo.ciclo_id == ciclo_id,
+                     MedicoVisita.es_top == True).all())  # noqa: E712
+    return [(p, m) for p, m in filas
+            if cuenta_en_ciclo(m, ciclo_orden, ordenes) and m.estado_aprobacion == "APROBADO"]
+
+
+def _publicadas_por_vm(db: Session, ciclo_id: int) -> dict[int, bool]:
+    """Caché `vm_id -> ¿su planeación de este ciclo está PUBLICADA?`, resuelto
+    perezosamente (evita una consulta por fila cuando muchas filas comparten VM)."""
+    from app.services.visita_planeacion_service import esta_publicada
+
+    class _Cache(dict):
+        def __missing__(self, vm_id):
+            val = esta_publicada(db, vm_id, ciclo_id)
+            self[vm_id] = val
+            return val
+    return _Cache()
 
 
 def pendientes_recordatorio(db: Session, ciclo: Ciclo, hoy: date,
                             dias_gracia: int) -> list[dict]:
     """Visitas planeadas a un TOP cuya fecha venció hace >= `dias_gracia` días
-    hábiles y que siguen sin ejecutarse."""
+    hábiles y que siguen sin ejecutarse.
+
+    Solo mira planeaciones PUBLICADAS (I2): un borrador es editable en cualquier
+    momento, no es el compromiso congelado sobre el que tiene sentido reclamar.
+    """
     ejecutadas = _ejecutadas(db, ciclo.id)
     feriados = _feriados(db, ciclo)
+    publicadas = _publicadas_por_vm(db, ciclo.id)
     salida = []
     for p, m in _plan_top(db, ciclo.id):
+        if not publicadas[p.vm_id]:
+            continue
         if (m.id, p.tipo_visita) in ejecutadas:
             continue
         f = fecha_planeada(ciclo, p.semana, p.dia_semana)
@@ -120,10 +164,16 @@ def pendientes_recordatorio(db: Session, ciclo: Ciclo, hoy: date,
 
 def pendientes_escalamiento(db: Session, ciclo: Ciclo) -> list[dict]:
     """Visitas planeadas a un TOP que siguen sin ejecutarse, sin mirar la fecha:
-    quien decide el momento es el umbral de % del ciclo, que evalúa el job."""
+    quien decide el momento es el umbral de % del ciclo, que evalúa el job.
+
+    Solo mira planeaciones PUBLICADAS (I2), mismo motivo que `pendientes_recordatorio`.
+    """
     ejecutadas = _ejecutadas(db, ciclo.id)
+    publicadas = _publicadas_por_vm(db, ciclo.id)
     salida = []
     for p, m in _plan_top(db, ciclo.id):
+        if not publicadas[p.vm_id]:
+            continue
         if (m.id, p.tipo_visita) in ejecutadas:
             continue
         salida.append({"vm_id": p.vm_id, "medico_id": m.id,
@@ -137,8 +187,13 @@ def pendientes_escalamiento(db: Session, ciclo: Ciclo) -> list[dict]:
 #: pendiente nº 8 del §10 del requerimiento sigue abierto con Mallén.
 CFG_DIAS_RECORDATORIO = "top_dias_recordatorio"
 CFG_PCT_ESCALAMIENTO = "top_pct_ciclo_escalamiento"
+#: Interruptor de emergencia del cron completo (I5 de la revisión final): permite
+#: apagar los avisos de médicos TOP sin redesplegar, mientras el pendiente nº 8
+#: del §10 se resuelve con Mallén o si algo sale mal en producción.
+CFG_AVISOS_ACTIVOS = "top_avisos_activos"
 DIAS_RECORDATORIO_DEFAULT = 2
 PCT_ESCALAMIENTO_DEFAULT = 70
+AVISOS_ACTIVOS_DEFAULT = True
 
 
 def _ya_avisado(db: Session, ciclo_id: int, tipo_aviso: str) -> set[tuple]:
@@ -170,6 +225,13 @@ def procesar_avisos(db: Session, hoy: date | None = None) -> dict:
     from app.services import config_service, notification_service
 
     hoy = hoy or date.today()
+
+    # I5: interruptor de emergencia — sin redesplegar. Si está apagado, ni siquiera
+    # se leen los otros parámetros: la corrida completa se omite y queda en el log.
+    if not config_service.obtener_bool(db, CFG_AVISOS_ACTIVOS, AVISOS_ACTIVOS_DEFAULT):
+        logger.info(f"Avisos de médicos TOP: OMITIDOS — {CFG_AVISOS_ACTIVOS}=false")
+        return {"recordatorios": 0, "escalamientos": 0}
+
     dias_gracia = config_service.obtener_int(db, CFG_DIAS_RECORDATORIO,
                                              DIAS_RECORDATORIO_DEFAULT)
     pct_umbral = config_service.obtener_int(db, CFG_PCT_ESCALAMIENTO,
@@ -177,8 +239,15 @@ def procesar_avisos(db: Session, hoy: date | None = None) -> dict:
     n_rec = n_esc = 0
 
     # Ciclos CERRADOS no se procesan: son snapshots inmutables y nadie puede ya
-    # actuar sobre ellos.
+    # actuar sobre ellos. Pero "no cerrado" no basta (C1): un ciclo puede quedar
+    # semanas en POR_CERRAR (terminó, nadie lo cerró todavía) — ahí ya no tiene
+    # sentido reclamar nada, `visita_registro_service._guard_ventana_ciclo`
+    # rechazaría el registro igual. Solo se procesan los ciclos VIGENTES: cuya
+    # ventana [fecha_inicio, fecha_fin] contiene HOY.
     for ciclo in db.query(Ciclo).filter(Ciclo.cerrado == False).all():  # noqa: E712
+        if not (ciclo.fecha_inicio <= hoy <= ciclo.fecha_fin):
+            continue
+
         # ── Recordatorio al representante ────────────────────────────────
         avisados = _ya_avisado(db, ciclo.id, AVISO_RECORDATORIO)
         pend = [p for p in pendientes_recordatorio(db, ciclo, hoy, dias_gracia)
@@ -193,7 +262,11 @@ def procesar_avisos(db: Session, hoy: date | None = None) -> dict:
                 logger.warning(f"TOP: representante {vm_id} sin correo; no se avisa")
                 continue
             if notification_service.notificar_top_pendiente(rm.email, rm.nombre, items):
+                # I1: commit INMEDIATO por destinatario, no al final de toda la
+                # corrida — si un envío posterior revienta (o el contenedor se
+                # reinicia a mitad de camino), lo ya enviado no se debe reenviar.
                 _marcar(db, ciclo.id, items, AVISO_RECORDATORIO)
+                db.commit()
                 n_rec += len(items)
 
         # ── Escalamiento al Gerente de Distrito ──────────────────────────
@@ -216,10 +289,11 @@ def procesar_avisos(db: Session, hoy: date | None = None) -> dict:
                 logger.warning(f"TOP: gerente {gerente_id} sin correo; no se escala")
                 continue
             if notification_service.notificar_top_escalado(g.email, g.nombre, por_rm):
+                # I1: mismo motivo — commit inmediato por gerente.
                 planos = [x for lista in por_rm.values() for x in lista]
                 _marcar(db, ciclo.id, planos, AVISO_ESCALAMIENTO)
+                db.commit()
                 n_esc += len(planos)
 
-    db.commit()
     logger.info(f"Avisos de médicos TOP: {n_rec} recordatorios, {n_esc} escalamientos")
     return {"recordatorios": n_rec, "escalamientos": n_esc}

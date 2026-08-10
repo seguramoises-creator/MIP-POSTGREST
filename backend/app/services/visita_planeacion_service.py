@@ -31,6 +31,19 @@ class TopSinPlanearError(Exception):
     falta alguno, no permite publicar y muestra cuáles faltan."""
 
 
+#: M1 de la revisión final: con un panel entero marcado TOP, concatenar todos
+#: los nombres vuelve el mensaje del 409 una cadena de miles de caracteres en
+#: un snackbar. Se capa igual que las listas vecinas del frontend (`.slice(0, 30)`).
+_TOPE_NOMBRES = 30
+
+
+def _formatear_nombres(nombres: list[str], tope: int = _TOPE_NOMBRES) -> str:
+    if len(nombres) <= tope:
+        return ", ".join(nombres)
+    resto = len(nombres) - tope
+    return f"{', '.join(nombres[:tope])} y {resto} más"
+
+
 def _guard_ciclo_abierto(db, ciclo_id):
     """Bloquea escrituras sobre ciclos cerrados (inmutables)."""
     try:
@@ -108,7 +121,7 @@ def publicar_planeacion(db: Session, vm_id: int, ciclo_id: int | None, usuario_i
         raise ValueError("No hay planeación que publicar: guarda al menos un médico primero.")
     faltantes = top_sin_planear(db, vm_id, ciclo_id)
     if faltantes:
-        nombres = ", ".join(f["nombre"] for f in faltantes)
+        nombres = _formatear_nombres([f["nombre"] for f in faltantes])
         raise TopSinPlanearError(
             f"No se puede publicar: faltan {len(faltantes)} médico(s) TOP en la "
             f"planeación del ciclo. Agrégalos y vuelve a intentarlo: {nombres}.")

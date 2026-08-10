@@ -444,11 +444,19 @@ def test_fecha_planeada_dia_irreconocible_es_none(escenario):
     assert top.fecha_planeada(c, 1, "Cualquiera") is None
 
 
+def _publicar(db, escenario, vm_id=None):
+    """Publica la planeación del (vm, ciclo) del escenario. Las pruebas del cron de
+    avisos (I2) necesitan que la planeación esté PUBLICADA, no en borrador —
+    `pendientes_recordatorio`/`pendientes_escalamiento` ya no miran borradores."""
+    return plan.publicar_planeacion(db, vm_id or escenario["rm"].id, escenario["ciclo"].id, None)
+
+
 def test_recordatorio_respeta_los_dias_de_gracia(escenario):
     db = escenario["db"]
     t = _medico(db, escenario, "DOCTOR TOP", True)
     _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")   # 1-ene-2026
     db.commit()
+    _publicar(db, escenario)
 
     # 2-ene: solo 1 día hábil transcurrido, con gracia de 2 no toca avisar
     assert top.pendientes_recordatorio(db, escenario["ciclo"], date(2026, 1, 2), 2) == []
@@ -464,6 +472,7 @@ def test_recordatorio_no_incluye_lo_ya_visitado(escenario):
     _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
     _visita_reg(db, escenario, t, tipo="V")
     db.commit()
+    _publicar(db, escenario)
 
     assert top.pendientes_recordatorio(db, escenario["ciclo"], date(2026, 1, 20), 2) == []
 
@@ -473,6 +482,7 @@ def test_recordatorio_ignora_a_los_no_top(escenario):
     n = _medico(db, escenario, "DOCTOR NORMAL", False)
     _planear(db, escenario, n, tipo="V", semana=1, dia="Lunes")
     db.commit()
+    _publicar(db, escenario)
 
     assert top.pendientes_recordatorio(db, escenario["ciclo"], date(2026, 1, 20), 2) == []
 
@@ -489,6 +499,7 @@ def test_recordatorio_ignora_visita_no_ejecutada(escenario):
                           medico_id=t.id, tipo_visita="V", ejecutada=False,
                           fecha_hora=datetime(2026, 1, 1, 10, 0)))
     db.commit()
+    _publicar(db, escenario)
 
     r = top.pendientes_recordatorio(db, escenario["ciclo"], date(2026, 1, 6), 2)
 
@@ -505,6 +516,7 @@ def test_escalamiento_ignora_visita_no_ejecutada(escenario):
                           medico_id=t.id, tipo_visita="V", ejecutada=False,
                           fecha_hora=datetime(2026, 1, 1, 10, 0)))
     db.commit()
+    _publicar(db, escenario)
 
     r = top.pendientes_escalamiento(db, escenario["ciclo"])
 
@@ -525,6 +537,7 @@ def test_escalamiento_solo_para_top_sin_cubrir(escenario):
     _planear(db, escenario, cubierto, tipo="V", semana=1, dia="Lunes")
     _visita_reg(db, escenario, cubierto, tipo="V")
     db.commit()
+    _publicar(db, escenario)
 
     r = top.pendientes_escalamiento(db, escenario["ciclo"])
 
@@ -546,6 +559,7 @@ def test_procesar_avisos_registra_y_no_repite(escenario, monkeypatch):
     t = _medico(db, escenario, "DOCTOR TOP", True)
     _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
     db.commit()
+    _publicar(db, escenario)
 
     r1 = top.procesar_avisos(db, hoy=date(2026, 1, 20))
     r2 = top.procesar_avisos(db, hoy=date(2026, 1, 20))
@@ -567,6 +581,7 @@ def test_no_registra_si_el_correo_no_salio(escenario, monkeypatch):
     t = _medico(db, escenario, "DOCTOR TOP", True)
     _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
     db.commit()
+    _publicar(db, escenario)
 
     r = top.procesar_avisos(db, hoy=date(2026, 1, 20))
 
@@ -582,6 +597,8 @@ def test_ciclo_cerrado_no_genera_avisos(escenario, monkeypatch):
     escenario["rm"].email = "rm@ejemplo.com"
     t = _medico(db, escenario, "DOCTOR TOP", True)
     _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+    _publicar(db, escenario)     # hay que publicar ANTES de cerrar el ciclo
     escenario["ciclo"].cerrado = True
     db.commit()
 
@@ -603,6 +620,7 @@ def test_escalamiento_solo_pasado_el_umbral(escenario, monkeypatch):
     t = _medico(db, escenario, "DOCTOR TOP", True)
     _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
     db.commit()
+    _publicar(db, escenario)
 
     # 15-ene = 50% del ciclo, por debajo del umbral de 70
     r_antes = top.procesar_avisos(db, hoy=date(2026, 1, 15))
@@ -624,6 +642,7 @@ def test_representante_sin_gerente_no_tumba_el_job(escenario, monkeypatch):
     t = _medico(db, escenario, "DOCTOR TOP", True)
     _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
     db.commit()
+    _publicar(db, escenario)
 
     r = top.procesar_avisos(db, hoy=date(2026, 1, 28))
 
@@ -646,6 +665,7 @@ def test_gerente_sin_correo_no_tumba_el_job(escenario, monkeypatch):
     t = _medico(db, escenario, "DOCTOR TOP", True)
     _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
     db.commit()
+    _publicar(db, escenario)
 
     r = top.procesar_avisos(db, hoy=date(2026, 1, 28))
 
@@ -671,6 +691,7 @@ def test_un_solo_correo_agrupa_a_todos_los_medicos_del_representante(escenario, 
         m = _medico(db, escenario, nombre, True)
         _planear(db, escenario, m, tipo="V", semana=1, dia="Lunes")
     db.commit()
+    _publicar(db, escenario)
 
     r = top.procesar_avisos(db, hoy=date(2026, 1, 20))
 
@@ -693,7 +714,212 @@ def test_una_visita_no_cubre_una_revisita_planeada(escenario):
     _planear(db, escenario, t, tipo="R", semana=2, dia="Martes")
     _visita_reg(db, escenario, t, tipo="V")   # ejecutó la Visita, no la Revisita
     db.commit()
+    _publicar(db, escenario)
 
     r = top.pendientes_escalamiento(db, escenario["ciclo"])
 
     assert [(x["medico"], x["tipo_visita"]) for x in r] == [("DOCTOR TOP", "R")]
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Revisión final (7 defectos) — el módulo se declaró NO desplegable con el
+# cron activo: mandaba correos reales sobre trabajo que el sistema rechaza.
+# ─────────────────────────────────────────────────────────────────────────
+
+def test_ciclo_vencido_no_genera_avisos(escenario, monkeypatch):
+    """C1 (CRITICAL): el ciclo sigue ABIERTO (`cerrado=False`) pero su ventana ya
+    terminó — el caso real de producción: C07 DO corrió 01→28-jul y sigue abierto
+    en agosto porque nadie lo cerró (`POR_CERRAR`, no `CERRADO`). `cerrado=False`
+    NO es sinónimo de vigente: el cron no debe reclamar visitas de un ciclo que
+    `visita_registro_service._guard_ventana_ciclo` ya rechazaría."""
+    db = escenario["db"]
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda *a, **k: True)
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_escalado",
+        lambda *a, **k: True)
+    escenario["rm"].email = "rm@ejemplo.com"
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+    _publicar(db, escenario)
+    # El ciclo termina el 31-ene-2026 y sigue "abierto" (cerrado=False) — se
+    # simula agosto, muy después de la ventana, exactamente como en producción.
+    assert escenario["ciclo"].cerrado is False
+
+    r = top.procesar_avisos(db, hoy=date(2026, 3, 1))
+
+    assert r == {"recordatorios": 0, "escalamientos": 0}
+    assert db.query(AvisoTopEnviado).count() == 0
+
+
+def test_top_inactivo_no_genera_aviso(escenario):
+    """C2 (CRITICAL): `_plan_top` debe pasar por `cuenta_en_ciclo` (mismo patrón
+    del bloqueo de publicación y de la cobertura) — un TOP con `activo=False` no
+    forma parte del panel efectivo, así que no se le puede reclamar nada."""
+    db = escenario["db"]
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+    _publicar(db, escenario)
+    t.activo = False
+    db.commit()
+
+    assert top.pendientes_escalamiento(db, escenario["ciclo"]) == []
+
+
+def test_top_con_alta_rechazada_no_genera_aviso(escenario):
+    """C2 (CRITICAL), segundo caso: alta RECHAZADA — tampoco cuenta en el ciclo."""
+    db = escenario["db"]
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+    _publicar(db, escenario)
+    t.estado_aprobacion = "RECHAZADO"
+    db.commit()
+
+    assert top.pendientes_escalamiento(db, escenario["ciclo"]) == []
+
+
+def test_top_pendiente_baja_no_avisa_pero_bloquea_publicacion(escenario):
+    """I3 (IMPORTANT): `cuenta_en_ciclo` SÍ admite PENDIENTE_BAJA (planear la baja
+    de un TOP es legítimo), pero `visita_registro_service._medico_del_vm` exige
+    `estado_aprobacion == "APROBADO"` para dejar registrar la visita. El cron de
+    avisos no debe reclamar lo que el sistema rechazaría — sin tocar el bloqueo
+    de publicación, que sigue exigiendo planear al TOP en baja (dos asserts, la
+    diferencia central del defecto)."""
+    db = escenario["db"]
+    t = _medico(db, escenario, "DOCTOR TOP EN BAJA", True, estado="PENDIENTE_BAJA")
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+    _publicar(db, escenario)
+
+    # (1) Avisos: PUBLICADA y todo, pero no está APROBADO — el cron no reclama.
+    assert top.pendientes_escalamiento(db, escenario["ciclo"]) == []
+
+    # (2) Bloqueo de publicación: `top_sin_planear` (el chequeo que usa
+    # `publicar_planeacion`) sigue exigiéndolo planeado — `cuenta_en_ciclo` lo
+    # admitió arriba tal cual, sin el filtro adicional que usan los avisos.
+    sin_planear_antes = [f["nombre"] for f in
+                         plan.top_sin_planear(db, escenario["rm"].id, escenario["ciclo"].id)]
+    assert sin_planear_antes == []   # está planeado, así que no aparece como faltante
+
+    db.query(PlaneacionCiclo).filter(PlaneacionCiclo.medico_id == t.id).delete()
+    db.commit()
+    sin_planear_despues = [f["nombre"] for f in
+                           plan.top_sin_planear(db, escenario["rm"].id, escenario["ciclo"].id)]
+    assert "DOCTOR TOP EN BAJA" in sin_planear_despues
+
+
+def test_planeacion_en_borrador_no_avisa_publicada_si(escenario):
+    """I2 (IMPORTANT): solo se avisa sobre planeaciones PUBLICADAS — un borrador
+    es editable en cualquier momento, no es el compromiso congelado sobre el que
+    tiene sentido reclamar. Reutiliza `visita_planeacion_service.esta_publicada`."""
+    db = escenario["db"]
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+
+    # Borrador: nadie congeló el compromiso todavía.
+    assert top.pendientes_escalamiento(db, escenario["ciclo"]) == []
+
+    _publicar(db, escenario)
+
+    assert [x["medico"] for x in top.pendientes_escalamiento(db, escenario["ciclo"])] == ["DOCTOR TOP"]
+
+
+def test_fallo_a_mitad_de_corrida_no_reenvia_lo_ya_registrado(escenario, monkeypatch):
+    """I1 (IMPORTANT): commit por destinatario, no al final de toda la corrida.
+    Si el envío al segundo representante revienta (o el proceso se reinicia a
+    mitad de camino — simulado aquí con `db.rollback()`), lo que ya se envió al
+    primero debe quedar registrado y NO reenviarse en la corrida siguiente."""
+    db = escenario["db"]
+    rm2 = RepresentanteMedico(pais_codigo="DO", linea_id=escenario["rm"].linea_id,
+                              gerente_id=escenario["rm"].gerente_id, codigo="VM02",
+                              nombre="Representante Dos", email="rm2@ejemplo.com")
+    db.add(rm2)
+    db.flush()
+    escenario["rm"].email = "rm1@ejemplo.com"
+    t1 = _medico(db, escenario, "DOCTOR UNO", True)
+    _planear(db, escenario, t1, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+    _publicar(db, escenario)
+
+    t2 = MedicoVisita(vm_id=rm2.id, nombre_completo="DOCTOR DOS", es_top=True,
+                      estado_aprobacion="APROBADO", activo=True)
+    db.add(t2)
+    db.flush()
+    db.add(PlaneacionCiclo(vm_id=rm2.id, ciclo_id=escenario["ciclo"].id, medico_id=t2.id,
+                           tipo_visita="V", semana=1, dia_semana="Lunes"))
+    db.commit()
+    _publicar(db, escenario, vm_id=rm2.id)
+
+    def enviar(destinatario, nombre, medicos):
+        if destinatario == "rm2@ejemplo.com":
+            raise RuntimeError("SMTP caído")
+        return True
+    monkeypatch.setattr("app.services.notification_service.notificar_top_pendiente", enviar)
+
+    with pytest.raises(RuntimeError):
+        top.procesar_avisos(db, hoy=date(2026, 1, 20))
+    db.rollback()   # simula un reinicio del contenedor: lo no comiteado se pierde
+
+    assert db.query(AvisoTopEnviado).filter_by(vm_id=escenario["rm"].id).count() == 1
+    assert db.query(AvisoTopEnviado).filter_by(vm_id=rm2.id).count() == 0
+
+    # Corrida siguiente: rm1 ya no se repite; solo rm2 (antes fallido) sale.
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda *a, **k: True)
+
+    r2 = top.procesar_avisos(db, hoy=date(2026, 1, 20))
+
+    assert r2["recordatorios"] == 1
+    assert db.query(AvisoTopEnviado).filter_by(vm_id=rm2.id).count() == 1
+
+
+def test_avisos_desactivados_por_configuracion(escenario, monkeypatch):
+    """I5 (IMPORTANT): con el interruptor apagado, cero correos y cero filas —
+    la red de seguridad para apagar el cron sin redesplegar."""
+    from app.services import config_service
+
+    db = escenario["db"]
+    llamadas = {"n": 0}
+
+    def contar(*a, **k):
+        llamadas["n"] += 1
+        return True
+    monkeypatch.setattr("app.services.notification_service.notificar_top_pendiente", contar)
+    escenario["rm"].email = "rm@ejemplo.com"
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+    _publicar(db, escenario)
+    config_service.fijar(db, top.CFG_AVISOS_ACTIVOS, "false")
+    db.commit()
+
+    r = top.procesar_avisos(db, hoy=date(2026, 1, 20))
+
+    assert r == {"recordatorios": 0, "escalamientos": 0}
+    assert llamadas["n"] == 0
+    assert db.query(AvisoTopEnviado).count() == 0
+
+
+def test_mensaje_409_topea_nombres_en_30(escenario):
+    """M1 (MINOR): con un panel entero marcado TOP, el 409 no debe concatenar
+    todos los nombres — se capa a 30 + 'y N más', igual que las listas vecinas
+    del frontend (`.slice(0, 30)`)."""
+    db = escenario["db"]
+    for i in range(35):
+        _medico(db, escenario, f"DOCTOR TOP {i:02d}", True)
+    otro = _medico(db, escenario, "DOCTOR NORMAL", False)
+    _planear(db, escenario, otro)
+    db.commit()
+
+    with pytest.raises(plan.TopSinPlanearError) as exc:
+        plan.publicar_planeacion(db, escenario["rm"].id, escenario["ciclo"].id, None)
+
+    msg = str(exc.value)
+    assert msg.count("DOCTOR TOP ") == 30
+    assert "y 5 más" in msg

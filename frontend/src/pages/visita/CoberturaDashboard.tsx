@@ -14,6 +14,14 @@ import {
 
 const CAT_COLOR: Record<string, string> = { A: '#1b5e20', B: '#0d47a1', C: '#e65100' };
 
+// M1: con un panel entero marcado TOP, concatenar todos los nombres vuelve la
+// alerta una cadena de miles de caracteres. Se capa igual que las listas
+// vecinas de esta pantalla (`.slice(0, 30)`).
+function formatearNombres(nombres: string[], tope = 30): string {
+  if (nombres.length <= tope) return nombres.join(', ');
+  return `${nombres.slice(0, tope).join(', ')} y ${nombres.length - tope} más`;
+}
+
 // ── Botón "i" + panel de ranking por visitador (detalle desplegable) ──
 function DetalleVisitador({ metrica, titulo, paisCodigo }: { metrica: string; titulo: string; paisCodigo?: string }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -258,7 +266,7 @@ export default function CoberturaDashboard() {
           {data.top_sin_visita.length} sin ninguna visita
           {' · '}{data.top_falta_revisita.length} sin revisita.
           {' '}
-          {[...data.top_sin_visita, ...data.top_falta_revisita].map((m) => m.nombre).join(', ')}
+          {formatearNombres([...data.top_sin_visita, ...data.top_falta_revisita].map((m) => m.nombre))}
         </Alert>
       )}
 
