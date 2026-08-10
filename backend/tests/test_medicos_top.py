@@ -260,6 +260,25 @@ def test_publicar_ok_si_estan_todos_los_top(escenario):
     assert r["publicada"] is True
 
 
+def test_publicar_ok_con_normal_sin_planear(escenario):
+    """Distingue «faltan TOP» de «falta el panel entero» (§7.3).
+
+    Un médico normal sin ninguna fila en la planeación NO debe bloquear la
+    publicación — solo los TOP la bloquean. Si alguien ampliara el bloqueo a
+    cualquier médico sin planear (quitando `m.es_top` del filtro), este test
+    debe fallar.
+    """
+    db = escenario["db"]
+    top = _medico(db, escenario, "DOCTOR TOP", True)
+    _medico(db, escenario, "DOCTOR NORMAL", False)  # sin planear, a propósito
+    _planear(db, escenario, top)
+    db.commit()
+
+    r = plan.publicar_planeacion(db, escenario["rm"].id, escenario["ciclo"].id, None)
+
+    assert r["publicada"] is True
+
+
 def test_un_top_con_alta_pendiente_no_bloquea(escenario):
     """El caso que distingue `cuenta_en_ciclo` de `activo`.
 
@@ -285,6 +304,18 @@ def test_resumen_lista_los_top_sin_planear(escenario):
     r = plan.resumen_planeacion(db, escenario["rm"].id, escenario["ciclo"].id)
 
     assert [x["nombre"] for x in r["top_sin_planear"]] == ["DOCTOR TOP"]
+
+
+def test_resumen_no_incluye_normal_sin_planear_en_top_sin_planear(escenario):
+    """El equivalente en el aviso: un médico normal sin planear no se cuela en
+    `top_sin_planear` — la lista es exclusiva de médicos TOP."""
+    db = escenario["db"]
+    _medico(db, escenario, "DOCTOR NORMAL", False)  # sin planear
+    db.commit()
+
+    r = plan.resumen_planeacion(db, escenario["rm"].id, escenario["ciclo"].id)
+
+    assert r["top_sin_planear"] == []
 
 
 def test_top_planeado_solo_con_vista_avisa_pero_no_bloquea(escenario):
