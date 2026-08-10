@@ -521,3 +521,22 @@ def test_escalamiento_solo_para_top_sin_cubrir(escenario):
     r = top.pendientes_escalamiento(db, escenario["ciclo"])
 
     assert [x["medico"] for x in r] == ["DOCTOR TOP"]
+
+
+def test_una_visita_no_cubre_una_revisita_planeada(escenario):
+    """El emparejamiento es por (medico_id, tipo_visita): una Revisita planeada
+    solo la cubre una Revisita ejecutada.
+
+    Sin este test, simplificar la clave a solo `medico_id` no haría fallar nada
+    — y una V ejecutada taparía silenciosamente la R que falta, que es justo lo
+    que el §3.4 del requerimiento no permite dejar pasar en un médico TOP.
+    """
+    db = escenario["db"]
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="R", semana=2, dia="Martes")
+    _visita_reg(db, escenario, t, tipo="V")   # ejecutó la Visita, no la Revisita
+    db.commit()
+
+    r = top.pendientes_escalamiento(db, escenario["ciclo"])
+
+    assert [(x["medico"], x["tipo_visita"]) for x in r] == [("DOCTOR TOP", "R")]
