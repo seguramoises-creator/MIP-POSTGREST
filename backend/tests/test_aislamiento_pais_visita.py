@@ -154,12 +154,16 @@ def _medico(id, pais_codigo, activo=True, estado_validacion="APROBADO", **extra)
     return SimpleNamespace(**base)
 
 
-def _med(id, vm_id, categoria="A"):
+def _med(id, vm_id, categoria="A", es_top=False):
+    # `es_top` (prioridad TOP del SFA de Mallén) es un criterio ORTOGONAL a
+    # `categoria`: el §11.5 del requerimiento avisa que "marcar TOP no es marcar
+    # categoría A". Por eso viaja como campo aparte y su default es False —
+    # ausencia de dato NO es TOP.
     return SimpleNamespace(
         id=id, vm_id=vm_id, categoria=categoria, codigo=None,
         nombre_completo=f"Dr {id}", especialidad_id=None,
         centro_trabajo=None, provincia=None, municipio=None,
-        ciclos_sin_visita=0, activo=True,
+        ciclos_sin_visita=0, activo=True, es_top=es_top,
         estado_aprobacion="APROBADO", ciclo_alta_id=None, ciclo_baja_id=None)
 
 
