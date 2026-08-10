@@ -631,6 +631,55 @@ def test_representante_sin_gerente_no_tumba_el_job(escenario, monkeypatch):
     assert r["recordatorios"] == 1   # el recordatorio al RM sí sale
 
 
+def test_gerente_sin_correo_no_tumba_el_job(escenario, monkeypatch):
+    """Distinto de «sin gerente»: el gerente existe pero no tiene correo.
+
+    Sin este test, quitar el guard `not g.email` no haría fallar nada y el job
+    intentaría escalar a un destinatario vacío.
+    """
+    db = escenario["db"]
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda *a, **k: True)
+    escenario["rm"].email = "rm@ejemplo.com"
+    db.query(Gerente).filter(Gerente.id == escenario["rm"].gerente_id).one().email = None
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+
+    r = top.procesar_avisos(db, hoy=date(2026, 1, 28))
+
+    assert r["escalamientos"] == 0
+    assert r["recordatorios"] == 1
+    assert db.query(AvisoTopEnviado).filter_by(tipo_aviso=AVISO_ESCALAMIENTO).count() == 0
+
+
+def test_un_solo_correo_agrupa_a_todos_los_medicos_del_representante(escenario, monkeypatch):
+    """Se agrupa por destinatario: un correo por representante con TODOS sus
+    médicos pendientes, no uno por médico.
+
+    Sin este test, mandar un correo por cada médico pendiente pasaría
+    inadvertido — y con un panel real serían decenas al mismo buzón.
+    """
+    db = escenario["db"]
+    llamadas = []
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda destinatario, nombre, medicos: (llamadas.append(medicos) or True))
+    escenario["rm"].email = "rm@ejemplo.com"
+    for nombre in ("DOCTOR TOP UNO", "DOCTOR TOP DOS", "DOCTOR TOP TRES"):
+        m = _medico(db, escenario, nombre, True)
+        _planear(db, escenario, m, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+
+    r = top.procesar_avisos(db, hoy=date(2026, 1, 20))
+
+    assert len(llamadas) == 1            # UN correo, no tres
+    assert len(llamadas[0]) == 3         # con los tres médicos dentro
+    assert r["recordatorios"] == 3
+    assert db.query(AvisoTopEnviado).filter_by(tipo_aviso=AVISO_RECORDATORIO).count() == 3
+
+
 def test_una_visita_no_cubre_una_revisita_planeada(escenario):
     """El emparejamiento es por (medico_id, tipo_visita): una Revisita planeada
     solo la cubre una Revisita ejecutada.
