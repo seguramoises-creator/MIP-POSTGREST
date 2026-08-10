@@ -328,6 +328,22 @@ export default function PlaneacionVisita() {
         </Alert>
       )}
 
+      {/* Médicos TOP (SFA de Mallén): sin planear BLOQUEA publicar (error); sin Revisita
+          solo AVISA (warning) — publicar sigue permitido. */}
+      {!!resumen?.top_sin_planear?.length && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          No podrás publicar hasta incluir {resumen.top_sin_planear.length} médico(s){' '}
+          <strong>TOP</strong>: {resumen.top_sin_planear.map((m) => m.nombre).join(', ')}.
+        </Alert>
+      )}
+      {!!resumen?.top_sin_revisita?.length && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {resumen.top_sin_revisita.length} médico(s) <strong>TOP</strong> están planeados sin
+          Revisita: {resumen.top_sin_revisita.map((m) => m.nombre).join(', ')}. Un TOP no debería
+          cerrar el ciclo sin visita y revisita.
+        </Alert>
+      )}
+
       {/* Filtros (solo afectan lo mostrado; el guardado persiste TODO el panel) */}
       <Card variant="outlined" sx={{ mb: 2, bgcolor: '#f5f8ff', borderColor: '#bbdefb' }}>
         <Box sx={{ p: 1.5 }}>
@@ -395,13 +411,16 @@ export default function PlaneacionVisita() {
                     <TableCell>
                       <Typography variant="body2" fontWeight={600}>{m.nombre_completo}</Typography>
                       {/* Requerimiento Mallén (Item 6): indica en el panel si el médico ya fue visitado este ciclo. */}
-                      {m.estado_visita === 'vr' || m.estado_visita === 'v' ? (
-                        <Chip size="small" color="success" variant="outlined" sx={{ mt: 0.3, height: 18, fontSize: 11 }}
-                              label={m.estado_visita === 'vr' ? 'Visitado (V+R)' : 'Visitado'} />
-                      ) : (
-                        <Chip size="small" color="default" variant="outlined" sx={{ mt: 0.3, height: 18, fontSize: 11 }}
-                              label="Sin visitar" />
-                      )}
+                      <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.3 }}>
+                        {m.estado_visita === 'vr' || m.estado_visita === 'v' ? (
+                          <Chip size="small" color="success" variant="outlined" sx={{ height: 18, fontSize: 11 }}
+                                label={m.estado_visita === 'vr' ? 'Visitado (V+R)' : 'Visitado'} />
+                        ) : (
+                          <Chip size="small" color="default" variant="outlined" sx={{ height: 18, fontSize: 11 }}
+                                label="Sin visitar" />
+                        )}
+                        {m.es_top && <Chip label="TOP" size="small" color="error" sx={{ ml: 0.5, fontWeight: 700 }} />}
+                      </Stack>
                     </TableCell>
                     <TableCell align="center">
                       <Chip size="small" label={m.categoria} sx={catChipSx(m.categoria)} />

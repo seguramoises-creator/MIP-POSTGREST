@@ -251,6 +251,17 @@ export default function CoberturaDashboard() {
         </Alert>
       )}
 
+      {/* Médicos TOP (SFA de Mallén) sin cubrir — aviso destacado antes de las listas generales. */}
+      {(!!data?.top_sin_visita?.length || !!data?.top_falta_revisita?.length) && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          <strong>Médicos TOP sin cubrir:</strong>{' '}
+          {data.top_sin_visita.length} sin ninguna visita
+          {' · '}{data.top_falta_revisita.length} sin revisita.
+          {' '}
+          {[...data.top_sin_visita, ...data.top_falta_revisita].map((m) => m.nombre).join(', ')}
+        </Alert>
+      )}
+
       {/* Listas: sin visita / falta revisita */}
       <Grid container spacing={2}>
         <Grid item xs={12} md={6}>
@@ -262,7 +273,10 @@ export default function CoberturaDashboard() {
               </Typography>
               <Stack sx={{ mt: 1, maxHeight: 220, overflow: 'auto' }}>
                 {data.sin_visita.slice(0, 30).map((m) => (
-                  <Typography key={m.id} variant="body2" color="text.secondary">• {m.nombre} <Chip size="small" variant="outlined" label={m.categoria} sx={{ ml: 0.5, height: 16 }} /></Typography>
+                  <Typography key={m.id} variant="body2" color="text.secondary">
+                    • {m.nombre} <Chip size="small" variant="outlined" label={m.categoria} sx={{ ml: 0.5, height: 16 }} />
+                    {m.es_top && <Chip size="small" color="error" label="TOP" sx={{ ml: 0.5, height: 16, fontWeight: 700 }} />}
+                  </Typography>
                 ))}
               </Stack>
             </CardContent>
@@ -277,7 +291,10 @@ export default function CoberturaDashboard() {
               </Typography>
               <Stack sx={{ mt: 1, maxHeight: 220, overflow: 'auto' }}>
                 {data.falta_revisita.slice(0, 30).map((m) => (
-                  <Typography key={m.id} variant="body2" color="text.secondary">• {m.nombre} <Chip size="small" variant="outlined" label={m.categoria} sx={{ ml: 0.5, height: 16 }} /></Typography>
+                  <Typography key={m.id} variant="body2" color="text.secondary">
+                    • {m.nombre} <Chip size="small" variant="outlined" label={m.categoria} sx={{ ml: 0.5, height: 16 }} />
+                    {m.es_top && <Chip size="small" color="error" label="TOP" sx={{ ml: 0.5, height: 16, fontWeight: 700 }} />}
+                  </Typography>
                 ))}
               </Stack>
             </CardContent>

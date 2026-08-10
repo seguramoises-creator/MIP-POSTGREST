@@ -690,6 +690,7 @@ export default function PanelMedico() {
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                         <Typography variant="body2" fontWeight={700} noWrap>{m.nombre_completo}</Typography>
+                        {m.es_top && <Chip label="TOP" size="small" color="error" sx={{ height: 20, fontWeight: 700, '& .MuiChip-label': { px: 0.75, fontSize: 11 } }} />}
                         {ruptura && (
                           <Chip size="small" color="error" icon={<FiberManualRecord sx={{ fontSize: '10px !important' }} />}
                                 label={`${m.ciclos_sin_visita} ciclos sin visitar — Ruptura de secuencia`}

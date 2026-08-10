@@ -40,6 +40,8 @@ export interface MedicoVisita {
   estado_visita?: 'vr' | 'v' | 'sin';   // Vista+Revisita / una visita / sin visitar
   estado_aprobacion?: 'APROBADO' | 'PENDIENTE_ALTA' | 'PENDIENTE_BAJA' | 'RECHAZADO';
   ciclo_baja_id?: number | null;
+  /** Prioridad TOP del SFA de Mallén — nunca la categoría A/B/C/D. */
+  es_top: boolean;
 }
 
 export interface AprobacionPendiente {
@@ -209,9 +211,13 @@ export interface CoberturaResumen {
   acompanadas?: number; visitas_ejecutadas?: number; pct_acompanamiento?: number;
   objetivo_cobertura: number; objetivo_completa: number;
   categorias: Record<string, CatCobertura>;
-  sin_visita: { id: number; nombre: string; categoria: string }[];
-  falta_revisita: { id: number; nombre: string; categoria: string }[];
+  sin_visita: { id: number; nombre: string; categoria: string; es_top: boolean }[];
+  falta_revisita: { id: number; nombre: string; categoria: string; es_top: boolean }[];
   ruptura: { id: number; nombre: string; categoria: string; ciclos_sin_visita: number }[];
+  // Médicos TOP (SFA de Mallén) que no tienen ninguna visita / que les falta la Revisita.
+  // Subconjuntos de sin_visita/falta_revisita, ya filtrados por es_top === true.
+  top_sin_visita: { id: number; nombre: string; categoria: string | null; es_top: boolean }[];
+  top_falta_revisita: { id: number; nombre: string; categoria: string | null; es_top: boolean }[];
   // Cómo va la LÍNEA COMPLETA del RM (solo cuando se consulta un visitador). Cifras agregadas.
   linea_total?: {
     linea_id: number; linea_nombre: string;
@@ -289,6 +295,10 @@ export interface PlaneacionResumen {
   ciclo_id: number | null; panel: number; total_planeadas: number;
   medicos_planeados: number; cobertura_planeada_pct: number;
   cat_a_sin_revisita: number; carga_por_dia: number;
+  // Médicos TOP (SFA de Mallén): sin ninguna fila en la planeación (bloquea publicar) /
+  // planeados pero sin Revisita (solo avisa).
+  top_sin_planear: { id: number; nombre: string }[];
+  top_sin_revisita: { id: number; nombre: string }[];
 }
 export const obtenerPlaneacion = (vmId?: number) =>
   api.get<PlaneacionItem[]>('/visita/planeacion', { params: vmId ? { vm_id: vmId } : {} }).then(r => r.data);

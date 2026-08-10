@@ -311,6 +311,7 @@ def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None =
             "estado_visita": estado,
             "estado_aprobacion": m.estado_aprobacion,
             "ciclo_baja_id": m.ciclo_baja_id,
+            "es_top": m.es_top,
         }
         # Campos pesados (ficha completa): solo para editar un médico (lite=False).
         if not lite:
