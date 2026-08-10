@@ -21,6 +21,7 @@ from app.models import (  # noqa: F401
     hechos, ia_conexion, integracion_ext, integracion_hallazgo, mapeo_externo,
     seguridad_rbac, usuario, visita,
 )
+from app.services import visita_top_service as top
 from app.models.dimensiones import (
     Ciclo, Farmacia, Linea, Medico, Pais, RepresentanteMedico, TargetMedico,
 )
@@ -397,12 +398,126 @@ def test_medico_normal_no_entra_en_las_listas_top(escenario):
 
 def test_visita_no_ejecutada_no_cubre_al_top(escenario):
     db = escenario["db"]
-    top = _medico(db, escenario, "DOCTOR TOP", True)
+    top_medico = _medico(db, escenario, "DOCTOR TOP", True)
     db.add(VisitaRegistro(vm_id=escenario["rm"].id, ciclo_id=escenario["ciclo"].id,
-                          medico_id=top.id, tipo_visita="V", ejecutada=False,
+                          medico_id=top_medico.id, tipo_visita="V", ejecutada=False,
                           fecha_hora=datetime(2026, 1, 15, 10, 0)))
     db.commit()
 
     r = cob.resumen_cobertura(db, ciclo_id=escenario["ciclo"].id, vm_id=escenario["rm"].id)
 
     assert [x["nombre"] for x in r["top_sin_visita"]] == ["DOCTOR TOP"]
+
+
+def test_fecha_planeada_semana_1_lunes(escenario):
+    """El ciclo empieza el jueves 1-ene-2026. La semana 1 es la que CONTIENE
+    fecha_inicio, así que su lunes es el 29-dic — anterior al ciclo. La fecha
+    se acota a fecha_inicio: no se puede planear antes de que el ciclo empiece."""
+    c = escenario["ciclo"]
+    assert top.fecha_planeada(c, 1, "Lunes") == date(2026, 1, 1)
+
+
+def test_fecha_planeada_semana_2_miercoles(escenario):
+    """Lunes de la semana 1 = 29-dic-2025; semana 2 = +7 días = 5-ene;
+    miércoles = +2 = 7-ene-2026."""
+    c = escenario["ciclo"]
+    assert top.fecha_planeada(c, 2, "Miércoles") == date(2026, 1, 7)
+
+
+def test_fecha_planeada_se_acota_al_fin_del_ciclo(escenario):
+    c = escenario["ciclo"]
+    assert top.fecha_planeada(c, 40, "Viernes") == c.fecha_fin
+
+
+def test_fecha_planeada_dia_irreconocible_es_none(escenario):
+    """Un dato de planeación incompleto no debe generar un correo de reclamo."""
+    c = escenario["ciclo"]
+    assert top.fecha_planeada(c, 1, None) is None
+    assert top.fecha_planeada(c, 1, "Cualquiera") is None
+
+
+def test_recordatorio_respeta_los_dias_de_gracia(escenario):
+    db = escenario["db"]
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")   # 1-ene-2026
+    db.commit()
+
+    # 2-ene: solo 1 día hábil transcurrido, con gracia de 2 no toca avisar
+    assert top.pendientes_recordatorio(db, escenario["ciclo"], date(2026, 1, 2), 2) == []
+    # 6-ene: ya pasaron 3 días hábiles desde el 2 (2, 5 y 6; el 3 y 4 son fin
+    # de semana), así que supera la gracia de 2
+    r = top.pendientes_recordatorio(db, escenario["ciclo"], date(2026, 1, 6), 2)
+    assert [x["medico"] for x in r] == ["DOCTOR TOP"]
+
+
+def test_recordatorio_no_incluye_lo_ya_visitado(escenario):
+    db = escenario["db"]
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    _visita_reg(db, escenario, t, tipo="V")
+    db.commit()
+
+    assert top.pendientes_recordatorio(db, escenario["ciclo"], date(2026, 1, 20), 2) == []
+
+
+def test_recordatorio_ignora_a_los_no_top(escenario):
+    db = escenario["db"]
+    n = _medico(db, escenario, "DOCTOR NORMAL", False)
+    _planear(db, escenario, n, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+
+    assert top.pendientes_recordatorio(db, escenario["ciclo"], date(2026, 1, 20), 2) == []
+
+
+def test_recordatorio_ignora_visita_no_ejecutada(escenario):
+    """Restricción central: solo las EJECUTADAS cuentan como cobertura. Una fila
+    de `FactVisita` con `ejecutada=False` (no-visita con causa) no puede tapar
+    a un TOP vencido — si lo hiciera, el representante nunca recibiría el
+    recordatorio pese a no haberlo visitado de verdad."""
+    db = escenario["db"]
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")   # 1-ene-2026
+    db.add(VisitaRegistro(vm_id=escenario["rm"].id, ciclo_id=escenario["ciclo"].id,
+                          medico_id=t.id, tipo_visita="V", ejecutada=False,
+                          fecha_hora=datetime(2026, 1, 1, 10, 0)))
+    db.commit()
+
+    r = top.pendientes_recordatorio(db, escenario["ciclo"], date(2026, 1, 6), 2)
+
+    assert [x["medico"] for x in r] == ["DOCTOR TOP"]
+
+
+def test_escalamiento_ignora_visita_no_ejecutada(escenario):
+    """Mismo principio que arriba, del lado de escalamiento: una no-visita con
+    causa no debe sacar al TOP de la lista que ve el Gerente de Distrito."""
+    db = escenario["db"]
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.add(VisitaRegistro(vm_id=escenario["rm"].id, ciclo_id=escenario["ciclo"].id,
+                          medico_id=t.id, tipo_visita="V", ejecutada=False,
+                          fecha_hora=datetime(2026, 1, 1, 10, 0)))
+    db.commit()
+
+    r = top.pendientes_escalamiento(db, escenario["ciclo"])
+
+    assert [x["medico"] for x in r] == ["DOCTOR TOP"]
+
+
+def test_pct_ciclo_transcurrido(escenario):
+    """Ciclo 1-ene a 31-ene-2026: 22 días hábiles. Al 15-ene han pasado 11."""
+    db = escenario["db"]
+    assert top.pct_ciclo_transcurrido(db, escenario["ciclo"], date(2026, 1, 15)) == 50
+
+
+def test_escalamiento_solo_para_top_sin_cubrir(escenario):
+    db = escenario["db"]
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    cubierto = _medico(db, escenario, "DOCTOR CUBIERTO", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    _planear(db, escenario, cubierto, tipo="V", semana=1, dia="Lunes")
+    _visita_reg(db, escenario, cubierto, tipo="V")
+    db.commit()
+
+    r = top.pendientes_escalamiento(db, escenario["ciclo"])
+
+    assert [x["medico"] for x in r] == ["DOCTOR TOP"]
