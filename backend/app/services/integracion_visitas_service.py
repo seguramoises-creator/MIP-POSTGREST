@@ -722,9 +722,16 @@ def integrar_ventas(db: Session, pais_codigo: str, ciclo_codigo: str,
                 SEVERIDAD_AVISO))
 
         def _buscar(cid=ciclo_id, rid=rm_id):
+            # `.order_by(Ventas.id)`: sin orden explícito, cuál fila devuelve
+            # PostgreSQL con `.first()` no está garantizado y puede cambiar de
+            # una corrida a otra sobre los MISMOS datos -- eso volvía no
+            # determinista tanto la adopción (qué fila se actualiza) como el
+            # listado de "sobrantes" del hallazgo de más abajo. Se adopta la
+            # fila más ANTIGUA (id menor), estable entre corridas.
             return (db.query(Ventas)
                     .filter(Ventas.pais_codigo == pais_codigo,
-                            Ventas.ciclo_id == cid, Ventas.rm_id == rid).first())
+                            Ventas.ciclo_id == cid, Ventas.rm_id == rid)
+                    .order_by(Ventas.id).first())
 
         def _crear(cid=ciclo_id, rid=rm_id, r=rm):
             nuevo = Ventas(pais_codigo=pais_codigo, linea_id=r.linea_id,

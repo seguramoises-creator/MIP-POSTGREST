@@ -8,6 +8,7 @@ repetida.
 
 Necesita PostgreSQL real: cruza tres esquemas con claves compuestas.
 """
+import re
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -377,26 +378,38 @@ def test_filas_legacy_duplicadas_generan_hallazgo_de_error(escenario):
     el Excel de ventas era mensual, dos filas por RM en el mismo `ciclo_id` es
     un escenario esperable, no exótico.
 
-    `_buscar` hace `.first()`: adopta o actualiza UNA sola fila. Si hay más,
-    quedan sumando en silencio al ROI un ingreso que ya no corresponde -- el
-    daño exacto que `ENT_VENTAS_RM_CICLO` se creó para evitar, entrando por la
-    puerta de los datos preexistentes en vez de por la de los reintentos.
+    `_buscar` hace `.first()` con `.order_by(Ventas.id)`: adopta la fila MÁS
+    ANTIGUA (id menor) y actualiza solo esa. Si hay más, quedan sumando en
+    silencio al ROI un ingreso que ya no corresponde -- el daño exacto que
+    `ENT_VENTAS_RM_CICLO` se creó para evitar, entrando por la puerta de los
+    datos preexistentes en vez de por la de los reintentos.
 
     La comprobación no puede vivir dentro de `_buscar`: una vez que existe el
     mapeo, `integracion_mapeo.resolver` ya NO vuelve a llamar `buscar_natural`
     en las corridas siguientes, así que el aviso se emitiría una sola vez en
     la vida y nunca más aunque el duplicado siga ahí -- tiene que repetirse en
     cada corrida, fuera del callable `_buscar`.
+
+    El resultado se afirma DETERMINISTA (no "cualquiera de las dos"): sin
+    `.order_by(Ventas.id)` en `_buscar`, cuál fila adopta PostgreSQL con
+    `.first()` no está garantizado, y un hallazgo que lista ids distintos de
+    una corrida a otra sobre los MISMOS datos es un hallazgo en el que nadie
+    confía. La más antigua (`mas_antigua`, insertada primero, id menor) es la
+    que debe quedar con el monto de Mallén; la más reciente (`mas_reciente`)
+    debe ser la que el hallazgo nombra como sobrante, intacta.
     """
     db = escenario["db"]
-    legacy1 = Ventas(pais_codigo="DO", linea_id=escenario["rm"].linea_id,
-                     rm_id=escenario["rm"].id, ciclo_id=escenario["ciclo"].id,
-                     ventas_reales=Decimal("100.00"), cuota=Decimal("100.00"))
-    legacy2 = Ventas(pais_codigo="DO", linea_id=escenario["rm"].linea_id,
-                     rm_id=escenario["rm"].id, ciclo_id=escenario["ciclo"].id,
-                     ventas_reales=Decimal("200.00"), cuota=Decimal("100.00"))
-    db.add_all([legacy1, legacy2])
+    mas_antigua = Ventas(pais_codigo="DO", linea_id=escenario["rm"].linea_id,
+                         rm_id=escenario["rm"].id, ciclo_id=escenario["ciclo"].id,
+                         ventas_reales=Decimal("200.00"), cuota=Decimal("100.00"))
+    db.add(mas_antigua)
     db.commit()
+    mas_reciente = Ventas(pais_codigo="DO", linea_id=escenario["rm"].linea_id,
+                          rm_id=escenario["rm"].id, ciclo_id=escenario["ciclo"].id,
+                          ventas_reales=Decimal("100.00"), cuota=Decimal("100.00"))
+    db.add(mas_reciente)
+    db.commit()
+    assert mas_antigua.id < mas_reciente.id   # precondición del test: orden de inserción real
     _venta(db, "V-1", 700, 500)
     db.commit()
     hallazgos = []
@@ -405,20 +418,29 @@ def test_filas_legacy_duplicadas_generan_hallazgo_de_error(escenario):
     db.commit()
 
     # (b) no se borró nada: siguen las dos filas.
-    filas = db.query(Ventas).filter(Ventas.rm_id == escenario["rm"].id).all()
+    filas = {v.id: v for v in
+             db.query(Ventas).filter(Ventas.rm_id == escenario["rm"].id).all()}
     assert len(filas) == 2
 
-    # (a) hay un hallazgo de severidad ERROR que menciona la duplicación.
-    errores = [h for h in hallazgos if h.severidad == "error"]
-    assert any("duplicad" in h.problema.lower() or "adicional" in h.problema.lower()
-               for h in errores), errores
+    # (a) hay un hallazgo de severidad ERROR que menciona la duplicación Y
+    # nombra exactamente la fila sobrante (la más reciente), no la adoptada.
+    # Se extrae la lista "(ids: ...)" con regex en vez de un `in` sobre el
+    # texto completo: un `str(id) in problema` de sustring es falso positivo
+    # cuando el id coincide con un dígito de otra parte del mensaje (p. ej.
+    # "1 fila(s) adicionales" contiene "1").
+    errores = [h for h in hallazgos if h.severidad == "error"
+               and h.hecho == "factventa"
+               and ("duplicad" in h.problema.lower() or "adicional" in h.problema.lower())]
+    assert len(errores) == 1, errores
+    ids_en_mensaje = re.search(r"ids: ([\d, ]+)\)", errores[0].problema)
+    assert ids_en_mensaje is not None, errores[0].problema
+    ids_reportados = {int(i) for i in ids_en_mensaje.group(1).split(",")}
+    assert ids_reportados == {mas_reciente.id}
 
-    # (c) una de ellas quedó con el monto de Mallén; la otra sigue con su
-    # monto legacy original, intacta (no se tocó ni se sumó).
-    montos = {v.ventas_reales for v in filas}
-    assert Decimal("700.00") in montos
-    assert montos == {Decimal("700.00"), Decimal("200.00")} or \
-        montos == {Decimal("700.00"), Decimal("100.00")}
+    # (c) determinista: la más ANTIGUA quedó con el monto de Mallén; la más
+    # reciente sigue intacta con su monto legacy original.
+    assert filas[mas_antigua.id].ventas_reales == Decimal("700.00")
+    assert filas[mas_reciente.id].ventas_reales == Decimal("100.00")
 
 
 # --- Tarea 2: el indicador VENTAS (ext.factventa -> DW.FACT_ResultadoIndicador) ---
