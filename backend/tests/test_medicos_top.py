@@ -583,7 +583,7 @@ def test_no_registra_si_el_correo_no_salio(escenario, monkeypatch):
     db.commit()
     _publicar(db, escenario)
 
-    r = top.procesar_avisos(db, hoy=date(2026, 1, 20))
+    r = top.procesar_avisos(db, hoy=date(2026, 1, 6))
 
     assert r["recordatorios"] == 0
     assert db.query(AvisoTopEnviado).count() == 0
@@ -622,10 +622,10 @@ def test_escalamiento_solo_pasado_el_umbral(escenario, monkeypatch):
     db.commit()
     _publicar(db, escenario)
 
-    # 15-ene = 50% del ciclo, por debajo del umbral de 70
-    r_antes = top.procesar_avisos(db, hoy=date(2026, 1, 15))
-    # 28-ene ya supera el 70%
-    r_despues = top.procesar_avisos(db, hoy=date(2026, 1, 28))
+    # 8-ene = 6 de 22 días hábiles = 27%, por debajo del umbral de 50
+    r_antes = top.procesar_avisos(db, hoy=date(2026, 1, 8))
+    # 15-ene = 11 de 22 = 50% EXACTO: el borde del umbral ya escala (>=)
+    r_despues = top.procesar_avisos(db, hoy=date(2026, 1, 15))
 
     assert r_antes["escalamientos"] == 0
     assert r_despues["escalamientos"] == 1
@@ -862,7 +862,7 @@ def test_fallo_a_mitad_de_corrida_no_reenvia_lo_ya_registrado(escenario, monkeyp
     monkeypatch.setattr("app.services.notification_service.notificar_top_pendiente", enviar)
 
     with pytest.raises(RuntimeError):
-        top.procesar_avisos(db, hoy=date(2026, 1, 20))
+        top.procesar_avisos(db, hoy=date(2026, 1, 6))
     db.rollback()   # simula un reinicio del contenedor: lo no comiteado se pierde
 
     assert db.query(AvisoTopEnviado).filter_by(vm_id=escenario["rm"].id).count() == 1
@@ -873,7 +873,7 @@ def test_fallo_a_mitad_de_corrida_no_reenvia_lo_ya_registrado(escenario, monkeyp
         "app.services.notification_service.notificar_top_pendiente",
         lambda *a, **k: True)
 
-    r2 = top.procesar_avisos(db, hoy=date(2026, 1, 20))
+    r2 = top.procesar_avisos(db, hoy=date(2026, 1, 6))
 
     assert r2["recordatorios"] == 1
     assert db.query(AvisoTopEnviado).filter_by(vm_id=rm2.id).count() == 1
@@ -934,15 +934,15 @@ def test_mensaje_409_topea_nombres_en_30(escenario):
 def test_config_medicos_top_get_devuelve_defaults_sin_nada_guardado(escenario):
     """Sin ninguna fila en `Config.DIM_Parametro`, el GET debe devolver
     exactamente los defaults documentados en `visita_top_service` (2 días /
-    70% / activado) — el mismo valor que usaría `procesar_avisos` hoy."""
+    50% / activado) — el mismo valor que usaría `procesar_avisos` hoy."""
     from app.api.v1.routers import admin as admin_router
 
     db = escenario["db"]
     r = admin_router.get_config_medicos_top(db, None)
 
     assert r == {
-        "dias_recordatorio": 2, "pct_ciclo_escalamiento": 70, "avisos_activos": True,
-        "dias_recordatorio_default": 2, "pct_ciclo_escalamiento_default": 70,
+        "dias_recordatorio": 2, "pct_ciclo_escalamiento": 50, "avisos_activos": True,
+        "dias_recordatorio_default": 2, "pct_ciclo_escalamiento_default": 50,
         "avisos_activos_default": True,
     }
 
@@ -997,7 +997,7 @@ def test_config_medicos_top_rechaza_pct_fuera_de_0_100(escenario):
 
     # Ningún intento rechazado debe haber escrito nada a medias.
     r = admin_router.get_config_medicos_top(db, None)
-    assert r["pct_ciclo_escalamiento"] == 70
+    assert r["pct_ciclo_escalamiento"] == 50
 
 
 def test_config_medicos_top_rechaza_dias_negativos(escenario):
@@ -1056,8 +1056,8 @@ def test_endpoint_guarda_dias_gracia_y_procesar_avisos_lo_lee(escenario, monkeyp
 
 def test_endpoint_guarda_pct_escalamiento_y_procesar_avisos_lo_lee(escenario, monkeypatch):
     """Mismo punto del lado del escalamiento: bajar el umbral vía el ENDPOINT a
-    40% hace que el 15-ene (50% del ciclo, por debajo del default de 70) ya
-    dispare el escalamiento al GD — con el default no lo haría
+    40% hace que el 14-ene (10 de 22 días hábiles = 45%, por debajo del default
+    de 50) ya dispare el escalamiento al GD — con el default no lo haría
     (ver test_escalamiento_solo_pasado_el_umbral)."""
     from app.api.v1.routers import admin as admin_router
 
@@ -1076,7 +1076,7 @@ def test_endpoint_guarda_pct_escalamiento_y_procesar_avisos_lo_lee(escenario, mo
 
     admin_router.set_config_medicos_top({"pct_ciclo_escalamiento": 40}, db, None)
 
-    r = top.procesar_avisos(db, hoy=date(2026, 1, 15))
+    r = top.procesar_avisos(db, hoy=date(2026, 1, 14))
 
     assert r["escalamientos"] == 1
     assert db.query(AvisoTopEnviado).filter_by(tipo_aviso=AVISO_ESCALAMIENTO).count() == 1

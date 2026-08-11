@@ -143,13 +143,15 @@ Ambos consultan `AvisoTopEnviado` antes de enviar y lo escriben después. Se agr
 | Parámetro | Default | Significado |
 |---|---|---|
 | `top_dias_recordatorio` | `2` | Días hábiles tras la fecha planeada antes de avisar al representante |
-| `top_pct_ciclo_escalamiento` | `70` | % de días hábiles del ciclo transcurridos antes de escalar al GD |
+| `top_pct_ciclo_escalamiento` | `50` | % de días hábiles del ciclo transcurridos antes de escalar al GD |
 
 El porcentaje se mide como **días hábiles transcurridos ÷ días hábiles totales del ciclo**, ambos calculados con el `_networkdays` que respeta `DIM_Feriado` (§5.1), no sobre días naturales.
 
 Editables desde Administración con el mecanismo de configuración en BD que ya usa el SMTP. **El pendiente nº 8 del §10 del requerimiento sigue abierto con Mallén** (si el recordatorio va al vencer la fecha, a mitad de ciclo, o a X días del cierre); cuando respondan, es cambiar un número en pantalla, sin tocar código ni redesplegar.
 
-Los defaults son una posición razonable, no una decisión del cliente. Deben confirmarse.
+**El 50% es decisión del cliente (10-ago-2026)**: el Gerente de Distrito se entera a mitad de ciclo, con la otra mitad por delante para reaccionar. La propuesta inicial era 70% y el cliente la ajustó. Los 2 días del recordatorio sí se confirmaron tal cual.
+
+El pendiente nº 8 del §10 (el momento exacto según Mallén) **sigue abierto**: estos valores son los de VISTA hasta que el laboratorio se pronuncie, y por eso siguen siendo editables desde Administración.
 
 ### 5.5 Destinatarios
 

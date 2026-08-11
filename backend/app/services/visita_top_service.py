@@ -192,7 +192,11 @@ CFG_PCT_ESCALAMIENTO = "top_pct_ciclo_escalamiento"
 #: del §10 se resuelve con Mallén o si algo sale mal en producción.
 CFG_AVISOS_ACTIVOS = "top_avisos_activos"
 DIAS_RECORDATORIO_DEFAULT = 2
-PCT_ESCALAMIENTO_DEFAULT = 70
+#: 50% (decisión del cliente, 10-ago-2026): el Gerente de Distrito se entera a
+#: mitad de ciclo, con la otra mitad por delante para reaccionar. Antes era 70%,
+#: una posición nuestra que el cliente ajustó. El pendiente nº 8 del §10 (el
+#: momento exacto según Mallén) sigue abierto, y por eso es configurable.
+PCT_ESCALAMIENTO_DEFAULT = 50
 AVISOS_ACTIVOS_DEFAULT = True
 
 
