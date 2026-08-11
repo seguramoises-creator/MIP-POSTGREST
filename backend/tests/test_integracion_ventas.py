@@ -127,9 +127,9 @@ def escenario(db):
     return {"db": db, "rm": rm, "ciclo": ciclo}
 
 
-def _venta(db, origen_id, valor, cuota, producto="P1", rm="VM01"):
+def _venta(db, origen_id, valor, cuota, producto="P1", rm="VM01", lote_id=1001):
     db.add(ExtFactVenta(
-        lote_id=1001, origen_id=origen_id, pais_codigo="DO",
+        lote_id=lote_id, origen_id=origen_id, pais_codigo="DO",
         ciclo_codigo="C01-2026", rm_codigo=rm, producto_codigo=producto,
         valor_venta=Decimal(str(valor)), cuota=Decimal(str(cuota))))
     db.flush()
@@ -291,3 +291,70 @@ def test_rm_sin_sincronizar_se_omite_y_el_resto_entra(escenario):
     assert db.query(Ventas).count() == 1
     assert db.query(Ventas).one().ventas_reales == Decimal("100.00")
     assert any(h.severidad == "error" for h in hallazgos)
+
+
+def test_ciclo_no_sincronizado_se_omite_con_hallazgo(escenario):
+    """Rama simétrica a `test_rm_sin_sincronizar...`: si el CICLO no tiene
+    mapeo (en vez del RM), el grupo se omite igual, con hallazgo de error, y
+    no se escribe ninguna fila."""
+    db = escenario["db"]
+    db.add(ExtDimCiclo(pais_codigo="DO", ciclo_codigo="C99-2026", anio=2026,
+                       numero=99, fecha_inicio=date(2026, 12, 1),
+                       fecha_fin=date(2026, 12, 31), dias_laborables=20,
+                       cerrado=False))
+    db.add(ExtControlCarga(
+        lote_id=1099, sistema_origen="SFA", modulo="VENTAS", pais_codigo="DO",
+        ciclo_codigo="C99-2026", fecha_extraccion=datetime(2026, 12, 31, 20, 0),
+        fecha_recepcion=datetime(2026, 12, 31, 21, 0), filas_enviadas=1,
+        estado="VALIDADO"))
+    db.flush()
+    db.add(ExtFactVenta(
+        lote_id=1099, origen_id="V-1", pais_codigo="DO",
+        ciclo_codigo="C99-2026", rm_codigo="VM01", producto_codigo="P1",
+        valor_venta=Decimal("100"), cuota=Decimal("100")))
+    db.commit()
+    hallazgos = []
+
+    viz.integrar_ventas(db, "DO", "C99-2026", hallazgos)
+    db.commit()
+
+    assert db.query(Ventas).count() == 0
+    assert any(h.severidad == "error" for h in hallazgos)
+
+
+def test_lotes_multiples_del_mismo_rm_se_acreditan_todos(escenario):
+    """El defecto Important de la ronda 1: agrupar por RM puede juntar filas
+    de VARIOS lotes (un reenvio/correccion parcial de Mallen). Acreditar solo
+    el lote de la primera fila dejaba al resto atascado en VALIDADO aunque sus
+    datos SI se hubieran integrado -- `_cerrar_lotes` nunca los habria
+    pasado a INTEGRADO.
+    """
+    db = escenario["db"]
+    db.add(ExtControlCarga(
+        lote_id=1002, sistema_origen="SFA", modulo="VENTAS", pais_codigo="DO",
+        ciclo_codigo="C01-2026", fecha_extraccion=datetime(2026, 1, 31, 20, 0),
+        fecha_recepcion=datetime(2026, 1, 31, 21, 0), filas_enviadas=1,
+        estado="VALIDADO"))
+    db.flush()
+    _venta(db, "V-1", 100, 40, producto="P1", lote_id=1001)
+    _venta(db, "V-2", 200, 60, producto="P2", lote_id=1002)
+    db.commit()
+
+    conteo = viz.integrar_ventas(db, "DO", "C01-2026", [])
+    db.commit()
+
+    assert conteo.lotes_aportados == {1001, 1002}
+    assert db.query(Ventas).one().ventas_reales == Decimal("300.00")
+
+    # Bonus: con ambos lotes acreditados, `_cerrar_lotes` (el consumidor real
+    # de `lotes_aportados` dentro de `integrar_todo`) los pasa a INTEGRADO a
+    # los dos -- no solo al que aporto la primera fila del grupo.
+    cerrados = viz._cerrar_lotes(
+        db, [1001, 1002], "Integrado en VISTA.", "C01-2026", conteo.lotes_aportados)
+    db.commit()
+
+    assert cerrados == [1001, 1002]
+    estados = {row.lote_id: row.estado for row in
+               db.query(ExtControlCarga).filter(
+                   ExtControlCarga.lote_id.in_([1001, 1002])).all()}
+    assert estados == {1001: "INTEGRADO", 1002: "INTEGRADO"}

@@ -117,14 +117,14 @@ class ConteoHecho:
     #: un lote cuyas filas se omitieron TODAS no debe pasar a INTEGRADO.
     lotes_aportados: set[int] = field(default_factory=set)
 
-    def anotar(self, resultado: str, lote_id: int) -> None:
+    def anotar(self, resultado: str, *lotes: int) -> None:
         if resultado == mapeo.RESULTADO_CREADO:
             self.integrados += 1
         else:
             # Adoptado y actualizado se cuentan igual: para un hecho no existe la
             # distinción del maestro (nadie los cargó antes a mano).
             self.actualizados += 1
-        self.lotes_aportados.add(lote_id)
+        self.lotes_aportados.update(lotes)
 
 
 def _refs(db: Session, pais_codigo: str, ciclo_codigo: str, rm_codigo: str
@@ -735,7 +735,12 @@ def integrar_ventas(db: Session, pais_codigo: str, ciclo_codigo: str,
         # tabla a medias). El Score NO lo usa: su camino es FACT_ResultadoIndicador.
         registro.cumplimiento_pct = (
             calcular_cumplimiento(total_venta, total_cuota) if total_cuota else None)
-        conteo.anotar(resultado, grupo[0].lote_id)
+        # Un mismo RM/ciclo puede traer filas de VARIOS lotes (un reenvío parcial
+        # de Mallén). Todos aportaron a la suma, así que todos deben poder cerrar:
+        # acreditar solo el primero dejaría al resto atascado en VALIDADO aunque
+        # sus datos ya estén integrados. El conteo de integrados/actualizados
+        # sigue siendo uno por RM — lo que se multiplica son los lotes, no las filas.
+        conteo.anotar(resultado, *{f.lote_id for f in grupo})
 
     return conteo
 
