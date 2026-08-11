@@ -32,6 +32,7 @@ from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE, MapeoExterno
 from app.services import integracion_indicadores_service as ind
 from app.services import integracion_visitas_service as viz
 from app.services import motor_calculo_service
+from app.services import visita_costo_service
 
 BD_PRUEBA = "vista_test_ventas"
 
@@ -537,3 +538,53 @@ def test_prom_diario_no_se_calcula_ni_pisa_para_rm_solo_de_ventas(escenario):
                  .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
                  .filter(Indicador.codigo == "PROM_DIARIO").one())
     assert fila_prom.resultado_real == Decimal("0.7500")   # intacto, NO pisado con 0
+
+
+# --- Tarea 3: el circuito Mallen -> FACT_Ventas -> ROI (Visita) ---
+
+
+def test_las_ventas_integradas_alimentan_el_roi(escenario):
+    """El §7.2 pide que Ventas alimente «los ingresos del ROI». Este test cierra
+    el circuito Mallen -> FACT_Ventas -> ROI de punta a punta."""
+    db = escenario["db"]
+    _venta(db, "V-1", 700, 500)
+    db.commit()
+
+    viz.integrar_ventas(db, "DO", "C01-2026", [])
+    db.commit()
+
+    r = visita_costo_service.roi(db, escenario["ciclo"].id, escenario["rm"].id)
+
+    assert r["ingresos"] == 700.0
+
+
+def test_el_roi_no_toma_ventas_de_otro_pais(escenario):
+    """No prueba un arreglo: `DIM_Ciclo` YA lleva pais_codigo, asi que cada
+    ciclo es de un solo pais y el ROI nunca pudo mezclar. Fija la propiedad
+    para que nadie la rompa quitando el pais del ciclo."""
+    db = escenario["db"]
+    otro_pais = Pais(codigo="CR", nombre="Costa Rica")
+    db.add(otro_pais)
+    db.flush()
+    otra_linea = Linea(pais_codigo="CR", codigo="CARD", nombre="Cardiologia")
+    db.add(otra_linea)
+    db.flush()
+    otro_rm = RepresentanteMedico(pais_codigo="CR", linea_id=otra_linea.id,
+                                  codigo="VM01-CR", nombre="RM de CR")
+    otro_ciclo = Ciclo(pais_codigo="CR", anio=2026, numero=1, nombre="Ciclo 1",
+                       fecha_inicio=date(2026, 1, 1), fecha_fin=date(2026, 1, 31),
+                       dias_laborables=20, cerrado=False)
+    db.add_all([otro_rm, otro_ciclo])
+    db.flush()
+    db.add(Ventas(pais_codigo="CR", linea_id=otra_linea.id, rm_id=otro_rm.id,
+                  ciclo_id=otro_ciclo.id, ventas_reales=Decimal("9999.00"),
+                  cuota=Decimal("1.00")))
+    _venta(db, "V-1", 700, 500)
+    db.commit()
+
+    viz.integrar_ventas(db, "DO", "C01-2026", [])
+    db.commit()
+
+    r = visita_costo_service.roi(db, escenario["ciclo"].id, None)
+
+    assert r["ingresos"] == 700.0        # las de CR no se cuelan
