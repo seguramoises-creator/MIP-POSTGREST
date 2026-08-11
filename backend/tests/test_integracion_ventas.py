@@ -22,14 +22,16 @@ from app.models import (  # noqa: F401
     hechos, ia_conexion, integracion_ext, integracion_hallazgo, mapeo_externo,
     seguridad_rbac, usuario, visita,
 )
-from app.models.dimensiones import Ciclo, Gerente, Linea, Pais, RepresentanteMedico
-from app.models.hechos import Ventas
+from app.models.dimensiones import Ciclo, Gerente, Indicador, Linea, Pais, RepresentanteMedico
+from app.models.hechos import ResultadoIndicador, Ventas
 from app.models.integracion_ext import (
     ExtControlCarga, ExtDimCiclo, ExtDimPais, ExtDimProducto, ExtDimRepresentante,
     ExtFactVenta,
 )
 from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE, MapeoExterno
+from app.services import integracion_indicadores_service as ind
 from app.services import integracion_visitas_service as viz
+from app.services import motor_calculo_service
 
 BD_PRUEBA = "vista_test_ventas"
 
@@ -67,12 +69,18 @@ def motor():
 def db(motor):
     Sesion = sessionmaker(bind=motor)
     s = Sesion()
-    for tabla in ('"DW"."FACT_Ventas"', "ext.factventa", "ext.dimproducto",
+    # `FACT_ResultadoIndicador`/`DIM_Indicador` los usan las pruebas del
+    # indicador VENTAS (Tarea 2): sin limpiarlos aqui, la segunda prueba de la
+    # sesion que llame `_indicador_ventas` chocaria con el UNIQUE
+    # (pais_codigo, codigo) del indicador anterior, sin relacion con lo que
+    # esa prueba intenta verificar.
+    for tabla in ('"DW"."FACT_ResultadoIndicador"', '"DW"."FACT_Ventas"',
+                  "ext.factventa", "ext.dimproducto",
                   '"Config"."MapeoExterno"', "ext.controlcarga",
                   "ext.dimrepresentante", "ext.dimciclo", "ext.dimpais",
                   '"Config"."DIM_RM"', '"Config"."DIM_Gerente"',
                   '"Config"."DIM_Ciclo"', '"Config"."DIM_Linea"',
-                  '"Config"."DIM_Pais"'):
+                  '"Config"."DIM_Indicador"', '"Config"."DIM_Pais"'):
         s.execute(text(f"DELETE FROM {tabla}"))
     s.commit()
     yield s
@@ -358,3 +366,108 @@ def test_lotes_multiples_del_mismo_rm_se_acreditan_todos(escenario):
                db.query(ExtControlCarga).filter(
                    ExtControlCarga.lote_id.in_([1001, 1002])).all()}
     assert estados == {1001: "INTEGRADO", 1002: "INTEGRADO"}
+
+
+# --- Tarea 2: el indicador VENTAS (ext.factventa -> DW.FACT_ResultadoIndicador) ---
+
+
+def _indicador_ventas(db):
+    """VENTAS con escala=1 y ponderacion 15, igual que en produccion."""
+    i = Indicador(pais_codigo="DO", codigo="VENTAS", nombre="Ventas vs Cuota",
+                  modulo="RESULTADOS", tipo_periodo="MES", escala=1,
+                  ponderacion_pct=15)
+    db.add(i)
+    db.flush()
+    return i
+
+
+def test_ventas_atraviesa_el_motor_y_puntua_bien(escenario):
+    """EL test que faltó en el sub-proyecto 3: afirmar sobre `resultado_real`
+    compara el valor consigo mismo. Lo que importa es qué PUNTOS salen al
+    final, porque VENTAS tiene escala=1 y el motor multiplica por 100."""
+    db = escenario["db"]
+    _indicador_ventas(db)
+    _venta(db, "V-1", 88, 100)
+    db.commit()
+
+    ind.calcular_indicadores(db, "DO", "C01-2026", [])
+    db.commit()
+    motor_calculo_service.completar_puntajes(db, escenario["ciclo"].id, "DO")
+
+    fila = (db.query(ResultadoIndicador)
+            .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
+            .filter(Indicador.codigo == "VENTAS").one())
+    assert fila.resultado_real == Decimal("0.8800")      # FRACCION, no 88
+    assert fila.resultado_porcentaje == Decimal("88.0000")
+    assert fila.puntos_obtenidos == Decimal("13.2000")   # 88% de 15
+
+
+def test_sobrecumplimiento_no_se_acota_en_el_dato_crudo(escenario):
+    db = escenario["db"]
+    _indicador_ventas(db)
+    _venta(db, "V-1", 120, 100)
+    db.commit()
+
+    ind.calcular_indicadores(db, "DO", "C01-2026", [])
+    db.commit()
+    motor_calculo_service.completar_puntajes(db, escenario["ciclo"].id, "DO")
+
+    fila = (db.query(ResultadoIndicador)
+            .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
+            .filter(Indicador.codigo == "VENTAS").one())
+    assert fila.resultado_real == Decimal("1.2000")       # crudo, sin acotar
+    assert fila.resultado_porcentaje == Decimal("100.0000")  # el motor sí acota
+
+
+def test_venta_negativa_no_baja_de_cero(escenario):
+    db = escenario["db"]
+    _indicador_ventas(db)
+    _venta(db, "V-1", -50, 100)
+    db.commit()
+
+    ind.calcular_indicadores(db, "DO", "C01-2026", [])
+    db.commit()
+
+    fila = (db.query(ResultadoIndicador)
+            .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
+            .filter(Indicador.codigo == "VENTAS").one())
+    assert fila.resultado_real == Decimal("0.0000")
+
+
+def test_sin_cuota_no_se_escribe_la_fila(escenario):
+    """Dividir por cero no es cumplimiento cero: es ausencia de meta, y un 0
+    penalizaria a un RM al que nadie le fijo cuota."""
+    db = escenario["db"]
+    _indicador_ventas(db)
+    _venta(db, "V-1", 500, 0)
+    db.commit()
+    hallazgos = []
+
+    ind.calcular_indicadores(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert (db.query(ResultadoIndicador)
+            .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
+            .filter(Indicador.codigo == "VENTAS").count()) == 0
+    assert any(h.severidad == "aviso" for h in hallazgos)
+
+
+def test_sin_cuota_no_pisa_un_valor_anterior(escenario):
+    """Al no escribirse, tampoco entra en el delete-then-insert: lo que hubiera
+    cargado el Excel se conserva."""
+    db = escenario["db"]
+    i = _indicador_ventas(db)
+    db.add(ResultadoIndicador(
+        rm_id=escenario["rm"].id, pais_codigo="DO",
+        linea_id=escenario["rm"].linea_id, ciclo_id=escenario["ciclo"].id,
+        indicador_id=i.id, resultado_real=Decimal("0.9"), activo=True))
+    _venta(db, "V-1", 500, 0)
+    db.commit()
+
+    ind.calcular_indicadores(db, "DO", "C01-2026", [])
+    db.commit()
+
+    fila = (db.query(ResultadoIndicador)
+            .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
+            .filter(Indicador.codigo == "VENTAS").one())
+    assert fila.resultado_real == Decimal("0.9000")   # intacto

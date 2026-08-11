@@ -26,8 +26,8 @@ from app.models.dimensiones import Ciclo, Indicador, Linea, Pais, RepresentanteM
 from app.models.hechos import ResultadoIndicador
 from app.models.integracion_ext import (
     ExtControlCarga, ExtDimCiclo, ExtDimFarmacia, ExtDimMedico, ExtDimPais,
-    ExtDimRepresentante, ExtFactVisitaFarmacia, ExtFactVisitaMedico,
-    ExtPanelMedico, ExtTargetFarmacia,
+    ExtDimRepresentante, ExtFactVenta, ExtFactVisitaFarmacia,
+    ExtFactVisitaMedico, ExtPanelMedico, ExtTargetFarmacia,
 )
 from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE, MapeoExterno
 from app.services import integracion_indicadores_service as ind
@@ -73,7 +73,7 @@ def db(motor):
     for tabla in ('"DW"."FACT_ResultadoIndicador"', '"Config"."DIM_MetaIndicador"',
                   '"Config"."DIM_Indicador"',
                   "ext.panelmedico", "ext.factvisitamedico", "ext.targetfarmacia",
-                  "ext.factvisitafarmacia", "ext.controlcarga",
+                  "ext.factvisitafarmacia", "ext.factventa", "ext.controlcarga",
                   '"Config"."DIM_Medico"', '"Config"."DIM_CentroMedico"',
                   '"Config"."DIM_Municipio"', '"Config"."DIM_Provincia"',
                   '"Config"."DIM_Farmacia"', '"Config"."DIM_Producto"',
@@ -178,6 +178,17 @@ def _visitas_farmacia(db, farmacia, cuantas, ejecutada=True, desde=1):
             lote_id=1001, origen_id=f"VF-{farmacia}-{i}", pais_codigo="DO",
             ciclo_codigo="C01-2026", rm_codigo="VM01", farmacia_codigo=farmacia,
             fecha_visita=date(2026, 1, desde + i), ejecutada=ejecutada))
+
+
+def _venta(db, origen_id, valor, cuota):
+    # `producto_codigo=None`: estas pruebas de indicadores de visita no
+    # necesitan el catálogo de productos, solo que VENTAS tenga con qué
+    # calcular su cumplimiento (ver la nota de módulo «VENTAS: QUINTO
+    # INDICADOR» de `integracion_indicadores_service`).
+    db.add(ExtFactVenta(
+        lote_id=1001, origen_id=origen_id, pais_codigo="DO",
+        ciclo_codigo="C01-2026", rm_codigo="VM01", producto_codigo=None,
+        valor_venta=Decimal(str(valor)), cuota=Decimal(str(cuota))))
 
 
 def test_cobertura_cuenta_medicos_distintos_no_visitas(base):
@@ -292,11 +303,12 @@ def test_visitas_programadas_nulo_no_afecta_el_calculo(base):
     """`visitas_programadas` no entra en la fórmula, así que un nulo no rompe
     nada ni genera hallazgo: no hay frecuencia que exigir.
 
-    Se completa el universo de F2 y farmacias (aunque no es lo que este test
-    quiere ejercitar) para que `assert hallazgos == []` siga probando
-    específicamente lo suyo — que `visitas_programadas=None` no genera
-    ningún hallazgo — sin mezclarse con los avisos de «sin universo» de la
-    corrección C3, que se prueban aparte.
+    Se completa el universo de F2, farmacias Y VENTAS (aunque no es lo que
+    este test quiere ejercitar) para que `assert hallazgos == []` siga
+    probando específicamente lo suyo — que `visitas_programadas=None` no
+    genera ningún hallazgo — sin mezclarse con los avisos de «sin universo»/
+    «sin cuota» de las correcciones C3 y de la Tarea 2 (VENTAS), que se
+    prueban aparte.
     """
     db = base["db"]
     _panel(db, "MD01", "F1", None)
@@ -305,6 +317,7 @@ def test_visitas_programadas_nulo_no_afecta_el_calculo(base):
     _visitas(db, "MD02", 1, desde=5)
     _farmacia(db, "FAR01")
     _visitas_farmacia(db, "FAR01", 1)
+    _venta(db, "V-1", 100, 100)
     db.commit()
     hallazgos = []
 
@@ -316,17 +329,29 @@ def test_visitas_programadas_nulo_no_afecta_el_calculo(base):
 
 
 def test_recalcular_no_duplica_ni_toca_otros_indicadores(base):
-    """Delete-then-insert acotado a los 4 códigos: los otros no se rozan.
+    """Delete-then-insert acotado a los 5 códigos que maneja este módulo
+    (los 4 de visita + VENTAS, Tarea 2): un indicador de OTRO módulo no se
+    roza.
 
-    Se completa el universo de F1, F2 y farmacias (PROM_DIARIO siempre se
-    calcula, no tiene noción de universo) para que los 4 se calculen de
-    verdad y la cuenta `4 calculados + VENTAS` siga siendo literal — si solo
-    se cargara F1, la corrección C3 dejaría a F2 y farmacias sin fila (sin
-    universo), y esta prueba dejaría de probar lo que dice probar.
+    `EVAL_CONOCIMIENTOS` (no está en `ind.CODIGOS`, lo consolida el módulo de
+    Exámenes — ver §22 de CLAUDE.md) hace de indicador ajeno. Antes de la
+    Tarea 2 este mismo rol lo hacía `VENTAS`, pero ahora que VENTAS SÍ es uno
+    de los códigos que gestiona `calcular_indicadores`, ya no sirve como
+    ejemplo de «indicador que no se toca» — usarlo aquí además chocaría con
+    el UNIQUE (pais_codigo, codigo), porque la fixture `base` ya da de alta
+    un VENTAS por cada código de `ind.CODIGOS`.
+
+    Se completa el universo de F1, F2, farmacias y VENTAS (PROM_DIARIO
+    siempre se calcula, no tiene noción de universo) para que los 5 se
+    calculen de verdad y la cuenta `5 calculados + EVAL_CONOCIMIENTOS` siga
+    siendo literal — si solo se cargara F1, la corrección C3 dejaría a F2 y
+    farmacias sin fila (sin universo), y esta prueba dejaría de probar lo que
+    dice probar.
     """
     db = base["db"]
-    otro = Indicador(pais_codigo="DO", codigo="VENTAS", nombre="Ventas",
-                     modulo="COMERCIAL", tipo_periodo="MES")
+    otro = Indicador(pais_codigo="DO", codigo="EVAL_CONOCIMIENTOS",
+                     nombre="Evaluación de Conocimientos",
+                     modulo="CAPACITACION", tipo_periodo="MES")
     db.add(otro)
     db.flush()
     db.add(ResultadoIndicador(rm_id=base["rm"].id, pais_codigo="DO",
@@ -339,6 +364,7 @@ def test_recalcular_no_duplica_ni_toca_otros_indicadores(base):
     _visitas(db, "MD02", 1, desde=5)
     _farmacia(db, "FAR01")
     _visitas_farmacia(db, "FAR01", 1)
+    _venta(db, "V-1", 100, 100)
     db.commit()
     ind.calcular_indicadores(db, "DO", "C01-2026", [])
     db.commit()
@@ -346,8 +372,10 @@ def test_recalcular_no_duplica_ni_toca_otros_indicadores(base):
     ind.calcular_indicadores(db, "DO", "C01-2026", [])
     db.commit()
 
-    assert db.query(ResultadoIndicador).count() == 5   # 4 calculados + VENTAS
-    assert _valor(db, base["rm"].id, base["ciclo"].id, "VENTAS") == 88.0
+    # 5 calculados por este módulo (F1/F2/PROM_DIARIO/COB_FARMACIAS/VENTAS)
+    # + EVAL_CONOCIMIENTOS, el ajeno que nunca debió tocarse.
+    assert db.query(ResultadoIndicador).count() == 6
+    assert _valor(db, base["rm"].id, base["ciclo"].id, "EVAL_CONOCIMIENTOS") == 88.0
 
 
 def test_no_escribe_puntos_solo_el_valor(base):

@@ -95,17 +95,35 @@ fuente sea un lote no integrable no debe ni entrar al bucle, para que la regla
 de «sin universo no se pisa lo que hubiera antes» (ver la nota de arriba)
 también lo proteja a él — de lo contrario PROM_DIARIO, que no tiene noción de
 universo, escribiría una tasa cruda de `0` real y pisaría su valor previo.
+
+VENTAS (sub-proyecto 5, Tarea 2): QUINTO INDICADOR, DE OTRA FUENTE
+--------------------------------------------------------------------
+`VENTAS` se calcula aquí también --comparte gate de lote, guard de ciclo
+cerrado y patron `candidatos`/delete-then-insert con los otros cuatro--, pero
+su origen NO es visita: sale de `ext.factventa` (venta + cuota por RM/ciclo),
+la misma tabla que agrega `integracion_visitas_service.integrar_ventas` hacia
+`DW.FACT_Ventas`. Es una lectura independiente de esa: este modulo no
+depende de que `integrar_ventas` ya haya corrido, ni pisa su tabla.
+
+Misma unidad que el resto: `_cumplimiento_ventas` devuelve una FRACCION 0-1
+(`venta/cuota`), no un porcentaje -- `VENTAS` esta dado de alta con
+`escala == 1`, asi que el motor la multiplica por 100 una sola vez (ver la
+nota de modulo de mas arriba sobre la unidad de `resultado_real`). Y la misma
+regla de «sin universo no es cero»: sin `cuota` no hay meta con la que medir
+cumplimiento, asi que no se escribe la fila (se avisa) en vez de escribir un
+`0` que penalizaria a un RM al que nadie le fijo cuota.
 """
 from decimal import Decimal
 
 from loguru import logger
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.dimensiones import Ciclo, Indicador, RepresentanteMedico
 from app.models.hechos import ResultadoIndicador
 from app.models.integracion_ext import (
-    ExtDimCiclo, ExtFactVisitaFarmacia, ExtFactVisitaMedico, ExtPanelMedico,
-    ExtTargetFarmacia,
+    ExtDimCiclo, ExtFactVenta, ExtFactVisitaFarmacia, ExtFactVisitaMedico,
+    ExtPanelMedico, ExtTargetFarmacia,
 )
 from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE
 from app.services import integracion_mapeo as mapeo
@@ -118,7 +136,8 @@ COB_MD_F1 = "COB_MD_F1"
 COB_MD_F2 = "COB_MD_F2"
 PROM_DIARIO = "PROM_DIARIO"
 COB_FARMACIAS = "COB_FARMACIAS"
-CODIGOS: tuple[str, ...] = (COB_MD_F1, COB_MD_F2, PROM_DIARIO, COB_FARMACIAS)
+VENTAS = "VENTAS"
+CODIGOS: tuple[str, ...] = (COB_MD_F1, COB_MD_F2, PROM_DIARIO, COB_FARMACIAS, VENTAS)
 
 
 def _pct(cubiertos: int, universo: int) -> Decimal:
@@ -246,19 +265,50 @@ def _cobertura_farmacias(db: Session, pais_codigo: str, ciclo_codigo: str,
     return _pct(len(target & visitadas), len(target))
 
 
+def _cumplimiento_ventas(db: Session, pais_codigo: str, ciclo_codigo: str,
+                         rm_codigo: str, lotes_integrables: list[int]
+                         ) -> Decimal | None:
+    """`SUM(valor_venta) / SUM(cuota)` del RM en el ciclo, como FRACCIÓN 0-1.
+
+    Devuelve None —y por tanto NO se escribe la fila— cuando no hay cuota: sin
+    meta no hay cumplimiento que medir, y un 0 penalizaría a un representante al
+    que nadie se la fijó. Misma regla que el universo vacío de las coberturas.
+
+    Se acota por abajo a 0 (una venta negativa por devoluciones no resta
+    cumplimiento) pero NO por arriba: sobrecumplir debe verse en el dato crudo,
+    y el motor ya acota a 100 al puntuar.
+    """
+    fila = (db.query(func.sum(ExtFactVenta.valor_venta),
+                     func.sum(ExtFactVenta.cuota))
+            .filter(ExtFactVenta.pais_codigo == pais_codigo,
+                    ExtFactVenta.ciclo_codigo == ciclo_codigo,
+                    ExtFactVenta.rm_codigo == rm_codigo,
+                    ExtFactVenta.lote_id.in_(lotes_integrables)).one())
+    venta, cuota = fila[0], fila[1]
+    if cuota is None or Decimal(cuota) == 0:
+        return None
+    bruto = Decimal(venta or 0) / Decimal(cuota)
+    return max(bruto, Decimal(0)).quantize(Decimal("0.0001"))
+
+
 def _lotes_integrables(db: Session, pais_codigo: str, ciclo_codigo: str) -> set[int]:
     """Los `lote_id` en VALIDADO/INTEGRADO (`_ESTADOS_LOTE_INTEGRABLES`, de
     `integracion_visitas_service`) entre los que aportan filas a este
-    país/ciclo, en cualquiera de los 4 hechos de `ext` que lee este módulo.
+    país/ciclo, en cualquiera de los 5 hechos de `ext` que lee este módulo
+    (los 4 de visita más `ExtFactVenta`, para VENTAS -- ver la nota de módulo
+    «VENTAS: QUINTO INDICADOR»).
 
     Resuelto UNA sola vez por corrida (no una consulta por fila ni por RM):
     primero los `lote_id` presentes en `ext` para este país/ciclo, luego su
     estado en una sola consulta a `ExtControlCarga` vía
     `_resolver_estados_lotes`. El resultado se pasa a cada helper de más abajo
-    para filtrar sus consultas.
+    para filtrar sus consultas. Sin `ExtFactVenta` aquí, un lote que solo
+    trajera ventas (sin ningún hecho de visita) nunca se reconocería como
+    integrable y `_cumplimiento_ventas` nunca vería sus filas, pese a que el
+    lote esté VALIDADO/INTEGRADO.
     """
     modelos = (ExtFactVisitaMedico, ExtPanelMedico, ExtTargetFarmacia,
-              ExtFactVisitaFarmacia)
+              ExtFactVisitaFarmacia, ExtFactVenta)
     lote_ids: set[int] = set()
     for modelo in modelos:
         lote_ids |= {f[0] for f in db.query(modelo.lote_id)
@@ -321,9 +371,11 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
     # resuelto UNA sola vez para toda la corrida, no por fila ni por RM.
     lotes_integrables = _lotes_integrables(db, pais_codigo, ciclo_codigo)
 
-    # Los RM con actividad: los del panel más los que solo tienen farmacias,
-    # acotados a lotes VALIDADO/INTEGRADO -- un RM cuya única fuente sea un
-    # lote no integrable no debe ni entrar al bucle (ver la nota de módulo).
+    # Los RM con actividad: los del panel más los que solo tienen farmacias o
+    # solo ventas, acotados a lotes VALIDADO/INTEGRADO -- un RM cuya única
+    # fuente sea un lote no integrable no debe ni entrar al bucle (ver la nota
+    # de módulo). Sin la unión de ventas, un RM sin panel médico (solo SFA de
+    # ventas) nunca llegaría a calcularse.
     rms = {f[0] for f in db.query(ExtPanelMedico.rm_codigo)
            .filter(ExtPanelMedico.pais_codigo == pais_codigo,
                    ExtPanelMedico.ciclo_codigo == ciclo_codigo,
@@ -332,6 +384,10 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
             .filter(ExtTargetFarmacia.pais_codigo == pais_codigo,
                     ExtTargetFarmacia.ciclo_codigo == ciclo_codigo,
                     ExtTargetFarmacia.lote_id.in_(lotes_integrables)).distinct()}
+    rms |= {f[0] for f in db.query(ExtFactVenta.rm_codigo)
+            .filter(ExtFactVenta.pais_codigo == pais_codigo,
+                    ExtFactVenta.ciclo_codigo == ciclo_codigo,
+                    ExtFactVenta.lote_id.in_(lotes_integrables)).distinct()}
 
     filas_escritas = 0
     rms_calculados = 0
@@ -376,6 +432,9 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
             COB_FARMACIAS: (_cobertura_farmacias(db, pais_codigo, ciclo_codigo,
                                                  rm_codigo, lotes_integrables),
                             "no tiene target de farmacias"),
+            VENTAS: (_cumplimiento_ventas(db, pais_codigo, ciclo_codigo,
+                                          rm_codigo, lotes_integrables),
+                     "no tiene cuota de ventas cargada"),
         }
         valores: dict[str, Decimal] = {}
         for codigo, (valor, motivo) in candidatos.items():
