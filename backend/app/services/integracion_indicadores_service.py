@@ -1,4 +1,5 @@
-"""Calcula los cuatro indicadores de visita a partir de los hechos de Mallén.
+"""Calcula los cinco indicadores (cuatro de visita + VENTAS) a partir de los
+hechos de Mallén.
 
 POR QUÉ EXISTE ESTE MÓDULO
 ---------------------------
@@ -112,6 +113,27 @@ nota de modulo de mas arriba sobre la unidad de `resultado_real`). Y la misma
 regla de «sin universo no es cero»: sin `cuota` no hay meta con la que medir
 cumplimiento, asi que no se escribe la fila (se avisa) en vez de escribir un
 `0` que penalizaria a un RM al que nadie le fijo cuota.
+
+RONDA DE CORRECCIONES 1 (post-Tarea 2): PROM_DIARIO NO ES DE QUIEN SOLO TIENE VENTAS
+--------------------------------------------------------------------------------------
+`PROM_DIARIO` es el único indicador de este módulo SIN noción de universo: no
+pasa por `candidatos`, así que nunca devuelve `None` -- `_promedio_diario`
+siempre devuelve una tasa cruda, `0` incluido, para cualquier `rm_codigo` que
+llegue al bucle. Antes de esta corrección `rms` (el universo TOTAL, incluidos
+los RM que solo tienen ventas) alimentaba también a `PROM_DIARIO`: un RM cuya
+única fuente fuera `ext.factventa` -- el caso normal cuando ventas y visitas
+son feeds separados de Mallén que no llegan el mismo día -- se colaba al
+bucle, `_medicos_visitados` le devolvía el conjunto vacío, y `PROM_DIARIO`
+escribía un `0` real que pisaba (delete-then-insert) cualquier valor previo
+cargado por el feed de visitas. Exactamente el daño que la nota de módulo
+«SIN UNIVERSO NO ES COBERTURA CERO» existe para evitar.
+
+Por eso `calcular_indicadores` distingue `rms_visita` (panel médico + target
+de farmacias -- quienes SÍ tienen, en principio, algo que visitar) de `rms`
+(universo total, `rms_visita` más los que solo aparecen en `ext.factventa`).
+`PROM_DIARIO` se calcula únicamente para `rm_codigo in rms_visita`. Un RM que
+SÍ está en `rms_visita` pero no visitó a nadie sigue recibiendo su `0`
+legítimo -- eso no cambió, y hay tests que lo protegen.
 """
 from decimal import Decimal
 
@@ -266,7 +288,7 @@ def _cobertura_farmacias(db: Session, pais_codigo: str, ciclo_codigo: str,
 
 
 def _cumplimiento_ventas(db: Session, pais_codigo: str, ciclo_codigo: str,
-                         rm_codigo: str, lotes_integrables: list[int]
+                         rm_codigo: str, lotes_integrables: set[int]
                          ) -> Decimal | None:
     """`SUM(valor_venta) / SUM(cuota)` del RM en el ciclo, como FRACCIÓN 0-1.
 
@@ -321,7 +343,8 @@ def _lotes_integrables(db: Session, pais_codigo: str, ciclo_codigo: str) -> set[
 
 def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
                          hallazgos: list) -> dict:
-    """Calcula los 4 indicadores de cada RM con actividad en el ciclo.
+    """Calcula los 5 indicadores (4 de visita + VENTAS) de cada RM con
+    actividad en el ciclo.
 
     Escribe SOLO `resultado_real`: la conversión a puntos la sigue haciendo
     `motor_calculo_service`, igual que con los datos que llegaban por Excel. Así
@@ -371,23 +394,25 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
     # resuelto UNA sola vez para toda la corrida, no por fila ni por RM.
     lotes_integrables = _lotes_integrables(db, pais_codigo, ciclo_codigo)
 
-    # Los RM con actividad: los del panel más los que solo tienen farmacias o
-    # solo ventas, acotados a lotes VALIDADO/INTEGRADO -- un RM cuya única
-    # fuente sea un lote no integrable no debe ni entrar al bucle (ver la nota
-    # de módulo). Sin la unión de ventas, un RM sin panel médico (solo SFA de
-    # ventas) nunca llegaría a calcularse.
-    rms = {f[0] for f in db.query(ExtPanelMedico.rm_codigo)
-           .filter(ExtPanelMedico.pais_codigo == pais_codigo,
-                   ExtPanelMedico.ciclo_codigo == ciclo_codigo,
-                   ExtPanelMedico.lote_id.in_(lotes_integrables)).distinct()}
-    rms |= {f[0] for f in db.query(ExtTargetFarmacia.rm_codigo)
-            .filter(ExtTargetFarmacia.pais_codigo == pais_codigo,
-                    ExtTargetFarmacia.ciclo_codigo == ciclo_codigo,
-                    ExtTargetFarmacia.lote_id.in_(lotes_integrables)).distinct()}
-    rms |= {f[0] for f in db.query(ExtFactVenta.rm_codigo)
-            .filter(ExtFactVenta.pais_codigo == pais_codigo,
-                    ExtFactVenta.ciclo_codigo == ciclo_codigo,
-                    ExtFactVenta.lote_id.in_(lotes_integrables)).distinct()}
+    # Universo de VISITA: quién puede tener panel médico o target de
+    # farmacias -- y por tanto un PROM_DIARIO con sentido. Acotado a lotes
+    # VALIDADO/INTEGRADO, igual que el resto.
+    rms_visita = {f[0] for f in db.query(ExtPanelMedico.rm_codigo)
+                  .filter(ExtPanelMedico.pais_codigo == pais_codigo,
+                          ExtPanelMedico.ciclo_codigo == ciclo_codigo,
+                          ExtPanelMedico.lote_id.in_(lotes_integrables)).distinct()}
+    rms_visita |= {f[0] for f in db.query(ExtTargetFarmacia.rm_codigo)
+                   .filter(ExtTargetFarmacia.pais_codigo == pais_codigo,
+                           ExtTargetFarmacia.ciclo_codigo == ciclo_codigo,
+                           ExtTargetFarmacia.lote_id.in_(lotes_integrables)).distinct()}
+    # Universo TOTAL del cálculo: se suman los RM que solo tienen ventas, que
+    # sin esta unión nunca llegarían a calcularse su indicador VENTAS. VENTAS
+    # queda deliberadamente FUERA de `rms_visita` -- ver la guarda de
+    # PROM_DIARIO más abajo y la nota de módulo «RONDA DE CORRECCIONES 1».
+    rms = rms_visita | {f[0] for f in db.query(ExtFactVenta.rm_codigo)
+                        .filter(ExtFactVenta.pais_codigo == pais_codigo,
+                                ExtFactVenta.ciclo_codigo == ciclo_codigo,
+                                ExtFactVenta.lote_id.in_(lotes_integrables)).distinct()}
 
     filas_escritas = 0
     rms_calculados = 0
@@ -447,7 +472,16 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
                     SEVERIDAD_AVISO))
             else:
                 valores[codigo] = valor
-        if PROM_DIARIO in ids:
+        # PROM_DIARIO es el único indicador SIN noción de universo: no
+        # devuelve None cuando no hay nada que medir, devuelve una tasa cruda
+        # de 0. Para un RM que solo aparece en el feed de ventas eso no es
+        # "visitó poco", es "no pertenece al universo de visita" -- y
+        # escribirlo borraría su valor real, porque ventas y visitas son
+        # feeds separados que no llegan el mismo día. Se omite en silencio,
+        # sin aviso: a diferencia de los `candidatos`, esto no es una carga
+        # parcial que el operador deba revisar, es un RM que simplemente no
+        # está en ese universo (ver la nota de módulo «RONDA DE CORRECCIONES 1»).
+        if PROM_DIARIO in ids and rm_codigo in rms_visita:
             valores[PROM_DIARIO] = _promedio_diario(
                 visitados, ciclo_ext.dias_laborables)
 
@@ -469,7 +503,7 @@ def calcular_indicadores(db: Session, pais_codigo: str, ciclo_codigo: str,
                 activo=True))
             filas_escritas += 1
 
-    logger.info(f"Indicadores de visita {pais_codigo}/{ciclo_codigo}: "
+    logger.info(f"Indicadores de visita+VENTAS {pais_codigo}/{ciclo_codigo}: "
                 f"{rms_calculados} representantes, {filas_escritas} filas")
     return {"rms": rms_calculados, "filas": filas_escritas,
             "omitido_ciclo_cerrado": False}

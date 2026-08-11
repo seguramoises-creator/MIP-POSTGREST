@@ -454,7 +454,14 @@ def test_sin_cuota_no_se_escribe_la_fila(escenario):
 
 def test_sin_cuota_no_pisa_un_valor_anterior(escenario):
     """Al no escribirse, tampoco entra en el delete-then-insert: lo que hubiera
-    cargado el Excel se conserva."""
+    cargado el Excel se conserva.
+
+    Minor 1 de la Ronda de correcciones 1: se agrega un SEGUNDO RM con cuota
+    VALIDA en la MISMA corrida (`VM02`), para que el delete-then-insert
+    realmente se ejecute en esta llamada -- sin esto, la prueba pasaría igual
+    con o sin la funcionalidad implementada, porque nunca habría ningún
+    borrado real que demostrar (solo "no hubo borrado" desde el principio).
+    """
     db = escenario["db"]
     i = _indicador_ventas(db)
     db.add(ResultadoIndicador(
@@ -462,6 +469,18 @@ def test_sin_cuota_no_pisa_un_valor_anterior(escenario):
         linea_id=escenario["rm"].linea_id, ciclo_id=escenario["ciclo"].id,
         indicador_id=i.id, resultado_real=Decimal("0.9"), activo=True))
     _venta(db, "V-1", 500, 0)
+
+    otro_rm = RepresentanteMedico(
+        pais_codigo="DO", linea_id=escenario["rm"].linea_id,
+        gerente_id=escenario["rm"].gerente_id, codigo="VM02",
+        nombre="Representante Dos")
+    db.add(otro_rm)
+    db.flush()
+    db.add(ExtDimRepresentante(pais_codigo="DO", rm_codigo="VM02",
+                               nombre="Representante Dos", activo=True))
+    db.add(MapeoExterno(entidad=ENT_REPRESENTANTE, pais_codigo="DO",
+                        codigo_externo="VM02", id_interno=otro_rm.id))
+    _venta(db, "V-2", 80, 100, rm="VM02")
     db.commit()
 
     ind.calcular_indicadores(db, "DO", "C01-2026", [])
@@ -469,5 +488,52 @@ def test_sin_cuota_no_pisa_un_valor_anterior(escenario):
 
     fila = (db.query(ResultadoIndicador)
             .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
-            .filter(Indicador.codigo == "VENTAS").one())
-    assert fila.resultado_real == Decimal("0.9000")   # intacto
+            .filter(Indicador.codigo == "VENTAS",
+                    ResultadoIndicador.rm_id == escenario["rm"].id).one())
+    assert fila.resultado_real == Decimal("0.9000")   # intacto, no borrado
+
+    fila_otro = (db.query(ResultadoIndicador)
+                 .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
+                 .filter(Indicador.codigo == "VENTAS",
+                         ResultadoIndicador.rm_id == otro_rm.id).one())
+    assert fila_otro.resultado_real == Decimal("0.8000")  # el borrado SÍ ocurrió, para el otro RM
+
+
+def test_prom_diario_no_se_calcula_ni_pisa_para_rm_solo_de_ventas(escenario):
+    """Important de la Ronda de correcciones 1.
+
+    `PROM_DIARIO` es el único indicador de este módulo SIN noción de
+    universo: no pasa por `candidatos`, así que `_promedio_diario` siempre
+    devuelve una tasa cruda, `0` incluido. Un RM cuya única fuente en el
+    ciclo sea `ext.factventa` (el caso normal cuando ventas y visitas son
+    feeds separados de Mallén que no llegan el mismo día) no tiene panel
+    médico ni target de farmacias -- así que no pertenece al universo de
+    visita, y su PROM_DIARIO real (el que cargó el feed de visitas en otra
+    corrida) NO debe pisarse con un `0` solo porque esta corrida trae ventas.
+    """
+    db = escenario["db"]
+    _indicador_ventas(db)
+    prom = Indicador(pais_codigo="DO", codigo="PROM_DIARIO",
+                     nombre="Promedio Diario de Visitas", modulo="RESULTADOS",
+                     tipo_periodo="CICLO", escala=1, ponderacion_pct=10)
+    db.add(prom)
+    db.flush()
+    db.add(ResultadoIndicador(
+        rm_id=escenario["rm"].id, pais_codigo="DO",
+        linea_id=escenario["rm"].linea_id, ciclo_id=escenario["ciclo"].id,
+        indicador_id=prom.id, resultado_real=Decimal("0.75"), activo=True))
+    _venta(db, "V-1", 88, 100)
+    db.commit()
+
+    ind.calcular_indicadores(db, "DO", "C01-2026", [])
+    db.commit()
+
+    fila_ventas = (db.query(ResultadoIndicador)
+                   .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
+                   .filter(Indicador.codigo == "VENTAS").one())
+    assert fila_ventas.resultado_real == Decimal("0.8800")  # VENTAS sí se calculó
+
+    fila_prom = (db.query(ResultadoIndicador)
+                 .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
+                 .filter(Indicador.codigo == "PROM_DIARIO").one())
+    assert fila_prom.resultado_real == Decimal("0.7500")   # intacto, NO pisado con 0
