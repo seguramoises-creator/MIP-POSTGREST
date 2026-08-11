@@ -86,3 +86,8 @@ Thumbs.db
 /backend/nuevo2.txt
 # lanzador local del entorno de desarrollo
 /iniciar_vista_local.cmd
+
+# Certificados TLS de PostgreSQL para la integración con Mallén (§8.1).
+# La clave privada NUNCA se versiona: se genera en cada servidor con
+# backend/scripts/integracion/generar_certificado_pg.sh y vive solo ahí.
+certs/

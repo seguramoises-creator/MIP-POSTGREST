@@ -61,14 +61,38 @@ services:
       POSTGRES_DB: "${DB_NAME:-scgcpr}"
       POSTGRES_USER: "${DB_USER:-segura}"
       POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD (clave fuerte) para el perfil with-db}"
-    # NO se publica el 5432 al host: el backend alcanza la BD por la red interna de
-    # compose (host 'db'). Así no choca con otro Postgres del servidor (p.ej. postgres-dw
-    # del DW/Odoo en srv1772225) y no se expone la BD al exterior. Para acceso puntual
-    # desde el host: `docker compose exec db psql -U segura -d scgcpr`.
+    # TLS AUTO-ACTIVADO SI HAY CERTIFICADO (§8.1 del requerimiento de Mallén: la
+    # integración conecta con `sslmode=require`). El condicional NO es adorno: si
+    # se pusiera `-c ssl=on` fijo, cualquier despliegue sin certificados dejaría a
+    # PostgreSQL sin arrancar — y con él toda la aplicación. Así, un servidor sin
+    # `certs/postgres/server.crt` arranca exactamente como siempre.
+    # Generar los certificados con: scripts/integracion/generar_certificado_pg.sh
+    # OJO con la indentación: en un bloque YAML `>` las líneas MÁS indentadas que
+    # la primera conservan su salto de línea en vez de plegarse. Si los `-c ssl=on`
+    # se indentan bajo el `exec`, el shell los toma como comandos sueltos y no como
+    # argumentos: PostgreSQL arranca SIN TLS mientras el log dice que sí. Todas las
+    # líneas van al mismo nivel a propósito.
+    command: >
+      bash -c 'if [ -f /certs/server.crt ] && [ -f /certs/server.key ]; then
+      echo "TLS habilitado (certificado encontrado en /certs)";
+      exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/certs/server.crt -c ssl_key_file=/certs/server.key;
+      else
+      echo "TLS deshabilitado (sin certificado en /certs) - normal fuera del ambiente de Mallen";
+      exec docker-entrypoint.sh postgres;
+      fi'
+    # El 5432 NO se publica aquí, a propósito: el backend llega por la red interna
+    # de compose (host `db`), y publicarlo chocaría con cualquier otro PostgreSQL
+    # del servidor — en el piloto hay uno escuchando en el 5432 del host, así que
+    # añadirlo aquí dejaría este contenedor sin arrancar.
+    # El ambiente de Mallén, donde el SQL Server SÍ debe alcanzarlo, lo publica con
+    # el override `docker-compose.integracion.yml`. Ver scripts/integracion/README.md.
     expose:
       - "5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
+      # Certificados TLS. Si el directorio está vacío, el arranque de arriba lo
+      # detecta y sigue sin TLS.
+      - ./certs/postgres:/certs:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-segura} -d ${DB_NAME:-scgcpr}"]
       interval: 5s

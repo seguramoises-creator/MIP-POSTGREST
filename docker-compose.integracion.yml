@@ -1,0 +1,32 @@
+# ═══════════════════════════════════════════════════════════════
+# Override SOLO para los ambientes de Laboratorio Mallén (calidad y producción)
+# ───────────────────────────────────────────────────────────────
+# Publica el 5432 para que el SQL Server de Mallén pueda escribir en el esquema
+# `ext` por ODBC (§8 del Requerimiento de Datos).
+#
+# Va aparte del compose base a propósito: publicar ese puerto en un servidor que
+# ya tiene otro PostgreSQL escuchando en el 5432 deja el contenedor sin arrancar.
+# El piloto de VISTA es exactamente ese caso, así que el base nunca lo publica.
+#
+# Uso en el servidor de Mallén:
+#     export DB_BIND_ADDR=<IP interna del servidor de VISTA>
+#     docker compose -f docker-compose.yml -f docker-compose.integracion.yml \
+#         --profile with-db up -d --build
+#
+# DOS COSAS QUE HAY QUE HACER ADEMÁS, o esto queda mal:
+#
+#   1. TLS. El §8.1 exige `sslmode=require`. Generar el certificado ANTES de
+#      levantar:  bash backend/scripts/integracion/generar_certificado_pg.sh
+#      El compose base activa TLS solo si lo encuentra.
+#
+#   2. Firewall. Publicar el puerto lo deja alcanzable desde toda la red.
+#      Restringirlo a la IP del SQL Server con reglas en la cadena DOCKER-USER
+#      — `ufw` NO sirve, Docker se la salta. Ver scripts/integracion/README.md.
+# ═══════════════════════════════════════════════════════════════
+services:
+  db:
+    ports:
+      # Sin DB_BIND_ADDR queda en loopback: inservible para la integración, pero
+      # nunca expuesto por accidente. El valor correcto es la IP interna del
+      # servidor de VISTA, la que alcanza el SQL Server.
+      - "${DB_BIND_ADDR:-127.0.0.1}:${DB_PORT_HOST:-5432}:5432"

@@ -12,6 +12,7 @@ proceso de carga por ODBC contra estas tablas.
 |---|---|
 | `crear_esquema_ext.sql` | Las 22 tablas con sus claves e índices. **Se entrega a Mallén** para que repliquen el esquema en su ambiente de pruebas |
 | `crear_usuario_mallen.sql` | El usuario `mallen_etl`, limitado al esquema `ext` |
+| `generar_certificado_pg.sh` | Certificado TLS autofirmado para PostgreSQL (`sslmode=require`, §8.1) |
 | `generar_ddl_ext.py` | Regenera el `.sql` desde los modelos. **El `.sql` no se edita a mano** |
 
 En producción el esquema lo crea la migración `0030_esquema_ext_integracion`,
@@ -22,12 +23,63 @@ pueden divergir sin que falle la suite.
 ## Puesta en marcha de un ambiente
 
 1. Aplicar migraciones (`alembic upgrade head`) — crea `ext` con sus 22 tablas.
-2. Ejecutar `crear_usuario_mallen.sql` **reemplazando antes** `CLAVE_A_DEFINIR`
+   Con Docker esto ocurre solo al arrancar el contenedor del backend.
+2. **Habilitar TLS** (§8.1 — sin esto el ETL de Mallén no conecta):
+   ```bash
+   bash backend/scripts/integracion/generar_certificado_pg.sh
+   docker compose --profile with-db up -d db
+   docker compose exec -T db psql -U segura -d scgcpr -Atc 'SHOW ssl;'   # debe decir: on
+   ```
+   El `docker-compose.yml` activa TLS **solo si encuentra el certificado**; un
+   servidor sin él arranca igual que siempre. Es deliberado: con `ssl=on` fijo,
+   un despliegue sin certificados dejaría la base sin arrancar.
+3. **Publicar el 5432 hacia el SQL Server** — ver la sección siguiente.
+4. Ejecutar `crear_usuario_mallen.sql` **reemplazando antes** `CLAVE_A_DEFINIR`
    por la clave que entregue Mallén. Cada ambiente lleva la suya.
-3. Entregar a Mallén: `crear_esquema_ext.sql`, el usuario y el puerto 5432
-   abierto **solo** desde la IP de su SQL Server, con TLS (`sslmode=require`).
-4. Comprobar el aislamiento: conectado como `mallen_etl`, un
+5. Entregar a Mallén: `crear_esquema_ext.sql`, el usuario, el host y el puerto.
+6. Comprobar el aislamiento: conectado como `mallen_etl`, un
    `SELECT * FROM "Config"."DIM_RM"` debe fallar con permiso denegado.
+
+## Abrir el 5432 solo al SQL Server (y por qué ufw no basta)
+
+El compose base **no publica el 5432**: hacerlo rompería cualquier servidor que ya
+tenga otro PostgreSQL en ese puerto (el piloto de VISTA es justo ese caso — el
+contenedor no arrancaría). La publicación vive en un override aparte, que solo se
+usa en los ambientes de Mallén:
+
+```bash
+export DB_BIND_ADDR=<IP interna del servidor de VISTA>
+docker compose -f docker-compose.yml -f docker-compose.integracion.yml \
+    --profile with-db up -d --build
+```
+
+Sin `DB_BIND_ADDR` queda en `127.0.0.1`, que no alcanza a nadie fuera del host:
+seguro, pero inservible para la integración. Con la IP interna, el puerto queda
+alcanzable desde la red de Mallén, así que **hay que restringir el origen**.
+
+**`ufw` no sirve aquí.** Docker escribe sus propias reglas de `iptables` en la
+tabla `nat` y el tráfico hacia un puerto publicado **se salta las reglas de ufw**:
+la regla parece aplicada, `ufw status` la muestra, y el puerto sigue abierto a
+todo el mundo. Es una de las confusiones más caras de Docker en producción.
+
+Lo que sí funciona es la cadena `DOCKER-USER`, que Docker consulta antes que las
+suyas y no reescribe:
+
+```bash
+# Permitir solo al SQL Server de Mallén
+sudo iptables -I DOCKER-USER -p tcp --dport 5432 -s <IP_DEL_SQL_SERVER> -j ACCEPT
+# Y bloquear al resto
+sudo iptables -I DOCKER-USER -p tcp --dport 5432 -j DROP
+```
+
+El orden importa: `-I` inserta al principio, así que **la regla de ACCEPT debe
+insertarse después** para quedar por encima del DROP. Compruébalo con
+`sudo iptables -L DOCKER-USER -n --line-numbers`.
+
+Estas reglas **no sobreviven a un reinicio** por sí solas: persístelas con
+`iptables-persistent` (`netfilter-persistent save`) o vuelve a aplicarlas desde
+el arranque. Un reinicio del servidor con las reglas perdidas deja la base
+expuesta sin que nada lo avise.
 
 ## Tres diferencias respecto al DDL impreso en el documento
 
