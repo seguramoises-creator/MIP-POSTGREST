@@ -65,17 +65,15 @@ El cálculo vive en `integracion_indicadores_service`, junto a los otros cuatro,
 
 `puntaje` y `cumplimiento_pct` de `FACT_Ventas` se rellenan con el criterio del ETL legacy (`calcular_cumplimiento` acotado a `[0,100]`), para no dejar la tabla a medias — pero **el Score no los usa**: su camino es `FACT_ResultadoIndicador`.
 
-## 6. El ROI mezcla países — se arregla aquí
+## 6. El ROI NO mezcla países — hallazgo retirado
 
-`visita_costo_service` calcula los ingresos filtrando **solo por `ciclo_id`**:
+Una versión anterior de este spec afirmaba que `visita_costo_service` mezclaba ingresos entre países, porque suma `Ventas.ventas_reales` filtrando **solo por `ciclo_id`**, sin `pais_codigo`.
 
-```python
-iq = db.query(func.coalesce(func.sum(Ventas.ventas_reales), 0)).filter(Ventas.ciclo_id == ciclo_id)
-```
+**Es falso, y se retira.** `Config.DIM_Ciclo` **tiene `pais_codigo`**: cada país tiene su propia fila de ciclo (verificado con los datos reales — `id=1` es CR, `id=5` es DO, ambos "C01-2026"). Filtrar por `ciclo_id` ya acota a un solo país, así que el ROI nunca podría sumar ingresos ajenos.
 
-Los ciclos son globales, no por país. Hoy no se nota porque las 9 filas existentes son de un solo país; **en cuanto Mallén integre un segundo país contra el mismo ciclo, el ROI de uno incluiría los ingresos del otro**.
+El error vino de dar por bueno un informe de exploración que describía los ciclos como globales, sin comprobarlo contra el modelo ni contra la base. **No se toca `visita_costo_service`.**
 
-**Decisión del cliente: se arregla en este trabajo.** Añadir el filtro por `pais_codigo` (y por los RM del alcance donde ya se filtra por `vm_id`). Es un cambio pequeño, con test, y este módulo es precisamente lo que activa el defecto: desplegarlo sabiendo que dará cifras falsas no es una opción.
+Sí queda una propiedad del diseño que conviene tener presente, y que no es un defecto: con `vm_id = None`, el ROI de equipo suma las ventas de **todas las líneas** de ese país y ciclo. Es coherente con que el costo fijo del ciclo también se impute a nivel equipo.
 
 ## 7. Fuera de alcance (YAGNI)
 
@@ -110,6 +108,6 @@ Los ciclos son globales, no por país. Hoy no se nota porque las 9 filas existen
 15. Recalcular no duplica y no toca los otros indicadores del ciclo.
 16. Ciclo cerrado → no se escribe nada.
 
-**El ROI**
-17. Dos países con ventas en el **mismo ciclo** → el ROI de cada uno cuenta **solo las suyas**. Contra el código actual este test falla; es la prueba del arreglo.
-18. El ROI de un `vm_id` concreto sigue devolviendo lo mismo que antes del cambio (sin regresión).
+**El ROI (sin cambios de código, solo comprobación)**
+17. Tras integrar ventas de un ciclo, `visita_costo_service.roi` devuelve esos ingresos — la prueba de que el circuito Mallén → `FACT_Ventas` → ROI queda cerrado, que es lo que el §7.2 pide.
+18. Ventas de un ciclo de OTRO país no aparecen en ese ROI. No prueba un arreglo (no hizo falta): fija la propiedad para que nadie la rompa quitando el país de `DIM_Ciclo`.
