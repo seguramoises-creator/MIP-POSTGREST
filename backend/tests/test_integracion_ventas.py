@@ -442,6 +442,25 @@ def test_filas_legacy_duplicadas_generan_hallazgo_de_error(escenario):
     assert filas[mas_antigua.id].ventas_reales == Decimal("700.00")
     assert filas[mas_reciente.id].ventas_reales == Decimal("100.00")
 
+    # (d) SE REPITE EN CADA CORRIDA. Es la parte que se rompe sola si alguien
+    # mueve la comprobación dentro de `_buscar` para "simplificar": en la
+    # segunda corrida el mapeo ya existe, `integracion_mapeo.resolver` devuelve
+    # el registro sin llamar a `buscar_natural`, y el hallazgo desaparecería
+    # para siempre aunque el duplicado siga ahí. Un aviso que se emite una sola
+    # vez en la vida del sistema es peor que ninguno: aparenta vigilancia.
+    hallazgos_2 = []
+    viz.integrar_ventas(db, "DO", "C01-2026", hallazgos_2)
+    db.commit()
+
+    errores_2 = [h for h in hallazgos_2 if h.severidad == "error"
+                 and h.hecho == "factventa"
+                 and ("duplicad" in h.problema.lower()
+                      or "adicional" in h.problema.lower())]
+    assert len(errores_2) == 1, errores_2
+    ids_2 = re.search(r"ids: ([\d, ]+)\)", errores_2[0].problema)
+    assert ids_2 is not None, errores_2[0].problema
+    assert {int(i) for i in ids_2.group(1).split(",")} == {mas_reciente.id}
+
 
 # --- Tarea 2: el indicador VENTAS (ext.factventa -> DW.FACT_ResultadoIndicador) ---
 
