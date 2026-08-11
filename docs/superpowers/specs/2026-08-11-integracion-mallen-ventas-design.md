@@ -63,7 +63,9 @@ Acotado **por abajo a 0** (una venta negativa por devoluciones no resta cumplimi
 
 El cálculo vive en `integracion_indicadores_service`, junto a los otros cuatro, y respeta lo que ya tiene: gate de estado del lote, guard de ciclo cerrado, y delete-then-insert acotado al código y al `(rm_id, ciclo_id)`.
 
-`puntaje` y `cumplimiento_pct` de `FACT_Ventas` se rellenan con el criterio del ETL legacy (`calcular_cumplimiento` acotado a `[0,100]`), para no dejar la tabla a medias — pero **el Score no los usa**: su camino es `FACT_ResultadoIndicador`.
+**Solo `cumplimiento_pct` se rellena** (con el criterio del ETL legacy, `calcular_cumplimiento` acotado a `[0,100]`), para no dejar la tabla a medias — pero **el Score no lo usa**: su camino es `FACT_ResultadoIndicador`.
+
+`puntaje` se deja **deliberadamente sin poblar**, hallazgo de la revisión final de rama (11-ago-2026): el `puntaje` legacy se calculaba con `convertir_a_puntaje` contra `DIM_IndicadorTabla`, así que rellenarlo abriría un segundo camino de puntuación en paralelo al de `FACT_ResultadoIndicador` — precisamente lo que el sistema lleva dos rediseños evitando (ver §7-8 de `CLAUDE.md`). Su único lector es `comercial.py`, código muerto no registrado en `router.py`.
 
 ## 6. El ROI NO mezcla países — hallazgo retirado
 

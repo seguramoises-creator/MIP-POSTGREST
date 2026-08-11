@@ -75,9 +75,11 @@ def resumen_dimensiones(pais_codigo: str, db: Session = Depends(get_db),
              summary="Integrar los hechos de visita de un ciclo, recalcular y cerrar los lotes")
 def integrar_visitas(pais_codigo: str, ciclo_codigo: str,
                      db: Session = Depends(get_db), _: Usuario = RequireTI):
-    """Los cuatro pasos del §7.1 en una acción: integra los hechos, calcula los
-    4 indicadores de visita, dispara el recálculo del Score/ranking/premios y
-    marca los lotes recorridos como INTEGRADO."""
+    """Los cuatro pasos del §7.1 en una acción: integra los cinco hechos
+    (panel médico, visitas médico, target farmacia, visitas farmacia y
+    ventas), calcula los 5 indicadores (los 4 de visita más VENTAS, que no es
+    de visita), dispara el recálculo del Score/ranking/premios y marca los
+    lotes recorridos como INTEGRADO."""
     return visitas.integrar_todo(db, pais_codigo, ciclo_codigo)
 
 

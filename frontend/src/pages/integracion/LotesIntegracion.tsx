@@ -367,9 +367,11 @@ function SeccionVisitas({ paisCodigo }: { paisCodigo: string | null }) {
       </Box>
 
       <Alert severity="info" sx={{ mb: 2 }}>
-        Integrar deja el ciclo completo: los cuatro hechos entran, los indicadores
-        COB_MD_F1, COB_MD_F2, PROM_DIARIO y COB_FARMACIAS se calculan desde ellos,
-        se recalculan Score y ranking, y los lotes quedan marcados como integrados.
+        Integrar deja el ciclo completo: los cinco hechos entran (panel médico,
+        visitas médico, target farmacia, visitas farmacia y ventas), los
+        indicadores COB_MD_F1, COB_MD_F2, PROM_DIARIO, COB_FARMACIAS y VENTAS
+        se calculan desde ellos, se recalculan Score y ranking, y los lotes
+        quedan marcados como integrados.
       </Alert>
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}

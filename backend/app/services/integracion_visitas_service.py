@@ -651,6 +651,14 @@ def integrar_ventas(db: Session, pais_codigo: str, ciclo_codigo: str,
     Alimenta dos cosas: el indicador VENTAS (vía `integracion_indicadores_service`)
     y los INGRESOS DEL ROI del módulo de Visita, que lee esta tabla — de ahí que
     duplicar una fila sea especialmente dañino.
+
+    Rellena `cumplimiento_pct` (criterio del ETL legacy, para no dejar la fila a
+    medias) pero **NO** `FACT_Ventas.puntaje`, a propósito: ese campo legacy se
+    calculaba con `convertir_a_puntaje` contra `DIM_IndicadorTabla`, y poblarlo
+    aquí abriría un segundo camino de puntuación en paralelo al de
+    `FACT_ResultadoIndicador` — justo lo que el sistema lleva dos rediseños
+    evitando. Su único lector es `comercial.py`, código muerto no registrado en
+    `router.py`. No es un olvido: no rellenarlo es la decisión correcta.
     """
     conteo = ConteoHecho("factventa")
     filas = (db.query(ExtFactVenta)
@@ -728,6 +736,38 @@ def integrar_ventas(db: Session, pais_codigo: str, ciclo_codigo: str,
 
         registro, resultado = mapeo.resolver(
             db, ENT_VENTAS_RM_CICLO, pais_codigo, clave, Ventas, _buscar, _crear)
+
+        # `FACT_Ventas` no tiene ningún UNIQUE y el ETL legacy de Excel es
+        # *append-only* (`etl_service.py` agrega una fila por cada fila del
+        # Excel, sin buscar ni deduplicar) -- nada garantiza una sola fila
+        # legacy por (país, ciclo, RM), y como el ciclo es un biciclo mientras
+        # el Excel de ventas era mensual, dos filas del mismo RM en el mismo
+        # ciclo es un escenario esperable. `_buscar` (arriba) hace `.first()`:
+        # adopta o actualiza UNA sola fila; las demás seguirían sumando en
+        # silencio al ROI un ingreso que ya no corresponde.
+        #
+        # Esta comprobación NO puede vivir dentro de `_buscar`: una vez que
+        # existe el mapeo, `mapeo.resolver` (`integracion_mapeo.py`) ya NO
+        # vuelve a llamar `buscar_natural` en las corridas siguientes -- el
+        # aviso se emitiría una sola vez en la vida y nunca más, aunque el
+        # duplicado siga ahí. Por eso se repite aquí, en cada corrida, sobre
+        # la misma clave natural que usa `_buscar`.
+        otras = (db.query(Ventas.id)
+                 .filter(Ventas.pais_codigo == pais_codigo,
+                         Ventas.ciclo_id == ciclo_id, Ventas.rm_id == rm_id,
+                         Ventas.id != registro.id).all())
+        if otras:
+            ids_otras = sorted(o[0] for o in otras)
+            hallazgos.append(Hallazgo(
+                "factventa", clave,
+                f"El representante «{rm_codigo}» tiene {len(ids_otras)} "
+                f"fila(s) adicionales en FACT_Ventas para este ciclo (ids: "
+                f"{', '.join(str(i) for i in ids_otras)}), anteriores a la "
+                f"integración. Se actualizó una sola; las demás siguen "
+                f"sumando al ROI un ingreso que ya no corresponde. Bórralas "
+                f"o consolídalas.",
+                SEVERIDAD_ERROR))
+
         registro.ventas_reales = total_venta
         registro.cuota = total_cuota
         registro.linea_id = rm.linea_id
@@ -757,11 +797,12 @@ _INTEGRADORES = (
 )
 
 #: El tercer elemento reconstruye, en SQL, la misma `codigo_externo` que los
-#: cuatro integradores de arriba le pasan a `mapeo.resolver` para ese hecho —
+#: cinco integradores de arriba le pasan a `mapeo.resolver` para ese hecho —
 #: ver las llamadas a `mapeo.resolver` en `integrar_panel_medico` /
 #: `integrar_visitas_medico` / `integrar_target_farmacia` /
-#: `integrar_visitas_farmacia`. Se usa para el JOIN de `resumen_visitas`, no
-#: para integrar (eso lo siguen haciendo los integradores, sin tocar).
+#: `integrar_visitas_farmacia` / `integrar_ventas`. Se usa para el JOIN de
+#: `resumen_visitas`, no para integrar (eso lo siguen haciendo los
+#: integradores, sin tocar).
 _ORIGEN_CONTEO = {
     "panelmedico": (
         ExtPanelMedico, ENT_TARGET_MEDICO,
@@ -781,7 +822,7 @@ _ORIGEN_CONTEO = {
 
 def _lotes_del_ciclo(db: Session, pais_codigo: str, ciclo_codigo: str) -> list[int]:
     """Los `lote_id` que aportaron filas a este ciclo, en cualquiera de los
-    cuatro hechos. Es la reconciliación lote ↔ ciclo: la integración trabaja
+    cinco hechos. Es la reconciliación lote ↔ ciclo: la integración trabaja
     por ciclo, pero el estado del §7.1 vive en el lote."""
     lotes: set[int] = set()
     for modelo, _, _ in _ORIGEN_CONTEO.values():
@@ -794,7 +835,7 @@ def _lotes_del_ciclo(db: Session, pais_codigo: str, ciclo_codigo: str) -> list[i
 def _lote_tiene_filas_de_otro_ciclo(db: Session, lote_id: int,
                                     ciclo_codigo: str) -> bool:
     """¿El lote todavía tiene filas de un ciclo DISTINTO al que se acaba de
-    integrar, en cualquiera de los cuatro hechos? Un mismo lote puede traer
+    integrar, en cualquiera de los cinco hechos? Un mismo lote puede traer
     filas de más de un ciclo (p. ej. un corte de mes a mitad del envío); si
     las tiene, cerrarlo como INTEGRADO dejaría esas otras filas huérfanas —y
     como `validar_lote` (sub-proyecto 1) rechaza re-validar un lote ya
@@ -868,7 +909,7 @@ def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
     hallazgos: list[Hallazgo] = []
     conteos: list[ConteoHecho] = []
     # Los lotes del ciclo (y sus estados) se resuelven UNA sola vez para las
-    # cuatro llamadas de abajo — no una consulta a `ExtControlCarga` por fila
+    # cinco llamadas de abajo — no una consulta a `ExtControlCarga` por fila
     # ni una por integrador. `_lotes_del_ciclo` solo lee `ext`, así que da
     # igual calcularlo antes o después de integrar.
     lotes_del_ciclo = _lotes_del_ciclo(db, pais_codigo, ciclo_codigo)

@@ -369,6 +369,58 @@ def test_lotes_multiples_del_mismo_rm_se_acreditan_todos(escenario):
     assert estados == {1001: "INTEGRADO", 1002: "INTEGRADO"}
 
 
+def test_filas_legacy_duplicadas_generan_hallazgo_de_error(escenario):
+    """IMPORTANT de la revisión final de rama: `FACT_Ventas` no tiene ningún
+    UNIQUE y el ETL legacy de Excel es *append-only* (`etl_service.py` agrega
+    una fila por cada fila del Excel, sin buscar ni deduplicar). Nada garantiza
+    una sola fila legacy por RM/ciclo -- y como el ciclo es un biciclo mientras
+    el Excel de ventas era mensual, dos filas por RM en el mismo `ciclo_id` es
+    un escenario esperable, no exótico.
+
+    `_buscar` hace `.first()`: adopta o actualiza UNA sola fila. Si hay más,
+    quedan sumando en silencio al ROI un ingreso que ya no corresponde -- el
+    daño exacto que `ENT_VENTAS_RM_CICLO` se creó para evitar, entrando por la
+    puerta de los datos preexistentes en vez de por la de los reintentos.
+
+    La comprobación no puede vivir dentro de `_buscar`: una vez que existe el
+    mapeo, `integracion_mapeo.resolver` ya NO vuelve a llamar `buscar_natural`
+    en las corridas siguientes, así que el aviso se emitiría una sola vez en
+    la vida y nunca más aunque el duplicado siga ahí -- tiene que repetirse en
+    cada corrida, fuera del callable `_buscar`.
+    """
+    db = escenario["db"]
+    legacy1 = Ventas(pais_codigo="DO", linea_id=escenario["rm"].linea_id,
+                     rm_id=escenario["rm"].id, ciclo_id=escenario["ciclo"].id,
+                     ventas_reales=Decimal("100.00"), cuota=Decimal("100.00"))
+    legacy2 = Ventas(pais_codigo="DO", linea_id=escenario["rm"].linea_id,
+                     rm_id=escenario["rm"].id, ciclo_id=escenario["ciclo"].id,
+                     ventas_reales=Decimal("200.00"), cuota=Decimal("100.00"))
+    db.add_all([legacy1, legacy2])
+    db.commit()
+    _venta(db, "V-1", 700, 500)
+    db.commit()
+    hallazgos = []
+
+    viz.integrar_ventas(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    # (b) no se borró nada: siguen las dos filas.
+    filas = db.query(Ventas).filter(Ventas.rm_id == escenario["rm"].id).all()
+    assert len(filas) == 2
+
+    # (a) hay un hallazgo de severidad ERROR que menciona la duplicación.
+    errores = [h for h in hallazgos if h.severidad == "error"]
+    assert any("duplicad" in h.problema.lower() or "adicional" in h.problema.lower()
+               for h in errores), errores
+
+    # (c) una de ellas quedó con el monto de Mallén; la otra sigue con su
+    # monto legacy original, intacta (no se tocó ni se sumó).
+    montos = {v.ventas_reales for v in filas}
+    assert Decimal("700.00") in montos
+    assert montos == {Decimal("700.00"), Decimal("200.00")} or \
+        montos == {Decimal("700.00"), Decimal("100.00")}
+
+
 # --- Tarea 2: el indicador VENTAS (ext.factventa -> DW.FACT_ResultadoIndicador) ---
 
 
@@ -441,6 +493,29 @@ def test_sin_cuota_no_se_escribe_la_fila(escenario):
     db = escenario["db"]
     _indicador_ventas(db)
     _venta(db, "V-1", 500, 0)
+    db.commit()
+    hallazgos = []
+
+    ind.calcular_indicadores(db, "DO", "C01-2026", hallazgos)
+    db.commit()
+
+    assert (db.query(ResultadoIndicador)
+            .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
+            .filter(Indicador.codigo == "VENTAS").count()) == 0
+    assert any(h.severidad == "aviso" for h in hallazgos)
+
+
+def test_cuota_negativa_agregada_no_escribe_fila(escenario):
+    """Minor 2 de la revisión final de rama: el guard original era
+    `cuota is None or cuota == 0`. Con una cuota AGREGADA de -100 (posible,
+    porque `total_cuota` es la SUMA de las filas del RM), pasaba de largo,
+    `bruto` salía negativo y `max(bruto, 0)` escribía `resultado_real = 0` --
+    justo lo que la regla "ausencia de meta no es cumplimiento cero" quería
+    impedir: 0 es indistinguible de "cumplió 0%" y penaliza al representante.
+    El guard debe ser `cuota <= 0`, no solo `== 0`."""
+    db = escenario["db"]
+    _indicador_ventas(db)
+    _venta(db, "V-1", 500, -100)
     db.commit()
     hallazgos = []
 
@@ -588,3 +663,79 @@ def test_el_roi_no_toma_ventas_de_otro_pais(escenario):
     r = visita_costo_service.roi(db, escenario["ciclo"].id, None)
 
     assert r["ingresos"] == 700.0        # las de CR no se cuelan
+
+
+# --- Revisión final de rama: puntos Minor 3 y 4 ---
+
+
+def test_cumplimiento_pct_y_resultado_real_cuentan_la_misma_historia(escenario):
+    """Minor 3: `integrar_ventas` (que rellena `FACT_Ventas.cumplimiento_pct`)
+    y `_cumplimiento_ventas` (que produce el `resultado_real` del indicador
+    VENTAS) agregan `ext.factventa` cada uno por su cuenta, en archivos
+    distintos -- hoy dan el mismo número, pero nada avisará si mañana uno de
+    los dos cambia y divergen. Se usan VARIAS filas de venta del mismo RM (no
+    una sola), que es donde la agregación puede divergir de verdad.
+
+    Este test debería pasar en verde a la primera (no hay comportamiento
+    nuevo): lo que fija es la RELACIÓN entre las dos piezas.
+    """
+    db = escenario["db"]
+    _indicador_ventas(db)
+    _venta(db, "V-1", 30, 40, producto="P1")
+    _venta(db, "V-2", 45, 60, producto="P2")
+    db.commit()
+
+    viz.integrar_ventas(db, "DO", "C01-2026", [])
+    ind.calcular_indicadores(db, "DO", "C01-2026", [])
+    db.commit()
+
+    v = db.query(Ventas).filter(Ventas.rm_id == escenario["rm"].id).one()
+    fila = (db.query(ResultadoIndicador)
+            .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
+            .filter(Indicador.codigo == "VENTAS",
+                    ResultadoIndicador.rm_id == escenario["rm"].id).one())
+
+    # 75/100 = 75% en ambos caminos -- ni frontera de 100%, ni cero.
+    assert v.cumplimiento_pct == Decimal("75.00")
+    assert fila.resultado_real == Decimal("0.7500")
+    assert v.cumplimiento_pct == fila.resultado_real * 100
+
+
+def test_integrar_ventas_sobre_ciclo_cerrado_si_escribe_pero_el_indicador_no(escenario):
+    """Minor 4: declara, a propósito, la asimetría entre los dos integradores
+    de este sub-proyecto frente a un ciclo cerrado:
+
+    - `integrar_ventas` (este módulo) NO tiene guard de ciclo cerrado, y es
+      CORRECTO que no lo tenga: no borra nada -- solo actualiza/adopta/crea
+      una fila de `FACT_Ventas` -- y los hechos entran siempre porque son
+      historia (misma regla que los otros cuatro integradores de
+      `_INTEGRADORES`, ninguno de los cuales tiene guard tampoco).
+    - `calcular_indicadores` (`integracion_indicadores_service`) SÍ lo tiene,
+      porque hace delete-then-insert sobre `FACT_ResultadoIndicador`: sin el
+      guard, un ciclo cerrado perdería los `puntos_obtenidos` que ya calculó
+      el motor, y el recálculo posterior los rechazaría sin reponerlos (el
+      ciclo cerrado es un snapshot inmutable).
+
+    Este test debería pasar en verde a la primera -- existe para que nadie
+    "arregle" la ausencia de guard en `integrar_ventas` agregando uno por
+    simetría con el indicador, en la dirección equivocada.
+    """
+    db = escenario["db"]
+    _indicador_ventas(db)
+    escenario["ciclo"].cerrado = True
+    db.commit()
+    _venta(db, "V-1", 700, 500)
+    db.commit()
+
+    conteo = viz.integrar_ventas(db, "DO", "C01-2026", [])
+    db.commit()
+    assert conteo.integrados == 1
+    assert db.query(Ventas).filter(
+        Ventas.rm_id == escenario["rm"].id).one().ventas_reales == Decimal("700.00")
+
+    resumen = ind.calcular_indicadores(db, "DO", "C01-2026", [])
+    db.commit()
+    assert resumen["omitido_ciclo_cerrado"] is True
+    assert (db.query(ResultadoIndicador)
+            .join(Indicador, ResultadoIndicador.indicador_id == Indicador.id)
+            .filter(Indicador.codigo == "VENTAS").count()) == 0

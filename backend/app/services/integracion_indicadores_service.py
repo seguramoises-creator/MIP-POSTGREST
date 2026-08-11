@@ -307,7 +307,14 @@ def _cumplimiento_ventas(db: Session, pais_codigo: str, ciclo_codigo: str,
                     ExtFactVenta.rm_codigo == rm_codigo,
                     ExtFactVenta.lote_id.in_(lotes_integrables)).one())
     venta, cuota = fila[0], fila[1]
-    if cuota is None or Decimal(cuota) == 0:
+    # `<= 0`, no solo `== 0`: `total_cuota` es una SUMA de las filas del RM
+    # (varias líneas de producto), así que puede quedar negativa aunque
+    # ninguna fila individual lo sea. Con solo `== 0`, una cuota agregada
+    # negativa dejaba pasar `bruto` negativo y `max(bruto, 0)` lo convertía en
+    # `resultado_real = 0` -- indistinguible de "cumplió 0%", que penaliza al
+    # representante en vez de tratarlo como ausencia de meta (misma regla que
+    # el resto del módulo: sin meta no hay cumplimiento que medir).
+    if cuota is None or Decimal(cuota) <= 0:
         return None
     bruto = Decimal(venta or 0) / Decimal(cuota)
     return max(bruto, Decimal(0)).quantize(Decimal("0.0001"))
