@@ -32,6 +32,10 @@ No hay columna reutilizable:
 
 ### Sincronización desde el SFA
 
+> **PENDIENTE Nº 9 DEL §10 — CERRADO (decisión del cliente, 10-ago-2026).** El requerimiento dejaba abierto *"Criterio para marcar un médico como TOP: ¿lo define Laboratorio Mallén, el Gerente de Distrito o el representante?"*, cuyo efecto era **quién puede escribir el campo `prioridad`**. Resuelto: **lo define Mallén, desde `ext.panelmedico.prioridad`**. Nadie más lo escribe — ni el GD ni el representante tienen dónde marcarlo, y no debe añadirse esa pantalla. Lo implementado ya era esto; la decisión lo confirma y deja de ser una asunción.
+>
+> Consecuencia que conviene no perder de vista: como se reafirma en cada integración, **cualquier valor local se pisa**. Si algún día se quisiera que el GD pudiera marcar TOP, no bastaría con una pantalla — habría que decidir antes qué gana cuando el SFA y el gerente discrepan.
+
 `integrar_panel_medico` escribe `es_top = (fila.prioridad == "TOP")`, y **lo reafirma en cada integración**, igual que ya hace con `activo` — es dato maestro del SFA, no algo que el representante edite. Un médico que pasa de TOP a REGULAR entre ciclos se actualiza solo. (A diferencia de `nombre_completo`, que solo se escribe al crear para no pisar correcciones manuales del GD.)
 
 La comparación es tolerante a la caja: `(fila.prioridad or "").strip().upper() == "TOP"`. El origen ha demostrado enviar variaciones.
