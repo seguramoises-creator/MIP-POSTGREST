@@ -1177,6 +1177,56 @@ def set_password_policy(body: dict, db: Session = Depends(get_db), _=AdminOnly):
     return get_password_policy(db, _)
 
 
+# ── Configuración de avisos de Médicos TOP (§7.3, cron de recordatorio/escalamiento) ──
+@router.get("/config/medicos-top", summary="Configuración de avisos de Médicos TOP")
+def get_config_medicos_top(db: Session = Depends(get_db), _=AdminOnly):
+    """Los 3 parámetros que lee `visita_top_service.procesar_avisos` (cron diario:
+    recordatorio al representante + escalamiento al Gerente de Distrito).
+
+    Los defaults (`*_default` en la respuesta) NO son una decisión cerrada con el
+    cliente: siguen abiertos con Mallén (pendiente nº 8 del requerimiento). Un campo
+    vacío/omitido en el guardado deja vigente el default, no un error."""
+    from app.services import visita_top_service as _top
+    return {
+        "dias_recordatorio": _cfg.obtener_int(db, _top.CFG_DIAS_RECORDATORIO,
+                                              _top.DIAS_RECORDATORIO_DEFAULT),
+        "pct_ciclo_escalamiento": _cfg.obtener_int(db, _top.CFG_PCT_ESCALAMIENTO,
+                                                   _top.PCT_ESCALAMIENTO_DEFAULT),
+        "avisos_activos": _cfg.obtener_bool(db, _top.CFG_AVISOS_ACTIVOS,
+                                            _top.AVISOS_ACTIVOS_DEFAULT),
+        "dias_recordatorio_default": _top.DIAS_RECORDATORIO_DEFAULT,
+        "pct_ciclo_escalamiento_default": _top.PCT_ESCALAMIENTO_DEFAULT,
+        "avisos_activos_default": _top.AVISOS_ACTIVOS_DEFAULT,
+    }
+
+
+@router.put("/config/medicos-top", summary="Guardar configuración de avisos de Médicos TOP")
+def set_config_medicos_top(body: dict, db: Session = Depends(get_db), _=AdminOnly):
+    """Guarda en BD los parámetros de `visita_top_service.procesar_avisos` — el
+    próximo corte del cron los toma tal cual, sin redesplegar. Solo escribe las
+    claves presentes en el body; omitir una la deja como estaba."""
+    from app.services import visita_top_service as _top
+    if "dias_recordatorio" in body:
+        try:
+            v = int(body["dias_recordatorio"])
+        except (ValueError, TypeError):
+            raise HTTPException(400, "Los días de gracia deben ser un número entero.")
+        if v < 0:
+            raise HTTPException(400, "Los días de gracia no pueden ser negativos.")
+        _cfg.fijar(db, _top.CFG_DIAS_RECORDATORIO, str(v))
+    if "pct_ciclo_escalamiento" in body:
+        try:
+            v = int(body["pct_ciclo_escalamiento"])
+        except (ValueError, TypeError):
+            raise HTTPException(400, "El % de escalamiento debe ser un número entero.")
+        if v < 0 or v > 100:
+            raise HTTPException(400, "El % de escalamiento debe estar entre 0 y 100.")
+        _cfg.fijar(db, _top.CFG_PCT_ESCALAMIENTO, str(v))
+    if "avisos_activos" in body:
+        _cfg.fijar(db, _top.CFG_AVISOS_ACTIVOS, "true" if body["avisos_activos"] else "false")
+    return get_config_medicos_top(db, _)
+
+
 # ── Catálogo de Errores (matriz de errores mantenible) ──────────────────────────
 _AdminOnly = Depends(require_roles(Rol.ADMIN))
 

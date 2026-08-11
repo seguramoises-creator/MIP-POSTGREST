@@ -94,7 +94,7 @@ def db(motor):
                   '"Config"."DIM_Medico"', '"Config"."DIM_RM"',
                   '"Config"."DIM_Gerente"',
                   '"Config"."DIM_Ciclo"', '"Config"."DIM_Linea"',
-                  '"Config"."DIM_Pais"'):
+                  '"Config"."DIM_Pais"', '"Config"."DIM_Parametro"'):
         s.execute(text(f"DELETE FROM {tabla}"))
     s.commit()
     yield s
@@ -923,3 +923,186 @@ def test_mensaje_409_topea_nombres_en_30(escenario):
     msg = str(exc.value)
     assert msg.count("DOCTOR TOP ") == 30
     assert "y 5 más" in msg
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Configuración de avisos de Médicos TOP editable desde Administración
+# (GET/PUT /admin/config/medicos-top) — cierra el hueco del §5.4 del design:
+# antes los 3 parámetros solo se cambiaban con un INSERT a mano.
+# ─────────────────────────────────────────────────────────────────────────
+
+def test_config_medicos_top_get_devuelve_defaults_sin_nada_guardado(escenario):
+    """Sin ninguna fila en `Config.DIM_Parametro`, el GET debe devolver
+    exactamente los defaults documentados en `visita_top_service` (2 días /
+    70% / activado) — el mismo valor que usaría `procesar_avisos` hoy."""
+    from app.api.v1.routers import admin as admin_router
+
+    db = escenario["db"]
+    r = admin_router.get_config_medicos_top(db, None)
+
+    assert r == {
+        "dias_recordatorio": 2, "pct_ciclo_escalamiento": 70, "avisos_activos": True,
+        "dias_recordatorio_default": 2, "pct_ciclo_escalamiento_default": 70,
+        "avisos_activos_default": True,
+    }
+
+
+def test_config_medicos_top_put_guarda_y_get_lo_refleja(escenario):
+    """El PUT persiste y el GET inmediato ya lo ve — sin caché intermedio."""
+    from app.api.v1.routers import admin as admin_router
+
+    db = escenario["db"]
+    admin_router.set_config_medicos_top(
+        {"dias_recordatorio": 5, "pct_ciclo_escalamiento": 40, "avisos_activos": False},
+        db, None)
+
+    r = admin_router.get_config_medicos_top(db, None)
+
+    assert r["dias_recordatorio"] == 5
+    assert r["pct_ciclo_escalamiento"] == 40
+    assert r["avisos_activos"] is False
+
+
+def test_config_medicos_top_put_parcial_no_toca_lo_omitido(escenario):
+    """Guardar solo un campo no debe resetear los otros dos a su default."""
+    from app.api.v1.routers import admin as admin_router
+
+    db = escenario["db"]
+    admin_router.set_config_medicos_top({"dias_recordatorio": 5}, db, None)
+    admin_router.set_config_medicos_top({"pct_ciclo_escalamiento": 60}, db, None)
+
+    r = admin_router.get_config_medicos_top(db, None)
+
+    assert r["dias_recordatorio"] == 5           # sigue el valor del primer PUT
+    assert r["pct_ciclo_escalamiento"] == 60
+    assert r["avisos_activos"] is True            # nunca se tocó: default
+
+
+def test_config_medicos_top_rechaza_pct_fuera_de_0_100(escenario):
+    """Regla de negocio explícita del encargo: 0-100, mensaje claro, 400 (no 500)."""
+    from fastapi import HTTPException
+    from app.api.v1.routers import admin as admin_router
+
+    db = escenario["db"]
+
+    with pytest.raises(HTTPException) as exc:
+        admin_router.set_config_medicos_top({"pct_ciclo_escalamiento": 101}, db, None)
+    assert exc.value.status_code == 400
+    assert "0 y 100" in exc.value.detail
+
+    with pytest.raises(HTTPException) as exc:
+        admin_router.set_config_medicos_top({"pct_ciclo_escalamiento": -1}, db, None)
+    assert exc.value.status_code == 400
+    assert "0 y 100" in exc.value.detail
+
+    # Ningún intento rechazado debe haber escrito nada a medias.
+    r = admin_router.get_config_medicos_top(db, None)
+    assert r["pct_ciclo_escalamiento"] == 70
+
+
+def test_config_medicos_top_rechaza_dias_negativos(escenario):
+    from fastapi import HTTPException
+    from app.api.v1.routers import admin as admin_router
+
+    db = escenario["db"]
+
+    with pytest.raises(HTTPException) as exc:
+        admin_router.set_config_medicos_top({"dias_recordatorio": -3}, db, None)
+    assert exc.value.status_code == 400
+    assert "negativ" in exc.value.detail.lower()
+
+    r = admin_router.get_config_medicos_top(db, None)
+    assert r["dias_recordatorio"] == 2
+
+
+def test_config_medicos_top_rechaza_valor_no_numerico(escenario):
+    from fastapi import HTTPException
+    from app.api.v1.routers import admin as admin_router
+
+    db = escenario["db"]
+
+    with pytest.raises(HTTPException) as exc:
+        admin_router.set_config_medicos_top({"dias_recordatorio": "no-es-un-numero"}, db, None)
+    assert exc.value.status_code == 400
+
+
+def test_endpoint_guarda_dias_gracia_y_procesar_avisos_lo_lee(escenario, monkeypatch):
+    """El punto entero de la tarea: lo que guarda el PUT del admin lo usa de
+    verdad `procesar_avisos`, no solo el GET de vuelta.
+
+    Con la gracia default (2 días hábiles) el 6-ene ya dispararía el
+    recordatorio (ver test_recordatorio_respeta_los_dias_de_gracia). Subiendo
+    la gracia a 10 vía el ENDPOINT, la misma fecha ya NO debe disparar nada.
+    """
+    from app.api.v1.routers import admin as admin_router
+
+    db = escenario["db"]
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda *a, **k: True)
+    escenario["rm"].email = "rm@ejemplo.com"
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")   # 1-ene-2026
+    db.commit()
+    _publicar(db, escenario)
+
+    admin_router.set_config_medicos_top({"dias_recordatorio": 10}, db, None)
+
+    r = top.procesar_avisos(db, hoy=date(2026, 1, 6))
+
+    assert r["recordatorios"] == 0
+    assert db.query(AvisoTopEnviado).count() == 0
+
+
+def test_endpoint_guarda_pct_escalamiento_y_procesar_avisos_lo_lee(escenario, monkeypatch):
+    """Mismo punto del lado del escalamiento: bajar el umbral vía el ENDPOINT a
+    40% hace que el 15-ene (50% del ciclo, por debajo del default de 70) ya
+    dispare el escalamiento al GD — con el default no lo haría
+    (ver test_escalamiento_solo_pasado_el_umbral)."""
+    from app.api.v1.routers import admin as admin_router
+
+    db = escenario["db"]
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda *a, **k: True)
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_escalado",
+        lambda *a, **k: True)
+    escenario["rm"].email = "rm@ejemplo.com"
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+    _publicar(db, escenario)
+
+    admin_router.set_config_medicos_top({"pct_ciclo_escalamiento": 40}, db, None)
+
+    r = top.procesar_avisos(db, hoy=date(2026, 1, 15))
+
+    assert r["escalamientos"] == 1
+    assert db.query(AvisoTopEnviado).filter_by(tipo_aviso=AVISO_ESCALAMIENTO).count() == 1
+
+
+def test_endpoint_apaga_avisos_y_procesar_avisos_no_hace_nada(escenario, monkeypatch):
+    """El interruptor I5, pero accionado vía el ENDPOINT (no `config_service.fijar`
+    a mano como en `test_avisos_desactivados_por_configuracion`) — prueba que el
+    camino completo (UI -> PUT -> BD -> cron) funciona de punta a punta."""
+    from app.api.v1.routers import admin as admin_router
+
+    db = escenario["db"]
+    llamadas = {"n": 0}
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda *a, **k: (llamadas.__setitem__("n", llamadas["n"] + 1) or True))
+    escenario["rm"].email = "rm@ejemplo.com"
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+    _publicar(db, escenario)
+
+    admin_router.set_config_medicos_top({"avisos_activos": False}, db, None)
+
+    r = top.procesar_avisos(db, hoy=date(2026, 1, 20))
+
+    assert r == {"recordatorios": 0, "escalamientos": 0}
+    assert llamadas["n"] == 0
+    assert db.query(AvisoTopEnviado).count() == 0
