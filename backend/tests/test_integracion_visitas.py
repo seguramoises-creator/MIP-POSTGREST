@@ -405,7 +405,9 @@ def test_target_farmacia_adopta_panel_pendiente_de_alta(farmacia):
     assert conteo.integrados == 0
 
 
-def test_integrar_todo_corre_los_cuatro_hechos(farmacia):
+def test_integrar_todo_corre_los_cinco_hechos(farmacia):
+    """Los cuatro hechos de visita/farmacia más `factventa` (sub-proyecto 5):
+    corre siempre, aunque no traiga filas para este ciclo (en_ext=0)."""
     db = farmacia["db"]
     _panel(db)
     _visita(db, "V-0001")
@@ -415,9 +417,12 @@ def test_integrar_todo_corre_los_cuatro_hechos(farmacia):
 
     assert r["ciclo_codigo"] == "C01-2026"
     assert [h["hecho"] for h in r["hechos"]] == [
-        "panelmedico", "factvisitamedico", "targetfarmacia", "factvisitafarmacia"]
+        "panelmedico", "factvisitamedico", "targetfarmacia", "factvisitafarmacia",
+        "factventa"]
     panel = next(h for h in r["hechos"] if h["hecho"] == "panelmedico")
     assert panel["integrados"] == 1
+    ventas = next(h for h in r["hechos"] if h["hecho"] == "factventa")
+    assert ventas["en_ext"] == 0
 
 
 def test_integrar_todo_es_idempotente(farmacia):

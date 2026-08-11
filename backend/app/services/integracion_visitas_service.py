@@ -36,16 +36,18 @@ filas de un lote que la validación ya descartó.
 """
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 
 from loguru import logger
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.dimensiones import Medico, TargetMedico
+from app.models.dimensiones import Medico, RepresentanteMedico, TargetMedico
 from app.models.hechos import Visita as FactVisita
+from app.models.hechos import Ventas
 from app.models.integracion_ext import (
-    ExtControlCarga, ExtFactVisitaFarmacia, ExtFactVisitaMedico, ExtPanelMedico,
-    ExtTargetFarmacia,
+    ExtControlCarga, ExtFactVenta, ExtFactVisitaFarmacia, ExtFactVisitaMedico,
+    ExtPanelMedico, ExtTargetFarmacia,
 )
 from app.models.mapeo_externo import (
     ENT_CICLO, ENT_FARMACIA, ENT_MEDICO, ENT_REPRESENTANTE, MapeoExterno,
@@ -54,6 +56,7 @@ from app.models.visita import (
     FactVisitaFarmacia, FarmaciaVisita, MedicoVisita, VisitaRegistro,
 )
 from app.services import integracion_mapeo as mapeo
+from app.services.puntaje_service import calcular_cumplimiento
 
 SEVERIDAD_ERROR = "error"
 SEVERIDAD_AVISO = "aviso"
@@ -71,6 +74,15 @@ ENT_VISITA_MEDICO = "visita_medico"
 #: el mapeo de ambos destinos.
 ENT_PANEL_MEDICO_VISITA = "panel_medico_visita"
 ENT_VISITA_MEDICO_REGISTRO = "visita_medico_registro"
+
+#: Entidad propia para la fila AGREGADA de `DW.FACT_Ventas`. Nueva y no
+#: reutilizada, por lo mismo que las de los hechos de médico: `MapeoExterno` es
+#: único por `(entidad, país, código)` con un solo `id_interno`, así que
+#: compartirla haría que `resolver` buscara el id en la tabla equivocada.
+#: Es además la ÚNICA idempotencia que tiene `FACT_Ventas`: esa tabla no lleva
+#: ningún UNIQUE, y como el ROI suma `ventas_reales`, duplicar una fila
+#: inventaría ingresos que nadie podría rastrear.
+ENT_VENTAS_RM_CICLO = "ventas_rm_ciclo"
 
 #: `MapeoExterno.codigo_externo` es String(60). Las claves compuestas que arman
 #: `integrar_panel_medico`/`integrar_target_farmacia` (ciclo/rm/entidad) pueden
@@ -626,12 +638,117 @@ def integrar_visitas_farmacia(db: Session, pais_codigo: str, ciclo_codigo: str,
     return conteo
 
 
+def integrar_ventas(db: Session, pais_codigo: str, ciclo_codigo: str,
+                    hallazgos: list,
+                    estados_lote: dict[int, str] | None = None) -> ConteoHecho:
+    """`ext.factventa` → `DW.FACT_Ventas`, AGREGANDO por (país, ciclo, RM).
+
+    La granularidad no coincide: el contrato manda detalle (con `producto_codigo`
+    opcional) y `FACT_Ventas` es una fila por país+línea+RM+ciclo, sin columna de
+    producto. Se suma `valor_venta` y `cuota`; el detalle se descarta porque no
+    hay dónde ponerlo y ningún consumidor lo pide.
+
+    Alimenta dos cosas: el indicador VENTAS (vía `integracion_indicadores_service`)
+    y los INGRESOS DEL ROI del módulo de Visita, que lee esta tabla — de ahí que
+    duplicar una fila sea especialmente dañino.
+    """
+    conteo = ConteoHecho("factventa")
+    filas = (db.query(ExtFactVenta)
+             .filter(ExtFactVenta.pais_codigo == pais_codigo,
+                     ExtFactVenta.ciclo_codigo == ciclo_codigo).all())
+    conteo.en_ext = len(filas)
+    if estados_lote is None:
+        estados_lote = _resolver_estados_lotes(db, {f.lote_id for f in filas})
+
+    # Agregación por RM. Se agrupa DESPUÉS de filtrar por lote: una fila de un
+    # lote rechazado no debe sumar al total de nadie.
+    por_rm: dict[str, list] = {}
+    for fila in filas:
+        if not _lote_habilitado(estados_lote, fila.lote_id):
+            _omitir_por_lote(conteo, hallazgos, "factventa", fila.origen_id,
+                             fila.lote_id, estados_lote)
+            continue
+        por_rm.setdefault(fila.rm_codigo, []).append(fila)
+
+    for rm_codigo, grupo in sorted(por_rm.items()):
+        clave = f"{ciclo_codigo}/{rm_codigo}"
+        if not _cabe(clave, LARGO_CODIGO_EXTERNO):
+            _omitir_por_largo(conteo, hallazgos, "factventa", clave,
+                              "MapeoExterno.codigo_externo", LARGO_CODIGO_EXTERNO)
+            continue
+        ciclo_id, rm_id = _refs(db, pais_codigo, ciclo_codigo, rm_codigo)
+        if ciclo_id is None:
+            conteo.omitidos += 1
+            _falta_ref(hallazgos, "factventa", clave, "el ciclo", ciclo_codigo)
+            continue
+        if rm_id is None:
+            conteo.omitidos += 1
+            _falta_ref(hallazgos, "factventa", clave, "el representante", rm_codigo)
+            continue
+        rm = db.query(RepresentanteMedico).filter(
+            RepresentanteMedico.id == rm_id).first()
+        if rm is None:
+            conteo.omitidos += 1
+            _falta_ref(hallazgos, "factventa", clave, "la ficha del representante",
+                       rm_codigo)
+            continue
+
+        total_venta = sum((f.valor_venta or Decimal(0) for f in grupo), Decimal(0))
+        total_cuota = sum((f.cuota or Decimal(0) for f in grupo), Decimal(0))
+
+        # La cuota se SUMA (decisión del cliente), pero varias filas con la cuota
+        # EXACTAMENTE igual son la firma de un ERP que repite el total del RM en
+        # cada producto en vez de repartirlo. Sumarla ahí la multiplicaría por el
+        # número de productos y hundiría el cumplimiento de todos sin que nada lo
+        # delatara. No se corrige automáticamente —adivinar haría el número
+        # impredecible—: se avisa.
+        cuotas = {f.cuota for f in grupo}
+        if len(grupo) > 1 and len(cuotas) == 1:
+            hallazgos.append(Hallazgo(
+                "factventa", clave,
+                f"El representante «{rm_codigo}» trae {len(grupo)} filas con la "
+                f"MISMA cuota ({next(iter(cuotas))}). Se sumaron, pero si el "
+                f"origen repite la cuota total por producto en vez de "
+                f"repartirla, el total quedaría multiplicado por "
+                f"{len(grupo)}. Confirmar con el laboratorio.",
+                SEVERIDAD_AVISO))
+
+        def _buscar(cid=ciclo_id, rid=rm_id):
+            return (db.query(Ventas)
+                    .filter(Ventas.pais_codigo == pais_codigo,
+                            Ventas.ciclo_id == cid, Ventas.rm_id == rid).first())
+
+        def _crear(cid=ciclo_id, rid=rm_id, r=rm):
+            nuevo = Ventas(pais_codigo=pais_codigo, linea_id=r.linea_id,
+                           rm_id=rid, ciclo_id=cid,
+                           ventas_reales=Decimal(0), cuota=Decimal(0))
+            db.add(nuevo)
+            db.flush()
+            return nuevo
+
+        registro, resultado = mapeo.resolver(
+            db, ENT_VENTAS_RM_CICLO, pais_codigo, clave, Ventas, _buscar, _crear)
+        registro.ventas_reales = total_venta
+        registro.cuota = total_cuota
+        registro.linea_id = rm.linea_id
+        # `cumplimiento_pct` en 0-100 (criterio del ETL legacy, para no dejar la
+        # tabla a medias). El Score NO lo usa: su camino es FACT_ResultadoIndicador.
+        registro.cumplimiento_pct = (
+            calcular_cumplimiento(total_venta, total_cuota) if total_cuota else None)
+        conteo.anotar(resultado, grupo[0].lote_id)
+
+    return conteo
+
+
 #: En orden: los hechos de farmacia dependen del target, que dependen del panel.
+#: Las ventas no dependen de los otros hechos, pero el orden fija el de la
+#: respuesta.
 _INTEGRADORES = (
     ("panelmedico", integrar_panel_medico),
     ("factvisitamedico", integrar_visitas_medico),
     ("targetfarmacia", integrar_target_farmacia),
     ("factvisitafarmacia", integrar_visitas_farmacia),
+    ("factventa", integrar_ventas),
 )
 
 #: El tercer elemento reconstruye, en SQL, la misma `codigo_externo` que los
@@ -651,6 +768,9 @@ _ORIGEN_CONTEO = {
         lambda m: func.concat(m.ciclo_codigo, "/", m.rm_codigo, "/", m.farmacia_codigo)),
     "factvisitafarmacia": (
         ExtFactVisitaFarmacia, ENT_VISITA_FARMACIA, lambda m: m.origen_id),
+    "factventa": (
+        ExtFactVenta, ENT_VENTAS_RM_CICLO,
+        lambda m: func.concat(m.ciclo_codigo, "/", m.rm_codigo)),
 }
 
 
