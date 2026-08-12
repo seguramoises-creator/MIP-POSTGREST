@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models.exam_models import Examen, AsignacionExamen, IntentoExamen, ConsolidacionCiclo
 from app.models.dimensiones import RepresentanteMedico
 from app.services import examen_kpi_service, recalculo_service
+from app.services import fuente_indicador_service as fuentes
 
 INDICADOR_EXAMEN = "EVAL_CONOCIMIENTOS"
 
@@ -93,6 +94,10 @@ def _upsert_estado(db, ciclo_id, pais_codigo, n, promedio, usuario_id):
 def consolidar_ciclo(db: Session, ciclo_id: int, pais_codigo: str, usuario_id: int | None) -> dict:
     """Escribe la nota EVAL_CONOCIMIENTOS de cada RM del (ciclo, país) a la FACT y
     dispara UN recálculo. Re-ejecutable mientras el ciclo esté abierto."""
+    # Antes que nada: ¿es este país de exámenes? Los tres caminos hacen
+    # delete-then-insert sobre el mismo indicador, así que consolidar en un país
+    # que se alimenta de otra fuente borraría la nota buena sin dejar rastro.
+    fuentes.asegurar_duenio(db, pais_codigo, fuentes.FUENTE_EXAMEN_VISTA)
     try:
         recalculo_service.validar_ciclo_abierto(db, ciclo_id)
     except recalculo_service.CicloCerradoError:

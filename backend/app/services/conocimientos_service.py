@@ -15,8 +15,12 @@ from sqlalchemy.orm import Session
 
 from app.models.dimensiones import Indicador, RepresentanteMedico
 from app.models.hechos import NotaConocimiento, ResultadoIndicador
+from app.models.integracion_ext import ExtControlCarga, ExtFactEvaluacionConocimiento
+from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE
 from app.services import fuente_indicador_service as fuentes
+from app.services import integracion_mapeo as mapeo
 from app.services import recalculo_service
+from app.services.integracion_dimensiones_service import SEVERIDAD_ERROR, Hallazgo
 
 NOTA_MIN = Decimal("0")
 NOTA_MAX = Decimal("100")
@@ -147,5 +151,72 @@ def integrar_captura(db: Session, pais_codigo: str, ciclo_id: int) -> dict:
 
     logger.info(f"Conocimientos: {integrados} RM integrados en el ciclo {ciclo_id} "
                 f"de {pais_codigo}")
+    return {"abortado": False, "rms_integrados": integrados,
+            "ciclo_id": ciclo_id, "pais_codigo": pais_codigo}
+
+
+#: Un lote ya INTEGRADO se vuelve a leer sin problema: la escritura es
+#: idempotente y reprocesar debe poder repetirse.
+_ESTADOS_INTEGRABLES = ("VALIDADO", "INTEGRADO")
+
+
+def integrar_conocimientos(db: Session, pais_codigo: str, ciclo_codigo: str,
+                           hallazgos: list) -> dict:
+    """`ext.factevaluacionconocimiento` → `EVAL_CONOCIMIENTOS`, promediando por RM.
+
+    Un RM puede traer varias notas (temas o fechas distintas): se promedian,
+    igual que en los otros dos caminos.
+    """
+    fuente = fuentes.fuente_de(db, pais_codigo)
+    if fuente != fuentes.FUENTE_NOTA_EXTERNA:
+        hallazgos.append(Hallazgo(
+            "factevaluacionconocimiento", ciclo_codigo,
+            f"En {pais_codigo}, {fuentes.INDICADOR_CONOCIMIENTOS} lo alimenta "
+            f"«{fuente}»; las notas de Mallén no se integraron. Cambia la fuente "
+            f"en Conocimientos si esa es la decisión.", SEVERIDAD_ERROR))
+        return {"abortado": True, "motivo": "fuente_ajena", "rms_integrados": 0}
+
+    ciclo_id = mapeo.id_mapeado(db, ENT_CICLO, pais_codigo, ciclo_codigo)
+    if ciclo_id is None:
+        hallazgos.append(Hallazgo(
+            "factevaluacionconocimiento", ciclo_codigo,
+            f"No se pudo resolver el ciclo «{ciclo_codigo}»; sincroniza "
+            f"dimensiones primero.", SEVERIDAD_ERROR))
+        return {"abortado": True, "motivo": "ciclo_no_mapeado", "rms_integrados": 0}
+
+    try:
+        recalculo_service.validar_ciclo_abierto(db, ciclo_id)
+    except recalculo_service.CicloCerradoError:
+        logger.info(f"Conocimientos: ciclo {ciclo_id} cerrado — no se integra")
+        return {"abortado": True, "motivo": "ciclo_cerrado", "rms_integrados": 0}
+
+    filas = (db.query(ExtFactEvaluacionConocimiento)
+             .filter(ExtFactEvaluacionConocimiento.pais_codigo == pais_codigo,
+                     ExtFactEvaluacionConocimiento.ciclo_codigo == ciclo_codigo).all())
+    estados = {l.lote_id: l.estado for l in db.query(ExtControlCarga).filter(
+        ExtControlCarga.lote_id.in_({f.lote_id for f in filas} or {0})).all()}
+
+    por_rm: dict[str, list] = {}
+    for fila in filas:
+        if estados.get(fila.lote_id) not in _ESTADOS_INTEGRABLES:
+            continue
+        por_rm.setdefault(fila.rm_codigo, []).append(fila.nota)
+
+    integrados = 0
+    for rm_codigo, notas in sorted(por_rm.items()):
+        rm_id = mapeo.id_mapeado(db, ENT_REPRESENTANTE, pais_codigo, rm_codigo)
+        rm = db.get(RepresentanteMedico, rm_id) if rm_id else None
+        if rm is None:
+            hallazgos.append(Hallazgo(
+                "factevaluacionconocimiento", rm_codigo,
+                f"El representante «{rm_codigo}» no está sincronizado; su nota "
+                f"no se integró.", SEVERIDAD_ERROR))
+            continue
+        promedio = sum(notas, Decimal(0)) / len(notas)
+        if _upsert_resultado(db, rm, ciclo_id, promedio):
+            integrados += 1
+
+    logger.info(f"Conocimientos (Mallén): {integrados} RM integrados en "
+                f"{pais_codigo}/{ciclo_codigo}")
     return {"abortado": False, "rms_integrados": integrados,
             "ciclo_id": ciclo_id, "pais_codigo": pais_codigo}

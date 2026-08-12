@@ -2,11 +2,15 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from app.services import examen_consolidacion_service as cons
 
 
 def test_consolidar_aborta_si_ciclo_cerrado(monkeypatch):
     db = MagicMock()
+    monkeypatch.setattr(cons.fuentes, "fuente_de",
+                        lambda d, p, *a, **k: cons.fuentes.FUENTE_EXAMEN_VISTA)
 
     def _raise(d, c):
         raise cons.recalculo_service.CicloCerradoError("cerrado")
@@ -19,6 +23,8 @@ def test_consolidar_aborta_si_ciclo_cerrado(monkeypatch):
 
 def test_consolidar_escribe_y_recalcula_una_vez(monkeypatch):
     db = MagicMock()
+    monkeypatch.setattr(cons.fuentes, "fuente_de",
+                        lambda d, p, *a, **k: cons.fuentes.FUENTE_EXAMEN_VISTA)
     monkeypatch.setattr(cons.recalculo_service, "validar_ciclo_abierto", lambda d, c: None)
     rms = [SimpleNamespace(id=1, pais_codigo="DO"), SimpleNamespace(id=2, pais_codigo="DO")]
     monkeypatch.setattr(cons, "rms_del_ciclo", lambda d, c, p: rms)
@@ -43,3 +49,19 @@ def test_estado_consolidacion_sin_fila_es_pendiente(monkeypatch):
     assert out["estado"] == "pendiente"
     assert out["rms_con_nota"] == 0
     assert out["ciclo_abierto"] is True
+
+
+def test_consolidar_se_niega_si_el_pais_no_es_de_examenes(monkeypatch):
+    """Con otro dueño, consolidar no debe escribir NADA: los tres caminos hacen
+    delete-then-insert, así que dejarlo pasar sobrescribiría la nota buena."""
+    db = MagicMock()
+    monkeypatch.setattr(cons.fuentes, "fuente_de",
+                        lambda d, p, *a, **k: cons.fuentes.FUENTE_CAPTURA_MANUAL)
+    escrituras = {"n": 0}
+    monkeypatch.setattr(cons.examen_kpi_service, "upsert_nota_rm",
+                        lambda *a, **k: escrituras.__setitem__("n", escrituras["n"] + 1))
+
+    with pytest.raises(cons.fuentes.FuenteAjenaError):
+        cons.consolidar_ciclo(db, ciclo_id=7, pais_codigo="DO", usuario_id=1)
+
+    assert escrituras["n"] == 0
