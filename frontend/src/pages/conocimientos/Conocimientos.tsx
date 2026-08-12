@@ -2,9 +2,15 @@
  * Conocimientos — quién alimenta EVAL_CONOCIMIENTOS y captura manual de notas.
  *
  * Sustituye al Excel para este indicador. Los controles de captura se apagan
- * cuando el país no se alimenta de esta vía, o cuando el ciclo en consulta no
- * es el de trabajo: la puerta que manda es la del backend, pero descubrir el
- * 409 DESPUÉS de teclear veinte notas es una forma cara de enterarse.
+ * por dos motivos independientes:
+ *   - Fuente ajena: el backend SÍ guarda una puerta (`/conocimientos/integrar`
+ *     responde 409 si el país no es CAPTURA_MANUAL) — apagar el botón aquí
+ *     solo evita que el usuario descubra el 409 después de teclear notas.
+ *   - Ciclo en consulta (`esSoloLectura`): NO hay guard en el backend para
+ *     `POST /notas` ni `PUT /notas/{id}` — nada impide, hoy, capturar sobre un
+ *     ciclo que no es el de trabajo salvo este `disabled` de la pantalla. Que
+ *     quede claro para no repetir aquí la afirmación errónea de que "la
+ *     puerta que manda es la del backend" para AMBOS motivos.
  */
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -23,6 +29,13 @@ const EXPLICACION: Record<FuenteConocimientos, string> = {
   EXAMEN_VISTA: 'Las notas salen de los exámenes de VISTA; Capacitación las consolida por ciclo. Esta pantalla queda de solo lectura.',
   NOTA_EXTERNA: 'Las notas las envía Laboratorio Mallén y entran por la integración. Esta pantalla queda de solo lectura.',
   CAPTURA_MANUAL: 'Las notas se capturan aquí y entran al ciclo con el botón "Integrar al ciclo".',
+};
+
+// El `motivo` que devuelve `POST /conocimientos/integrar` es un código interno
+// (igual que en ETL/recálculo: "ciclo_cerrado"). Traducirlo aquí evita pintarle
+// al operador el literal crudo.
+const MOTIVO_ABORTO: Record<string, string> = {
+  ciclo_cerrado: 'el ciclo está cerrado (snapshot histórico inmutable).',
 };
 
 function mensajeError(e: unknown, respaldo: string): string {
@@ -81,7 +94,7 @@ export default function Conocimientos() {
     onSuccess: (r) => {
       setError(null);
       setAviso(r.abortado
-        ? `No se integró: ${r.motivo}.`
+        ? `No se integró: ${(r.motivo && MOTIVO_ABORTO[r.motivo]) || r.motivo || 'motivo desconocido'}`
         : `${r.rms_integrados} representante(s) integrados al ciclo.`);
       refrescar();
     },
@@ -100,6 +113,23 @@ export default function Conocimientos() {
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>Conocimientos</Typography>
+
+      {/* Sin esto, un 403/500 en cualquiera de las dos queries deja la tabla
+          vacía y los botones apagados sin ningún mensaje — indistinguible de
+          "no hay datos" en una pantalla cuyo propósito es saber a quién le
+          falta nota. */}
+      {fuente.isLoading && <Alert severity="info" sx={{ mb: 2 }}>Cargando la fuente configurada…</Alert>}
+      {fuente.isError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {mensajeError(fuente.error, 'No se pudo cargar la fuente configurada.')}
+        </Alert>
+      )}
+      {notas.isLoading && <Alert severity="info" sx={{ mb: 2 }}>Cargando las notas del ciclo…</Alert>}
+      {notas.isError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {mensajeError(notas.error, 'No se pudieron cargar las notas del ciclo.')}
+        </Alert>
+      )}
 
       <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, p: 2, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -205,7 +235,11 @@ export default function Conocimientos() {
                     </Box>
                   )}
                 </TableCell>
-                <TableCell align="right">{f.promedio ?? '—'}</TableCell>
+                {/* El promedio que integra al ciclo (`integrar_captura`) usa el valor
+                    EXACTO — este `.toFixed(2)` es solo de presentación: `promedio` sale
+                    de `sum/len` con `Decimal` de 28 dígitos y, sin redondear, tres notas
+                    80/85/83 pintarían "82.66666666666667". */}
+                <TableCell align="right">{f.promedio !== null ? f.promedio.toFixed(2) : '—'}</TableCell>
                 <TableCell align="right">
                   <Button size="small" disabled={!puedeCapturar}
                     onClick={() => setNuevo({

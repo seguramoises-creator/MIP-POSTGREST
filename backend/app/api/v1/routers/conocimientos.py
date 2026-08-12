@@ -8,18 +8,25 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.deps import get_current_active_user, require_roles
+from app.core.deps import require_roles
 from app.db.database import get_db
 from app.models.dimensiones import RepresentanteMedico
 from app.models.usuario import Rol, Usuario
 from app.services import conocimientos_service as cs
 from app.services import fuente_indicador_service as fuentes
+from app.services import recalculo_service
 
 router = APIRouter(prefix="/conocimientos", tags=["Conocimientos"])
 
+# Única definición de la lista de roles. `require_roles` ya devuelve el
+# `Usuario` autenticado, así que `usuario: Usuario = RequireCaptura` en la
+# firma del endpoint basta — no hace falta repetir el chequeo `usuario.rol
+# not in (...)` en cada handler (antes vivía copiado 4 veces: sin test que lo
+# delatara, una copia se habría podido desincronizar de las otras).
 RequireCaptura = Depends(require_roles(
     Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.CAPACITACION))
 
@@ -30,7 +37,6 @@ class FuenteIn(BaseModel):
 
 
 class NotaIn(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
     pais_codigo: str
     ciclo_id: int
     rm_id: int
@@ -68,16 +74,22 @@ def ver_fuente(pais_codigo: str, db: Session = Depends(get_db),
 
 @router.put("/fuente", summary="Declarar quién alimenta EVAL_CONOCIMIENTOS")
 def cambiar_fuente(datos: FuenteIn, db: Session = Depends(get_db),
-                   usuario: Usuario = Depends(get_current_active_user)):
+                   usuario: Usuario = RequireCaptura):
     """Los otros caminos consultan esto antes de escribir: cambiarlo decide cuál
     de los tres puede alimentar el indicador en ese país."""
-    if usuario.rol not in (Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.CAPACITACION):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso.")
     try:
         fila = fuentes.fijar_fuente(db, datos.pais_codigo, datos.fuente, usuario.id)
+        db.commit()
     except ValueError as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
-    db.commit()
+    except IntegrityError:
+        # pais_codigo inexistente: la FK revienta en el commit (INSERT nuevo)
+        # o en el propio UPDATE si el motor la valida antes — se traduce a 422
+        # con un mensaje de negocio en vez del 500 crudo del IntegrityError.
+        db.rollback()
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"El país «{datos.pais_codigo}» no existe.")
     return {"pais_codigo": fila.pais_codigo, "fuente": fila.fuente}
 
 
@@ -89,9 +101,7 @@ def listar_notas(pais_codigo: str, ciclo_id: int, db: Session = Depends(get_db),
 
 @router.post("/notas", summary="Capturar una nota")
 def crear_nota(datos: NotaIn, db: Session = Depends(get_db),
-               usuario: Usuario = Depends(get_current_active_user)):
-    if usuario.rol not in (Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.CAPACITACION):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso.")
+               usuario: Usuario = RequireCaptura):
     _validar_rm_del_pais(db, datos.rm_id, datos.pais_codigo)
     try:
         fila = cs.capturar_nota(db, datos.pais_codigo, datos.ciclo_id, datos.rm_id,
@@ -105,12 +115,10 @@ def crear_nota(datos: NotaIn, db: Session = Depends(get_db),
 
 @router.put("/notas/{nota_id}", summary="Corregir una nota capturada")
 def editar_nota(nota_id: int, datos: NotaEdit, db: Session = Depends(get_db),
-                usuario: Usuario = Depends(get_current_active_user)):
+                usuario: Usuario = RequireCaptura):
     """Corrige EDITANDO la fila. Para añadir otra nota del mismo RM se usa POST:
     la tabla no lleva UNIQUE y corregir insertando dejaría la nota vieja
     entrando al promedio."""
-    if usuario.rol not in (Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD, Rol.CAPACITACION):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Sin permiso.")
     try:
         cs.corregir_nota(db, nota_id, datos.nota, datos.tema, usuario.id)
     except ValueError as exc:
@@ -124,10 +132,31 @@ def integrar(pais_codigo: str, ciclo_id: int, db: Session = Depends(get_db),
              _: Usuario = RequireCaptura):
     """`integrar_captura` no hace commit propio (lo decide el llamador, igual
     que `capturar_nota`/`corregir_nota`/`fijar_fuente`) — sin este commit, el
-    delete-then-insert se pierde al cerrarse la sesión con la petición."""
+    delete-then-insert se pierde al cerrarse la sesión con la petición.
+
+    Dispara el recálculo AQUÍ, en el router, y no dentro de
+    `conocimientos_service.integrar_captura`: ese servicio lo comparte
+    `integrar_conocimientos` (el integrador de Mallén), que corre dentro del
+    orquestador por lotes `integracion_visitas_service.integrar_todo` — ese
+    orquestador YA dispara un único recálculo al final de todo el lote. Si el
+    recálculo viviera en el servicio compartido, un lote de Mallén recalcularía
+    una vez por CADA integrador que lo llama, no una sola vez. La captura
+    manual no tiene orquestador propio, así que el recálculo pertenece aquí.
+    Solo se dispara si `integrar_captura` no abortó (ciclo cerrado): en el
+    aborto el servicio no escribió nada, y recalcular una escritura vacía
+    sería trabajo de sobra (aunque inofensivo — el guard de ciclo abierto
+    también corta ahí)."""
     try:
         resultado = cs.integrar_captura(db, pais_codigo, ciclo_id)
     except fuentes.FuenteAjenaError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
     db.commit()
+    if not resultado.get("abortado"):
+        recalculo_service.recalcular_ciclo(db, ciclo_id, pais_codigo)
+        # `completar_puntajes`/`generar_ranking` escriben sin comitear (igual
+        # que `integrar_captura`): sin este segundo commit, `puntos_obtenidos`
+        # se calcularía y se perdería al cerrarse la sesión de la petición —
+        # el mismo defecto que motivó el commit de arriba, aplicado ahora al
+        # resultado del recálculo.
+        db.commit()
     return resultado

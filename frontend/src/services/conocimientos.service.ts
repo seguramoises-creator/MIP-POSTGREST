@@ -12,14 +12,18 @@ export interface FuenteActual {
   fuentes: FuenteConocimientos[];
 }
 
+// Los endpoints no llevan `response_model`: FastAPI serializa con `jsonable_encoder`
+// y un `Decimal` sale como NÚMERO, no como string (a diferencia de otros módulos que
+// sí fuerzan un `response_model` con coerción a string). Mismo dato que
+// `examenes.service.ts:166` tipa `promedio: number | null` — igual aquí.
 export interface NotaCapturada {
-  id: number; nota: string; tema: string | null;
+  id: number; nota: number; tema: string | null;
   fecha_evaluacion: string; capturado_en: string;
 }
 
 export interface FilaNotas {
   rm_id: number; rm_codigo: string; rm_nombre: string;
-  notas: NotaCapturada[]; promedio: string | null;
+  notas: NotaCapturada[]; promedio: number | null;
 }
 
 export interface ResultadoIntegracion {
