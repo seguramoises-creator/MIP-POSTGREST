@@ -41,7 +41,7 @@ from datetime import datetime, date, timezone
 from decimal import Decimal
 from sqlalchemy import (
     String, Boolean, Integer, Date, DateTime,
-    Numeric, ForeignKey, Text, BigInteger, UniqueConstraint
+    Numeric, ForeignKey, Text, BigInteger, UniqueConstraint, Index
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.database import Base
@@ -647,7 +647,15 @@ class NotaConocimiento(Base):
     número saldría mal sin que nada lo delatara.
     """
     __tablename__ = "FACT_NotaConocimiento"
-    __table_args__ = {"schema": "DW"}
+    __table_args__ = (
+        # El compuesto sirve a la consulta real del módulo (las notas de un
+        # ciclo, por RM). Se declara AQUÍ además de en la migración: si solo
+        # vive en la migración, el esquema de los tests y el de producción
+        # divergen, y el próximo `alembic revision --autogenerate` propone una
+        # migración espuria para "arreglar" lo que nunca estuvo mal.
+        Index("IX_NotaConocimiento_ciclo", "ciclo_id", "rm_id"),
+        {"schema": "DW"},
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     pais_codigo: Mapped[str] = mapped_column(

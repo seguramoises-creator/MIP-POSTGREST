@@ -64,9 +64,24 @@ def upgrade() -> None:
     )
     op.create_index("IX_NotaConocimiento_ciclo", "FACT_NotaConocimiento",
                     ["ciclo_id", "rm_id"], schema="DW")
+    # Los tres de una columna que el modelo declara vía `index=True` — mismo
+    # nombre que generaría el ORM (ver otras tablas DW.FACT_* con index=True),
+    # para que el modelo y la migración digan lo mismo y `alembic check` pase.
+    op.create_index(op.f("ix_DW_FACT_NotaConocimiento_pais_codigo"),
+                    "FACT_NotaConocimiento", ["pais_codigo"], schema="DW")
+    op.create_index(op.f("ix_DW_FACT_NotaConocimiento_ciclo_id"),
+                    "FACT_NotaConocimiento", ["ciclo_id"], schema="DW")
+    op.create_index(op.f("ix_DW_FACT_NotaConocimiento_rm_id"),
+                    "FACT_NotaConocimiento", ["rm_id"], schema="DW")
 
 
 def downgrade() -> None:
+    op.drop_index(op.f("ix_DW_FACT_NotaConocimiento_rm_id"),
+                  table_name="FACT_NotaConocimiento", schema="DW")
+    op.drop_index(op.f("ix_DW_FACT_NotaConocimiento_ciclo_id"),
+                  table_name="FACT_NotaConocimiento", schema="DW")
+    op.drop_index(op.f("ix_DW_FACT_NotaConocimiento_pais_codigo"),
+                  table_name="FACT_NotaConocimiento", schema="DW")
     op.drop_index("IX_NotaConocimiento_ciclo", table_name="FACT_NotaConocimiento",
                   schema="DW")
     op.drop_table("FACT_NotaConocimiento", schema="DW")
