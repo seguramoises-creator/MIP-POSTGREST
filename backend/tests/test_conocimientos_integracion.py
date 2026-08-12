@@ -204,6 +204,34 @@ def test_filas_de_un_lote_no_validado_se_omiten(escenario):
 
     assert out["rms_integrados"] == 0
     assert _resultado(e, "EVAL_CONOCIMIENTOS") is None
+    # Ronda de correcciones 1: sin esto el operador no tenía ninguna pista de
+    # que había una fila descartada por el lote, ni por qué estado.
+    avisos = [h for h in hallazgos if h.severidad == "aviso"]
+    assert len(avisos) == 1
+    assert "RECHAZADO" in avisos[0].problema
+    assert "1" in avisos[0].problema
+
+
+def test_nota_fuera_de_rango_se_omite_con_hallazgo(escenario):
+    """Ronda de correcciones 1: el camino manual pasa por `_validar_nota`, pero
+    el integrador escribía `resultado_real` tal cual. Una nota de 150 debe
+    omitirse (no recortarse en silencio) con un hallazgo de error, y el resto
+    de las notas válidas del RM sí deben promediarse."""
+    e = escenario
+    fs.fijar_fuente(e["db"], "DO", fs.FUENTE_NOTA_EXTERNA, usuario_id=1)
+    _nota_ext(e["db"], "N-1", 150)
+    _nota_ext(e["db"], "N-2", 80)
+    e["db"].commit()
+    hallazgos = []
+
+    out = cs.integrar_conocimientos(e["db"], "DO", "C01-2026", hallazgos)
+    e["db"].commit()
+
+    assert out["rms_integrados"] == 1
+    assert _resultado(e, "EVAL_CONOCIMIENTOS").resultado_real == Decimal("80.0000")
+    errores = [h for h in hallazgos if h.severidad == "error"]
+    assert len(errores) == 1
+    assert "150" in errores[0].problema
 
 
 def test_ciclo_cerrado_no_escribe_ni_borra(escenario):

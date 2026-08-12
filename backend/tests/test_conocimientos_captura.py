@@ -58,7 +58,12 @@ def motor():
 def escenario(motor):
     Sesion = sessionmaker(bind=motor)
     s = Sesion()
+    # `FuenteIndicador` limpio ANTES que `DIM_Pais` (FK): preexistente pero solo
+    # invisible porque el único test de este archivo con `fijar_fuente` es el
+    # último — el próximo test que alguien agregue después lo rompería con la
+    # misma violación de FK que encontró la Tarea 4 en `test_conocimientos_integracion.py`.
     for tabla in ('"DW"."FACT_NotaConocimiento"', '"DW"."FACT_ResultadoIndicador"',
+                  '"Config"."FuenteIndicador"',
                   '"Config"."DIM_Indicador"', '"Config"."DIM_RM"',
                   '"Config"."DIM_Gerente"', '"Config"."DIM_Ciclo"',
                   '"Config"."DIM_Linea"', '"Config"."DIM_Pais"'):

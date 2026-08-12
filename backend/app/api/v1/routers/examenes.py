@@ -502,10 +502,19 @@ def consolidacion_ejecutar(
     current_user=ConfigExamen,
 ):
     """Consolida el (ciclo, país): escribe la nota EVAL_CONOCIMIENTOS de cada RM a
-    DW.FACT_ResultadoIndicador y dispara un único recálculo. Solo Capacitación."""
+    DW.FACT_ResultadoIndicador y dispara un único recálculo. Solo Capacitación.
+
+    Si el país no es de exámenes (otra fuente es la dueña de EVAL_CONOCIMIENTOS),
+    `consolidar_ciclo` levanta `FuenteAjenaError` ANTES de escribir nada — se
+    traduce a 409 con el mensaje de la excepción, que ya nombra al dueño real y
+    dónde cambiarlo (spec del sub-proyecto: "409 nombrando la fuente vigente")."""
     from app.services import examen_consolidacion_service
-    return examen_consolidacion_service.consolidar_ciclo(
-        db, body.ciclo_id, body.pais_codigo, getattr(current_user, "id", None))
+    from app.services import fuente_indicador_service as fuentes
+    try:
+        return examen_consolidacion_service.consolidar_ciclo(
+            db, body.ciclo_id, body.pais_codigo, getattr(current_user, "id", None))
+    except fuentes.FuenteAjenaError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
 
 
 @router.get("/{examen_id}", response_model=ExamenResponse)

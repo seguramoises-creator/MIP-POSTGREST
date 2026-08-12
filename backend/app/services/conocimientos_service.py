@@ -15,12 +15,24 @@ from sqlalchemy.orm import Session
 
 from app.models.dimensiones import Indicador, RepresentanteMedico
 from app.models.hechos import NotaConocimiento, ResultadoIndicador
-from app.models.integracion_ext import ExtControlCarga, ExtFactEvaluacionConocimiento
+from app.models.integracion_ext import ExtFactEvaluacionConocimiento
 from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE
 from app.services import fuente_indicador_service as fuentes
 from app.services import integracion_mapeo as mapeo
 from app.services import recalculo_service
-from app.services.integracion_dimensiones_service import SEVERIDAD_ERROR, Hallazgo
+# Ronda de correcciones 1 (Tarea 4): el `Hallazgo` correcto es el de
+# `integracion_visitas_service`, NO el de `integracion_dimensiones_service` (esos
+# tienen campos distintos: `hecho`/`origen_id` vs `entidad`/`codigo_externo`).
+# `integrar_conocimientos` corre dentro del MISMO proceso por lotes que
+# `integracion_indicadores_service` (que ya hace este mismo import) — comparte su
+# lista de hallazgos, así que un objeto con campos ajenos revienta con
+# `AttributeError` al serializar, al FINAL del lote, después de haber escrito.
+# También se reutilizan `_lote_habilitado`/`_resolver_estados_lotes`: dos
+# definiciones de «lote integrable» sobre el mismo dato es justo lo que hay que
+# evitar (mismo criterio que documenta `integracion_indicadores_service`).
+from app.services.integracion_visitas_service import (
+    SEVERIDAD_AVISO, SEVERIDAD_ERROR, Hallazgo, _lote_habilitado, _resolver_estados_lotes,
+)
 
 NOTA_MIN = Decimal("0")
 NOTA_MAX = Decimal("100")
@@ -155,17 +167,29 @@ def integrar_captura(db: Session, pais_codigo: str, ciclo_id: int) -> dict:
             "ciclo_id": ciclo_id, "pais_codigo": pais_codigo}
 
 
-#: Un lote ya INTEGRADO se vuelve a leer sin problema: la escritura es
-#: idempotente y reprocesar debe poder repetirse.
-_ESTADOS_INTEGRABLES = ("VALIDADO", "INTEGRADO")
-
-
 def integrar_conocimientos(db: Session, pais_codigo: str, ciclo_codigo: str,
-                           hallazgos: list) -> dict:
+                           hallazgos: list,
+                           estados_lote: dict[int, str] | None = None) -> dict:
     """`ext.factevaluacionconocimiento` → `EVAL_CONOCIMIENTOS`, promediando por RM.
 
     Un RM puede traer varias notas (temas o fechas distintas): se promedian,
     igual que en los otros dos caminos.
+
+    ASIMETRÍA DELIBERADA con `integrar_captura`: ese camino LEVANTA
+    `FuenteAjenaError` si el país no es suyo (lo llama un humano desde la
+    pantalla de Conocimientos, y una excepción interrumpe justo ahí). Este
+    camino, en cambio, anota un `Hallazgo` de severidad error y devuelve sin
+    escribir — corre dentro del mismo proceso POR LOTES que
+    `integracion_indicadores_service`/`integracion_visitas_service`, donde una
+    excepción abortaría el resto de los hechos del lote (ventas, visitas,
+    farmacias...) que no tienen nada que ver con esta fuente. `Hallazgo` es el
+    contrato de ese proceso; `FuenteAjenaError` es el de la pantalla manual.
+
+    `estados_lote` sigue el mismo patrón que
+    `integracion_visitas_service.integrar_ventas`/etc: si el llamador ya lo
+    resolvió para toda la corrida (un futuro `integrar_todo` que también cubra
+    Conocimientos), se reutiliza tal cual; si no, se resuelve aquí con
+    `_resolver_estados_lotes` (una sola consulta).
     """
     fuente = fuentes.fuente_de(db, pais_codigo)
     if fuente != fuentes.FUENTE_NOTA_EXTERNA:
@@ -193,14 +217,39 @@ def integrar_conocimientos(db: Session, pais_codigo: str, ciclo_codigo: str,
     filas = (db.query(ExtFactEvaluacionConocimiento)
              .filter(ExtFactEvaluacionConocimiento.pais_codigo == pais_codigo,
                      ExtFactEvaluacionConocimiento.ciclo_codigo == ciclo_codigo).all())
-    estados = {l.lote_id: l.estado for l in db.query(ExtControlCarga).filter(
-        ExtControlCarga.lote_id.in_({f.lote_id for f in filas} or {0})).all()}
+    if estados_lote is None:
+        estados_lote = _resolver_estados_lotes(db, {f.lote_id for f in filas})
 
     por_rm: dict[str, list] = {}
+    omitidas_por_estado: dict[str | None, int] = {}
     for fila in filas:
-        if estados.get(fila.lote_id) not in _ESTADOS_INTEGRABLES:
+        if not _lote_habilitado(estados_lote, fila.lote_id):
+            estado = estados_lote.get(fila.lote_id)
+            omitidas_por_estado[estado] = omitidas_por_estado.get(estado, 0) + 1
+            continue
+        # Nota fuera de rango: se omite ESA fila con un hallazgo de error, en
+        # vez de escribirla tal cual (el motor la acotaría para los puntos,
+        # pero el número que se reporta —`resultado_real`— quedaría mal) o de
+        # recortarla en silencio (inventaría un valor que Mallén no mandó).
+        if fila.nota < NOTA_MIN or fila.nota > NOTA_MAX:
+            hallazgos.append(Hallazgo(
+                "factevaluacionconocimiento", fila.origen_id,
+                f"La nota {fila.nota} del representante «{fila.rm_codigo}» está "
+                f"fuera de [{NOTA_MIN}, {NOTA_MAX}]; la fila se omitió.",
+                SEVERIDAD_ERROR))
             continue
         por_rm.setdefault(fila.rm_codigo, []).append(fila.nota)
+
+    # Un hallazgo de aviso por estado (no por fila): sin esto, un lote entero
+    # descartado por estar RECHAZADO/RECIBIDO se traduce en `rms_integrados: 0`
+    # y una lista de hallazgos vacía — el operador no tiene ninguna pista de
+    # que había datos y por qué no entraron.
+    for estado, n in sorted(omitidas_por_estado.items(), key=lambda kv: kv[0] or ""):
+        hallazgos.append(Hallazgo(
+            "factevaluacionconocimiento", ciclo_codigo,
+            f"{n} fila(s) se omitieron por estar en un lote «"
+            f"{estado or 'sin control de carga'}», no VALIDADO/INTEGRADO.",
+            SEVERIDAD_AVISO))
 
     integrados = 0
     for rm_codigo, notas in sorted(por_rm.items()):
