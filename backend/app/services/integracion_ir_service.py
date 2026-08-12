@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from app.models.dimensiones import Ciclo, Medico, Producto
 from app.models.integracion_ext import (
-    ExtDimMedicoIR, ExtDimPeriodoIR, ExtDimProductoIR,
+    ExtDimMedicoIR, ExtDimPeriodoIR, ExtDimProductoIR, ExtFactPrescripcionDetalle,
 )
 from app.models.mapeo_externo import (
     ENT_CICLO, ENT_MEDICO_IR, ENT_PERIODO_IR, ENT_PRODUCTO_IR, MapeoExterno,
@@ -298,4 +298,212 @@ def sincronizar_ir(db: Session, pais_codigo: str) -> dict:
         "hallazgos": [{"entidad": h.entidad, "codigo_externo": h.codigo_externo,
                        "problema": h.problema, "severidad": h.severidad}
                       for h in hallazgos],
+    }
+
+
+# ===========================================================================
+# La cadena de atribución
+# ===========================================================================
+
+ATR_DIRECTA = "directa"
+ATR_CADENA = "por_cadena"
+ATR_AMBIGUA = "ambigua"
+ATR_HUERFANA = "huerfana"
+
+
+@dataclass
+class ContextoAtribucion:
+    """Todo lo que la atribución necesita, resuelto UNA vez por corrida.
+
+    Sin esto, cada receta dispararía media docena de consultas: `ext` puede
+    traer cientos de miles de filas por período.
+    """
+    pais_codigo: str
+    #: código externo → id interno, de los tres puentes
+    medicos: dict = field(default_factory=dict)
+    productos: dict = field(default_factory=dict)
+    periodos: dict = field(default_factory=dict)
+    #: rm_codigo de Mallén → id interno
+    representantes: dict = field(default_factory=dict)
+    #: id de DIM_Producto → linea_id (puede ser None)
+    linea_de_producto: dict = field(default_factory=dict)
+    #: id de DIM_Medico → [(vm_id, linea_id del vm, fila de panel)]
+    paneles: dict = field(default_factory=dict)
+    #: id de DIM_Ciclo → orden (anio*1000+numero), de `ordenes_ciclo`
+    ordenes: dict = field(default_factory=dict)
+
+
+def _mapa(db: Session, entidad: str, pais_codigo: str) -> dict:
+    return {m.codigo_externo: m.id_interno
+            for m in db.query(MapeoExterno).filter(
+                MapeoExterno.entidad == entidad,
+                MapeoExterno.pais_codigo == pais_codigo).all()}
+
+
+def _contexto(db: Session, pais_codigo: str) -> ContextoAtribucion:
+    from app.models.dimensiones import RepresentanteMedico
+    from app.models.mapeo_externo import ENT_REPRESENTANTE
+    from app.models.visita import MedicoVisita
+    from app.services.visita_aprobacion_service import ordenes_ciclo
+
+    ctx = ContextoAtribucion(pais_codigo=pais_codigo)
+    ctx.medicos = _mapa(db, ENT_MEDICO_IR, pais_codigo)
+    ctx.productos = _mapa(db, ENT_PRODUCTO_IR, pais_codigo)
+    ctx.periodos = _mapa(db, ENT_PERIODO_IR, pais_codigo)
+    ctx.representantes = _mapa(db, ENT_REPRESENTANTE, pais_codigo)
+    ctx.ordenes = ordenes_ciclo(db)
+
+    for p in db.query(Producto).all():
+        ctx.linea_de_producto[p.id] = p.linea_id
+
+    lineas_rm = {r.id: r.linea_id for r in
+                 db.query(RepresentanteMedico).filter(
+                     RepresentanteMedico.pais_codigo == pais_codigo).all()}
+    for m in (db.query(MedicoVisita)
+              .filter(MedicoVisita.maestro_medico_id.isnot(None)).all()):
+        if m.vm_id not in lineas_rm:      # panel de otro país
+            continue
+        ctx.paneles.setdefault(m.maestro_medico_id, []).append(
+            (m.vm_id, lineas_rm[m.vm_id], m))
+    return ctx
+
+
+def atribuir(db: Session, fila, ctx: ContextoAtribucion) -> tuple[int | None, str]:
+    """¿De qué representante es esta receta?
+
+    1. Si `rm_codigo` viene informado, Mallén ya atribuyó y su decisión manda.
+    2. Si no, exequátur → maestro → filas de panel de ESE médico.
+    3. Se filtran por pertenencia al panel EN EL CICLO de la receta, con
+       `cuenta_en_ciclo` — el mismo criterio que usan la planeación y la
+       cobertura. Admite `PENDIENTE_BAJA` a propósito: una baja solicitada
+       sigue contando el ciclo actual. NO se usa
+       `estado_aprobacion == "APROBADO"`, que responde otra pregunta
+       («¿se le puede registrar una visita hoy?») y dejaría sin atribuir las
+       recetas de todo médico en proceso de baja.
+    4. Si el producto tiene línea, se desempata por ella.
+    5. Un solo candidato → atribuida. Cero o varios → no se atribuye: cuenta
+       para el mercado, que es lo que dice el §3.2 del contrato.
+    """
+    from app.services.visita_aprobacion_service import cuenta_en_ciclo
+
+    if fila.rm_codigo:
+        rm_id = ctx.representantes.get(fila.rm_codigo)
+        if rm_id is not None:
+            return rm_id, ATR_DIRECTA
+        # Mallén atribuyó a un representante que VISTA no conoce: no se cae al
+        # panel, porque contradecir la atribución de la fuente sería inventar.
+        return None, ATR_HUERFANA
+
+    medico_id = ctx.medicos.get(fila.medico_ir_codigo)
+    if medico_id is None:
+        return None, ATR_HUERFANA
+
+    candidatos = ctx.paneles.get(medico_id, [])
+    ciclo_id = ctx.periodos.get(fila.periodo_codigo)
+    ciclo_orden = ctx.ordenes.get(ciclo_id) if ciclo_id is not None else None
+    candidatos = [c for c in candidatos
+                  if cuenta_en_ciclo(c[2], ciclo_orden, ctx.ordenes)]
+    if not candidatos:
+        return None, ATR_HUERFANA
+
+    if len(candidatos) > 1:
+        producto_id = ctx.productos.get(fila.producto_ir_codigo)
+        linea = ctx.linea_de_producto.get(producto_id) if producto_id else None
+        if linea is not None:
+            candidatos = [c for c in candidatos if c[1] == linea]
+
+    if len(candidatos) == 1:
+        return candidatos[0][0], ATR_CADENA
+    if not candidatos:
+        return None, ATR_HUERFANA
+    return None, ATR_AMBIGUA
+
+
+# ===========================================================================
+# El diagnóstico
+# ===========================================================================
+
+#: Cuántos ejemplos se muestran de cada clase. Una lista de miles no la lee
+#: nadie; lo que el operador necesita es reconocer el patrón.
+EJEMPLOS = 10
+
+
+def diagnosticar_ir(db: Session, pais_codigo: str) -> dict:
+    """Qué tan bien enlaza el IR, ANTES de construir el indicador.
+
+    Es lo que el §11.9 del requerimiento manda comprobar con muestra real: si
+    la mayoría de las recetas cae en huérfanas, el problema es del archivo de
+    Close-Up y no se arregla con código.
+
+    De SOLO LECTURA: no escribe, no hace commit, no cierra lotes. Correrlo dos
+    veces devuelve lo mismo.
+    """
+    ctx = _contexto(db, pais_codigo)
+
+    indice = _indice_exequatur(db, pais_codigo)
+    prescriptores = (db.query(ExtDimMedicoIR)
+                     .filter(ExtDimMedicoIR.pais_codigo == pais_codigo).all())
+    enlazados, casi, huerfanos = [], [], []
+    for p in prescriptores:
+        if p.medico_ir_codigo in ctx.medicos:
+            enlazados.append(p)
+        elif _es_casi_enlace(indice, p.exequatur):
+            casi.append(p)
+        else:
+            huerfanos.append(p)
+    con_panel = sum(1 for p in enlazados
+                    if ctx.paneles.get(ctx.medicos[p.medico_ir_codigo]))
+
+    productos = (db.query(ExtDimProductoIR)
+                 .filter(ExtDimProductoIR.pais_codigo == pais_codigo).all())
+    propios = [p for p in productos if p.es_propio]
+    propios_sin_equivalencia = [p for p in propios
+                                if p.producto_ir_codigo not in ctx.productos]
+
+    periodos = (db.query(ExtDimPeriodoIR)
+                .filter(ExtDimPeriodoIR.pais_codigo == pais_codigo).all())
+
+    baldes = {ATR_DIRECTA: 0, ATR_CADENA: 0, ATR_AMBIGUA: 0, ATR_HUERFANA: 0}
+    recetas = (db.query(ExtFactPrescripcionDetalle)
+               .filter(ExtFactPrescripcionDetalle.pais_codigo == pais_codigo).all())
+    for fila in recetas:
+        _, balde = atribuir(db, fila, ctx)
+        baldes[balde] += 1
+
+    return {
+        "pais_codigo": pais_codigo,
+        "prescriptores": {
+            "en_ext": len(prescriptores),
+            "enlazados": len(enlazados),
+            "con_panel": con_panel,
+            "casi_enlazados": len(casi),
+            "huerfanos": len(huerfanos),
+            "ejemplos_casi_enlazados": [
+                {"codigo": p.medico_ir_codigo, "exequatur": p.exequatur,
+                 "nombre": p.nombre} for p in casi[:EJEMPLOS]],
+            "ejemplos_huerfanos": [
+                {"codigo": p.medico_ir_codigo, "exequatur": p.exequatur,
+                 "nombre": p.nombre} for p in huerfanos[:EJEMPLOS]],
+        },
+        "productos": {
+            "en_ext": len(productos),
+            "propios": len(propios),
+            "enlazados": len(ctx.productos),
+            "propios_sin_equivalencia": len(propios_sin_equivalencia),
+            "ejemplos_propios_sin_equivalencia": [
+                {"codigo": p.producto_ir_codigo, "nombre": p.nombre}
+                for p in propios_sin_equivalencia[:EJEMPLOS]],
+        },
+        "periodos": {
+            "en_ext": len(periodos),
+            "con_ciclo": len(ctx.periodos),
+            "sin_ciclo": len(periodos) - len(ctx.periodos),
+        },
+        "recetas": {
+            "total": len(recetas),
+            "directas": baldes[ATR_DIRECTA],
+            "por_cadena": baldes[ATR_CADENA],
+            "ambiguas": baldes[ATR_AMBIGUA],
+            "huerfanas": baldes[ATR_HUERFANA],
+        },
     }
