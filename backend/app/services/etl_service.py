@@ -89,6 +89,18 @@ def _to_decimal(value) -> Decimal:
 INDICADORES_SIN_EXCEL: frozenset[str] = frozenset({"EVAL_CONOCIMIENTOS"})
 
 
+def _omitida_por_excel(ind_codigo: str) -> bool:
+    """¿Este indicador dejó de alimentarse por Excel?
+
+    Vive fuera de las ramas por tipo de archivo A PROPÓSITO: el guard nació solo
+    en `KPI_RM` y la rama legacy `PRODUCTIVIDAD` —que también escribe en
+    `FACT_ResultadoIndicador`— quedó como puerta abierta. Cualquier rama nueva
+    que escriba en esa tabla debe llamarlo justo después de resolver
+    `ind_codigo`, para no reabrir la misma puerta.
+    """
+    return ind_codigo in INDICADORES_SIN_EXCEL
+
+
 # ── Columnas requeridas por tipo de archivo ──────────────────────────────────
 COLUMNAS_REQUERIDAS = {
     # Tipo principal: FACT_KPI_RM — todos los KPIs de RM en un solo archivo
@@ -566,6 +578,11 @@ def _cargar_datos(
     exitosas = 0
     errores  = []
     advertencias_carga: list[str] = []
+    # Cuenta por indicador en vez de una advertencia por fila: un archivo real
+    # trae ~170 filas por indicador/país, y una advertencia por fila desborda
+    # el log (json.dumps(advertencias[:50]) trunca y desplaza las advertencias
+    # de RM inválido que ya vienen de _validar_y_enriquecer).
+    omitidos_por_excel: dict[str, int] = {}
 
     mapa_rm      = mapas["rm"]
     mapa_gerente = mapas["gerente"]
@@ -676,11 +693,8 @@ def _cargar_datos(
             if tipo == "KPI_RM":
                 # Formato FACT_KPI_RM: un registro por RM + indicador + periodo
                 ind_codigo = str(row.get("indicador_codigo", "")).strip().upper()
-                if ind_codigo in INDICADORES_SIN_EXCEL:
-                    advertencias_carga.append(
-                        f"Fila {idx+2}: {ind_codigo} ya no se carga por Excel; "
-                        f"se captura en la pantalla de Conocimientos, llega por "
-                        f"exámenes o la envía Mallén, según la fuente del país.")
+                if _omitida_por_excel(ind_codigo):
+                    omitidos_por_excel[ind_codigo] = omitidos_por_excel.get(ind_codigo, 0) + 1
                     continue
 
                 # Usar pais_codigo del RM para resolver el indicador_id correcto.
@@ -749,6 +763,10 @@ def _cargar_datos(
 
             elif tipo == "PRODUCTIVIDAD":
                 ind_codigo = str(row.get("indicador_codigo", "")).strip().upper()
+                if _omitida_por_excel(ind_codigo):
+                    omitidos_por_excel[ind_codigo] = omitidos_por_excel.get(ind_codigo, 0) + 1
+                    continue
+
                 ind_id     = mapa_ind.get(ind_codigo)
                 if not ind_id:
                     errores.append(f"Fila {idx+2}: Indicador '{ind_codigo}' no encontrado")
@@ -847,5 +865,13 @@ def _cargar_datos(
                 logger.error(f"ETL DEBUG Exception primer error fila {idx+2}: {type(exc).__name__}: {exc}")
                 first_error_logged = True
             errores.append(f"Fila {idx+2}: {exc}")
+
+    # Una sola advertencia agregada por indicador omitido, no una por fila
+    # (ver comentario junto a omitidos_por_excel más arriba).
+    for ind_codigo, n in omitidos_por_excel.items():
+        advertencias_carga.append(
+            f"{n} fila(s) de {ind_codigo} omitidas: ya no se carga por Excel; "
+            f"se captura en la pantalla de Conocimientos, llega por exámenes "
+            f"o la envía Mallén, según la fuente del país.")
 
     return exitosas, errores, advertencias_carga

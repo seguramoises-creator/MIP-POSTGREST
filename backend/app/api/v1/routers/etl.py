@@ -226,6 +226,8 @@ def get_etl_historial(
             "total_filas": r.total_filas,
             "filas_exitosas": r.filas_exitosas,
             "filas_error": r.filas_error,
+            "filas_advertencia": r.filas_advertencia,
+            "log_advertencias": r.log_advertencias,
         }
         for r in rows
     ]

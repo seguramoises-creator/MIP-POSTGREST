@@ -4,7 +4,7 @@ import {
   Box, Typography, Card, CardContent, Button, Grid,
   Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, Paper, Chip, Alert, LinearProgress,
-  TextField, MenuItem, Step, Stepper, StepLabel,
+  TextField, MenuItem, Step, Stepper, StepLabel, Tooltip,
 } from '@mui/material';
 import { CloudUpload, Refresh, PlayArrow, RocketLaunch, Calculate } from '@mui/icons-material';
 import { api } from '../../services/api';
@@ -140,6 +140,20 @@ export default function ETL() {
   });
 
   const items: any[] = historial || [];
+
+  // El backend guarda log_advertencias como JSON.dumps de una lista de strings
+  // (o null si no hubo advertencias). Se parsea acá para el tooltip de la
+  // columna "Advertencias" del historial — si no es JSON válido se muestra el
+  // texto crudo en vez de reventar la fila.
+  const parsearAdvertencias = (log: string | null | undefined): string[] => {
+    if (!log) return [];
+    try {
+      const parsed = JSON.parse(log);
+      return Array.isArray(parsed) ? parsed : [String(parsed)];
+    } catch {
+      return [log];
+    }
+  };
 
   return (
     <Box>
@@ -311,7 +325,7 @@ export default function ETL() {
         <Table size="small">
           <TableHead sx={{ bgcolor: 'grey.100' }}>
             <TableRow>
-              {['ID', 'Tipo', 'Modo', 'Estado', 'Total', 'Exitosas', 'Errores', 'Inicio', 'Fin'].map((h) => (
+              {['ID', 'Tipo', 'Modo', 'Estado', 'Total', 'Exitosas', 'Errores', 'Advertencias', 'Inicio', 'Fin'].map((h) => (
                 <TableCell key={h} sx={{ fontWeight: 700 }}>{h}</TableCell>
               ))}
             </TableRow>
@@ -319,7 +333,7 @@ export default function ETL() {
           <TableBody>
             {items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                <TableCell colSpan={10} align="center" sx={{ py: 4, color: 'text.secondary' }}>
                   Sin cargas registradas
                 </TableCell>
               </TableRow>
@@ -341,6 +355,19 @@ export default function ETL() {
                     <TableCell sx={{ color: 'success.main' }}>{row.filas_exitosas ?? '—'}</TableCell>
                     <TableCell sx={{ color: row.filas_error > 0 ? 'error.main' : 'inherit' }}>
                       {row.filas_error ?? '—'}
+                    </TableCell>
+                    <TableCell>
+                      {row.filas_advertencia > 0 ? (
+                        <Tooltip
+                          title={
+                            <Box component="span" sx={{ whiteSpace: 'pre-line' }}>
+                              {parsearAdvertencias(row.log_advertencias).join('\n')}
+                            </Box>
+                          }
+                        >
+                          <Chip label={row.filas_advertencia} color="warning" size="small" />
+                        </Tooltip>
+                      ) : '—'}
                     </TableCell>
                     <TableCell>{row.fecha_inicio ? new Date(row.fecha_inicio).toLocaleString() : '—'}</TableCell>
                     <TableCell>{row.fecha_fin ? new Date(row.fecha_fin).toLocaleString() : '—'}</TableCell>

@@ -210,3 +210,44 @@ def test_un_archivo_solo_de_conocimientos_no_borra_nada(escenario):
 
     assert exitosas == 0
     assert _resultado(e, "EVAL_CONOCIMIENTOS").resultado_real == Decimal("77.0000")
+
+
+def test_productividad_legacy_tambien_excluye_conocimientos(escenario):
+    """Ronda de correcciones 1 (Important 1): el guard no puede vivir solo en la
+    rama KPI_RM. La rama legacy PRODUCTIVIDAD también hace db.add(ResultadoIndicador)
+    y etl.py sigue aceptando 'PRODUCTIVIDAD' en TIPOS_PERMITIDOS (con esa
+    etiqueta en el desplegable) — un archivo legacy con una fila EVAL_CONOCIMIENTOS
+    no debe entrar al KPI por esa puerta."""
+    e = escenario
+    df = _df([{"rm_codigo": "VM01", "indicador_codigo": "EVAL_CONOCIMIENTOS",
+               "valor_real": 88, "valor_meta": 100}])
+
+    exitosas, errores, advertencias = etl_service._cargar_datos(
+        e["db"], df, "PRODUCTIVIDAD", "DO", e["ciclo"].id, _mapas(e))
+    e["db"].commit()
+
+    assert exitosas == 0
+    assert errores == []
+    assert _resultado(e, "EVAL_CONOCIMIENTOS") is None
+    assert any("EVAL_CONOCIMIENTOS" in a for a in advertencias)
+
+
+def test_advertencia_de_conocimientos_es_agregada_no_por_fila(escenario):
+    """Ronda de correcciones 1 (menor): con muchas filas omitidas debe emitirse
+    UNA advertencia agregada, no una por fila — un archivo real trae ~170 filas
+    por indicador/país y una advertencia por fila desbordaría
+    json.dumps(advertencias[:50]), desplazando las de RM inválido."""
+    e = escenario
+    filas = [{"rm_codigo": "VM01", "indicador_codigo": "EVAL_CONOCIMIENTOS",
+              "valor_real": 80 + i, "pais_codigo": "DO", "anio": 2026,
+              "ciclo_id": 1} for i in range(5)]
+    df = _df(filas)
+
+    exitosas, _, advertencias = etl_service._cargar_datos(
+        e["db"], df, "KPI_RM", "DO", e["ciclo"].id, _mapas(e))
+    e["db"].commit()
+
+    assert exitosas == 0
+    advertencias_conocimientos = [a for a in advertencias if "EVAL_CONOCIMIENTOS" in a]
+    assert len(advertencias_conocimientos) == 1
+    assert "5" in advertencias_conocimientos[0]
