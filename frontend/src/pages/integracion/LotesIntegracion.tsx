@@ -599,27 +599,73 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
         </Paper>
       )}
 
-      {resultado && resultado.hallazgos.length > 0 && (
-        <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2 }}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Entidad</TableCell>
-                <TableCell>Código</TableCell>
-                <TableCell>Problema</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {resultado.hallazgos.map((h, i) => (
-                <TableRow key={i}>
-                  <TableCell>{h.entidad}</TableCell>
-                  <TableCell>{h.codigo_externo}</TableCell>
-                  <TableCell>{h.problema}</TableCell>
+      {resultado && (
+        <>
+          <Alert severity="success" sx={{ mb: 2 }}>
+            Sincronización completada. «Ya enlazados» son los que venían de una
+            corrida anterior; «casi enlazados» y «omitidos» no cuentan como
+            fallo — ver la tabla.
+          </Alert>
+          <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 2 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Entidad</TableCell>
+                  <TableCell align="right">En Mallén</TableCell>
+                  <TableCell align="right">Enlazados</TableCell>
+                  <TableCell align="right">Ya enlazados</TableCell>
+                  <TableCell align="right">Sin enlazar</TableCell>
+                  <TableCell align="right">Casi enlazados</TableCell>
+                  <TableCell align="right">Omitidos (esperado)</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Paper>
+              </TableHead>
+              <TableBody>
+                {resultado.entidades.map((e) => (
+                  <TableRow key={e.entidad}>
+                    <TableCell sx={{ textTransform: 'capitalize' }}>{e.entidad}</TableCell>
+                    <TableCell align="right">{e.en_ext}</TableCell>
+                    <TableCell align="right"><strong>{e.enlazados}</strong></TableCell>
+                    <TableCell align="right">{e.ya_enlazados}</TableCell>
+                    <TableCell align="right">{e.no_enlazados || '—'}</TableCell>
+                    <TableCell align="right">{e.casi_enlazados || '—'}</TableCell>
+                    <TableCell align="right">{e.omitidos || '—'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Paper>
+
+          {resultado.hallazgos.length > 0 && (
+            <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2 }}>
+              <Box sx={{ p: 2 }}>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Esto es lo que hay que enviarle al equipo técnico de Mallén para corregir.
+                </Alert>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Entidad</TableCell><TableCell>Código</TableCell>
+                      <TableCell>Problema</TableCell><TableCell>Severidad</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {resultado.hallazgos.map((h, i) => (
+                      <TableRow key={`${h.entidad}-${h.codigo_externo}-${i}`}>
+                        <TableCell sx={{ textTransform: 'capitalize' }}>{h.entidad}</TableCell>
+                        <TableCell>{h.codigo_externo}</TableCell>
+                        <TableCell>{h.problema}</TableCell>
+                        <TableCell>
+                          <Chip size="small" label={h.severidad}
+                            color={h.severidad === 'error' ? 'error' : 'warning'} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            </Paper>
+          )}
+        </>
       )}
     </Box>
   );
