@@ -51,7 +51,22 @@ Es la decisión más importante del sub-proyecto, y es deliberadamente distinta 
 
 El maestro de médicos es país-level y alimenta paneles, categorización y cobertura. Un prescriptor que solo existe en Close-Up y que ningún representante trabaja entraría como médico del universo de VISTA y contaminaría esos denominadores — el mismo daño silencioso que la cobertura ya sufrió una vez. Y el §3.2 del requerimiento lo dice de frente: *una receta cuyo prescriptor no se pueda enlazar se cuenta para el mercado pero no se atribuye a ningún representante*.
 
-El emparejamiento por exequátur usa la normalización del maestro, no una propia. Es la lección del sub-proyecto 2: comparar con un criterio distinto al que usó quien escribió el dato produce duplicados masivos.
+El emparejamiento **reutiliza `maestro_medico_service._resolver_por_llave_dura`**, que es el criterio con el que el maestro decide si dos médicos son el mismo. Ese criterio compara el exequátur **exacto** (a diferencia del nombre, que sí normaliza), y filtra por país y `activo`.
+
+No se inventa una normalización propia del exequátur, aunque subiría la tasa de enlace. Es la lección del sub-proyecto 2 en su forma inversa: un criterio privado enlazaría como el mismo médico a dos que la deduplicación del maestro considera distintos, y el desacuerdo solo se descubriría cuando las cifras no cuadraran. Si Close-Up envía `12.345` donde el maestro tiene `12345`, eso **no es un enlace**: es un dato que hay que arreglar en el origen, y el trabajo del diagnóstico es sacarlo a la luz, no taparlo.
+
+Para que sea accionable, el diagnóstico distingue dos clases de no-enlace: el **huérfano real** (ese exequátur no existe en el maestro de ninguna forma) y el **casi-enlace** (existe uno que solo difiere en mayúsculas, espacios o signos de puntuación). El casi-enlace **no se enlaza** — solo se cuenta y se muestra, porque convierte "no cruzan 400 médicos" en "380 no existen y 20 están mal escritos", que son dos conversaciones distintas con Mallén.
+
+### 3.4 Los prescriptores no enlazados se CUENTAN, no se reportan uno a uno
+
+`dimmedicoir` trae el universo de Close-Up, que es **todo el mercado**: el §9.1 dimensiona unos 10.000 médicos. Que la mayoría no esté en el panel de nadie es lo normal, no una anomalía.
+
+Por eso el sincronizador **no emite un `Hallazgo` por prescriptor no enlazado**. Los cuenta, y el diagnóstico los muestra con una muestra de ejemplos. Emitir uno por fila produciría miles de líneas en la pantalla de hallazgos, y una lista que nadie puede leer es una lista que nadie lee: enterraría los pocos hallazgos que sí exigen acción.
+
+Los `Hallazgo` quedan reservados para lo acotado y accionable, que vive en catálogos de decenas de filas, no de miles:
+- producto `es_propio = true` sin equivalencia → **error**;
+- período sin `ciclo_codigo` → **aviso**;
+- exequátur duplicado en el maestro (dos médicos con el mismo) → **error**, porque impide decidir a cuál enlazar y es un defecto del maestro, no de Close-Up.
 
 ### 3.2 Los productos de la competencia no son un error
 
@@ -92,7 +107,7 @@ Que el criterio sea sensible al ciclo importa además por una razón temporal: l
 
 | Bloque | Qué reporta |
 |---|---|
-| Prescriptores | total en `dimmedicoir`; cuántos enlazan por exequátur al maestro; cuántos de esos están en algún panel aprobado; cuántos huérfanos, con una muestra de ejemplos |
+| Prescriptores | total en `dimmedicoir`; cuántos enlazan por exequátur al maestro; cuántos de esos están en algún panel; cuántos **casi-enlazan** (§3.1) y cuántos son huérfanos reales, con una muestra de ejemplos de cada clase |
 | Productos | total IR; cuántos propios; cuántos con equivalencia resuelta; **cuántos propios sin equivalencia** |
 | Períodos | cuántos con ciclo asignado y cuántos sin |
 | Recetas | filas de `factprescripciondetalle` por balde: atribuidas por `rm_codigo`, atribuidas por la cadena, **ambiguas**, huérfanas |
@@ -121,11 +136,13 @@ Servicio nuevo `app/services/integracion_ir_service.py`. No se amplía `integrac
 **Los puentes**
 1. Un prescriptor cuyo exequátur existe en el maestro se mapea; el mapeo apunta al `DIM_Medico.id` correcto.
 2. Un prescriptor cuyo exequátur NO existe **no crea ningún médico**: `DIM_Medico` no crece y la fila se cuenta como no enlazable. Es el test que protege los denominadores de cobertura.
-3. El emparejamiento por exequátur encuentra al médico aunque el maestro lo tenga con otro formato de mayúsculas o espacios (normalización del maestro, no propia).
+3. Un exequátur que difiere solo en puntuación o espacios (`12.345` vs `12345`) **NO se enlaza**, y se cuenta como casi-enlace, no como huérfano. Es el test que impide que alguien "mejore" el emparejamiento con una normalización privada que el maestro no comparte.
 4. Un producto `es_propio = false` sin equivalencia se omite **sin hallazgo**.
 5. Un producto `es_propio = true` sin equivalencia produce hallazgo de severidad error.
 6. Un período con `ciclo_codigo` nulo no se mapea y produce aviso.
 7. Re-sincronizar no duplica mapeos ni cambia conteos.
+7b. **Cien prescriptores huérfanos producen CERO hallazgos** y un conteo de cien. Es el test que protege la pantalla de hallazgos de quedar inservible (§3.4).
+7c. Dos médicos del maestro con el mismo exequátur → no se enlaza y se emite hallazgo de error.
 
 **La atribución**
 8. Fila con `rm_codigo` informado → atribuida a ese representante, sin consultar el panel.
