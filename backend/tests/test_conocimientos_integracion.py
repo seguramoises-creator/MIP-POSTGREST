@@ -195,6 +195,27 @@ def test_se_niega_si_el_pais_no_es_de_notas_externas(escenario):
     assert _resultado(e, "EVAL_CONOCIMIENTOS") is None
 
 
+def test_pais_de_otra_fuente_sin_notas_de_mallen_no_genera_hallazgo(escenario):
+    """Regresión de la ola anterior: al cablear `integrar_conocimientos` dentro
+    de `integrar_todo` (Tarea 2), un país que NO es NOTA_EXTERNA (el default es
+    CAPTURA_MANUAL) generaba un `Hallazgo` de error en TODAS las corridas,
+    aunque Mallén no hubiera enviado ni una sola fila para ese ciclo. Sin datos
+    que integrar no hay nada que avisar — debe devolver el dict de "no
+    integrado" en silencio, sin tocar `hallazgos`."""
+    e = escenario
+    fs.fijar_fuente(e["db"], "DO", fs.FUENTE_CAPTURA_MANUAL, usuario_id=1)
+    # A propósito: NINGUNA fila en ext.factevaluacionconocimiento.
+    e["db"].commit()
+    hallazgos = []
+
+    out = cs.integrar_conocimientos(e["db"], "DO", "C01-2026", hallazgos)
+
+    assert out["abortado"] is False
+    assert out["rms_integrados"] == 0
+    assert hallazgos == []
+    assert _resultado(e, "EVAL_CONOCIMIENTOS") is None
+
+
 def test_filas_de_un_lote_no_validado_se_omiten(escenario):
     e = escenario
     fs.fijar_fuente(e["db"], "DO", fs.FUENTE_NOTA_EXTERNA, usuario_id=1)
@@ -319,6 +340,26 @@ def test_integrar_todo_no_pisa_un_pais_de_otra_fuente(escenario):
     assert _resultado(e, "EVAL_CONOCIMIENTOS") is None
     assert any(h["hecho"] == "factevaluacionconocimiento" and h["severidad"] == "error"
                for h in r["hallazgos"])
+
+
+def test_integrar_todo_sin_notas_de_mallen_no_genera_falsa_alarma(escenario):
+    """El mismo caso que motivó la corrección, pero atravesando `integrar_todo`
+    (el punto donde realmente se manifestaba: antes de cablearla, nadie la
+    llamaba, así que la falsa alarma nunca se veía). Un país CAPTURA_MANUAL
+    (el default) sin ninguna fila de Mallén no debe dejar ningún `Hallazgo`
+    de `factevaluacionconocimiento`, y el resto de la corrida sigue normal."""
+    e = escenario
+    # Fuente por defecto (CAPTURA_MANUAL) — ni siquiera se fija a mano.
+    # A propósito: NINGUNA fila en ext.factevaluacionconocimiento.
+
+    r = viz.integrar_todo(e["db"], "DO", "C01-2026")
+
+    assert r["conocimientos"]["abortado"] is False
+    assert r["conocimientos"]["rms_integrados"] == 0
+    assert not any(h["hecho"] == "factevaluacionconocimiento" for h in r["hallazgos"])
+    assert _resultado(e, "EVAL_CONOCIMIENTOS") is None
+    # El resto de la corrida no se vio afectado.
+    assert r["recalculo"]["abortado"] is False
 
 
 def test_rm_sin_mapeo_se_omite_con_hallazgo_y_el_resto_entra(escenario):

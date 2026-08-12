@@ -211,7 +211,26 @@ def integrar_conocimientos(db: Session, pais_codigo: str, ciclo_codigo: str,
     resolvió para toda la corrida (un futuro `integrar_todo` que también cubra
     Conocimientos), se reutiliza tal cual; si no, se resuelve aquí con
     `_resolver_estados_lotes` (una sola consulta).
+
+    REGRESIÓN DE LA OLA anterior (revisión final, corregida aquí): el chequeo
+    de fuente ocurría ANTES de mirar si `ext.factevaluacionconocimiento` traía
+    alguna fila para este (país, ciclo). Como `FUENTE_POR_DEFECTO` es
+    `CAPTURA_MANUAL`, al cablear esta función en `integrar_todo` (Tarea 2)
+    cada corrida en cualquier país que no fuera NOTA_EXTERNA agregaba un
+    `Hallazgo` de error PERMANENTE — aunque Mallén no hubiera enviado ni una
+    sola nota. Un aviso que salta siempre deja de leerse y arrastra a los que
+    sí importan, justo lo que este sub-proyecto existe para evitar. Por eso
+    ahora se mira PRIMERO si hay filas: sin ninguna, no hay nada que integrar
+    y no hay nada que avisar — se devuelve el mismo dict de "no integrado" en
+    silencio, sin tocar `hallazgos`.
     """
+    filas = (db.query(ExtFactEvaluacionConocimiento)
+             .filter(ExtFactEvaluacionConocimiento.pais_codigo == pais_codigo,
+                     ExtFactEvaluacionConocimiento.ciclo_codigo == ciclo_codigo).all())
+    if not filas:
+        return {"abortado": False, "rms_integrados": 0,
+                "pais_codigo": pais_codigo, "ciclo_codigo": ciclo_codigo}
+
     fuente = fuentes.fuente_de(db, pais_codigo)
     if fuente != fuentes.FUENTE_NOTA_EXTERNA:
         hallazgos.append(Hallazgo(
@@ -235,9 +254,6 @@ def integrar_conocimientos(db: Session, pais_codigo: str, ciclo_codigo: str,
         logger.info(f"Conocimientos: ciclo {ciclo_id} cerrado — no se integra")
         return {"abortado": True, "motivo": "ciclo_cerrado", "rms_integrados": 0}
 
-    filas = (db.query(ExtFactEvaluacionConocimiento)
-             .filter(ExtFactEvaluacionConocimiento.pais_codigo == pais_codigo,
-                     ExtFactEvaluacionConocimiento.ciclo_codigo == ciclo_codigo).all())
     if estados_lote is None:
         estados_lote = _resolver_estados_lotes(db, {f.lote_id for f in filas})
 
