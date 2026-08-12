@@ -15,6 +15,7 @@ from app.core.deps import require_roles
 from app.db.database import get_db
 from app.models.usuario import Rol, Usuario
 from app.services import integracion_dimensiones_service as dimensiones
+from app.services import integracion_ir_service as ir
 from app.services import integracion_validacion_service as validacion
 from app.services import integracion_visitas_service as visitas
 
@@ -87,3 +88,25 @@ def integrar_visitas(pais_codigo: str, ciclo_codigo: str,
 def resumen_visitas(pais_codigo: str, ciclo_codigo: str,
                     db: Session = Depends(get_db), _: Usuario = RequireTI):
     return visitas.resumen_visitas(db, pais_codigo, ciclo_codigo)
+
+
+@router.post("/ir/sincronizar",
+             summary="Resolver las equivalencias del módulo IR de un país")
+def sincronizar_ir(pais_codigo: str, db: Session = Depends(get_db),
+                   _: Usuario = RequireTI):
+    """Enlaza prescriptor, producto y período con los catálogos de VISTA.
+
+    A diferencia de las dimensiones, este paso NO crea registros internos: un
+    prescriptor de Close-Up que ningún representante trabaja no debe entrar al
+    maestro de médicos. Lo que no enlaza se cuenta y se ve en el diagnóstico.
+    """
+    return ir.sincronizar_ir(db, pais_codigo)
+
+
+@router.get("/ir/diagnostico",
+            summary="Qué tan bien enlaza el IR y qué recetas serían atribuibles")
+def diagnostico_ir(pais_codigo: str, db: Session = Depends(get_db),
+                   _: Usuario = RequireTI):
+    """Solo lectura. Es la comprobación que el requerimiento manda hacer con
+    muestra real antes de construir el indicador EVO_IR (§11.9)."""
+    return ir.diagnosticar_ir(db, pais_codigo)

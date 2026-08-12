@@ -123,3 +123,61 @@ export const resumenVisitas = (paisCodigo: string, cicloCodigo: string) =>
   api.get<FilaResumenVisita[]>('/integracion/visitas/resumen',
     { params: { pais_codigo: paisCodigo, ciclo_codigo: cicloCodigo } })
     .then((r) => r.data);
+
+// ── Prescripción IR (sub-proyecto 6) ─────────────────────────────────────
+export interface ConteoIR {
+  entidad: string; en_ext: number; enlazados: number; ya_enlazados: number;
+  no_enlazados: number; casi_enlazados: number; omitidos: number;
+}
+
+export interface ResultadoSincronizacionIR {
+  pais_codigo: string;
+  entidades: ConteoIR[];
+  hallazgos: HallazgoDimension[];
+}
+
+export interface EjemploPrescriptor {
+  codigo: string; exequatur: string; nombre: string;
+}
+
+export interface EjemploRmNoEnlazado {
+  origen_id: string | null; rm_codigo: string;
+}
+
+// Refleja el dict REAL de `integracion_ir_service.diagnosticar_ir` (Tareas 1-2),
+// no el borrador original del brief: `recetas` trae dos sub-conteos que se
+// añadieron en la ronda de revisión de la Tarea 2 (`sin_ciclo`,
+// `rm_no_enlazado` + sus ejemplos). Son causas de `huerfanas`, no un balde
+// nuevo — los cuatro baldes (`directas+por_cadena+ambiguas+huerfanas`) siguen
+// sumando `total` por sí solos.
+export interface DiagnosticoIR {
+  pais_codigo: string;
+  prescriptores: {
+    en_ext: number; enlazados: number; con_panel: number;
+    casi_enlazados: number; huerfanos: number;
+    ejemplos_casi_enlazados: EjemploPrescriptor[];
+    ejemplos_huerfanos: EjemploPrescriptor[];
+  };
+  productos: {
+    en_ext: number; propios: number; enlazados: number;
+    propios_sin_equivalencia: number;
+    ejemplos_propios_sin_equivalencia: { codigo: string; nombre: string }[];
+  };
+  periodos: { en_ext: number; con_ciclo: number; sin_ciclo: number };
+  recetas: {
+    total: number; directas: number; por_cadena: number;
+    ambiguas: number; huerfanas: number;
+    // Sub-causas de `huerfanas` — no participan de la suma de los 4 baldes.
+    sin_ciclo: number;
+    rm_no_enlazado: number;
+    ejemplos_rm_no_enlazado: EjemploRmNoEnlazado[];
+  };
+}
+
+export const sincronizarIR = (paisCodigo: string) =>
+  api.post<ResultadoSincronizacionIR>('/integracion/ir/sincronizar', null,
+    { params: { pais_codigo: paisCodigo } }).then((r) => r.data);
+
+export const diagnosticoIR = (paisCodigo: string) =>
+  api.get<DiagnosticoIR>('/integracion/ir/diagnostico',
+    { params: { pais_codigo: paisCodigo } }).then((r) => r.data);

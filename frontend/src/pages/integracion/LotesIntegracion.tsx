@@ -16,9 +16,11 @@ import {
   listarLotes, detalleLote, validarLote, resumenLotes,
   sincronizarDimensiones, resumenDimensiones,
   integrarVisitas, resumenVisitas,
+  sincronizarIR, diagnosticoIR,
   type EstadoLote, type LoteIntegracion,
   type ConteoDimension, type ResultadoSincronizacion,
   type ResultadoIntegracionVisitas,
+  type DiagnosticoIR, type ResultadoSincronizacionIR,
 } from '../../services/integracion.service';
 
 // Motivo real de un error de axios: 422 de FastAPI (detail = [{loc,msg}]) o string.
@@ -140,6 +142,8 @@ export default function LotesIntegracion() {
       <SeccionDimensiones paisCodigo={paisCodigo} />
 
       <SeccionVisitas paisCodigo={paisCodigo} />
+
+      <SeccionIR paisCodigo={paisCodigo} />
 
       <Snackbar open={!!aviso} autoHideDuration={8000} onClose={() => setAviso(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
@@ -473,6 +477,149 @@ function SeccionVisitas({ paisCodigo }: { paisCodigo: string | null }) {
             </Paper>
           )}
         </>
+      )}
+    </Box>
+  );
+}
+
+function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
+  const qc = useQueryClient();
+  const [resultado, setResultado] = useState<ResultadoSincronizacionIR | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const diag = useQuery<DiagnosticoIR>({
+    queryKey: ['integracion-ir', paisCodigo],
+    queryFn: () => diagnosticoIR(paisCodigo as string),
+    enabled: !!paisCodigo,
+  });
+
+  const sincronizar = useMutation({
+    mutationFn: () => sincronizarIR(paisCodigo as string),
+    onSuccess: (r) => {
+      setResultado(r); setError(null);
+      qc.invalidateQueries({ queryKey: ['integracion-ir'] });
+    },
+    onError: (e) => setError(detalleError(e, 'No se pudieron resolver las equivalencias.')),
+  });
+
+  if (!paisCodigo) {
+    return <Alert severity="info" sx={{ mt: 4 }}>
+      Selecciona un país en el encabezado para revisar el módulo IR.
+    </Alert>;
+  }
+
+  const d = diag.data;
+
+  return (
+    <Box sx={{ mt: 5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>
+          Prescripción IR
+        </Typography>
+        <Button variant="contained" startIcon={<Sync />}
+          disabled={sincronizar.isPending}
+          onClick={() => sincronizar.mutate()}>
+          {sincronizar.isPending ? 'Resolviendo…' : 'Resolver equivalencias'}
+        </Button>
+      </Box>
+
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Enlaza el prescriptor (por exequátur), el producto y el período de
+        Close-Up con los catálogos de VISTA. <b>No crea médicos</b>: un
+        prescriptor que ningún representante trabaja se cuenta para el
+        mercado y no se atribuye a nadie. Esta pantalla solo mide qué tan
+        bien enlaza — <b>el indicador EVO_IR todavía no se calcula</b> a
+        partir de esto.
+      </Alert>
+
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      {d && (
+        <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 2 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Qué</TableCell>
+                <TableCell align="right">En Mallén</TableCell>
+                <TableCell align="right">Enlazados</TableCell>
+                <TableCell align="right">Sin enlazar</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              <TableRow>
+                <TableCell>Prescriptores (con panel: {d.prescriptores.con_panel})</TableCell>
+                <TableCell align="right">{d.prescriptores.en_ext}</TableCell>
+                <TableCell align="right">{d.prescriptores.enlazados}</TableCell>
+                <TableCell align="right">
+                  {d.prescriptores.huerfanos}
+                  {d.prescriptores.casi_enlazados > 0 &&
+                    ` (+${d.prescriptores.casi_enlazados} mal escritos)`}
+                </TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell>Productos (propios: {d.productos.propios})</TableCell>
+                <TableCell align="right">{d.productos.en_ext}</TableCell>
+                <TableCell align="right">{d.productos.enlazados}</TableCell>
+                <TableCell align="right">{d.productos.propios_sin_equivalencia}</TableCell>
+              </TableRow>
+              <TableRow>
+                <TableCell>Períodos</TableCell>
+                <TableCell align="right">{d.periodos.en_ext}</TableCell>
+                <TableCell align="right">{d.periodos.con_ciclo}</TableCell>
+                <TableCell align="right">{d.periodos.sin_ciclo}</TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+        </Paper>
+      )}
+
+      {d && d.recetas.total > 0 && (
+        <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, p: 2, mb: 2 }}>
+          <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
+            Recetas atribuibles ({d.recetas.total} en total)
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {d.recetas.directas} traen representante de Mallén ·{' '}
+            {d.recetas.por_cadena} se atribuyen por el panel ·{' '}
+            {d.recetas.ambiguas} ambiguas ·{' '}
+            {d.recetas.huerfanas} sin dueño (cuentan para el mercado)
+          </Typography>
+          {d.recetas.huerfanas > 0 && (d.recetas.sin_ciclo > 0 || d.recetas.rm_no_enlazado > 0) && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+              De las {d.recetas.huerfanas} sin dueño, se sabe la causa de{' '}
+              {d.recetas.sin_ciclo + d.recetas.rm_no_enlazado}:{' '}
+              {d.recetas.sin_ciclo > 0 &&
+                `${d.recetas.sin_ciclo} porque su período no tiene ciclo mapeado`}
+              {d.recetas.sin_ciclo > 0 && d.recetas.rm_no_enlazado > 0 && ' y '}
+              {d.recetas.rm_no_enlazado > 0 &&
+                `${d.recetas.rm_no_enlazado} porque Mallén reporta un representante que VISTA aún no tiene sincronizado (corre primero la sincronización de dimensiones)`}
+              . El resto no tiene un prescriptor o panel vigente que las reclame.
+            </Typography>
+          )}
+        </Paper>
+      )}
+
+      {resultado && resultado.hallazgos.length > 0 && (
+        <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2 }}>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Entidad</TableCell>
+                <TableCell>Código</TableCell>
+                <TableCell>Problema</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {resultado.hallazgos.map((h, i) => (
+                <TableRow key={i}>
+                  <TableCell>{h.entidad}</TableCell>
+                  <TableCell>{h.codigo_externo}</TableCell>
+                  <TableCell>{h.problema}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Paper>
       )}
     </Box>
   );
