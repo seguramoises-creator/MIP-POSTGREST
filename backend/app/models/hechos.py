@@ -634,3 +634,31 @@ class KpiRaw(Base):
     fecha_carga: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False
     )
+
+
+class NotaConocimiento(Base):
+    """Notas capturadas a mano por el responsable, antes de integrarse al ciclo.
+
+    SIN UNIQUE a propósito: un RM puede tener varias notas en un ciclo (temas o
+    fechas distintas), igual que en `ext` y que en los exámenes, y por eso al
+    integrar se PROMEDIAN. La contrapartida es una regla que el servicio debe
+    sostener: corregir una nota EDITA esta fila, nunca añade otra — si
+    corrigiera insertando, la nota vieja seguiría entrando al promedio y el
+    número saldría mal sin que nada lo delatara.
+    """
+    __tablename__ = "FACT_NotaConocimiento"
+    __table_args__ = {"schema": "DW"}
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    pais_codigo: Mapped[str] = mapped_column(
+        String(10), ForeignKey("Config.DIM_Pais.codigo"), nullable=False, index=True)
+    ciclo_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False, index=True)
+    rm_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("Config.DIM_RM.id"), nullable=False, index=True)
+    fecha_evaluacion: Mapped[date] = mapped_column(Date, nullable=False)
+    nota: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+    tema: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    capturado_por_usuario_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    capturado_en: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

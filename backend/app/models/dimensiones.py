@@ -730,3 +730,31 @@ class Farmacia(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc),
                                                  onupdate=lambda: datetime.now(timezone.utc))
+
+
+class FuenteIndicador(Base):
+    """Quién alimenta un indicador en un país. Hoy solo se usa para
+    EVAL_CONOCIMIENTOS, que tiene tres caminos posibles y hasta ahora se los
+    disputaban en silencio: los tres hacen delete-then-insert, así que ganaba
+    el último en correr.
+
+    Es por PAÍS y no por ciclo a propósito: la elección entre exámenes de VISTA,
+    notas de Mallén y captura manual es una política que se toma una vez, no
+    algo que alterne entre ciclos.
+    """
+    __tablename__ = "FuenteIndicador"
+    __table_args__ = (
+        UniqueConstraint("pais_codigo", "indicador_codigo",
+                         name="UQ_FuenteIndicador_clave"),
+        {"schema": "Config"},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pais_codigo: Mapped[str] = mapped_column(
+        String(10), ForeignKey("Config.DIM_Pais.codigo"), nullable=False)
+    indicador_codigo: Mapped[str] = mapped_column(String(50), nullable=False)
+    #: EXAMEN_VISTA | NOTA_EXTERNA | CAPTURA_MANUAL — EXCEL no es una fuente
+    fuente: Mapped[str] = mapped_column(String(20), nullable=False)
+    actualizado_en: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    actualizado_por_usuario_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
