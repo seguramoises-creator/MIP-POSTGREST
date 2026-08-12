@@ -51,6 +51,33 @@ def test_estado_consolidacion_sin_fila_es_pendiente(monkeypatch):
     assert out["ciclo_abierto"] is True
 
 
+def test_estado_consolidacion_expone_la_fuente_vigente_dueño(monkeypatch):
+    """Menor de la revisión final: `ConsolidacionPanel.tsx` necesita saber ANTES
+    de que Capacitación pulse «Consolidar» si el país es de exámenes — antes,
+    la única señal era el 409 de `consolidar_ciclo` DESPUÉS de intentarlo."""
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    monkeypatch.setattr(cons, "rms_del_ciclo", lambda d, c, p: [])
+    monkeypatch.setattr(cons.recalculo_service, "validar_ciclo_abierto", lambda d, c: None)
+    monkeypatch.setattr(cons.fuentes, "fuente_de",
+                        lambda d, p, *a, **k: cons.fuentes.FUENTE_EXAMEN_VISTA)
+    out = cons.estado_consolidacion(db, ciclo_id=7, pais_codigo="DO")
+    assert out["fuente_vigente"] == cons.fuentes.FUENTE_EXAMEN_VISTA
+    assert out["es_duenio"] is True
+
+
+def test_estado_consolidacion_expone_la_fuente_vigente_ajena(monkeypatch):
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = None
+    monkeypatch.setattr(cons, "rms_del_ciclo", lambda d, c, p: [])
+    monkeypatch.setattr(cons.recalculo_service, "validar_ciclo_abierto", lambda d, c: None)
+    monkeypatch.setattr(cons.fuentes, "fuente_de",
+                        lambda d, p, *a, **k: cons.fuentes.FUENTE_CAPTURA_MANUAL)
+    out = cons.estado_consolidacion(db, ciclo_id=7, pais_codigo="DO")
+    assert out["fuente_vigente"] == cons.fuentes.FUENTE_CAPTURA_MANUAL
+    assert out["es_duenio"] is False
+
+
 def test_consolidar_se_niega_si_el_pais_no_es_de_examenes(monkeypatch):
     """Con otro dueño, consolidar no debe escribir NADA: los tres caminos hacen
     delete-then-insert, así que dejarlo pasar sobrescribiría la nota buena."""

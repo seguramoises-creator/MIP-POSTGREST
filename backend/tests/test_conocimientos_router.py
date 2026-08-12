@@ -94,6 +94,78 @@ def test_crear_nota_rm_de_otro_pais_422():
     db.commit.assert_not_called()
 
 
+def _db_con_rm_y_ciclo(rm_pais: str | None, ciclo_pais: str | None):
+    """MagicMock cuyo `.get(modelo, id)` responde distinto según el modelo:
+    RM de `rm_pais` (o None) y Ciclo de `ciclo_pais` (o None) — necesario
+    porque `crear_nota` ahora valida los dos (`_validar_rm_del_pais` y
+    `_validar_ciclo_del_pais`), a diferencia de `_db_con_rm` de arriba, que
+    solo cubría el RM."""
+    from app.models.dimensiones import Ciclo, RepresentanteMedico
+
+    def _get(modelo, id_):
+        if modelo is RepresentanteMedico:
+            return None if rm_pais is None else SimpleNamespace(id=1, pais_codigo=rm_pais)
+        if modelo is Ciclo:
+            return None if ciclo_pais is None else SimpleNamespace(id=1, pais_codigo=ciclo_pais)
+        return None
+
+    db = MagicMock()
+    db.get.side_effect = _get
+    return db
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Guard ciclo↔país (IMPORTANT de la revisión final del sub-proyecto 7)
+# ─────────────────────────────────────────────────────────────────────────
+
+def test_crear_nota_ciclo_de_otro_pais_422():
+    """Con el RM correcto pero el ciclo de OTRO país, el guard nuevo debe
+    cortar con 422 antes de escribir nada — mismo criterio que el guard
+    RM↔país de arriba."""
+    from app.api.v1.routers.conocimientos import router
+
+    db = _db_con_rm_y_ciclo(rm_pais="DO", ciclo_pais="CR")
+    r = _client(router, U(Rol.ADMIN), db).post(
+        "/api/v1/conocimientos/notas", json=BODY_BASE)
+
+    assert r.status_code == 422
+    cuerpo = r.json()["detail"]
+    assert "1" in cuerpo and "DO" in cuerpo
+    db.commit.assert_not_called()
+
+
+def test_crear_nota_ciclo_inexistente_422():
+    from app.api.v1.routers.conocimientos import router
+
+    db = _db_con_rm_y_ciclo(rm_pais="DO", ciclo_pais=None)
+    r = _client(router, U(Rol.ADMIN), db).post(
+        "/api/v1/conocimientos/notas", json=BODY_BASE)
+
+    assert r.status_code == 422
+    db.commit.assert_not_called()
+
+
+def test_integrar_traduce_ciclo_de_otro_pais_a_422_sin_comitear(monkeypatch):
+    """`integrar_captura` también valida ciclo↔país (defensa en profundidad:
+    una nota ya capturada con el par cruzado por otra vía debe rechazarse
+    también al integrar, no solo al capturar)."""
+    from app.api.v1.routers.conocimientos import router
+    from app.services import conocimientos_service as cs
+
+    def _raise(db, pais_codigo, ciclo_id):
+        raise ValueError(f"El ciclo {ciclo_id} es de CR, no de {pais_codigo}.")
+
+    monkeypatch.setattr(cs, "integrar_captura", _raise)
+
+    db = MagicMock()
+    r = _client(router, U(Rol.ADMIN), db).post(
+        "/api/v1/conocimientos/integrar", params={"pais_codigo": "DO", "ciclo_id": 7})
+
+    assert r.status_code == 422
+    assert "CR" in r.json()["detail"]
+    db.commit.assert_not_called()
+
+
 def test_crear_nota_rm_del_pais_correcto_pasa_el_guard_y_comitea(monkeypatch):
     """Con el RM del país correcto, la petición atraviesa el guard nuevo,
     llega a `capturar_nota` (monkeypencheado para no tocar BD real) y el

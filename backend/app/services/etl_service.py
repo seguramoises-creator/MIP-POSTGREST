@@ -101,6 +101,35 @@ def _omitida_por_excel(ind_codigo: str) -> bool:
     return ind_codigo in INDICADORES_SIN_EXCEL
 
 
+def _contar_omitidas_por_excel(df: pd.DataFrame) -> dict[str, int]:
+    """Cuántas filas de `df` traen un `indicador_codigo` que `_omitida_por_excel`
+    descartaría, agrupadas por indicador. Pura (sin DB, sin escribir) para
+    poder llamarse tanto ANTES de cargar (SIMULACIÓN, para advertir con
+    antelación) como usarse como base de la advertencia agregada que ya emite
+    `_cargar_datos` en PRODUCCIÓN."""
+    if "indicador_codigo" not in df.columns:
+        return {}
+    conteo: dict[str, int] = {}
+    for valor in df["indicador_codigo"].dropna():
+        codigo = str(valor).strip().upper()
+        if _omitida_por_excel(codigo):
+            conteo[codigo] = conteo.get(codigo, 0) + 1
+    return conteo
+
+
+def _mensajes_omitidas_por_excel(conteo: dict[str, int], verbo: str) -> list[str]:
+    """Una advertencia agregada por indicador (no una por fila, ver
+    `_cargar_datos`): `verbo` distingue el tiempo — "se omitieron" en
+    PRODUCCIÓN (ya pasó) vs "se OMITIRÍAN al cargar" en SIMULACIÓN (todavía no
+    pasó, es lo que pasaría)."""
+    return [
+        f"{n} fila(s) de {ind_codigo} {verbo}: ya no se carga por Excel; se "
+        f"captura en la pantalla de Conocimientos, llega por exámenes o la "
+        f"envía Mallén, según la fuente del país."
+        for ind_codigo, n in conteo.items()
+    ]
+
+
 # ── Columnas requeridas por tipo de archivo ──────────────────────────────────
 COLUMNAS_REQUERIDAS = {
     # Tipo principal: FACT_KPI_RM — todos los KPIs de RM en un solo archivo
@@ -208,8 +237,15 @@ def procesar_excel_task(
                 for cid in ciclos_unicos:
                     _recalcular_y_ranking(db, pais_codigo, cid, usuario_id)
         else:
-            # Simulación: validar sin escribir
+            # Simulación: validar sin escribir. Las filas de un indicador que
+            # `_omitida_por_excel` descartaría en PRODUCCIÓN (ver
+            # INDICADORES_SIN_EXCEL) deben advertirse AQUÍ también — si no, el
+            # operador simula p. ej. 176 filas de EVAL_CONOCIMIENTOS, la
+            # pantalla le dice "todas válidas", y en producción esas filas
+            # desaparecen sin que la simulación lo hubiera avisado.
             exitosas = total_filas
+            advertencias.extend(_mensajes_omitidas_por_excel(
+                _contar_omitidas_por_excel(df), "se OMITIRÍAN al cargar"))
             logger.info(f"ETL [{job_id}] SIMULACIÓN — {total_filas} filas válidas para cargar")
 
         duracion = round(time.time() - inicio, 2)
@@ -868,10 +904,7 @@ def _cargar_datos(
 
     # Una sola advertencia agregada por indicador omitido, no una por fila
     # (ver comentario junto a omitidos_por_excel más arriba).
-    for ind_codigo, n in omitidos_por_excel.items():
-        advertencias_carga.append(
-            f"{n} fila(s) de {ind_codigo} omitidas: ya no se carga por Excel; "
-            f"se captura en la pantalla de Conocimientos, llega por exámenes "
-            f"o la envía Mallén, según la fuente del país.")
+    advertencias_carga.extend(
+        _mensajes_omitidas_por_excel(omitidos_por_excel, "omitidas"))
 
     return exitosas, errores, advertencias_carga

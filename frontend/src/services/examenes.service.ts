@@ -116,6 +116,7 @@ export interface ConsolidacionEstado {
   ciclo_id: number; pais_codigo: string; estado: string;
   rms_con_nota: number; rms_con_nota_nombres: string[];
   nota_promedio_equipo: number | null; ultima_consolidacion: string | null; ciclo_abierto: boolean;
+  fuente_vigente: string; es_duenio: boolean;
 }
 export const consolidacionEstado = (cicloId: number, paisCodigo: string) =>
   api.get<ConsolidacionEstado>('/examenes/consolidacion', { params: { ciclo_id: cicloId, pais_codigo: paisCodigo } }).then(r => r.data);

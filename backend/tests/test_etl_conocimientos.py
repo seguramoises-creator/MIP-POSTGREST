@@ -232,6 +232,44 @@ def test_productividad_legacy_tambien_excluye_conocimientos(escenario):
     assert any("EVAL_CONOCIMIENTOS" in a for a in advertencias)
 
 
+def test_simulacion_cuenta_y_advierte_las_filas_que_se_omitirian(escenario):
+    """Menor de la revisión final: antes, `modo=SIMULACION` no pasaba por
+    `_cargar_datos` en absoluto — `procesar_excel_task` hacía
+    `exitosas = total_filas` sin más, así que el operador simulaba 176 filas
+    de EVAL_CONOCIMIENTOS, veía "todas válidas" y en producción desaparecían
+    sin ningún aviso previo. Se prueba el helper puro que ahora usa la rama
+    de simulación (`etl_service._contar_omitidas_por_excel` +
+    `_mensajes_omitidas_por_excel`), sin pasar por `procesar_excel_task`
+    completo (que exige archivo en disco y un job ya registrado)."""
+    df = _df([
+        {"rm_codigo": "VM01", "indicador_codigo": "EVAL_CONOCIMIENTOS",
+         "valor_real": 88, "pais_codigo": "DO", "anio": 2026, "ciclo_id": 1},
+        {"rm_codigo": "VM01", "indicador_codigo": "eval_conocimientos",
+         "valor_real": 91, "pais_codigo": "DO", "anio": 2026, "ciclo_id": 1},
+        {"rm_codigo": "VM01", "indicador_codigo": "COB_MD_F1",
+         "valor_real": 0.9, "pais_codigo": "DO", "anio": 2026, "ciclo_id": 1},
+    ])
+
+    conteo = etl_service._contar_omitidas_por_excel(df)
+    mensajes = etl_service._mensajes_omitidas_por_excel(
+        conteo, "se OMITIRÍAN al cargar")
+
+    assert conteo == {"EVAL_CONOCIMIENTOS": 2}
+    assert len(mensajes) == 1
+    assert "2 fila(s) de EVAL_CONOCIMIENTOS se OMITIRÍAN al cargar" in mensajes[0]
+
+
+def test_simulacion_sin_filas_omitidas_no_genera_advertencia(escenario):
+    df = _df([{"rm_codigo": "VM01", "indicador_codigo": "COB_MD_F1",
+               "valor_real": 0.9, "pais_codigo": "DO", "anio": 2026,
+               "ciclo_id": 1}])
+
+    conteo = etl_service._contar_omitidas_por_excel(df)
+
+    assert conteo == {}
+    assert etl_service._mensajes_omitidas_por_excel(conteo, "x") == []
+
+
 def test_advertencia_de_conocimientos_es_agregada_no_por_fila(escenario):
     """Ronda de correcciones 1 (menor): con muchas filas omitidas debe emitirse
     UNA advertencia agregada, no una por fila — un archivo real trae ~170 filas

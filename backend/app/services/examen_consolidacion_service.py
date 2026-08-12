@@ -47,7 +47,14 @@ def rms_del_ciclo(db: Session, ciclo_id: int, pais_codigo: str) -> list[Represen
 
 
 def estado_consolidacion(db: Session, ciclo_id: int, pais_codigo: str) -> dict:
-    """Preview del gate sin escribir nada."""
+    """Preview del gate sin escribir nada.
+
+    Incluye `fuente_vigente`/`es_duenio` (menor de la revisión final): sin
+    esto, Capacitación solo descubría que el país no es de EXAMEN_VISTA
+    DESPUÉS de pulsar «Consolidar» y recibir el 409 de `consolidar_ciclo` —
+    la pantalla de Conocimientos, en cambio, ya apaga sus controles por
+    adelantado con el mismo dato. `ConsolidacionPanel.tsx` usa este campo
+    para avisar antes, no solo traducir el 409 después."""
     fila = db.query(ConsolidacionCiclo).filter(
         ConsolidacionCiclo.ciclo_id == ciclo_id,
         ConsolidacionCiclo.pais_codigo == pais_codigo,
@@ -58,6 +65,7 @@ def estado_consolidacion(db: Session, ciclo_id: int, pais_codigo: str) -> dict:
         ciclo_abierto = True
     except recalculo_service.CicloCerradoError:
         ciclo_abierto = False
+    fuente_vigente = fuentes.fuente_de(db, pais_codigo)
     return {
         "ciclo_id": ciclo_id,
         "pais_codigo": pais_codigo,
@@ -73,6 +81,8 @@ def estado_consolidacion(db: Session, ciclo_id: int, pais_codigo: str) -> dict:
             if fila and fila.fecha_consolidacion else None
         ),
         "ciclo_abierto": ciclo_abierto,
+        "fuente_vigente": fuente_vigente,
+        "es_duenio": fuente_vigente == fuentes.FUENTE_EXAMEN_VISTA,
     }
 
 

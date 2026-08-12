@@ -13,7 +13,7 @@ from decimal import Decimal
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.models.dimensiones import Indicador, RepresentanteMedico
+from app.models.dimensiones import Ciclo, Indicador, RepresentanteMedico
 from app.models.hechos import NotaConocimiento, ResultadoIndicador
 from app.models.integracion_ext import ExtFactEvaluacionConocimiento
 from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE
@@ -108,8 +108,11 @@ def notas_del_ciclo(db: Session, pais_codigo: str, ciclo_id: int) -> list[dict]:
 
 def _upsert_resultado(db: Session, rm, ciclo_id: int, nota: Decimal) -> bool:
     """Escribe la nota del RM en `FACT_ResultadoIndicador`, reemplazando la
-    anterior. `pais_codigo`/`linea_id`/`gerente_id` salen del RM: son NOT NULL y
-    no vienen en la nota. Devuelve False si el país no tiene el indicador.
+    anterior. `pais_codigo`/`linea_id`/`gerente_id` salen del RM porque no
+    vienen en la nota — `pais_codigo` y `linea_id` son NOT NULL en el modelo
+    (`hechos.ResultadoIndicador`); `gerente_id` es `nullable=True` (un RM sin
+    gerente asignado no debe bloquear el INSERT). Devuelve False si el país no
+    tiene el indicador.
     """
     indicador = (db.query(Indicador)
                  .filter(Indicador.codigo == fuentes.INDICADOR_CONOCIMIENTOS,
@@ -137,8 +140,26 @@ def integrar_captura(db: Session, pais_codigo: str, ciclo_id: int) -> dict:
     va ANTES del guard de ciclo cerrado y antes de tocar nada. El guard de ciclo
     cerrado, a su vez, va ANTES de cualquier borrado: un delete-then-insert que
     luego aborta borra `puntos_obtenidos` para siempre.
+
+    IMPORTANT (revisión final): también valida que el ciclo pertenezca a
+    `pais_codigo`, con el mismo criterio que
+    `formacion_ranking_service.recalcular_ciclo` (que ya reparaba el mismo
+    error de clase — ver la migración
+    `c5a7881c944b_reparar_visitas_en_ciclo_de_otro_pais`). Sin esto,
+    `POST /conocimientos/notas {pais_codigo: "DO", ciclo_id: <un ciclo de CR>}`
+    capturaba notas dominicanas contra un ciclo costarricense, y al integrar se
+    escribían con ese par cruzado — disparando
+    `recalcular_ciclo(<ciclo de CR>, "DO")`. Va ANTES del guard de ciclo
+    cerrado: un ciclo ajeno no debe ni siquiera llegar a preguntarse si está
+    abierto o cerrado.
     """
     fuentes.asegurar_duenio(db, pais_codigo, fuentes.FUENTE_CAPTURA_MANUAL)
+    ciclo = db.get(Ciclo, ciclo_id)
+    if ciclo is None:
+        raise ValueError(f"Ciclo {ciclo_id} no encontrado.")
+    if ciclo.pais_codigo != pais_codigo:
+        raise ValueError(
+            f"El ciclo {ciclo_id} es de {ciclo.pais_codigo}, no de {pais_codigo}.")
     try:
         recalculo_service.validar_ciclo_abierto(db, ciclo_id)
     except recalculo_service.CicloCerradoError:

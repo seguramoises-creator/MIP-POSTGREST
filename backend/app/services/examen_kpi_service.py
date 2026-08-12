@@ -19,7 +19,13 @@ INDICADOR_EXAMEN = "EVAL_CONOCIMIENTOS"
 
 
 def nota_desde_score(score) -> float:
-    """Convierte el score (0-100) a la nota escala 0-10."""
+    """Convierte el score (0-100) a la nota escala 0-10 — SOLO para
+    presentación (consolidación, logs). NUNCA se escribe en
+    `FACT_ResultadoIndicador`: ese indicador tiene `escala=100` (ver el
+    CRITICAL del sub-proyecto 7 y `upsert_nota_rm` más abajo) — motor_calculo
+    espera el mismo 0-100 que ya llegan CAPTURA_MANUAL/NOTA_EXTERNA, y
+    escribir la nota 0-10 puntuaba una décima parte de lo que puntúan esos
+    otros dos caminos."""
     return round(float(score) / 10.0, 2)
 
 
@@ -31,13 +37,17 @@ def _examen_de_intento(db: Session, intento) -> Examen | None:
     return db.query(Examen).filter(Examen.id == asig.examen_id).first()
 
 
-def _nota_promedio_rm(db: Session, rm_id: int, ciclo_id: int) -> float | None:
-    """Promedio de score/10 del último intento de cada examen marcado del RM en el ciclo."""
+def _ultimos_scores_rm(db: Session, rm_id: int, ciclo_id: int) -> list[float]:
+    """Score 0-100 (escala nativa del examen) del último intento de cada
+    examen marcado del RM en el ciclo. Fuente única de la que derivan tanto
+    la nota de presentación (`_nota_promedio_rm`, 0-10) como el score que
+    entra al KPI (`_score_promedio_rm`, 0-100) — una sola consulta, dos
+    escalas de salida."""
     examenes = db.query(Examen).filter(
         Examen.indicador_codigo == INDICADOR_EXAMEN,
         Examen.ciclo_id == ciclo_id,
     ).all()
-    notas = []
+    scores = []
     for ex in examenes:
         ultimo = (
             db.query(IntentoExamen)
@@ -51,10 +61,29 @@ def _nota_promedio_rm(db: Session, rm_id: int, ciclo_id: int) -> float | None:
             .first()
         )
         if ultimo is not None and ultimo.score is not None:
-            notas.append(nota_desde_score(ultimo.score))
-    if not notas:
+            scores.append(float(ultimo.score))
+    return scores
+
+
+def _nota_promedio_rm(db: Session, rm_id: int, ciclo_id: int) -> float | None:
+    """Promedio, en escala 0-10, del último intento de cada examen marcado
+    del RM en el ciclo. SOLO para presentación (`nota_promedio_equipo` de la
+    consolidación, logs) — el KPI usa `_score_promedio_rm` (0-100)."""
+    scores = _ultimos_scores_rm(db, rm_id, ciclo_id)
+    if not scores:
         return None
-    return round(sum(notas) / len(notas), 2)
+    return round(sum(nota_desde_score(s) for s in scores) / len(scores), 2)
+
+
+def _score_promedio_rm(db: Session, rm_id: int, ciclo_id: int) -> float | None:
+    """Promedio, en escala 0-100, del último intento de cada examen marcado
+    del RM en el ciclo. Esta es la escala que espera `FACT_ResultadoIndicador`
+    (EVAL_CONOCIMIENTOS tiene `escala=100`, igual que CAPTURA_MANUAL/
+    NOTA_EXTERNA) — ver `upsert_nota_rm`."""
+    scores = _ultimos_scores_rm(db, rm_id, ciclo_id)
+    if not scores:
+        return None
+    return round(sum(scores) / len(scores), 2)
 
 
 def _indicador_de_pais(db: Session, pais_codigo: str):
@@ -67,14 +96,26 @@ def _indicador_de_pais(db: Session, pais_codigo: str):
 def upsert_nota_rm(db: Session, rm, ciclo_id: int) -> float | None:
     """Calcula el promedio EVAL_CONOCIMIENTOS del RM en el ciclo y hace upsert
     (delete-then-insert) en FACT_ResultadoIndicador. NO recalcula ni hace commit
-    (la consolidación dispara un único recálculo al final). Devuelve la nota o
-    None si no aplica (sin indicador de país o sin nota)."""
+    (la consolidación dispara un único recálculo al final).
+
+    CRITICAL (revisión final del sub-proyecto 7): `FACT_ResultadoIndicador.
+    resultado_real` recibe el SCORE 0-100 —la escala nativa del examen, la
+    misma que ya escriben CAPTURA_MANUAL y NOTA_EXTERNA—, NO la nota 0-10.
+    EVAL_CONOCIMIENTOS tiene `escala=100`, así que `motor_calculo_service`
+    usa `resultado_real` DIRECTO, sin normalizar: escribir la nota 0-10 aquí
+    puntuaba una décima parte de lo que puntúan los otros dos caminos para el
+    mismo desempeño real (8.0 vs 80 puntos, sobre un indicador que pesa 10%
+    del Score). Sigue devolviendo la NOTA 0-10 (no el score): es lo que
+    consume `examen_consolidacion_service` para `nota_promedio_equipo`, la
+    cifra que se le muestra al usuario — ese consumidor no cambia.
+    Devuelve None si no aplica (sin indicador de país o sin nota)."""
     indicador = _indicador_de_pais(db, rm.pais_codigo)
     if indicador is None:
         logger.warning(f"Examen: no existe indicador {INDICADOR_EXAMEN} para país {rm.pais_codigo}")
         return None
     nota = _nota_promedio_rm(db, rm.id, ciclo_id)
-    if nota is None:
+    score = _score_promedio_rm(db, rm.id, ciclo_id)
+    if nota is None or score is None:
         return None
     db.query(ResultadoIndicador).filter(
         ResultadoIndicador.rm_id == rm.id,
@@ -84,7 +125,7 @@ def upsert_nota_rm(db: Session, rm, ciclo_id: int) -> float | None:
     db.add(ResultadoIndicador(
         rm_id=rm.id, indicador_id=indicador.id, ciclo_id=ciclo_id,
         pais_codigo=rm.pais_codigo, linea_id=rm.linea_id, gerente_id=rm.gerente_id,
-        resultado_real=nota, activo=True,
+        resultado_real=score, activo=True,
     ))
     return nota
 

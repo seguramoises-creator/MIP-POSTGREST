@@ -115,9 +115,17 @@ export default function ConsolidacionPanel() {
                 RM: {estado.rms_con_nota_nombres.join(', ')}
               </Typography>
             )}
+            {!estado.es_duenio && (
+              <Alert severity="warning" sx={{ mb: 1 }}>
+                En {estado.pais_codigo}, EVAL_CONOCIMIENTOS lo alimenta «{estado.fuente_vigente}»,
+                no los exámenes. Consolidar aquí no escribirá nada — cambia la fuente en la
+                pantalla de Conocimientos si eso es lo que corresponde.
+              </Alert>
+            )}
             <Box sx={{ mt: 1.5 }}>
               <Button variant="contained" startIcon={<Lock />}
-                      disabled={!estado.ciclo_abierto || ejecutando || estado.rms_con_nota === 0 || esSoloLectura}
+                      disabled={!estado.ciclo_abierto || ejecutando || estado.rms_con_nota === 0
+                        || esSoloLectura || !estado.es_duenio}
                       onClick={consolidar}>
                 {ejecutando ? 'Consolidando…' : 'Consolidar ciclo → KPI'}
               </Button>

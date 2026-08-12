@@ -46,8 +46,8 @@ from app.models.dimensiones import Medico, RepresentanteMedico, TargetMedico
 from app.models.hechos import Visita as FactVisita
 from app.models.hechos import Ventas
 from app.models.integracion_ext import (
-    ExtControlCarga, ExtFactVenta, ExtFactVisitaFarmacia, ExtFactVisitaMedico,
-    ExtPanelMedico, ExtTargetFarmacia,
+    ExtControlCarga, ExtFactEvaluacionConocimiento, ExtFactVenta,
+    ExtFactVisitaFarmacia, ExtFactVisitaMedico, ExtPanelMedico, ExtTargetFarmacia,
 )
 from app.models.mapeo_externo import (
     ENT_CICLO, ENT_FARMACIA, ENT_MEDICO, ENT_REPRESENTANTE, MapeoExterno,
@@ -829,13 +829,29 @@ _ORIGEN_CONTEO = {
 
 def _lotes_del_ciclo(db: Session, pais_codigo: str, ciclo_codigo: str) -> list[int]:
     """Los `lote_id` que aportaron filas a este ciclo, en cualquiera de los
-    cinco hechos. Es la reconciliación lote ↔ ciclo: la integración trabaja
-    por ciclo, pero el estado del §7.1 vive en el lote."""
+    cinco hechos, MÁS los de `ext.factevaluacionconocimiento` (Tarea 2 del
+    sub-proyecto 7). Es la reconciliación lote ↔ ciclo: la integración
+    trabaja por ciclo, pero el estado del §7.1 vive en el lote.
+
+    `factevaluacionconocimiento` NO está en `_ORIGEN_CONTEO` —no usa
+    `MapeoExterno`/`mapeo.resolver` como idempotencia, `conocimientos_service.
+    integrar_conocimientos` hace delete-then-insert directo sobre
+    `FACT_ResultadoIndicador`— así que `resumen_visitas` no debe listarlo con
+    el mismo JOIN que los otros cinco. Pero sus lotes SÍ deben entrar en el
+    `estados_lote` que `integrar_todo` resuelve una sola vez para toda la
+    corrida: sin esto, un lote que solo trae notas de conocimiento nunca
+    aparece en el dict y `_lote_habilitado` lo trataría como «sin control de
+    carga», omitiendo notas válidas con un hallazgo falso.
+    """
     lotes: set[int] = set()
     for modelo, _, _ in _ORIGEN_CONTEO.values():
         lotes |= {f[0] for f in db.query(modelo.lote_id)
                   .filter(modelo.pais_codigo == pais_codigo,
                           modelo.ciclo_codigo == ciclo_codigo).distinct().all()}
+    lotes |= {f[0] for f in db.query(ExtFactEvaluacionConocimiento.lote_id)
+              .filter(ExtFactEvaluacionConocimiento.pais_codigo == pais_codigo,
+                      ExtFactEvaluacionConocimiento.ciclo_codigo == ciclo_codigo)
+              .distinct().all()}
     return sorted(lotes)
 
 
@@ -910,6 +926,7 @@ def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
     las tablas internas: así una sola acción del operador deja el ciclo completo,
     sin un segundo paso que se olvide.
     """
+    from app.services import conocimientos_service
     from app.services import integracion_indicadores_service as indicadores
     from app.services import recalculo_service
 
@@ -937,6 +954,22 @@ def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
     except ValueError as exc:
         resumen_ind = {"rms": 0, "filas": 0, "omitido_ciclo_cerrado": False}
         hallazgos.append(Hallazgo("indicador", None, str(exc), SEVERIDAD_ERROR))
+
+    # EVAL_CONOCIMIENTOS (Tarea 2, sub-proyecto 7): si el país tiene NOTA_EXTERNA
+    # declarado como dueño (`fuente_indicador_service`), las notas de Mallén que
+    # ya están en `ext.factevaluacionconocimiento` se integran aquí. NO va en
+    # `_INTEGRADORES`, a propósito: `integrar_conocimientos` devuelve un dict
+    # (`rms_integrados`/`abortado`), no un `ConteoHecho` — meterlo en ese loop
+    # rompería `detalle`/`_cerrar_lotes`, que leen `.hecho`/`.integrados`/
+    # `.actualizados`/`.lotes_aportados` de cada resultado. Mismo patrón que
+    # `calcular_indicadores` arriba: llamada aparte. `integrar_conocimientos`
+    # nunca lanza —un país que no es dueño, un ciclo sin mapear o notas fuera de
+    # rango terminan en un `Hallazgo`, no en una excepción—, así que no hace
+    # falta try/except. Se le pasa `estados_lote` ya resuelto (incluye los lotes
+    # de `factevaluacionconocimiento`, ver `_lotes_del_ciclo`): la misma corrida
+    # no debe golpear `ExtControlCarga` una vez más solo por este hecho.
+    resumen_conoc = conocimientos_service.integrar_conocimientos(
+        db, pais_codigo, ciclo_codigo, hallazgos, estados_lote)
 
     detalle = "; ".join(
         f"{c.hecho}: {c.integrados} nuevas, {c.actualizados} actualizadas"
@@ -977,6 +1010,7 @@ def integrar_todo(db: Session, pais_codigo: str, ciclo_codigo: str) -> dict:
             "actualizados": c.actualizados, "omitidos": c.omitidos,
         } for c in conteos],
         "indicadores": resumen_ind,
+        "conocimientos": resumen_conoc,
         "recalculo": recalculo,
         "lotes_cerrados": cerrados,
         "hallazgos": [{

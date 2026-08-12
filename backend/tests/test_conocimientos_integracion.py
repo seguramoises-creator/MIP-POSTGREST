@@ -26,6 +26,7 @@ from app.models.integracion_ext import (
 from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE, MapeoExterno
 from app.services import conocimientos_service as cs
 from app.services import fuente_indicador_service as fs
+from app.services import integracion_visitas_service as viz
 from app.services import motor_calculo_service
 
 BD_PRUEBA = "vista_test_conoc_ext"
@@ -67,6 +68,15 @@ def escenario(motor):
     for tabla in ("ext.factevaluacionconocimiento", "ext.controlcarga",
                   "ext.dimrepresentante", "ext.dimciclo", "ext.dimpais",
                   '"Config"."MapeoExterno"', '"Config"."FuenteIndicador"',
+                  # Tarea 2 (revisión final): `test_integrar_todo_ejecuta_
+                  # conocimientos` atraviesa `integrar_todo` -> recálculo
+                  # completo -> `generar_ranking`, que sí escribe estas tres
+                  # tablas (a diferencia de los tests que solo llaman
+                  # `completar_puntajes`). Sin borrarlas aquí, el `DELETE FROM
+                  # DIM_RM` de más abajo revienta por FK en el siguiente test
+                  # del módulo (mismo `motor`, module-scoped).
+                  '"DW"."FACT_RankingGerente"', '"DW"."FACT_RankingRM"',
+                  '"DW"."FACT_ScoreIntegralRM"',
                   '"DW"."FACT_NotaConocimiento"', '"DW"."FACT_ResultadoIndicador"',
                   '"Config"."DIM_Indicador"', '"Config"."DIM_RM"',
                   '"Config"."DIM_Gerente"', '"Config"."DIM_Ciclo"',
@@ -266,6 +276,49 @@ def test_reintegrar_no_duplica(escenario):
     filas = (e["db"].query(ResultadoIndicador)
              .filter(ResultadoIndicador.indicador_id == e["ind"]["EVAL_CONOCIMIENTOS"].id).all())
     assert len(filas) == 1
+
+
+def test_integrar_todo_ejecuta_conocimientos(escenario):
+    """IMPORTANT de la revisión final: antes de este fix, `integrar_todo` (el
+    orquestador por lotes que sí llama Capacitación/el resto de la app) nunca
+    invocaba `integrar_conocimientos` — un país declarado NOTA_EXTERNA se
+    quedaba SIN NINGUNA vía real de alimentar el indicador: el Excel lo omite
+    siempre, exámenes/captura devuelven 409 (fuente ajena), y nadie más lo
+    llamaba. Este test prueba el cableado end-to-end vía `integrar_todo`, no
+    llamando a `cs.integrar_conocimientos` directo (eso ya lo cubren los tests
+    de arriba)."""
+    e = escenario
+    fs.fijar_fuente(e["db"], "DO", fs.FUENTE_NOTA_EXTERNA, usuario_id=1)
+    _nota_ext(e["db"], "N-1", 80)
+    e["db"].commit()
+
+    r = viz.integrar_todo(e["db"], "DO", "C01-2026")
+
+    assert r["conocimientos"]["abortado"] is False
+    assert r["conocimientos"]["rms_integrados"] == 1
+    assert _resultado(e, "EVAL_CONOCIMIENTOS").resultado_real == Decimal("80.0000")
+    # Un solo recálculo al final del lote (no uno por integrador): la salida
+    # de `integrar_todo` solo tiene una clave "recalculo".
+    assert r["recalculo"]["abortado"] is False
+
+
+def test_integrar_todo_no_pisa_un_pais_de_otra_fuente(escenario):
+    """El país sigue protegido dentro del orquestador por lotes: si es de
+    CAPTURA_MANUAL (o EXAMEN_VISTA), `integrar_todo` no debe escribir el
+    indicador aunque `ext` traiga notas de Mallén — el `Hallazgo` lo explica,
+    no una excepción que tumbaría el resto del lote (ventas, visitas...)."""
+    e = escenario
+    fs.fijar_fuente(e["db"], "DO", fs.FUENTE_CAPTURA_MANUAL, usuario_id=1)
+    _nota_ext(e["db"], "N-1", 80)
+    e["db"].commit()
+
+    r = viz.integrar_todo(e["db"], "DO", "C01-2026")
+
+    assert r["conocimientos"]["abortado"] is True
+    assert r["conocimientos"]["motivo"] == "fuente_ajena"
+    assert _resultado(e, "EVAL_CONOCIMIENTOS") is None
+    assert any(h["hecho"] == "factevaluacionconocimiento" and h["severidad"] == "error"
+               for h in r["hallazgos"])
 
 
 def test_rm_sin_mapeo_se_omite_con_hallazgo_y_el_resto_entra(escenario):

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import require_roles
 from app.db.database import get_db
-from app.models.dimensiones import RepresentanteMedico
+from app.models.dimensiones import Ciclo, RepresentanteMedico
 from app.models.usuario import Rol, Usuario
 from app.services import conocimientos_service as cs
 from app.services import fuente_indicador_service as fuentes
@@ -64,6 +64,20 @@ def _validar_rm_del_pais(db: Session, rm_id: int, pais_codigo: str) -> None:
             f"El representante {rm_id} no pertenece a {pais_codigo}.")
 
 
+def _validar_ciclo_del_pais(db: Session, ciclo_id: int, pais_codigo: str) -> None:
+    """Mismo criterio que `_validar_rm_del_pais`, para el hallazgo IMPORTANT de
+    la revisión final: nadie comprobaba `ciclo.pais_codigo == pais_codigo`, así
+    que se podía capturar una nota dominicana contra un ciclo costarricense.
+    `conocimientos_service.integrar_captura` repite este guard (defensa en
+    profundidad: la captura y la integración pueden llamarse por separado, y
+    un dato ya guardado con el par cruzado sería peor que rechazarlo aquí)."""
+    ciclo = db.get(Ciclo, ciclo_id)
+    if ciclo is None or ciclo.pais_codigo != pais_codigo:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"El ciclo {ciclo_id} no pertenece a {pais_codigo}.")
+
+
 @router.get("/fuente", summary="Quién alimenta EVAL_CONOCIMIENTOS en un país")
 def ver_fuente(pais_codigo: str, db: Session = Depends(get_db),
                _: Usuario = RequireCaptura):
@@ -103,6 +117,7 @@ def listar_notas(pais_codigo: str, ciclo_id: int, db: Session = Depends(get_db),
 def crear_nota(datos: NotaIn, db: Session = Depends(get_db),
                usuario: Usuario = RequireCaptura):
     _validar_rm_del_pais(db, datos.rm_id, datos.pais_codigo)
+    _validar_ciclo_del_pais(db, datos.ciclo_id, datos.pais_codigo)
     try:
         fila = cs.capturar_nota(db, datos.pais_codigo, datos.ciclo_id, datos.rm_id,
                                 datos.nota, datos.fecha_evaluacion, datos.tema,
@@ -150,13 +165,18 @@ def integrar(pais_codigo: str, ciclo_id: int, db: Session = Depends(get_db),
         resultado = cs.integrar_captura(db, pais_codigo, ciclo_id)
     except fuentes.FuenteAjenaError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    except ValueError as exc:
+        # Ciclo inexistente o de OTRO país (ver `_validar_ciclo_del_pais` /
+        # el guard equivalente dentro de `integrar_captura`).
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
     db.commit()
     if not resultado.get("abortado"):
         recalculo_service.recalcular_ciclo(db, ciclo_id, pais_codigo)
-        # `completar_puntajes`/`generar_ranking` escriben sin comitear (igual
-        # que `integrar_captura`): sin este segundo commit, `puntos_obtenidos`
-        # se calcularía y se perdería al cerrarse la sesión de la petición —
-        # el mismo defecto que motivó el commit de arriba, aplicado ahora al
-        # resultado del recálculo.
+        # `completar_puntajes`/`generar_ranking` SÍ comitean por su cuenta
+        # (`motor_calculo_service.py`) — este segundo commit no es lo que los
+        # persiste. Es aquí por lo que hace `db.commit()` cuando no hay nada
+        # pendiente: cerrar la transacción de esta sesión/petición antes de
+        # devolver la respuesta. Inofensivo pero no imprescindible; se deja
+        # explícito para no dejar la sesión con una transacción abierta.
         db.commit()
     return resultado

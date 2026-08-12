@@ -47,12 +47,20 @@ def test_no_alimenta_si_ciclo_cerrado(monkeypatch):
 def test_upsert_nota_rm_escribe_sin_recalcular(monkeypatch):
     db = MagicMock()
     rm = SimpleNamespace(id=5, pais_codigo="DO", linea_id=2, gerente_id=3)
-    monkeypatch.setattr(kpi, "_nota_promedio_rm", lambda d, rid, cid: 8.5)
+    # Una sola fuente de scores (0-100) para nota (0-10) y score (0-100): 85.0
+    # da nota=8.5 y score=85.0. Un score de 80 con ponderación 10 debe dar 8
+    # puntos a través del motor — eso lo cubre test_examen_kpi_motor.py, que
+    # atraviesa `motor_calculo_service.completar_puntajes` de verdad.
+    monkeypatch.setattr(kpi, "_ultimos_scores_rm", lambda d, rid, cid: [85.0])
     monkeypatch.setattr(kpi, "_indicador_de_pais", lambda d, pais: SimpleNamespace(id=42))
     nota = kpi.upsert_nota_rm(db, rm, ciclo_id=7)
     assert nota == 8.5
     # Escribe a la FACT pero NO recalcula (eso lo hace la consolidación 1 sola vez).
     assert db.add.called
+    fila = db.add.call_args[0][0]
+    # CRITICAL: `resultado_real` lleva el SCORE 0-100 (escala del indicador),
+    # no la nota 0-10 — ver el docstring de `upsert_nota_rm`.
+    assert fila.resultado_real == 85.0
 
 
 def test_upsert_nota_rm_sin_indicador_devuelve_none(monkeypatch):

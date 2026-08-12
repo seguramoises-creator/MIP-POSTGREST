@@ -239,6 +239,35 @@ def test_ciclo_cerrado_no_escribe_ni_borra(escenario):
     assert _resultado(e, "EVAL_CONOCIMIENTOS").resultado_real == Decimal("55.0000")
 
 
+def test_integrar_se_niega_si_el_ciclo_es_de_otro_pais(escenario):
+    """IMPORTANT de la revisión final: `integrar_captura` no comprobaba
+    `ciclo.pais_codigo == pais_codigo`. Sin este guard,
+    `integrar_captura("DO", <ciclo de CR>)` escribiría el indicador con ese
+    par cruzado y dispararía `recalcular_ciclo(<ciclo de CR>, "DO")` — el
+    mismo error de clase que ya reparó la migración
+    `c5a7881c944b_reparar_visitas_en_ciclo_de_otro_pais`."""
+    e = escenario
+    e["db"].add(Pais(codigo="CR", nombre="Costa Rica"))
+    e["db"].flush()
+    ciclo_cr = Ciclo(pais_codigo="CR", anio=2026, numero=1, nombre="Ciclo CR",
+                     fecha_inicio=date(2026, 1, 1), fecha_fin=date(2026, 1, 31),
+                     dias_laborables=20, cerrado=False)
+    e["db"].add(ciclo_cr)
+    e["db"].commit()
+
+    with pytest.raises(ValueError):
+        cs.integrar_captura(e["db"], "DO", ciclo_cr.id)
+
+    # No se tocó nada: ni una fila de ResultadoIndicador para ningún país.
+    assert e["db"].query(ResultadoIndicador).count() == 0
+
+
+def test_integrar_se_niega_si_el_ciclo_no_existe(escenario):
+    e = escenario
+    with pytest.raises(ValueError):
+        cs.integrar_captura(e["db"], "DO", 999999)
+
+
 def test_integrar_se_niega_si_el_pais_no_es_de_captura(escenario):
     e = escenario
     fs.fijar_fuente(e["db"], "DO", fs.FUENTE_EXAMEN_VISTA, usuario_id=1)
