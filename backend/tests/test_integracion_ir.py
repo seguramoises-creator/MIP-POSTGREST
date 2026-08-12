@@ -24,10 +24,13 @@ from app.models.dimensiones import (
     Ciclo, Gerente, Linea, Medico, Pais, Producto, RepresentanteMedico,
 )
 from app.models.integracion_ext import (
-    ExtControlCarga, ExtDimCiclo, ExtDimMedicoIR, ExtDimPais, ExtDimPeriodoIR,
-    ExtDimProducto, ExtDimProductoIR, ExtDimRepresentante, ExtFactPrescripcionDetalle,
+    ExtControlCarga, ExtDimCiclo, ExtDimMedico, ExtDimMedicoIR, ExtDimPais,
+    ExtDimPeriodoIR, ExtDimProducto, ExtDimProductoIR, ExtDimRepresentante,
+    ExtFactPrescripcionDetalle,
 )
-from app.models.mapeo_externo import ENT_CICLO, ENT_REPRESENTANTE, MapeoExterno
+from app.models.mapeo_externo import (
+    ENT_CICLO, ENT_MEDICO, ENT_PRODUCTO, ENT_REPRESENTANTE, MapeoExterno,
+)
 from app.models.visita import MedicoVisita
 from app.services import integracion_ir_service as ir
 
@@ -68,7 +71,7 @@ def db(motor):
     Sesion = sessionmaker(bind=motor)
     s = Sesion()
     for tabla in ("ext.factprescripciondetalle", "ext.dimmedicoir",
-                  "ext.dimproductoir", "ext.dimperiodoir",
+                  "ext.dimmedico", "ext.dimproductoir", "ext.dimperiodoir",
                   "ext.dimproducto", "ext.controlcarga",
                   "ext.dimrepresentante", "ext.dimciclo", "ext.dimpais",
                   '"Visita"."DIM_MedicoVisita"',
@@ -262,6 +265,11 @@ def test_producto_propio_con_equivalencia_se_enlaza(escenario):
                  linea_id=escenario["linea"].id, activo=True)
     db.add(p)
     db.flush()
+    # Simula que `sincronizar_producto` (dimensiones) ya corrió: es lo que en
+    # producción deja `Producto` mapeado por ENT_PRODUCTO, prerequisito del
+    # puente de producto del IR desde el fix de Important 1 (Revisión final).
+    db.add(MapeoExterno(entidad=ENT_PRODUCTO, pais_codigo="DO",
+                        codigo_externo="P1", id_interno=p.id))
     _producto_ir(db, "PIR-1", producto_codigo="P1", es_propio=True)
     db.commit()
 
@@ -303,6 +311,61 @@ def test_producto_propio_sin_equivalencia_es_error(escenario):
     assert _conteo(r, ir.ENT_PRODUCTO_IR)["no_enlazados"] == 1
 
 
+def test_producto_mapeado_a_otro_pais_no_se_enlaza(escenario):
+    """Revisión final, Important 1: `DIM_Producto.codigo` es único GLOBAL. El
+    puente buscaba por `Producto.codigo` directo, sin país y sin pasar por el
+    mapeo — así que un `producto_codigo` de Mallén que YA está mapeado a OTRO
+    país coincidía por accidente y enlazaba el producto ajeno, deshaciendo en
+    silencio el guard I3 que `sincronizar_producto` sí respeta."""
+    db = escenario["db"]
+    p = Producto(codigo="P1", nombre="Producto Uno",
+                 linea_id=escenario["linea"].id, activo=True)
+    db.add(p)
+    db.flush()
+    db.add(MapeoExterno(entidad=ENT_PRODUCTO, pais_codigo="DO",
+                        codigo_externo="P1", id_interno=p.id))
+    db.commit()
+
+    db.add(Pais(codigo="PR", nombre="Puerto Rico"))
+    db.add(ExtDimPais(pais_codigo="PR", nombre="Puerto Rico", activo=True))
+    db.flush()
+    db.add(ExtDimProducto(pais_codigo="PR", producto_codigo="P1",
+                          nombre="Producto ext P1 en PR", activo=True))
+    db.flush()
+    db.add(ExtDimProductoIR(pais_codigo="PR", producto_ir_codigo="PIR-PR-1",
+                            nombre="Producto PR", producto_codigo="P1",
+                            es_propio=True, activo=True))
+    db.commit()
+
+    r = ir.sincronizar_ir(db, "PR")
+
+    assert db.query(MapeoExterno).filter(
+        MapeoExterno.entidad == ir.ENT_PRODUCTO_IR,
+        MapeoExterno.pais_codigo == "PR").count() == 0
+    assert _conteo(r, ir.ENT_PRODUCTO_IR)["enlazados"] == 0
+
+
+def test_producto_propio_sin_mapeo_de_dimension_es_aviso_no_error(escenario):
+    """Revisión final, Important 1 (segundo defecto de la misma línea): el orden
+    de los dos botones no está garantizado. Si «Resolver equivalencias» corre
+    antes que «Sincronizar dimensiones», el producto propio SÍ declara su
+    equivalencia pero VISTA todavía no la tiene mapeada — es un paso nuestro
+    que faltó correr, no un error de Mallén, y no debe reportarse como tal."""
+    db = escenario["db"]
+    _producto_ir(db, "PIR-2", producto_codigo="P2", es_propio=True)
+    db.commit()
+
+    r = ir.sincronizar_ir(db, "DO")
+
+    avisos = [h for h in r["hallazgos"]
+              if h["entidad"] == ir.ENT_PRODUCTO_IR and h["severidad"] == "aviso"]
+    errores = [h for h in r["hallazgos"]
+               if h["entidad"] == ir.ENT_PRODUCTO_IR and h["severidad"] == "error"]
+    assert len(avisos) == 1
+    assert errores == []
+    assert _conteo(r, ir.ENT_PRODUCTO_IR)["no_enlazados"] == 1
+
+
 # ── Puente del período ───────────────────────────────────────────────────
 
 def test_periodo_con_ciclo_se_enlaza(escenario):
@@ -331,6 +394,29 @@ def test_periodo_sin_ciclo_avisa_y_no_se_enlaza(escenario):
     avisos = [h for h in r["hallazgos"]
               if h["entidad"] == ir.ENT_PERIODO_IR and h["severidad"] == "aviso"]
     assert len(avisos) == 1
+
+
+def test_periodo_con_ciclo_declarado_pero_no_sincronizado_avisa(escenario):
+    """4a (Revisión final): el ciclo SÍ existe en `ext.dimciclo` pero la
+    sincronización de dimensiones todavía no lo mapeó a `Config.DIM_Ciclo` —
+    la misma situación de "falta correr el otro botón primero" que el punto 1
+    corrige para el producto. El puente de período ya lo hacía bien; queda
+    fijado con test para que sea el patrón a copiar."""
+    db = escenario["db"]
+    db.add(ExtDimCiclo(pais_codigo="DO", ciclo_codigo="C99-2026", anio=2026,
+                       numero=99, fecha_inicio=date(2026, 3, 1),
+                       fecha_fin=date(2026, 3, 31), dias_laborables=20,
+                       cerrado=False))
+    db.flush()
+    _periodo_ir(db, "2026-03", ciclo_codigo="C99-2026")
+    db.commit()
+
+    r = ir.sincronizar_ir(db, "DO")
+
+    avisos = [h for h in r["hallazgos"]
+              if h["entidad"] == ir.ENT_PERIODO_IR and h["severidad"] == "aviso"]
+    assert len(avisos) == 1
+    assert _conteo(r, ir.ENT_PERIODO_IR)["no_enlazados"] == 1
 
 
 def test_resincronizar_no_duplica_mapeos(escenario):
@@ -392,6 +478,11 @@ def _base_ir(db, escenario, *, producto_linea_id="misma"):
     p = Producto(codigo="P1", nombre="Producto Uno", linea_id=linea_id, activo=True)
     db.add(p)
     db.flush()
+    # Simula que `sincronizar_producto` (dimensiones) ya corrió — prerequisito
+    # del puente de producto del IR desde el fix de Important 1 (ver el mismo
+    # comentario en `test_producto_propio_con_equivalencia_se_enlaza`).
+    db.add(MapeoExterno(entidad=ENT_PRODUCTO, pais_codigo="DO",
+                        codigo_externo="P1", id_interno=p.id))
     _producto_ir(db, "PIR-1", producto_codigo="P1", es_propio=True)
     _periodo_ir(db, "2026-01", ciclo_codigo="C01-2026")
     return medico
@@ -655,3 +746,128 @@ def test_dos_filas_de_panel_del_mismo_representante_no_es_ambigua(escenario):
 
     assert d["recetas"]["por_cadena"] == 1
     assert d["recetas"]["ambiguas"] == 0
+
+
+# ── Revisión final de rama ───────────────────────────────────────────────
+
+def test_diagnostico_mide_enlazables_por_medico_codigo(escenario):
+    """Important 2: `ext.dimmedicoir.medico_codigo` es la segunda vía de
+    equivalencia que el contrato ya trae (misma forma que `producto_codigo` y
+    `ciclo_codigo`, que sí se honran) — hoy no se mide. Este prescriptor NO
+    enlaza por exequátur (el suyo no cruza con el maestro), pero su
+    `medico_codigo` SÍ apunta a un médico que la sincronización de dimensiones
+    ya mapeó: el diagnóstico debe decir que sería enlazable por esa vía, sin
+    enlazarlo (es medición, no una decisión de enlazar por ahí)."""
+    db = escenario["db"]
+    db.add(ExtDimMedico(pais_codigo="DO", medico_codigo="MC-1",
+                        nombre="MEDICO SIN EXEQUATUR", activo=True))
+    db.flush()
+    medico = Medico(pais_codigo="DO", nombre="MEDICO SIN EXEQUATUR", activo=True)
+    db.add(medico)
+    db.flush()
+    db.add(MapeoExterno(entidad=ENT_MEDICO, pais_codigo="DO",
+                        codigo_externo="MC-1", id_interno=medico.id))
+    db.commit()
+
+    db.add(ExtDimMedicoIR(pais_codigo="DO", medico_ir_codigo="MIR-77",
+                          nombre="MEDICO SIN EXEQUATUR", exequatur="NOEXISTE-1",
+                          medico_codigo="MC-1", activo=True))
+    db.commit()
+
+    ir.sincronizar_ir(db, "DO")
+    d = ir.diagnosticar_ir(db, "DO")
+
+    assert d["prescriptores"]["huerfanos"] == 1
+    assert d["prescriptores"]["con_medico_codigo"] == 1
+    assert d["prescriptores"]["enlazables_por_codigo"] == 1
+    assert len(d["prescriptores"]["ejemplos_enlazables_por_codigo"]) == 1
+
+
+def test_con_panel_excluye_filas_inactivas(escenario):
+    """4b: `con_panel` mide "tiene panel alguna vez"; `activo=False` es una
+    exclusión independiente del ciclo (no requiere `cuenta_en_ciclo`, que
+    necesita también el orden del ciclo) y por eso sí aplica aquí."""
+    db = escenario["db"]
+    medico = _base_ir(db, escenario)
+    _panel(db, escenario["rm"].id, medico.id, activo=False)
+    db.commit()
+    ir.sincronizar_ir(db, "DO")
+
+    d = ir.diagnosticar_ir(db, "DO")
+
+    assert d["prescriptores"]["con_panel"] == 0
+
+
+def test_con_panel_excluye_filas_rechazadas(escenario):
+    db = escenario["db"]
+    medico = _base_ir(db, escenario)
+    _panel(db, escenario["rm"].id, medico.id, estado="RECHAZADO")
+    db.commit()
+    ir.sincronizar_ir(db, "DO")
+
+    d = ir.diagnosticar_ir(db, "DO")
+
+    assert d["prescriptores"]["con_panel"] == 0
+
+
+def test_medico_desactivado_tras_enlazarse_no_sigue_contando_enlazado(escenario):
+    """5b: el primer enlace exige `activo` (vía `maestro_medico_service._base`),
+    pero la rama `ya_enlazado` de `_enlazar` no revalida nada. Si el médico se
+    desactiva en el maestro DESPUÉS de mapearse, `prescriptores.enlazados`
+    seguía inflado para siempre. El mapeo se deja intacto — borrarlo es otra
+    decisión — y no se emite Hallazgo (regla general: no enlazados no se
+    reportan, son miles)."""
+    db = escenario["db"]
+    medico = _medico_maestro(db, exequatur="EX-100")
+    _medico_ir(db, "MIR-1", exequatur="EX-100")
+    db.commit()
+    ir.sincronizar_ir(db, "DO")  # primer enlace
+
+    medico.activo = False
+    db.commit()
+
+    r = ir.sincronizar_ir(db, "DO")  # segunda corrida, médico ya inactivo
+
+    c = _conteo(r, ir.ENT_MEDICO_IR)
+    assert c["ya_enlazados"] == 0
+    assert c["no_enlazados"] == 1
+    assert db.query(MapeoExterno).filter(
+        MapeoExterno.entidad == ir.ENT_MEDICO_IR).count() == 1
+    assert [h for h in r["hallazgos"] if h["entidad"] == ir.ENT_MEDICO_IR] == []
+
+
+def test_diagnostico_cuenta_panel_sin_maestro_medico(escenario):
+    """5c: `MedicoVisita.maestro_medico_id` es nullable. Si parte del panel no
+    está migrada al maestro, esas filas son invisibles para `ctx.paneles`
+    (que solo indexa por `maestro_medico_id`) y `por_cadena` cae sin que nada
+    diga que la causa es interna, no un defecto del archivo de Close-Up."""
+    db = escenario["db"]
+    _panel(db, escenario["rm"].id, None)
+    db.commit()
+
+    d = ir.diagnosticar_ir(db, "DO")
+
+    assert d["prescriptores"]["panel_sin_maestro_medico"] == 1
+
+
+def test_desempate_por_linea_que_vacia_candidatos_es_huerfana(escenario):
+    """5d: rama `if not vms` de `atribuir`, hoy no ejercitada. Dos
+    representantes de la MISMA línea (CARD) pero el producto es de OTRA línea
+    (DERM): el filtro por línea deja `candidatos` vacío en vez de ambiguo."""
+    db = escenario["db"]
+    otra_linea = Linea(pais_codigo="DO", codigo="DERM", nombre="Dermatología")
+    db.add(otra_linea)
+    db.flush()
+    medico = _base_ir(db, escenario, producto_linea_id=otra_linea.id)
+    rm2 = _segundo_rm(db, escenario, "VM02")   # misma línea CARD que escenario["rm"]
+    _panel(db, escenario["rm"].id, medico.id)
+    _panel(db, rm2.id, medico.id)
+    _receta(db, "R-1", rm_codigo=None)
+    db.commit()
+    ir.sincronizar_ir(db, "DO")
+
+    d = ir.diagnosticar_ir(db, "DO")
+
+    assert d["recetas"]["huerfanas"] == 1
+    assert d["recetas"]["ambiguas"] == 0
+    assert d["recetas"]["por_cadena"] == 0

@@ -487,10 +487,19 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
   const [resultado, setResultado] = useState<ResultadoSincronizacionIR | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // `enabled: false` (Revisión final, punto 3): el diagnóstico recorre TODO
+  // `ext.factprescripciondetalle` del país (cientos de miles de filas) más
+  // los ~10.000 `dimmedicoir` y todos los `Producto`/`MedicoVisita` — no es
+  // un COUNT como los otros dos resúmenes de esta pantalla. Cargarlo solo al
+  // abrir `/integracion` (para cualquier otra tarea: validar un lote,
+  // sincronizar dimensiones, integrar visitas) lo repetía cada 2 minutos de
+  // uso (`staleTime` de React Query) sin que nadie lo pidiera. Ahora se
+  // dispara a demanda: con el botón "Ver diagnóstico" o, automáticamente, al
+  // terminar una sincronización (`sincronizar.onSuccess` abajo).
   const diag = useQuery<DiagnosticoIR>({
     queryKey: ['integracion-ir', paisCodigo],
     queryFn: () => diagnosticoIR(paisCodigo as string),
-    enabled: !!paisCodigo,
+    enabled: false,
   });
 
   const sincronizar = useMutation({
@@ -498,6 +507,7 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
     onSuccess: (r) => {
       setResultado(r); setError(null);
       qc.invalidateQueries({ queryKey: ['integracion-ir'] });
+      diag.refetch();
     },
     onError: (e) => setError(detalleError(e, 'No se pudieron resolver las equivalencias.')),
   });
@@ -516,6 +526,11 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
         <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>
           Prescripción IR
         </Typography>
+        <Button variant="outlined" startIcon={<Visibility />}
+          disabled={diag.isFetching}
+          onClick={() => diag.refetch()}>
+          {diag.isFetching ? 'Calculando…' : 'Ver diagnóstico'}
+        </Button>
         <Button variant="contained" startIcon={<Sync />}
           disabled={sincronizar.isPending}
           onClick={() => sincronizar.mutate()}>
@@ -534,6 +549,16 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
+      {!d && !diag.isFetching && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Pulsa <b>«Ver diagnóstico»</b> para calcular qué tan bien enlazan
+          el prescriptor, el producto y el período. Recorre todas las
+          recetas del país, así que no se calcula solo — si todavía no has
+          corrido «Resolver equivalencias», hazlo primero.
+        </Alert>
+      )}
+      {diag.isFetching && <CircularProgress sx={{ mb: 2 }} />}
+
       {d && (
         <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 2 }}>
           <Table size="small">
@@ -547,7 +572,9 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
             </TableHead>
             <TableBody>
               <TableRow>
-                <TableCell>Prescriptores (con panel: {d.prescriptores.con_panel})</TableCell>
+                <TableCell>
+                  Prescriptores (con panel alguna vez: {d.prescriptores.con_panel})
+                </TableCell>
                 <TableCell align="right">{d.prescriptores.en_ext}</TableCell>
                 <TableCell align="right">{d.prescriptores.enlazados}</TableCell>
                 <TableCell align="right">
@@ -571,6 +598,26 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
             </TableBody>
           </Table>
         </Paper>
+      )}
+
+      {d && d.prescriptores.enlazables_por_codigo > 0 && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          De los {d.prescriptores.huerfanos + d.prescriptores.casi_enlazados}
+          {' '}prescriptores sin enlazar por exequátur,{' '}
+          {d.prescriptores.enlazables_por_codigo} traen el código de médico de
+          Mallén y ese código SÍ está sincronizado en VISTA — no se enlazan
+          por ahí (es solo medición, ver §11.9), pero es la evidencia para
+          decidir si vale la pena.
+        </Alert>
+      )}
+
+      {d && d.prescriptores.panel_sin_maestro_medico > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {d.prescriptores.panel_sin_maestro_medico} fila(s) del panel de
+          médicos de este país todavía no están migradas al Maestro de
+          Médicos — son invisibles para la atribución por panel. No es un
+          defecto del archivo de Close-Up.
+        </Alert>
       )}
 
       {d && d.recetas.total > 0 && (
@@ -602,9 +649,13 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
       {resultado && (
         <>
           <Alert severity="success" sx={{ mb: 2 }}>
-            Sincronización completada. «Ya enlazados» son los que venían de una
-            corrida anterior; «casi enlazados» y «omitidos» no cuentan como
-            fallo — ver la tabla.
+            Sincronización completada. «Ya enlazados» son los que venían de
+            una corrida anterior. «Casi enlazados» YA están incluidos dentro
+            de «Sin enlazar» —son un subconjunto para ver cuántos son solo un
+            problema de formato, no se suman aparte— así que sumar las
+            columnas de la tabla los contaría dos veces. «Omitidos» sí es
+            aparte y no cuenta como fallo: son productos de la competencia,
+            se espera que no enlacen.
           </Alert>
           <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 2 }}>
             <Table size="small">
@@ -615,7 +666,7 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
                   <TableCell align="right">Enlazados</TableCell>
                   <TableCell align="right">Ya enlazados</TableCell>
                   <TableCell align="right">Sin enlazar</TableCell>
-                  <TableCell align="right">Casi enlazados</TableCell>
+                  <TableCell align="right">Casi enlazados (dentro de Sin enlazar)</TableCell>
                   <TableCell align="right">Omitidos (esperado)</TableCell>
                 </TableRow>
               </TableHead>

@@ -25,13 +25,15 @@ from dataclasses import dataclass, field
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.models.dimensiones import Ciclo, Medico, Producto
+from app.models.dimensiones import Ciclo, Medico, Producto, RepresentanteMedico
 from app.models.integracion_ext import (
     ExtDimMedicoIR, ExtDimPeriodoIR, ExtDimProductoIR, ExtFactPrescripcionDetalle,
 )
 from app.models.mapeo_externo import (
-    ENT_CICLO, ENT_MEDICO_IR, ENT_PERIODO_IR, ENT_PRODUCTO_IR, MapeoExterno,
+    ENT_CICLO, ENT_MEDICO, ENT_MEDICO_IR, ENT_PERIODO_IR, ENT_PRODUCTO,
+    ENT_PRODUCTO_IR, MapeoExterno,
 )
+from app.models.visita import MedicoVisita
 from app.services import integracion_mapeo as mapeo
 from app.services import maestro_medico_service
 from app.services.integracion_dimensiones_service import (
@@ -60,6 +62,14 @@ class ConteoIR:
     `omitidos` es el no-enlace ESPERADO (un producto de la competencia);
     `no_enlazados` es el que puede doler. Separarlos es lo que permite leer el
     resultado de un vistazo.
+
+    `casi_enlazados` es un SUBCONJUNTO de `no_enlazados`, NO un quinto balde
+    disjunto (Revisión final, 5a): `anotar()` ya sumó el registro a
+    `no_enlazados`, y el llamador suma `casi_enlazados` aparte solo para
+    detallar CUÁNTOS de esos `no_enlazados` son un problema de formato. Quien
+    sume `no_enlazados + casi_enlazados` los cuenta dos veces. `omitidos` sí
+    es disjunto de los demás (es el no-enlace esperado, nunca se suma a
+    `no_enlazados`).
     """
     entidad: str
     en_ext: int = 0
@@ -188,6 +198,16 @@ def sincronizar_medico_ir(db: Session, pais_codigo: str,
 
         registro, resultado = _enlazar(db, ENT_MEDICO_IR, pais_codigo,
                                        fila.medico_ir_codigo, Medico, _buscar)
+        if resultado == RESULTADO_YA_ENLAZADO and registro is not None and not registro.activo:
+            # 5b (Revisión final): el primer enlace exige `activo` (vía
+            # `maestro_medico_service._base`), pero `_enlazar` no revalida
+            # nada en la rama `ya_enlazado` — si el médico se desactivó en el
+            # maestro DESPUÉS de mapearse, `enlazados` quedaba inflado para
+            # siempre. Se cuenta como no_enlazado (sin Hallazgo — la regla de
+            # que los no enlazados no se reportan) y el mapeo se deja
+            # intacto: borrarlo es otra decisión.
+            conteo.no_enlazados += 1
+            continue
         conteo.anotar(resultado)
         if registro is None and _es_casi_enlace(indice, fila.exequatur):
             conteo.casi_enlazados += 1
@@ -203,6 +223,15 @@ def sincronizar_producto_ir(db: Session, pais_codigo: str,
     (§11.8): hacen falta para medir participación de mercado. Que no mapeen es
     lo ESPERADO y no genera hallazgo. Lo que sí es error es un producto marcado
     `es_propio` sin equivalencia: sus recetas no las va a poder contar nadie.
+
+    Resuelve contra `MapeoExterno(ENT_PRODUCTO)`, NUNCA contra
+    `Producto.codigo` directo (Revisión final, Important 1): `DIM_Producto.codigo`
+    es único GLOBAL y no lleva columna de país, así que buscar por código a
+    secas puede coincidir con el producto de OTRO país cuando dos países
+    reusan el mismo código de Mallén. `sincronizar_producto`
+    (`integracion_dimensiones_service`) ya resuelve esa colisión (I3) omitiendo
+    la fila con un `Hallazgo`; resolver aquí contra el mapeo hereda esa
+    decisión en vez de deshacerla en silencio.
     """
     conteo = ConteoIR(ENT_PRODUCTO_IR)
     filas = (db.query(ExtDimProductoIR)
@@ -222,18 +251,25 @@ def sincronizar_producto_ir(db: Session, pais_codigo: str,
             continue
 
         def _buscar(f=fila):
-            return db.query(Producto).filter(
-                Producto.codigo == f.producto_codigo).first()
+            pid = mapeo.id_mapeado(db, ENT_PRODUCTO, pais_codigo, f.producto_codigo)
+            return db.get(Producto, pid) if pid else None
 
         registro, resultado = _enlazar(db, ENT_PRODUCTO_IR, pais_codigo,
                                        fila.producto_ir_codigo, Producto, _buscar)
         conteo.anotar(resultado)
         if registro is None and fila.es_propio:
+            # Segundo defecto de la misma línea (Revisión final): «Resolver
+            # equivalencias» y «Sincronizar dimensiones» son dos botones
+            # independientes — correr este primero es un clic, no un caso
+            # raro. Con el catálogo interno todavía vacío esto NO es un bug
+            # de Mallén (culpa nuestra, falta un paso), así que es AVISO —
+            # calcado del puente de período, que ya distingue esta causa.
             hallazgos.append(Hallazgo(
                 ENT_PRODUCTO_IR, fila.producto_ir_codigo,
                 f"El producto propio «{fila.nombre}» declara la equivalencia "
-                f"«{fila.producto_codigo}», que no existe en el catálogo de VISTA.",
-                SEVERIDAD_ERROR))
+                f"«{fila.producto_codigo}», que todavía no está sincronizada en "
+                f"VISTA; corre primero la sincronización de dimensiones.",
+                SEVERIDAD_AVISO))
     return conteo
 
 
@@ -346,9 +382,7 @@ def _mapa(db: Session, entidad: str, pais_codigo: str) -> dict:
 
 
 def _contexto(db: Session, pais_codigo: str) -> ContextoAtribucion:
-    from app.models.dimensiones import RepresentanteMedico
     from app.models.mapeo_externo import ENT_REPRESENTANTE
-    from app.models.visita import MedicoVisita
     from app.services.visita_aprobacion_service import ordenes_ciclo
 
     ctx = ContextoAtribucion(pais_codigo=pais_codigo)
@@ -364,8 +398,18 @@ def _contexto(db: Session, pais_codigo: str) -> ContextoAtribucion:
     lineas_rm = {r.id: r.linea_id for r in
                  db.query(RepresentanteMedico).filter(
                      RepresentanteMedico.pais_codigo == pais_codigo).all()}
+    # `activo=False` y `estado_aprobacion == "RECHAZADO"` se filtran aquí
+    # (Revisión final, 4b): son exclusiones independientes del CICLO —a
+    # diferencia de `PENDIENTE_ALTA`/las fechas de alta-baja, que sí dependen
+    # de qué ciclo se está evaluando y por eso siguen resolviéndose en
+    # `cuenta_en_ciclo`, no aquí. `cuenta_en_ciclo` ya las excluye por su
+    # cuenta, así que filtrarlas antes es inocuo para `atribuir` y además
+    # corrige `con_panel` del diagnóstico, que sin esto contaba filas de
+    # panel que ya no cuentan para nada.
     for m in (db.query(MedicoVisita)
-              .filter(MedicoVisita.maestro_medico_id.isnot(None)).all()):
+              .filter(MedicoVisita.maestro_medico_id.isnot(None),
+                      MedicoVisita.activo == True,  # noqa: E712
+                      MedicoVisita.estado_aprobacion != "RECHAZADO").all()):
         if m.vm_id not in lineas_rm:      # panel de otro país
             continue
         ctx.paneles.setdefault(m.maestro_medico_id, []).append(
@@ -496,10 +540,30 @@ def diagnosticar_ir(db: Session, pais_codigo: str) -> dict:
         else:
             huerfanos.append(p)
     # Descriptivo, NO aplica `cuenta_en_ciclo`: mide "tiene alguna fila de
-    # panel alguna vez", no "panel efectivo para un ciclo". El nombre invita a
-    # leerlo como lo segundo — no lo es (Ronda de correcciones 1, menor).
+    # panel ALGUNA VEZ" (etiqueta en pantalla, Revisión final 4b — antes decía
+    # solo "con panel" e invitaba a leerlo como "panel efectivo para un
+    # ciclo", que no es lo mismo). `ctx.paneles` ya excluye `activo=False` y
+    # `RECHAZADO` (independientes del ciclo, filtrados en `_contexto`); lo que
+    # NO excluye es `PENDIENTE_ALTA` ni las fechas de alta/baja, porque esas sí
+    # dependen de qué ciclo se pregunte y este diagnóstico es de país, no de
+    # ciclo (no hay `ciclo_orden` que pasarle aquí).
     con_panel = sum(1 for p in enlazados
                     if ctx.paneles.get(ctx.medicos[p.medico_ir_codigo]))
+
+    # Important 2 (Revisión final): medición, NO enlace. `medico_codigo` es la
+    # segunda vía de equivalencia que `ext.dimmedicoir` ya trae (misma forma
+    # que `producto_codigo`/`ciclo_codigo`, que sí se honran) — hoy no se
+    # mira. Importa porque `ext.dimmedico.exequatur` es nullable a propósito:
+    # para un médico sin exequátur informado, `medico_codigo` es la ÚNICA
+    # equivalencia posible, y hoy sale como huérfano sin que nada lo distinga
+    # de un huérfano real. NO se enlaza por aquí — cambiar esa semántica es
+    # una decisión de diseño aparte (§10 pendiente 6) — solo se CUENTA, para
+    # decidir con datos si vale la pena.
+    no_enlazados_por_exequatur = casi + huerfanos
+    mapa_medico_codigo = _mapa(db, ENT_MEDICO, pais_codigo)
+    con_medico_codigo = [p for p in no_enlazados_por_exequatur if p.medico_codigo]
+    enlazables_por_codigo = [p for p in con_medico_codigo
+                             if p.medico_codigo in mapa_medico_codigo]
 
     productos = (db.query(ExtDimProductoIR)
                  .filter(ExtDimProductoIR.pais_codigo == pais_codigo).all())
@@ -516,6 +580,18 @@ def diagnosticar_ir(db: Session, pais_codigo: str) -> dict:
     periodos = (db.query(ExtDimPeriodoIR)
                 .filter(ExtDimPeriodoIR.pais_codigo == pais_codigo).all())
     periodos_con_ciclo = sum(1 for p in periodos if p.periodo_codigo in ctx.periodos)
+
+    # 5c (Revisión final): `maestro_medico_id` es NULLABLE — filas de panel que
+    # todavía no se migraron al Maestro de Médicos son invisibles para
+    # `ctx.paneles` (que solo indexa por `maestro_medico_id`, ver `_contexto`)
+    # y `por_cadena` cae sin que nada lo explique. Este contador es lo que
+    # distingue esa causa INTERNA de un defecto real del archivo de Close-Up.
+    panel_sin_maestro_medico = (
+        db.query(MedicoVisita)
+        .join(RepresentanteMedico, RepresentanteMedico.id == MedicoVisita.vm_id)
+        .filter(RepresentanteMedico.pais_codigo == pais_codigo,
+                MedicoVisita.maestro_medico_id.is_(None))
+        .count())
 
     baldes = {ATR_DIRECTA: 0, ATR_CADENA: 0, ATR_AMBIGUA: 0, ATR_HUERFANA: 0}
     #: Sub-conteos de `huerfanas` — NO son un quinto/sexto balde: la invariante
@@ -563,6 +639,15 @@ def diagnosticar_ir(db: Session, pais_codigo: str) -> dict:
             "con_panel": con_panel,
             "casi_enlazados": len(casi),
             "huerfanos": len(huerfanos),
+            # Medición, no enlace (Important 2 — ver el comentario arriba de
+            # `no_enlazados_por_exequatur`).
+            "con_medico_codigo": len(con_medico_codigo),
+            "enlazables_por_codigo": len(enlazables_por_codigo),
+            "ejemplos_enlazables_por_codigo": [
+                {"codigo": p.medico_ir_codigo, "medico_codigo": p.medico_codigo,
+                 "nombre": p.nombre} for p in enlazables_por_codigo[:EJEMPLOS]],
+            # 5c — panel migrado a medias: causa interna, no de Close-Up.
+            "panel_sin_maestro_medico": panel_sin_maestro_medico,
             "ejemplos_casi_enlazados": [
                 {"codigo": p.medico_ir_codigo, "exequatur": p.exequatur,
                  "nombre": p.nombre} for p in casi[:EJEMPLOS]],

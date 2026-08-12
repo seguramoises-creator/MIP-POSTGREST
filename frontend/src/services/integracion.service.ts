@@ -127,6 +127,9 @@ export const resumenVisitas = (paisCodigo: string, cicloCodigo: string) =>
 // ── Prescripción IR (sub-proyecto 6) ─────────────────────────────────────
 export interface ConteoIR {
   entidad: string; en_ext: number; enlazados: number; ya_enlazados: number;
+  // `casi_enlazados` es SUBCONJUNTO de `no_enlazados` (Revisión final, 5a):
+  // ya está incluido en ese número, no se suma aparte. `omitidos` sí es
+  // disjunto — no sumar `no_enlazados + casi_enlazados` al totalizar.
   no_enlazados: number; casi_enlazados: number; omitidos: number;
 }
 
@@ -144,19 +147,28 @@ export interface EjemploRmNoEnlazado {
   origen_id: string | null; rm_codigo: string;
 }
 
-// Refleja el dict REAL de `integracion_ir_service.diagnosticar_ir` (Tareas 1-2),
-// no el borrador original del brief: `recetas` trae dos sub-conteos que se
-// añadieron en la ronda de revisión de la Tarea 2 (`sin_ciclo`,
-// `rm_no_enlazado` + sus ejemplos). Son causas de `huerfanas`, no un balde
-// nuevo — los cuatro baldes (`directas+por_cadena+ambiguas+huerfanas`) siguen
-// sumando `total` por sí solos.
+export interface EjemploEnlazablePorCodigo {
+  codigo: string; medico_codigo: string | null; nombre: string;
+}
+
+// Refleja el dict REAL de `integracion_ir_service.diagnosticar_ir` (Tareas 1-2
+// + Revisión final de rama). `recetas` trae dos sub-conteos que se añadieron
+// en la ronda de revisión de la Tarea 2 (`sin_ciclo`, `rm_no_enlazado` + sus
+// ejemplos). Son causas de `huerfanas`, no un balde nuevo — los cuatro baldes
+// (`directas+por_cadena+ambiguas+huerfanas`) siguen sumando `total` por sí
+// solos. `con_medico_codigo`/`enlazables_por_codigo`/`panel_sin_maestro_medico`
+// (Revisión final, Important 2 y 5c) son MEDICIÓN, no enlace — nunca se restan
+// de `huerfanos`.
 export interface DiagnosticoIR {
   pais_codigo: string;
   prescriptores: {
     en_ext: number; enlazados: number; con_panel: number;
     casi_enlazados: number; huerfanos: number;
+    con_medico_codigo: number; enlazables_por_codigo: number;
+    panel_sin_maestro_medico: number;
     ejemplos_casi_enlazados: EjemploPrescriptor[];
     ejemplos_huerfanos: EjemploPrescriptor[];
+    ejemplos_enlazables_por_codigo: EjemploEnlazablePorCodigo[];
   };
   productos: {
     en_ext: number; propios: number; enlazados: number;
