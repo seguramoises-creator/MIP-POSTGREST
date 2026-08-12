@@ -34,6 +34,15 @@ ENT_MEDICO = "medico"
 ENT_FARMACIA = "farmacia"
 ENT_PRODUCTO = "producto"
 
+#: Módulo IR (Close-Up). NO entran en `ENTIDADES`: esa tupla es el orden de
+#: sincronización de las nueve dimensiones de `integracion_dimensiones_service`,
+#: que CREAN el registro interno cuando falta. Los puentes del IR solo enlazan
+#: contra lo que ya existe (ver `integracion_ir_service`), así que meterlos ahí
+#: los haría correr con una semántica que no es la suya.
+ENT_MEDICO_IR = "medico_ir"
+ENT_PRODUCTO_IR = "producto_ir"
+ENT_PERIODO_IR = "periodo_ir"
+
 #: En orden de dependencia: cada una resuelve claves foráneas contra las
 #: anteriores, así que sincronizarlas en otro orden dejaría referencias sueltas.
 ENTIDADES: tuple[str, ...] = (
