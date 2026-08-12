@@ -82,6 +82,13 @@ def _to_decimal(value) -> Decimal:
         return Decimal("0")
 
 
+#: Indicadores que el Excel YA NO alimenta. Decisión del cliente (12-ago-2026):
+#: "nunca más Excel para este proceso". EVAL_CONOCIMIENTOS se captura en la
+#: pantalla de Conocimientos, o llega por exámenes, o lo envía Mallén — las tres
+#: dejan autoría y fecha, cosa que una hoja de cálculo no hace.
+INDICADORES_SIN_EXCEL: frozenset[str] = frozenset({"EVAL_CONOCIMIENTOS"})
+
+
 # ── Columnas requeridas por tipo de archivo ──────────────────────────────────
 COLUMNAS_REQUERIDAS = {
     # Tipo principal: FACT_KPI_RM — todos los KPIs de RM en un solo archivo
@@ -169,9 +176,10 @@ def procesar_excel_task(
 
         # Fase 4: Cargar (solo en PRODUCCION)
         if modo == "PRODUCCION":
-            exitosas, errores = _cargar_datos(
+            exitosas, errores, advertencias_carga = _cargar_datos(
                 db, df, tipo_archivo, pais_codigo, ciclo_id, mapas
             )
+            advertencias.extend(advertencias_carga)
             db.commit()
 
             # Fase 5: Recalcular ranking automáticamente para TODOS los ciclos del archivo
@@ -557,6 +565,7 @@ def _cargar_datos(
     """
     exitosas = 0
     errores  = []
+    advertencias_carga: list[str] = []
 
     mapa_rm      = mapas["rm"]
     mapa_gerente = mapas["gerente"]
@@ -619,13 +628,32 @@ def _cargar_datos(
                     pass
 
         if ciclos_a_limpiar:
-            deleted = (
-                db.query(ResultadoIndicador)
-                  .filter(ResultadoIndicador.ciclo_id.in_(list(ciclos_a_limpiar)))
-                  .delete(synchronize_session=False)
-            )
-            db.flush()
-            logger.info(f"ETL: eliminados {deleted} registros previos de FACT_ResultadoIndicador (ciclos {ciclos_a_limpiar})")
+            # El borrado se acota a los indicadores que ESTE archivo trae. Antes
+            # barría el ciclo entero: cuando todo venía del Excel era coherente
+            # —borraba lo suyo y lo reponía—, pero desde la integración de Mallén
+            # destruía en silencio los cuatro indicadores de visita y VENTAS, que
+            # el Excel no repone. La regla es: un cargador solo puede reemplazar
+            # lo que él mismo vuelve a escribir.
+            codigos_archivo = {
+                str(c).strip().upper()
+                for c in df.get("indicador_codigo", pd.Series(dtype=str)).dropna()
+            } - INDICADORES_SIN_EXCEL
+            ids_a_limpiar = [i for (_p, c), i in mapa_ind.items()
+                             if isinstance(c, str) and c in codigos_archivo]
+            if ids_a_limpiar:
+                deleted = (
+                    db.query(ResultadoIndicador)
+                      .filter(ResultadoIndicador.ciclo_id.in_(list(ciclos_a_limpiar)),
+                              ResultadoIndicador.indicador_id.in_(ids_a_limpiar))
+                      .delete(synchronize_session=False)
+                )
+                db.flush()
+                logger.info(f"ETL: eliminados {deleted} registros previos de "
+                            f"FACT_ResultadoIndicador (ciclos {ciclos_a_limpiar}, "
+                            f"{len(ids_a_limpiar)} indicadores del archivo)")
+            else:
+                logger.info("ETL: el archivo no trae indicadores que el Excel "
+                            "pueda reponer — no se borra nada")
         else:
             logger.warning("ETL: no se pudo determinar ciclos_a_limpiar — se omite borrado previo")
 
@@ -648,6 +676,12 @@ def _cargar_datos(
             if tipo == "KPI_RM":
                 # Formato FACT_KPI_RM: un registro por RM + indicador + periodo
                 ind_codigo = str(row.get("indicador_codigo", "")).strip().upper()
+                if ind_codigo in INDICADORES_SIN_EXCEL:
+                    advertencias_carga.append(
+                        f"Fila {idx+2}: {ind_codigo} ya no se carga por Excel; "
+                        f"se captura en la pantalla de Conocimientos, llega por "
+                        f"exámenes o la envía Mallén, según la fuente del país.")
+                    continue
 
                 # Usar pais_codigo del RM para resolver el indicador_id correcto.
                 # Esto evita la colisión cuando el mismo codigo existe en varios países.
@@ -814,4 +848,4 @@ def _cargar_datos(
                 first_error_logged = True
             errores.append(f"Fila {idx+2}: {exc}")
 
-    return exitosas, errores
+    return exitosas, errores, advertencias_carga
