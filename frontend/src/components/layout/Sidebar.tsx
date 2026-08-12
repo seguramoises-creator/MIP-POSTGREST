@@ -11,6 +11,7 @@ import {
   MedicalServices, EditNote, EventNote, ReportProblem, Campaign, Paid,
   ChevronLeft, ChevronRight, Add, Remove, RateReview, LocalPharmacy, Storefront,
   Insights, CalendarMonth, RecordVoiceOver, Hub, Psychology, School, CloudSync,
+  Grading,
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { usePuede } from '../../store/permisos.store';
@@ -114,6 +115,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Administración',  path: '/usuarios', icon: <AdminPanelSettings />, recurso: 'config.usuarios', roles: ['ADMIN'] },
       { label: 'Conexiones de IA', path: '/conexiones-ia', icon: <Hub />, roles: ['ADMIN'] },
       { label: 'Lotes de Mallén', path: '/integracion/lotes', icon: <CloudSync />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
+      { label: 'Conocimientos', path: '/conocimientos', icon: <Grading />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION'] },
     ],
   },
 ];

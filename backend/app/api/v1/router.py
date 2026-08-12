@@ -32,6 +32,7 @@ from app.api.v1.routers.maestro_medicos import router as maestro_medicos_router
 from app.api.v1.routers.authz         import router as authz_router
 from app.api.v1.routers.farmacias     import router as farmacias_router
 from app.api.v1.routers.integracion import router as integracion_router
+from app.api.v1.routers.conocimientos import router as conocimientos_router
 
 api_router = APIRouter()
 
@@ -64,3 +65,4 @@ api_router.include_router(formacion_simulacro_router)  # Simulacro de Venta con 
 api_router.include_router(ia_conexiones_router)  # Conexiones de IA configurables (seccion 20)
 api_router.include_router(farmacias_router)  # Módulo de Farmacias (Config.DIM_Farmacia / Visita.*)
 api_router.include_router(integracion_router)  # Integracion Mallen: recepcion y validacion de lotes
+api_router.include_router(conocimientos_router)  # Fuente unica de EVAL_CONOCIMIENTOS + captura manual
