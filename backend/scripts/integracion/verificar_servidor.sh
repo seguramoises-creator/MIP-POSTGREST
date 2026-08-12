@@ -42,10 +42,17 @@ CPU=$(nproc 2>/dev/null || echo 0)
     && c_ok "Procesador: ${CPU} vCPU" \
     || c_mal "Procesador: ${CPU} vCPU — se requieren ${MIN_CPU}"
 
-RAM_GB=$(awk '/MemTotal/ {printf "%d", $2/1024/1024}' /proc/meminfo 2>/dev/null || echo 0)
-[ "$RAM_GB" -ge "$MIN_RAM_GB" ] \
-    && c_ok "Memoria: ${RAM_GB} GB" \
-    || c_mal "Memoria: ${RAM_GB} GB — se requieren ${MIN_RAM_GB} GB"
+# `MemTotal` NUNCA es la RAM física: el kernel se reserva una parte, así que una
+# máquina de 8 GB reporta ~7,7 GiB. Truncando (`%d`) daría 7 y marcaría FALLA a
+# un servidor que sí cumple — se redondea al GB más cercano, que es lo que
+# significa "8 GB de RAM" en la conversación con quien provisiona la máquina.
+RAM_MB=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)
+RAM_GB=$(( (RAM_MB + 512) / 1024 ))
+if [ "$RAM_GB" -ge "$MIN_RAM_GB" ]; then
+    c_ok "Memoria: ${RAM_GB} GB (${RAM_MB} MB visibles para el kernel)"
+else
+    c_mal "Memoria: ${RAM_GB} GB (${RAM_MB} MB visibles) — se requieren ${MIN_RAM_GB} GB"
+fi
 
 # El disco que importa es el que aloja los volúmenes de Docker, no siempre /.
 DIR_DOCKER=$(docker info --format '{{.DockerRootDir}}' 2>/dev/null || echo /var/lib/docker)
@@ -91,7 +98,18 @@ TZ_ACT=$(timedatectl show -p Timezone --value 2>/dev/null || cat /etc/timezone 2
 if [ "$TZ_ACT" = "UTC" ] || [ "$TZ_ACT" = "Etc/UTC" ]; then
     c_adv "Zona horaria: ${TZ_ACT} — el §9.4 pide la del país de operación (p. ej. America/Santo_Domingo)"
 else
-    c_ok "Zona horaria: ${TZ_ACT} (§9.4)"
+    # No basta con que NO sea UTC. Ninguno de los países donde opera VISTA
+    # (RD, PR, Centroamérica) cambia la hora, así que una zona CON horario de
+    # verano se desfasa una hora medio año contra la hora local real. Eso
+    # corrompe en silencio lo que se decide por hora del servidor: la ventana
+    # de 60 minutos del registro de visita y el corte de los ciclos.
+    INV=$(TZ="$TZ_ACT" date -d '2026-01-15 12:00' +%z 2>/dev/null)
+    VER=$(TZ="$TZ_ACT" date -d '2026-07-15 12:00' +%z 2>/dev/null)
+    if [ -n "$INV" ] && [ -n "$VER" ] && [ "$INV" != "$VER" ]; then
+        c_mal "Zona horaria: ${TZ_ACT} — OBSERVA horario de verano (${INV} en invierno, ${VER} en verano). Los países donde opera VISTA no lo hacen: medio año el servidor queda una hora corrido respecto a la hora local, y de la hora del servidor dependen la ventana de registro de visita y el cierre de ciclos. Debe ser la zona del país de operación (p. ej. America/Santo_Domingo)."
+    else
+        c_ok "Zona horaria: ${TZ_ACT}, sin horario de verano (§9.4)"
+    fi
 fi
 
 # ── §9.1 y §9.2 Docker ───────────────────────────────────────────────────────
@@ -132,7 +150,12 @@ fi
 # ── §9.2 PostgreSQL ──────────────────────────────────────────────────────────
 titulo "§9.2 Base de datos (PostgreSQL 17 en contenedor con volumen persistente)"
 
-if docker image inspect postgres:17 >/dev/null 2>&1; then
+# Sin Docker esta comprobación no puede decir NADA sobre el registro ni sobre la
+# red: culpar a la salida a internet cuando la causa real es que falta Docker
+# manda al administrador a investigar el problema equivocado.
+if ! command -v docker >/dev/null 2>&1; then
+    c_sin "Imagen postgres:17: no se puede comprobar sin Docker instalado"
+elif docker image inspect postgres:17 >/dev/null 2>&1; then
     c_ok "La imagen postgres:17 ya está en el servidor"
 elif docker pull --quiet postgres:17 >/dev/null 2>&1; then
     c_ok "La imagen postgres:17 se puede descargar (hay salida a un registro)"
