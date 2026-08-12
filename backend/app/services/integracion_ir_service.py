@@ -37,6 +37,11 @@ from app.services import maestro_medico_service
 from app.services.integracion_dimensiones_service import (
     SEVERIDAD_AVISO, SEVERIDAD_ERROR, Hallazgo,
 )
+#: Módulo-level y no dentro de `atribuir` (Ronda de correcciones 1, hallazgo
+#: menor): un import dentro de una función que corre una vez POR RECETA se
+#: resuelve una vez por receta. `visita_aprobacion_service` no importa nada de
+#: este módulo, así que no hay ciclo que evitar con un import perezoso.
+from app.services.visita_aprobacion_service import cuenta_en_ciclo
 
 #: Los tres códigos externos caben de sobra en `MapeoExterno.codigo_externo`
 #: (60): `medico_ir_codigo` y `producto_ir_codigo` son String(50) y
@@ -368,39 +373,55 @@ def _contexto(db: Session, pais_codigo: str) -> ContextoAtribucion:
     return ctx
 
 
-def atribuir(db: Session, fila, ctx: ContextoAtribucion) -> tuple[int | None, str]:
+def atribuir(fila, ctx: ContextoAtribucion) -> tuple[int | None, str]:
     """¿De qué representante es esta receta?
 
     1. Si `rm_codigo` viene informado, Mallén ya atribuyó y su decisión manda.
     2. Si no, exequátur → maestro → filas de panel de ESE médico.
-    3. Se filtran por pertenencia al panel EN EL CICLO de la receta, con
-       `cuenta_en_ciclo` — el mismo criterio que usan la planeación y la
-       cobertura. Admite `PENDIENTE_BAJA` a propósito: una baja solicitada
-       sigue contando el ciclo actual. NO se usa
+    3. El período de la receta DEBE tener ciclo mapeado. Sin esto, `ciclo_orden`
+       quedaría en `None`, y `cuenta_en_ciclo(ciclo_orden=None, ...)` ADMITE a
+       cualquier médico activo (ver su firma): el filtro de pertenencia no se
+       relajaría, se apagaría entero, y la receta se acreditaría a un
+       representante cuya pertenencia al panel nunca se evaluó para ningún
+       ciclo (Ronda de correcciones 1, Important 1). El diagnóstico lo separa
+       en `recetas.sin_ciclo` para que se sepa que la causa es el período, no
+       el prescriptor.
+    4. Los candidatos se filtran por pertenencia al panel EN EL CICLO de la
+       receta, con `cuenta_en_ciclo` — el mismo criterio que usan la
+       planeación y la cobertura. Admite `PENDIENTE_BAJA` a propósito: una
+       baja solicitada sigue contando el ciclo actual. NO se usa
        `estado_aprobacion == "APROBADO"`, que responde otra pregunta
        («¿se le puede registrar una visita hoy?») y dejaría sin atribuir las
        recetas de todo médico en proceso de baja.
-    4. Si el producto tiene línea, se desempata por ella.
-    5. Un solo candidato → atribuida. Cero o varios → no se atribuye: cuenta
-       para el mercado, que es lo que dice el §3.2 del contrato.
+    5. Si el producto tiene línea, se desempata por ella.
+    6. La decisión final se toma sobre REPRESENTANTES DISTINTOS, no sobre
+       filas de panel: `Visita.DIM_MedicoVisita` no tiene restricción única
+       sobre `(vm_id, maestro_medico_id)`, así que dos altas del mismo médico
+       bajo el mismo VM no deben leerse como dos candidatos (Ronda de
+       correcciones 1, Important 4). Un solo representante → atribuida. Cero
+       o varios → no se atribuye: cuenta para el mercado, que es lo que dice
+       el §3.2 del contrato.
     """
-    from app.services.visita_aprobacion_service import cuenta_en_ciclo
-
     if fila.rm_codigo:
         rm_id = ctx.representantes.get(fila.rm_codigo)
         if rm_id is not None:
             return rm_id, ATR_DIRECTA
         # Mallén atribuyó a un representante que VISTA no conoce: no se cae al
         # panel, porque contradecir la atribución de la fuente sería inventar.
+        # El diagnóstico distingue esta causa (interna, de sincronización) en
+        # `recetas.rm_no_enlazado` — ver `_motivo_huerfana`.
         return None, ATR_HUERFANA
 
     medico_id = ctx.medicos.get(fila.medico_ir_codigo)
     if medico_id is None:
         return None, ATR_HUERFANA
 
-    candidatos = ctx.paneles.get(medico_id, [])
     ciclo_id = ctx.periodos.get(fila.periodo_codigo)
-    ciclo_orden = ctx.ordenes.get(ciclo_id) if ciclo_id is not None else None
+    if ciclo_id is None:
+        return None, ATR_HUERFANA
+    ciclo_orden = ctx.ordenes.get(ciclo_id)
+
+    candidatos = ctx.paneles.get(medico_id, [])
     candidatos = [c for c in candidatos
                   if cuenta_en_ciclo(c[2], ciclo_orden, ctx.ordenes)]
     if not candidatos:
@@ -412,11 +433,34 @@ def atribuir(db: Session, fila, ctx: ContextoAtribucion) -> tuple[int | None, st
         if linea is not None:
             candidatos = [c for c in candidatos if c[1] == linea]
 
-    if len(candidatos) == 1:
+    vms = {c[0] for c in candidatos}
+    if len(vms) == 1:
         return candidatos[0][0], ATR_CADENA
-    if not candidatos:
+    if not vms:
         return None, ATR_HUERFANA
     return None, ATR_AMBIGUA
+
+
+def _motivo_huerfana(fila, ctx: ContextoAtribucion) -> str | None:
+    """Sub-causa de una huérfana, SOLO para el diagnóstico.
+
+    Deliberadamente separada de `atribuir`: la firma pública
+    (`atribuir(fila, ctx) -> (id|None, balde)`) no se acopla a un detalle que
+    solo el diagnóstico necesita, y estos son chequeos de pertenencia contra
+    `ctx` (ya resuelto), no una segunda pasada de la lógica de candidatos.
+    Devuelve `None` para las huérfanas "normales" (prescriptor no enlazado,
+    médico sin candidato vigente): esas ya las explican `prescriptores.huerfanos`
+    y los otros tests de la cadena, y no son un sub-balde con nombre propio.
+    """
+    if fila.rm_codigo:
+        if fila.rm_codigo not in ctx.representantes:
+            return "rm_no_enlazado"
+        return None
+    if fila.medico_ir_codigo not in ctx.medicos:
+        return None
+    if fila.periodo_codigo not in ctx.periodos:
+        return "sin_ciclo"
+    return None
 
 
 # ===========================================================================
@@ -451,6 +495,9 @@ def diagnosticar_ir(db: Session, pais_codigo: str) -> dict:
             casi.append(p)
         else:
             huerfanos.append(p)
+    # Descriptivo, NO aplica `cuenta_en_ciclo`: mide "tiene alguna fila de
+    # panel alguna vez", no "panel efectivo para un ciclo". El nombre invita a
+    # leerlo como lo segundo — no lo es (Ronda de correcciones 1, menor).
     con_panel = sum(1 for p in enlazados
                     if ctx.paneles.get(ctx.medicos[p.medico_ir_codigo]))
 
@@ -459,16 +506,54 @@ def diagnosticar_ir(db: Session, pais_codigo: str) -> dict:
     propios = [p for p in productos if p.es_propio]
     propios_sin_equivalencia = [p for p in propios
                                 if p.producto_ir_codigo not in ctx.productos]
+    # Cuenta sobre las FILAS de `ext.dimproductoir`, no sobre `len(ctx.productos)`:
+    # `ctx.productos` es el mapeo COMPLETO del país, así que si la dimensión deja
+    # de traer un producto ya mapeado el conteo por mapeos queda desfasado
+    # (Ronda de correcciones 1, menor — mismo motivo para `periodos` abajo).
+    productos_enlazados = sum(1 for p in productos
+                              if p.producto_ir_codigo in ctx.productos)
 
     periodos = (db.query(ExtDimPeriodoIR)
                 .filter(ExtDimPeriodoIR.pais_codigo == pais_codigo).all())
+    periodos_con_ciclo = sum(1 for p in periodos if p.periodo_codigo in ctx.periodos)
 
     baldes = {ATR_DIRECTA: 0, ATR_CADENA: 0, ATR_AMBIGUA: 0, ATR_HUERFANA: 0}
-    recetas = (db.query(ExtFactPrescripcionDetalle)
-               .filter(ExtFactPrescripcionDetalle.pais_codigo == pais_codigo).all())
-    for fila in recetas:
-        _, balde = atribuir(db, fila, ctx)
+    #: Sub-conteos de `huerfanas` — NO son un quinto/sexto balde: la invariante
+    #: de que los cuatro baldes suman `recetas.total` sigue intacta. Existen
+    #: para que el diagnóstico diga DÓNDE está el problema (¿el período de
+    #: Close-Up, la sincronización de representantes, o de verdad el
+    #: prescriptor?) en vez de amontonar todo bajo "huérfana" (Ronda de
+    #: correcciones 1, Important 1 e Important 2).
+    sin_ciclo = 0
+    rm_no_enlazado = 0
+    ejemplos_rm_no_enlazado: list[dict] = []
+
+    # SOLO las columnas que `atribuir`/`_motivo_huerfana` leen, y en streaming:
+    # `ext.factprescripciondetalle` puede traer cientos de miles de filas por
+    # período (ver docstring del módulo), y `ux_fp_origen` es por
+    # `(pais, origen_id)` — las filas de TODOS los períodos ya entregados
+    # conviven en la tabla, no solo las del período en curso (Ronda de
+    # correcciones 1, Important 3).
+    consulta = (db.query(ExtFactPrescripcionDetalle.origen_id,
+                         ExtFactPrescripcionDetalle.rm_codigo,
+                         ExtFactPrescripcionDetalle.medico_ir_codigo,
+                         ExtFactPrescripcionDetalle.producto_ir_codigo,
+                         ExtFactPrescripcionDetalle.periodo_codigo)
+                .filter(ExtFactPrescripcionDetalle.pais_codigo == pais_codigo))
+    total = 0
+    for fila in consulta.yield_per(1000):
+        total += 1
+        _, balde = atribuir(fila, ctx)
         baldes[balde] += 1
+        if balde == ATR_HUERFANA:
+            motivo = _motivo_huerfana(fila, ctx)
+            if motivo == "sin_ciclo":
+                sin_ciclo += 1
+            elif motivo == "rm_no_enlazado":
+                rm_no_enlazado += 1
+                if len(ejemplos_rm_no_enlazado) < EJEMPLOS:
+                    ejemplos_rm_no_enlazado.append(
+                        {"origen_id": fila.origen_id, "rm_codigo": fila.rm_codigo})
 
     return {
         "pais_codigo": pais_codigo,
@@ -488,7 +573,7 @@ def diagnosticar_ir(db: Session, pais_codigo: str) -> dict:
         "productos": {
             "en_ext": len(productos),
             "propios": len(propios),
-            "enlazados": len(ctx.productos),
+            "enlazados": productos_enlazados,
             "propios_sin_equivalencia": len(propios_sin_equivalencia),
             "ejemplos_propios_sin_equivalencia": [
                 {"codigo": p.producto_ir_codigo, "nombre": p.nombre}
@@ -496,14 +581,19 @@ def diagnosticar_ir(db: Session, pais_codigo: str) -> dict:
         },
         "periodos": {
             "en_ext": len(periodos),
-            "con_ciclo": len(ctx.periodos),
-            "sin_ciclo": len(periodos) - len(ctx.periodos),
+            "con_ciclo": periodos_con_ciclo,
+            "sin_ciclo": len(periodos) - periodos_con_ciclo,
         },
         "recetas": {
-            "total": len(recetas),
+            "total": total,
             "directas": baldes[ATR_DIRECTA],
             "por_cadena": baldes[ATR_CADENA],
             "ambiguas": baldes[ATR_AMBIGUA],
             "huerfanas": baldes[ATR_HUERFANA],
+            # Sub-conteos de `huerfanas` (no participan de la suma de los
+            # cuatro baldes de arriba, que ya cierra `total` por sí sola).
+            "sin_ciclo": sin_ciclo,
+            "rm_no_enlazado": rm_no_enlazado,
+            "ejemplos_rm_no_enlazado": ejemplos_rm_no_enlazado,
         },
     }

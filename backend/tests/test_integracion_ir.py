@@ -576,6 +576,8 @@ def test_el_diagnostico_no_escribe_nada_y_es_repetible(escenario):
 
     assert d1 == d2
     assert db.query(MapeoExterno).count() == mapeos_antes
+    # Cierra el "no escribe" para CUALQUIER tabla, no solo MapeoExterno.
+    assert not db.new and not db.dirty and not db.deleted
 
 
 def test_el_diagnostico_separa_huerfanos_de_casi_enlaces(escenario):
@@ -591,3 +593,65 @@ def test_el_diagnostico_separa_huerfanos_de_casi_enlaces(escenario):
     assert d["prescriptores"]["casi_enlazados"] == 1
     assert d["prescriptores"]["huerfanos"] == 1
     assert len(d["prescriptores"]["ejemplos_huerfanos"]) == 1
+
+
+# ── Ronda de correcciones 1 ──────────────────────────────────────────────
+
+def test_receta_de_periodo_sin_ciclo_no_se_atribuye_por_panel(escenario):
+    """Important 1: si el período no tiene ciclo mapeado, `ciclo_orden` es
+    `None`, y `cuenta_en_ciclo(ciclo_orden=None, ...)` admite a CUALQUIER
+    médico activo — el filtro de pertenencia al panel se apaga entero en vez
+    de relajarse. Sin el guard explícito, esta receta se acreditaba por error
+    a `por_cadena` aunque su pertenencia nunca se evaluó para ningún ciclo."""
+    db = escenario["db"]
+    medico = _base_ir(db, escenario)
+    _periodo_ir(db, "2026-02", ciclo_codigo=None)   # período SIN ciclo
+    _panel(db, escenario["rm"].id, medico.id)
+    _receta(db, "R-1", rm_codigo=None, periodo="2026-02")
+    db.commit()
+    ir.sincronizar_ir(db, "DO")
+
+    d = ir.diagnosticar_ir(db, "DO")
+
+    assert d["recetas"]["huerfanas"] == 1
+    assert d["recetas"]["por_cadena"] == 0
+    assert d["recetas"]["sin_ciclo"] == 1
+
+
+def test_receta_con_rm_codigo_no_mapeado_se_distingue_como_rm_no_enlazado(escenario):
+    """Important 2: Mallén ya atribuyó a un representante que VISTA todavía no
+    sincronizó (`MapeoExterno` sin esa fila). La causa es interna —falta correr
+    la sincronización de dimensiones— y el diagnóstico debe decirlo, no
+    enterrarla junto a los huérfanos por defecto de Close-Up."""
+    db = escenario["db"]
+    _base_ir(db, escenario)
+    db.add(ExtDimRepresentante(pais_codigo="DO", rm_codigo="VM99",
+                               nombre="Representante Sin Mapear", activo=True))
+    db.flush()
+    _receta(db, "R-1", rm_codigo="VM99")
+    db.commit()
+    ir.sincronizar_ir(db, "DO")
+
+    d = ir.diagnosticar_ir(db, "DO")
+
+    assert d["recetas"]["huerfanas"] == 1
+    assert d["recetas"]["rm_no_enlazado"] == 1
+
+
+def test_dos_filas_de_panel_del_mismo_representante_no_es_ambigua(escenario):
+    """Important 4: dos altas del mismo médico bajo el MISMO VM (no hay unique
+    constraint que lo impida) son dos filas de panel pero UN solo
+    representante candidato; decidir sobre filas en vez de sobre
+    representantes distintos perdía la receta al mercado sin necesidad."""
+    db = escenario["db"]
+    medico = _base_ir(db, escenario)
+    _panel(db, escenario["rm"].id, medico.id)
+    _panel(db, escenario["rm"].id, medico.id)   # segunda alta, mismo VM
+    _receta(db, "R-1", rm_codigo=None)
+    db.commit()
+    ir.sincronizar_ir(db, "DO")
+
+    d = ir.diagnosticar_ir(db, "DO")
+
+    assert d["recetas"]["por_cadena"] == 1
+    assert d["recetas"]["ambiguas"] == 0
