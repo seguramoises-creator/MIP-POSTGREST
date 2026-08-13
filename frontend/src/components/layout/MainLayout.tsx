@@ -18,6 +18,7 @@ import { usePermisosStore } from '../../store/permisos.store';
 import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
 import { miGerente, type MiGerente } from '../../services/visita.service';
+import logoImg from '../../assets/vista-logo.svg';
 import CicloPaisBadge from '../CicloPaisBadge';
 import CicloPaisHeader from '../CicloPaisHeader';
 import { useCicloStore } from '../../store/ciclo.store';
@@ -139,9 +140,23 @@ export default function MainLayout() {
           {/* Cabecera reducida a lo que informa: dónde estoy y sobre qué ciclo/país
               trabajo. La cuenta y la salida bajaron a la ranura Perfil. */}
           <Toolbar variant="dense" sx={{ justifyContent: 'space-between', gap: 1, minHeight: 52 }}>
-            <Typography noWrap sx={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.01em', minWidth: 0 }}>
-              {seccionActiva?.titulo ?? 'Inicio'}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+              {/* El logo vivía en el menú lateral y se fue con él al rediseñar la
+                  navegación. Vuelve aquí, que es donde se ve en todas las pantallas.
+
+                  SIN filtro de color, a propósito: el archivo dice `.svg` pero es un
+                  JPEG incrustado, así que no tiene transparencia. Un
+                  `brightness(0) invert(1)` —lo natural para un logo oscuro sobre
+                  barra azul— pintaría de blanco TODO el rectángulo, logo incluido.
+                  No hace falta: su fondo ya es azul marino (rgb(0,26,59)), casi el
+                  mismo que el extremo izquierdo del degradado, que es donde cae. */}
+              <Box component="img" src={logoImg} alt="VISTA"
+                   sx={{ height: 26, width: 'auto', display: 'block', flexShrink: 0,
+                         borderRadius: 0.5 }} />
+              <Typography noWrap sx={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.01em', minWidth: 0 }}>
+                {seccionActiva?.titulo ?? 'Inicio'}
+              </Typography>
+            </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
               {gd?.gerente && (
                 <Chip
