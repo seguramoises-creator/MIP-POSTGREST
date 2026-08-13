@@ -19,7 +19,7 @@ import { MoreHoriz } from '@mui/icons-material';
 
 import { useAuthStore } from '../../store/auth.store';
 import { useNavSecciones, type Destino } from './useNavSecciones';
-import { NAV_ACTIVO, NAV_BORDE, NAV_INACTIVO, NAV_PAPEL, BOTTOM_NAV_H } from './navTokens';
+import { NAV_ACTIVO, NAV_BORDE, NAV_FONDO, NAV_INACTIVO, TEXTO_TENUE, BOTTOM_NAV_H } from './navTokens';
 
 /** Ranuras visibles en la barra, contando Perfil. La referencia usa 5. */
 const RANURAS = 5;
@@ -94,7 +94,7 @@ export default function BottomNav({ activa, onPerfil }: Props) {
         aria-label="Navegación principal"
         sx={{
           position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: (t) => t.zIndex.appBar + 1,
-          bgcolor: NAV_PAPEL,                       // sólido a propósito (ver navTokens)
+          bgcolor: NAV_FONDO,                       // azul plano a propósito (ver navTokens)
           borderTop: `1px solid ${NAV_BORDE}`,
           display: 'flex',
           // Área segura de iOS: sin esto la barra queda debajo del indicador de inicio.
@@ -109,7 +109,7 @@ export default function BottomNav({ activa, onPerfil }: Props) {
 
         {ranura(
           'perfil',
-          <Avatar sx={{ width: 24, height: 24, fontSize: 12, bgcolor: NAV_ACTIVO }}>
+          <Avatar sx={{ width: 24, height: 24, fontSize: 12, bgcolor: NAV_ACTIVO, color: NAV_FONDO, fontWeight: 700 }}>
             {nombreCompleto?.[0]?.toUpperCase() || 'U'}
           </Avatar>,
           'Perfil', false, onPerfil,
@@ -128,7 +128,7 @@ export default function BottomNav({ activa, onPerfil }: Props) {
         <List sx={{ pb: 1 }}>
           {desbordadas.map((d) => (
             <ListItemButton key={d.titulo} onClick={() => irA(d)} selected={d.titulo === activa}>
-              <ListItemIcon sx={{ color: d.titulo === activa ? NAV_ACTIVO : NAV_INACTIVO, minWidth: 40 }}>
+              <ListItemIcon sx={{ color: d.titulo === activa ? NAV_FONDO : TEXTO_TENUE, minWidth: 40 }}>
                 {d.icono}
               </ListItemIcon>
               <ListItemText

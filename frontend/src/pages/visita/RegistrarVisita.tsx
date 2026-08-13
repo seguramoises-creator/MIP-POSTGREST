@@ -803,45 +803,52 @@ export default function RegistrarVisita() {
         El registro de visitas está cerrado: las visitas provienen del SFA de Mallén
         y se integran automáticamente. Lo ya registrado sigue disponible para consulta.
       </Alert>
-      {/* HERO — encabezado corporativo: título + fecha + Gerente de Distrito, con el
-          contexto País/Ciclo y el visitador integrados en un panel interior. Todo
-          con flex-wrap: se reacomoda solo en iPhone/iPad/Android. */}
+      {/* Encabezado de la pantalla.
+          ANTES era un bloque con degradado azul oscuro y un halo teal difuminado.
+          Dejó de funcionar cuando la navegación pasó a barras azules: la pestaña
+          de arriba ya dice "Registrar Visita" sobre azul, así que este bloque
+          repetía el mismo título en un segundo azul, más pesado, y las dos masas
+          competían. Ahora es una tarjeta clara: el azul se queda en el marco de la
+          app y aquí manda el contenido. Fuera también el halo decorativo — no
+          decía nada. */}
       <Box sx={{
-        background: `linear-gradient(130deg, ${NAVY} 0%, #17307a 55%, #1f6f8f 100%)`,
-        borderRadius: 4, p: { xs: 2, sm: 2.5 }, mb: 2.5, color: '#fff',
-        boxShadow: '0 12px 30px rgba(13,27,76,0.30)', position: 'relative', overflow: 'hidden',
+        bgcolor: '#fff', borderRadius: 3, p: { xs: 2, sm: 2.5 }, mb: 2.5,
+        border: '1px solid #E3E5EC', boxShadow: '0 1px 2px rgba(16,20,58,0.04)',
       }}>
-        {/* Acento decorativo sutil (círculo teal difuminado) */}
-        <Box sx={{ position: 'absolute', top: -40, right: -30, width: 150, height: 150, borderRadius: '50%',
-                   background: `radial-gradient(circle, ${TEAL}55 0%, transparent 70%)`, pointerEvents: 'none' }} />
         <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" rowGap={1}>
-          <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.16)', width: { xs: 40, sm: 48 }, height: { xs: 40, sm: 48 },
-                        border: '1px solid rgba(255,255,255,0.3)' }}>
-            <Assignment sx={{ color: '#fff', fontSize: { xs: 22, sm: 26 } }} />
-          </Avatar>
+          {/* Cuadrado con tinte de marca en vez de círculo sobre degradado: pesa
+              menos y deja el acento azul donde se necesita, no de fondo. */}
+          <Box sx={{
+            width: 44, height: 44, borderRadius: 2, flexShrink: 0,
+            bgcolor: 'rgba(26,35,126,0.08)', display: 'grid', placeItems: 'center',
+          }}>
+            <Assignment sx={{ color: NAVY, fontSize: 24 }} />
+          </Box>
           <Box sx={{ flex: 1, minWidth: 170 }}>
-            <Typography fontWeight={900} sx={{ color: '#fff', letterSpacing: '-0.3px', lineHeight: 1.15,
-                                               fontSize: { xs: '1.25rem', sm: '1.55rem' } }}>
+            <Typography sx={{ fontWeight: 700, color: '#10143A', letterSpacing: '-0.02em',
+                              lineHeight: 1.2, fontSize: { xs: '1.15rem', sm: '1.35rem' } }}>
               Registrar Visita
             </Typography>
-            <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.82)', display: 'block' }}>
+            <Typography sx={{ color: '#6B7183', fontSize: 13, display: 'block' }}>
               {(() => { const f = new Date().toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' });
                         return f.charAt(0).toUpperCase() + f.slice(1); })()} · Captura en campo
             </Typography>
           </Box>
           {gd?.gerente && (
-            <Chip icon={<SupervisorAccount sx={{ color: '#fff !important' }} />}
+            <Chip size="small" variant="outlined"
+                  icon={<SupervisorAccount sx={{ color: `${NAVY} !important` }} />}
                   label={`GD: ${gd.gerente}${gd.linea ? ` · ${gd.linea}` : ''}`}
-                  sx={{ bgcolor: 'rgba(255,255,255,0.14)', color: '#fff', fontWeight: 700,
-                        border: '1px solid rgba(255,255,255,0.28)', maxWidth: '100%' }} />
+                  sx={{ color: NAVY, borderColor: 'rgba(26,35,126,0.35)', fontWeight: 600, maxWidth: '100%' }} />
           )}
         </Stack>
 
         {/* Sin contexto País/Ciclo: el registro SIEMPRE va al ciclo abierto del país
             del visitador (el backend lo impone) — mostrarlo aquí era redundante.
-            El panel interior solo aparece para gestión (selector de visitador). */}
+            El selector solo aparece para gestión; el VM ya es él mismo.
+            Va directo sobre la tarjeta: el panel dentro del panel que había antes
+            solo existía para despegarlo del degradado. */}
         {!esVM && (
-          <Box sx={{ mt: 2, bgcolor: 'rgba(255,255,255,0.97)', borderRadius: 2, p: { xs: 1.25, sm: 1.5 } }}>
+          <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #EEF0F4' }}>
             <TextField select fullWidth size="small" label="Visitador (VM)" value={vmId}
                        helperText="Elige el visitador para ver su agenda del día"
                        onChange={(e) => setVmId(e.target.value === '' ? '' : Number(e.target.value))}>

@@ -11,7 +11,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Box, ButtonBase, Typography } from '@mui/material';
 
 import type { NavItem } from './Sidebar';
-import { NAV_ACTIVO, NAV_BORDE, NAV_INACTIVO, NAV_PAPEL } from './navTokens';
+import { NAV_ACTIVO, NAV_BORDE, NAV_FONDO, NAV_INACTIVO } from './navTokens';
 
 export default function TopTabs({ items }: { items: NavItem[] }) {
   const navigate = useNavigate();
@@ -32,8 +32,8 @@ export default function TopTabs({ items }: { items: NavItem[] }) {
       component="nav"
       aria-label="Secciones"
       sx={{
-        display: 'flex', gap: 0.5, overflowX: 'auto', bgcolor: NAV_PAPEL,
-        borderBottom: `1px solid ${NAV_BORDE}`,
+        display: 'flex', gap: 0.5, overflowX: 'auto', bgcolor: NAV_FONDO,
+        borderTop: `1px solid ${NAV_BORDE}`,
         px: 1,
         // La barra de scroll horizontal en escritorio ensucia y ocupa alto; el
         // desplazamiento sigue disponible con rueda, gesto y teclado.

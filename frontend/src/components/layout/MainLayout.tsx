@@ -10,7 +10,7 @@ import { useState, useEffect, useMemo } from 'react';
 import BottomNav from './BottomNav';
 import TopTabs from './TopTabs';
 import { useNavSecciones } from './useNavSecciones';
-import { APP_FONDO, BOTTOM_NAV_H, NAV_ACTIVO, NAV_BORDE, NAV_INACTIVO } from './navTokens';
+import { APP_FONDO, BOTTOM_NAV_H, NAV_ACTIVO, NAV_FONDO, TEXTO_TENUE } from './navTokens';
 import InstalarAppDialog from '../InstalarAppDialog';
 import AvisoErrorGlobal from '../AvisoErrorGlobal';
 import { useAuthStore } from '../../store/auth.store';
@@ -126,16 +126,14 @@ export default function MainLayout() {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {/* Lienzo de la app: capa fija detrás de todo (ver APP_FONDO en navTokens). */}
-      <Box aria-hidden sx={{ position: 'fixed', inset: 0, zIndex: -1, background: APP_FONDO }} />
       <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <AppBar
           position="sticky"
           elevation={0}
           sx={{
-            bgcolor: 'white',
-            borderBottom: `1px solid ${NAV_BORDE}`,
-            color: 'text.primary',
+            bgcolor: NAV_FONDO,
+            borderBottom: 'none',
+            color: NAV_ACTIVO,
           }}
         >
           {/* Cabecera reducida a lo que informa: dónde estoy y sobre qué ciclo/país
@@ -148,11 +146,13 @@ export default function MainLayout() {
               {gd?.gerente && (
                 <Chip
                   size="small"
-                  color="primary"
                   variant="outlined"
-                  icon={<SupervisorAccount />}
+                  icon={<SupervisorAccount sx={{ color: `${NAV_ACTIVO} !important` }} />}
                   label={gd.gerente}
-                  sx={{ fontWeight: 600, display: { xs: 'none', md: 'inline-flex' } }}
+                  sx={{
+                    fontWeight: 600, display: { xs: 'none', md: 'inline-flex' },
+                    color: NAV_ACTIVO, borderColor: 'rgba(255,255,255,0.45)',
+                  }}
                 />
               )}
               <CicloPaisBadge />
@@ -169,22 +169,22 @@ export default function MainLayout() {
           PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, pb: 'env(safe-area-inset-bottom, 0px)' } }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, pt: 2, pb: 1.5 }}>
-            <Avatar sx={{ width: 44, height: 44, bgcolor: NAV_ACTIVO, fontWeight: 700 }}>
+            <Avatar sx={{ width: 44, height: 44, bgcolor: NAV_FONDO, fontWeight: 700 }}>
               {nombreCompleto?.[0]?.toUpperCase() || 'U'}
             </Avatar>
             <Box sx={{ minWidth: 0 }}>
               <Typography noWrap sx={{ fontWeight: 700, fontSize: 16 }}>{nombreCompleto}</Typography>
-              {rol && <Typography sx={{ fontSize: 13, color: NAV_INACTIVO }}>{rol.replace(/_/g, ' ')}</Typography>}
+              {rol && <Typography sx={{ fontSize: 13, color: TEXTO_TENUE }}>{rol.replace(/_/g, ' ')}</Typography>}
             </Box>
           </Box>
           <Divider />
           <List>
             <ListItemButton onClick={() => { setPerfilOpen(false); setInstalarOpen(true); }}>
-              <ListItemIcon sx={{ minWidth: 40, color: NAV_INACTIVO }}><InstallMobile /></ListItemIcon>
+              <ListItemIcon sx={{ minWidth: 40, color: TEXTO_TENUE }}><InstallMobile /></ListItemIcon>
               <ListItemText primary="Instalar app" primaryTypographyProps={{ fontWeight: 600 }} />
             </ListItemButton>
             <ListItemButton onClick={abrirCambioPassword}>
-              <ListItemIcon sx={{ minWidth: 40, color: NAV_INACTIVO }}><LockReset /></ListItemIcon>
+              <ListItemIcon sx={{ minWidth: 40, color: TEXTO_TENUE }}><LockReset /></ListItemIcon>
               <ListItemText primary="Cambiar contraseña" primaryTypographyProps={{ fontWeight: 600 }} />
             </ListItemButton>
             <ListItemButton onClick={handleLogout} sx={{ color: 'error.main' }}>
@@ -224,21 +224,10 @@ export default function MainLayout() {
 
         {/* El relleno inferior deja libre el alto de la barra fija MÁS el área segura
             de iOS: sin él, la última fila de cada pantalla queda tapada. */}
+        {/* Área de información: blanca/gris claro como siempre. El azul se queda
+            en las dos barras, que son el marco de la app. */}
         <Box sx={{
-          // Transparente: el color lo pone el lienzo fijo de arriba.
-          flexGrow: 1, p: { xs: 1.5, sm: 3 }, bgcolor: 'transparent', minWidth: 0, overflowX: 'hidden',
-          // Los títulos de cada pantalla se escribían directamente sobre el fondo,
-          // que hasta ahora era gris claro. Con el lienzo oscuro quedaban negros
-          // sobre azul marino, ilegibles. Se aclaran SOLO ahí: dentro de un Paper
-          // MUI ya fija `color: text.primary`, así que el texto de las tarjetas
-          // conserva su color oscuro sobre superficie clara — que es lo que se
-          // quiere leer al sol.
-          color: '#fff',
-          // Las bajadas de cada pantalla usan `color="text.secondary"`, que es un
-          // color EXPLÍCITO y por tanto no hereda el blanco de arriba. Se aclaran
-          // las que están fuera de una tarjeta; `:not(.MuiPaper-root *)` es lo que
-          // deja intacto el texto secundario de dentro (Alert y Card son Paper).
-          '& .MuiTypography-root:not(.MuiPaper-root *)': { color: 'rgba(255,255,255,0.92)' },
+          flexGrow: 1, p: { xs: 1.5, sm: 3 }, bgcolor: APP_FONDO, minWidth: 0, overflowX: 'hidden',
           pb: { xs: `calc(${BOTTOM_NAV_H}px + env(safe-area-inset-bottom, 0px) + 16px)`,
                 sm: `calc(${BOTTOM_NAV_H}px + env(safe-area-inset-bottom, 0px) + 24px)` },
         }}>
