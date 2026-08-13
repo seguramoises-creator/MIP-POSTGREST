@@ -1,12 +1,16 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import {
-  Box, AppBar, Toolbar, Typography, IconButton,
-  Tooltip, Avatar, Menu, MenuItem, Divider, Chip,
+  Box, AppBar, Toolbar, Typography,
+  Avatar, Divider, Chip,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Alert, Stack,
+  Drawer, List, ListItemButton, ListItemIcon, ListItemText,
 } from '@mui/material';
-import { Logout, AccountCircle, LockReset, SupervisorAccount, Menu as MenuIcon, InstallMobile } from '@mui/icons-material';
-import { useState, useEffect } from 'react';
-import Sidebar, { DRAWER_WIDTH } from './Sidebar';
+import { Logout, LockReset, SupervisorAccount, InstallMobile } from '@mui/icons-material';
+import { useState, useEffect, useMemo } from 'react';
+import BottomNav from './BottomNav';
+import TopTabs from './TopTabs';
+import { useNavSecciones } from './useNavSecciones';
+import { APP_FONDO, BOTTOM_NAV_H, NAV_ACTIVO, NAV_BORDE, NAV_INACTIVO } from './navTokens';
 import InstalarAppDialog from '../InstalarAppDialog';
 import AvisoErrorGlobal from '../AvisoErrorGlobal';
 import { useAuthStore } from '../../store/auth.store';
@@ -55,20 +59,26 @@ export default function MainLayout() {
   const debeCambiarPassword = useAuthStore((s) => s.debeCambiarPassword);
   const passwordMotivo = useAuthStore((s) => s.passwordMotivo);
   const passwordExpiraEnDias = useAuthStore((s) => s.passwordExpiraEnDias);
-  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [perfilOpen, setPerfilOpen] = useState(false);   // hoja de Perfil (última ranura)
   const [gd, setGd] = useState<MiGerente | null>(null);
-  const [mobileOpen, setMobileOpen] = useState(false);   // menú lateral en móvil (overlay)
   const [instalarOpen, setInstalarOpen] = useState(false); // modal "Instalar app" (PWA)
+
+  // Sección activa = la que contiene la ruta actual. De ella salen las pestañas
+  // de arriba y la ranura resaltada abajo, así que se calcula UNA vez aquí.
+  const secciones = useNavSecciones();
+  const seccionActiva = useMemo(
+    () => secciones.find((s) => s.items.some((i) => pathname.startsWith(i.path))),
+    [secciones, pathname]);
 
   // RBAC Fase 2: carga las capacidades del usuario (/authz/me/permisos) una vez, al entrar
   // al layout autenticado. La navegación y las rutas derivan de aquí (con fallback por rol).
   const cargarPermisos = usePermisosStore((s) => s.cargar);
   useEffect(() => { if (accessToken) cargarPermisos(); }, [accessToken, cargarPermisos]);
 
-  // Red de seguridad: cerrar el menú lateral móvil en CADA cambio de ruta. Evita que
+  // Red de seguridad: cerrar la hoja de Perfil en CADA cambio de ruta. Evita que
   // el Drawer (o su backdrop) quede abierto/atascado tras navegar — causa del velo gris
-  // congelado en Safari iOS. Complementa el onMobileClose del click en cada ítem.
-  useEffect(() => { setMobileOpen(false); }, [pathname]);
+  // congelado en Safari iOS.
+  useEffect(() => { setPerfilOpen(false); }, [pathname]);
 
   // El representante ve su Gerente de Distrito de la línea arriba a la derecha.
   useEffect(() => {
@@ -92,7 +102,7 @@ export default function MainLayout() {
     navigate('/login');
   };
 
-  const abrirCambioPassword = () => { setAnchorEl(null); setPwMsg(null); setPwActual(''); setPwNueva(''); setPwConfirmar(''); setPwOpen(true); };
+  const abrirCambioPassword = () => { setPerfilOpen(false); setPwMsg(null); setPwActual(''); setPwNueva(''); setPwConfirmar(''); setPwOpen(true); };
 
   const handleCambiarPassword = async () => {
     if (!pwCoincide) { setPwMsg({ tipo: 'error', texto: 'La nueva contraseña y su confirmación no coinciden.' }); return; }
@@ -116,86 +126,73 @@ export default function MainLayout() {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <Sidebar mobileOpen={mobileOpen} onMobileClose={() => setMobileOpen(false)} />
+      {/* Lienzo de la app: capa fija detrás de todo (ver APP_FONDO en navTokens). */}
+      <Box aria-hidden sx={{ position: 'fixed', inset: 0, zIndex: -1, background: APP_FONDO }} />
       <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <AppBar
           position="sticky"
           elevation={0}
           sx={{
             bgcolor: 'white',
-            borderBottom: '1px solid',
-            borderColor: 'divider',
+            borderBottom: `1px solid ${NAV_BORDE}`,
             color: 'text.primary',
           }}
         >
-          <Toolbar sx={{ justifyContent: 'space-between', gap: 1 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-              {/* Botón ☰ — solo en móvil/tablet; abre el menú lateral en overlay. */}
-              <IconButton edge="start" onClick={() => setMobileOpen(true)}
-                          aria-label="Abrir menú" sx={{ display: { xs: 'inline-flex', md: 'none' } }}>
-                <MenuIcon />
-              </IconButton>
-              {/* Título largo: oculto en teléfono (app-like); visible desde tablet. */}
-              <Typography variant="subtitle1" fontWeight={600} color="text.secondary" noWrap
-                          sx={{ fontSize: { sm: '0.9rem', md: '1rem' }, display: { xs: 'none', sm: 'block' } }}>
-                Sistema Corporativo de Gestión Comercial
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.75, sm: 1.5 } }}>
-              <CicloPaisBadge />
+          {/* Cabecera reducida a lo que informa: dónde estoy y sobre qué ciclo/país
+              trabajo. La cuenta y la salida bajaron a la ranura Perfil. */}
+          <Toolbar variant="dense" sx={{ justifyContent: 'space-between', gap: 1, minHeight: 52 }}>
+            <Typography noWrap sx={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.01em', minWidth: 0 }}>
+              {seccionActiva?.titulo ?? 'Inicio'}
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
               {gd?.gerente && (
-                <Tooltip title={`Gerente de Distrito${gd.linea ? ` · Línea ${gd.linea}` : ''}`}>
-                  <Chip
-                    size="small"
-                    color="primary"
-                    variant="outlined"
-                    icon={<SupervisorAccount />}
-                    label={`Gerente de Distrito: ${gd.gerente}`}
-                    sx={{ fontWeight: 600, display: { xs: 'none', md: 'inline-flex' } }}
-                  />
-                </Tooltip>
+                <Chip
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  icon={<SupervisorAccount />}
+                  label={gd.gerente}
+                  sx={{ fontWeight: 600, display: { xs: 'none', md: 'inline-flex' } }}
+                />
               )}
-              {nombreCompleto && (
-                <Typography
-                  variant="body2"
-                  fontWeight={600}
-                  noWrap
-                  sx={{ color: 'text.primary', letterSpacing: '0.2px', display: { xs: 'none', md: 'block' } }}
-                >
-                  {nombreCompleto}
-                </Typography>
-              )}
-              <Tooltip title="Instalar app (iOS / Android)">
-                <IconButton onClick={() => setInstalarOpen(true)} size="small" color="primary" aria-label="Instalar app">
-                  <InstallMobile />
-                </IconButton>
-              </Tooltip>
-              <Tooltip title="Opciones de cuenta">
-                <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small">
-                  <Avatar sx={{ width: 34, height: 34, bgcolor: 'primary.main', fontSize: '0.9rem' }}>
-                    {nombreCompleto?.[0]?.toUpperCase() || 'U'}
-                  </Avatar>
-                </IconButton>
-              </Tooltip>
+              <CicloPaisBadge />
             </Box>
           </Toolbar>
+          <TopTabs items={seccionActiva?.items ?? []} />
         </AppBar>
 
-        <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
-          <MenuItem disabled>
-            <AccountCircle sx={{ mr: 1 }} /> {nombreCompleto}
-          </MenuItem>
+        {/* Perfil — recoge lo que antes colgaba del avatar de arriba a la derecha. */}
+        <Drawer
+          anchor="bottom"
+          open={perfilOpen}
+          onClose={() => setPerfilOpen(false)}
+          PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, pb: 'env(safe-area-inset-bottom, 0px)' } }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, pt: 2, pb: 1.5 }}>
+            <Avatar sx={{ width: 44, height: 44, bgcolor: NAV_ACTIVO, fontWeight: 700 }}>
+              {nombreCompleto?.[0]?.toUpperCase() || 'U'}
+            </Avatar>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography noWrap sx={{ fontWeight: 700, fontSize: 16 }}>{nombreCompleto}</Typography>
+              {rol && <Typography sx={{ fontSize: 13, color: NAV_INACTIVO }}>{rol.replace(/_/g, ' ')}</Typography>}
+            </Box>
+          </Box>
           <Divider />
-          <MenuItem onClick={() => { setAnchorEl(null); setInstalarOpen(true); }}>
-            <InstallMobile sx={{ mr: 1 }} /> Instalar app
-          </MenuItem>
-          <MenuItem onClick={abrirCambioPassword}>
-            <LockReset sx={{ mr: 1 }} /> Cambiar contraseña
-          </MenuItem>
-          <MenuItem onClick={handleLogout} sx={{ color: 'error.main' }}>
-            <Logout sx={{ mr: 1 }} /> Cerrar sesión
-          </MenuItem>
-        </Menu>
+          <List>
+            <ListItemButton onClick={() => { setPerfilOpen(false); setInstalarOpen(true); }}>
+              <ListItemIcon sx={{ minWidth: 40, color: NAV_INACTIVO }}><InstallMobile /></ListItemIcon>
+              <ListItemText primary="Instalar app" primaryTypographyProps={{ fontWeight: 600 }} />
+            </ListItemButton>
+            <ListItemButton onClick={abrirCambioPassword}>
+              <ListItemIcon sx={{ minWidth: 40, color: NAV_INACTIVO }}><LockReset /></ListItemIcon>
+              <ListItemText primary="Cambiar contraseña" primaryTypographyProps={{ fontWeight: 600 }} />
+            </ListItemButton>
+            <ListItemButton onClick={handleLogout} sx={{ color: 'error.main' }}>
+              <ListItemIcon sx={{ minWidth: 40, color: 'error.main' }}><Logout /></ListItemIcon>
+              <ListItemText primary="Cerrar sesión" primaryTypographyProps={{ fontWeight: 700 }} />
+            </ListItemButton>
+          </List>
+        </Drawer>
 
         <InstalarAppDialog open={instalarOpen} onClose={() => setInstalarOpen(false)} />
         <AvisoErrorGlobal />
@@ -225,7 +222,26 @@ export default function MainLayout() {
           </DialogActions>
         </Dialog>
 
-        <Box sx={{ flexGrow: 1, p: { xs: 1.5, sm: 3 }, bgcolor: '#f5f6fa', minWidth: 0, overflowX: 'hidden' }}>
+        {/* El relleno inferior deja libre el alto de la barra fija MÁS el área segura
+            de iOS: sin él, la última fila de cada pantalla queda tapada. */}
+        <Box sx={{
+          // Transparente: el color lo pone el lienzo fijo de arriba.
+          flexGrow: 1, p: { xs: 1.5, sm: 3 }, bgcolor: 'transparent', minWidth: 0, overflowX: 'hidden',
+          // Los títulos de cada pantalla se escribían directamente sobre el fondo,
+          // que hasta ahora era gris claro. Con el lienzo oscuro quedaban negros
+          // sobre azul marino, ilegibles. Se aclaran SOLO ahí: dentro de un Paper
+          // MUI ya fija `color: text.primary`, así que el texto de las tarjetas
+          // conserva su color oscuro sobre superficie clara — que es lo que se
+          // quiere leer al sol.
+          color: '#fff',
+          // Las bajadas de cada pantalla usan `color="text.secondary"`, que es un
+          // color EXPLÍCITO y por tanto no hereda el blanco de arriba. Se aclaran
+          // las que están fuera de una tarjeta; `:not(.MuiPaper-root *)` es lo que
+          // deja intacto el texto secundario de dentro (Alert y Card son Paper).
+          '& .MuiTypography-root:not(.MuiPaper-root *)': { color: 'rgba(255,255,255,0.92)' },
+          pb: { xs: `calc(${BOTTOM_NAV_H}px + env(safe-area-inset-bottom, 0px) + 16px)`,
+                sm: `calc(${BOTTOM_NAV_H}px + env(safe-area-inset-bottom, 0px) + 24px)` },
+        }}>
           {cicloAbierto?.vencido && (
             <Alert
               severity="warning"
@@ -260,6 +276,8 @@ export default function MainLayout() {
           <Outlet />
         </Box>
       </Box>
+
+      <BottomNav activa={seccionActiva?.titulo ?? null} onPerfil={() => setPerfilOpen(true)} />
     </Box>
   );
 }

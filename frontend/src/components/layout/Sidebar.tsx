@@ -30,7 +30,7 @@ const TXT_ON = '#ffffff';
 const ICO_ON = 'rgba(180,215,255,1)';
 const DIV_COLOR = 'rgba(160,195,255,0.22)';
 
-interface NavItem {
+export interface NavItem {
   label: string;
   path: string;
   icon: React.ReactNode;
@@ -39,7 +39,7 @@ interface NavItem {
   accion?: string;       // acción a evaluar sobre el recurso (default 'read')
 }
 
-interface NavSection {
+export interface NavSection {
   title: string | null;   // null = sin encabezado (el home)
   items: NavItem[];
 }
@@ -123,6 +123,20 @@ export const NAV_SECTIONS: NavSection[] = [
 // Lista plana (en el orden agrupado) — la usa App.tsx para resolver la ruta inicial por rol.
 export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((s) => s.items);
 
+/**
+ * ⚠️ ESTE COMPONENTE YA NO SE MONTA (ago-2026).
+ *
+ * La navegación pasó al patrón de app móvil —barra inferior de secciones
+ * (`BottomNav`) + pestañas de la sección activa (`TopTabs`)— en TODOS los anchos,
+ * así que `MainLayout` dejó de renderizar el menú lateral. Se conserva el archivo
+ * porque de él siguen saliendo `NAV_SECTIONS` / `NAV_ITEMS`, que son la fuente
+ * única del menú y las consumen la navegación nueva y `App.tsx` (ruta inicial por
+ * rol). Mismo criterio de "código muerto por no registro" que `comercial.py`.
+ *
+ * Si se vuelve a montar, ojo: duplicaría los destinos que ya ofrece la barra
+ * inferior. Lo que casi siempre se quiere tocar aquí es la CONSTANTE de arriba,
+ * no este componente.
+ */
 export default function Sidebar({ mobileOpen = false, onMobileClose }:
   { mobileOpen?: boolean; onMobileClose?: () => void } = {}) {
   const navigate = useNavigate();
