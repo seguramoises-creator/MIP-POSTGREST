@@ -353,12 +353,16 @@ export default function PlaneacionVisita() {
       )}
 
       {/* Filtros (solo afectan lo mostrado; el guardado persiste TODO el panel) */}
-      <Card variant="outlined" sx={{ mb: 2, bgcolor: '#f5f8ff', borderColor: '#bbdefb' }}>
+      <Card variant="outlined" sx={{ mb: 2, bgcolor: '#fff', borderColor: '#1a237e',
+                                   borderWidth: 1.5, borderRadius: 3 }}>
         <Box sx={{ p: 1.5 }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
-          <Stack direction="row" spacing={0.5} alignItems="center" sx={{ color: 'primary.main' }}>
+          <Stack direction="row" spacing={0.75} alignItems="center"
+                 sx={{ color: '#1a237e', width: { xs: '100%', md: 'auto' },
+                       pb: { xs: 1, md: 0 }, mb: { xs: 0.5, md: 0 },
+                       borderBottom: { xs: '1px solid #EEF0F4', md: 'none' } }}>
             <FilterList fontSize="small" />
-            <Typography variant="body2" fontWeight={700}>Filtrar</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 700, letterSpacing: '0.02em' }}>Filtrar</Typography>
           </Stack>
           <TextField size="small" label="Buscar médico" value={busqueda} sx={{ minWidth: 240, bgcolor: '#fff' }}
                      onChange={(e) => setBusqueda(e.target.value)} placeholder="Nombre del médico…"

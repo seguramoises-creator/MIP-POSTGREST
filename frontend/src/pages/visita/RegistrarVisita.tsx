@@ -18,7 +18,7 @@ import {
 
 // ── Paleta profesional (médica / farmacéutica) ───────────────────────────────
 const NAVY = '#0d1b4c';       // azul corporativo profundo
-const NAVY_BORDE = '#1a237e'; // azul de VISTA (primary.main) — bordes de tarjeta
+const AZUL_VISTA = '#1a237e'; // azul de VISTA (primary.main) — titulo y borde de tarjeta
 const TEAL = '#0f9b8e';       // acento clínico (teal-verde)
 const INK = '#1e293b';        // texto principal
 const SOFT_SHADOW = '0 1px 3px rgba(16,24,40,0.06), 0 6px 20px rgba(16,24,40,0.05)';
@@ -816,7 +816,7 @@ export default function RegistrarVisita() {
         bgcolor: '#fff', borderRadius: 3, p: { xs: 2, sm: 2.5 }, mb: 2.5,
         // Borde en el azul de VISTA — es lo que ata la tarjeta al marco de la app
         // ahora que ya no lleva el degradado dentro.
-        border: `1.5px solid ${NAVY_BORDE}`, boxShadow: '0 1px 2px rgba(16,20,58,0.04)',
+        border: `1.5px solid ${AZUL_VISTA}`, boxShadow: '0 1px 2px rgba(16,20,58,0.04)',
       }}>
         <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" rowGap={1}>
           {/* Cuadrado con tinte de marca en vez de círculo sobre degradado: pesa
@@ -825,10 +825,10 @@ export default function RegistrarVisita() {
             width: 44, height: 44, borderRadius: 2, flexShrink: 0,
             bgcolor: 'rgba(26,35,126,0.08)', display: 'grid', placeItems: 'center',
           }}>
-            <Assignment sx={{ color: NAVY, fontSize: 24 }} />
+            <Assignment sx={{ color: AZUL_VISTA, fontSize: 24 }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 170 }}>
-            <Typography sx={{ fontWeight: 700, color: '#10143A', letterSpacing: '-0.02em',
+            <Typography sx={{ fontWeight: 700, color: AZUL_VISTA, letterSpacing: '-0.02em',
                               lineHeight: 1.2, fontSize: { xs: '1.15rem', sm: '1.35rem' } }}>
               Registrar Visita
             </Typography>
@@ -839,9 +839,9 @@ export default function RegistrarVisita() {
           </Box>
           {gd?.gerente && (
             <Chip size="small" variant="outlined"
-                  icon={<SupervisorAccount sx={{ color: `${NAVY} !important` }} />}
+                  icon={<SupervisorAccount sx={{ color: `${AZUL_VISTA} !important` }} />}
                   label={`GD: ${gd.gerente}${gd.linea ? ` · ${gd.linea}` : ''}`}
-                  sx={{ color: NAVY, borderColor: 'rgba(26,35,126,0.35)', fontWeight: 600, maxWidth: '100%' }} />
+                  sx={{ color: AZUL_VISTA, borderColor: 'rgba(26,35,126,0.35)', fontWeight: 600, maxWidth: '100%' }} />
           )}
         </Stack>
 
