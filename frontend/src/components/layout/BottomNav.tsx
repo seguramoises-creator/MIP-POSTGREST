@@ -10,7 +10,7 @@
  * de la sección activa. La última ranura es siempre Perfil — ahí se recogió la
  * salida que antes vivía arriba a la derecha.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, ButtonBase, Typography, Drawer, List, ListItemButton, ListItemIcon, ListItemText, Avatar,
@@ -21,8 +21,15 @@ import { useAuthStore } from '../../store/auth.store';
 import { useNavSecciones, type Destino } from './useNavSecciones';
 import { NAV_ACTIVO, NAV_AZUL, NAV_BORDE, NAV_FONDO, NAV_INACTIVO, TEXTO_TENUE, BOTTOM_NAV_H } from './navTokens';
 
-/** Ranuras visibles en la barra, contando Perfil. La referencia usa 5. */
-const RANURAS = 5;
+/**
+ * Ancho mínimo de una ranura para que su etiqueta se lea entera ("Desempeño" es
+ * la más larga). De aquí sale cuántas caben: la referencia usa 5 porque es un
+ * teléfono, pero en un monitor esconder secciones detrás de "Más" teniendo sitio
+ * de sobra es esconderlas por copiar una restricción que ahí no existe.
+ */
+const ANCHO_MIN_RANURA = 104;
+/** Mínimo razonable en pantallas muy estrechas. */
+const RANURAS_MIN = 5;
 
 interface Props {
   /** Sección activa (título, o null para el home). */
@@ -37,14 +44,27 @@ export default function BottomNav({ activa, onPerfil }: Props) {
   const secciones = useNavSecciones();
   const [masAbierto, setMasAbierto] = useState(false);
 
-  // 4 ranuras para secciones + Perfil. Si hay más de 4 secciones visibles, la
-  // cuarta pasa a ser "Más" y recoge el resto: preferible a recortar en silencio
-  // destinos a los que el usuario sí tiene acceso.
+  // Cuántas ranuras caben AHORA. Se recalcula al cambiar el tamaño porque el
+  // mismo usuario pasa del teléfono al monitor, y girar el teléfono ya cambia
+  // el veredicto.
+  const [ancho, setAncho] = useState(() => (typeof window === 'undefined' ? 1024 : window.innerWidth));
+  useEffect(() => {
+    const alRedimensionar = () => setAncho(window.innerWidth);
+    window.addEventListener('resize', alRedimensionar);
+    return () => window.removeEventListener('resize', alRedimensionar);
+  }, []);
+
+  // Las secciones que caben directas + Perfil. Si no caben todas, la última
+  // ranura de sección pasa a ser "Más" y recoge el resto: preferible a recortar
+  // en silencio destinos a los que el usuario sí tiene acceso.
   const { directas, desbordadas } = useMemo(() => {
-    const cupo = RANURAS - 1;
+    // +1 = la ranura de Perfil, que siempre está.
+    const ranuras = Math.max(RANURAS_MIN, Math.min(secciones.length + 1,
+                                                   Math.floor(ancho / ANCHO_MIN_RANURA)));
+    const cupo = ranuras - 1;
     if (secciones.length <= cupo) return { directas: secciones, desbordadas: [] as Destino[] };
     return { directas: secciones.slice(0, cupo - 1), desbordadas: secciones.slice(cupo - 1) };
-  }, [secciones]);
+  }, [secciones, ancho]);
 
   const irA = (d: Destino) => {
     // Si ya se está dentro de la sección, no se navega: se respeta la pestaña abierta.
