@@ -24,12 +24,36 @@
  * vez de sumarse a ella.
  */
 
-/** Fondo de ambas barras: el primario de VISTA, sin retocar. */
-export const NAV_FONDO = '#1a237e';
+/**
+ * Fondo de ambas barras: el degradado azul de VISTA.
+ *
+ * Es el mismo que usaban las cabeceras del módulo Visita, así que el azul de las
+ * barras y el de la marca son literalmente el mismo color. Se aplica con
+ * `background` (no `bgcolor`): un degradado no es un color y `bgcolor` lo ignora.
+ *
+ * El tramo más claro (`#1f6f8f`) es el que decide la legibilidad: es ahí donde el
+ * blanco tiene menos contraste, así que es contra ESE punto —y no contra el azul
+ * oscuro del inicio— donde hay que medir si las etiquetas se leen.
+ */
+export const NAV_FONDO = 'linear-gradient(130deg, #0d1b4c 0%, #17307a 55%, #1f6f8f 100%)';
+
+/** Azul de VISTA plano — bordes, iconos y acentos sobre superficie clara. */
+export const NAV_AZUL = '#1a237e';
+/** Tramo más claro del degradado: el peor caso para medir contraste. */
+export const NAV_FONDO_CLARO = '#1f6f8f';
 /** Activo sobre el azul: blanco puro (13.2:1). */
 export const NAV_ACTIVO = '#FFFFFF';
-/** Inactivo sobre el azul: blanco atenuado, todavía muy por encima de AA. */
-export const NAV_INACTIVO = 'rgba(255,255,255,0.78)';
+/**
+ * Inactivo sobre el azul.
+ *
+ * 0.92 y no el 0.75-0.78 habitual porque el degradado termina en un azul-teal
+ * claro (`#1f6f8f`), y es en ESE tramo —la derecha de las barras— donde las
+ * etiquetas tienen menos contraste. Con 0.78 caían a 4.11:1, por debajo del
+ * mínimo AA para texto pequeño; a 0.92 vuelven a superarlo. El precio es que
+ * activo e inactivo se distinguen algo menos por color, así que la pestaña
+ * activa se apoya además en el subrayado blanco, que no depende del contraste.
+ */
+export const NAV_INACTIVO = 'rgba(255,255,255,0.92)';
 /** Separador interno de las barras (sobre el azul). */
 export const NAV_BORDE = 'rgba(255,255,255,0.16)';
 

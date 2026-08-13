@@ -10,7 +10,7 @@ import { useState, useEffect, useMemo } from 'react';
 import BottomNav from './BottomNav';
 import TopTabs from './TopTabs';
 import { useNavSecciones } from './useNavSecciones';
-import { APP_FONDO, BOTTOM_NAV_H, NAV_ACTIVO, NAV_FONDO, TEXTO_TENUE } from './navTokens';
+import { APP_FONDO, BOTTOM_NAV_H, NAV_ACTIVO, NAV_AZUL, NAV_FONDO, TEXTO_TENUE } from './navTokens';
 import InstalarAppDialog from '../InstalarAppDialog';
 import AvisoErrorGlobal from '../AvisoErrorGlobal';
 import { useAuthStore } from '../../store/auth.store';
@@ -131,7 +131,7 @@ export default function MainLayout() {
           position="sticky"
           elevation={0}
           sx={{
-            bgcolor: NAV_FONDO,
+            background: NAV_FONDO,
             borderBottom: 'none',
             color: NAV_ACTIVO,
           }}
@@ -169,7 +169,7 @@ export default function MainLayout() {
           PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, pb: 'env(safe-area-inset-bottom, 0px)' } }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, pt: 2, pb: 1.5 }}>
-            <Avatar sx={{ width: 44, height: 44, bgcolor: NAV_FONDO, fontWeight: 700 }}>
+            <Avatar sx={{ width: 44, height: 44, bgcolor: NAV_AZUL, fontWeight: 700 }}>
               {nombreCompleto?.[0]?.toUpperCase() || 'U'}
             </Avatar>
             <Box sx={{ minWidth: 0 }}>

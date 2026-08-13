@@ -18,6 +18,7 @@ import {
 
 // ── Paleta profesional (médica / farmacéutica) ───────────────────────────────
 const NAVY = '#0d1b4c';       // azul corporativo profundo
+const NAVY_BORDE = '#1a237e'; // azul de VISTA (primary.main) — bordes de tarjeta
 const TEAL = '#0f9b8e';       // acento clínico (teal-verde)
 const INK = '#1e293b';        // texto principal
 const SOFT_SHADOW = '0 1px 3px rgba(16,24,40,0.06), 0 6px 20px rgba(16,24,40,0.05)';
@@ -813,7 +814,9 @@ export default function RegistrarVisita() {
           decía nada. */}
       <Box sx={{
         bgcolor: '#fff', borderRadius: 3, p: { xs: 2, sm: 2.5 }, mb: 2.5,
-        border: '1px solid #E3E5EC', boxShadow: '0 1px 2px rgba(16,20,58,0.04)',
+        // Borde en el azul de VISTA — es lo que ata la tarjeta al marco de la app
+        // ahora que ya no lleva el degradado dentro.
+        border: `1.5px solid ${NAVY_BORDE}`, boxShadow: '0 1px 2px rgba(16,20,58,0.04)',
       }}>
         <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" rowGap={1}>
           {/* Cuadrado con tinte de marca en vez de círculo sobre degradado: pesa
