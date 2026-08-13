@@ -14,6 +14,7 @@ proceso de carga por ODBC contra estas tablas.
 | `crear_usuario_mallen.sql` | El usuario `mallen_etl`, limitado al esquema `ext` |
 | `generar_certificado_pg.sh` | Certificado TLS autofirmado para PostgreSQL (`sslmode=require`, §8.1) |
 | `generar_ddl_ext.py` | Regenera el `.sql` desde los modelos. **El `.sql` no se edita a mano** |
+| `verificar_servidor.sh` | Comprueba si un servidor cumple el §9 (dimensionamiento, Debian, Docker, puertos, salida SMTP). **Solo lee**: no instala ni cambia nada, así que puede correrse con el sistema en uso |
 
 En producción el esquema lo crea la migración `0030_esquema_ext_integracion`,
 no estos scripts: son la copia que Mallén replica y la referencia del contrato.
@@ -34,11 +35,19 @@ pueden divergir sin que falle la suite.
    servidor sin él arranca igual que siempre. Es deliberado: con `ssl=on` fijo,
    un despliegue sin certificados dejaría la base sin arrancar.
 3. **Publicar el 5432 hacia el SQL Server** — ver la sección siguiente.
-4. Ejecutar `crear_usuario_mallen.sql` **reemplazando antes** `CLAVE_A_DEFINIR`
-   por la clave que entregue Mallén. Cada ambiente lleva la suya.
+4. Ejecutar `crear_usuario_mallen.sql` **reemplazando antes** `CLAVE_A_DEFINIR`.
+   **Cada ambiente lleva la suya**: si calidad y producción comparten clave, una
+   prueba contra calidad tiene sin quererlo las credenciales de producción.
+   El archivo con la clave real **no se commitea** — se edita una copia fuera del
+   repositorio, o se sustituye al vuelo al ejecutarlo.
 5. Entregar a Mallén: `crear_esquema_ext.sql`, el usuario, el host y el puerto.
+   **La clave viaja por un canal aparte**, no en el mismo mensaje: juntos, los
+   cuatro datos dan acceso completo a la capa de recepción a cualquiera que lea
+   ese correo o lo tenga reenviado.
 6. Comprobar el aislamiento: conectado como `mallen_etl`, un
-   `SELECT * FROM "Config"."DIM_RM"` debe fallar con permiso denegado.
+   `SELECT * FROM "Config"."DIM_RM"` debe fallar con permiso denegado. Es la
+   prueba de que el usuario está encerrado en `ext` — si devuelve filas, los
+   `REVOKE` del script no se aplicaron y hay que parar ahí.
 
 ## Abrir el 5432 solo al SQL Server (y por qué ufw no basta)
 
@@ -106,10 +115,36 @@ Los dominios acotados (`tipo_visita`, `frecuencia_objetivo`, `prioridad`,
 se registren "sin detener el lote completo", y un CHECK rechazaría la fila.
 Se validan al integrar.
 
+## Estado del lado de VISTA (ago-2026)
+
+Lo que Mallén escribe en `ext` **ya se consume de punta a punta**. Estos scripts
+son solo la puerta de entrada; el recorrido completo vive en
+`app/services/integracion_*.py`:
+
+| Pieza | Dónde | Estado |
+|---|---|---|
+| Validación de lotes (§7.1) | `integracion_validacion_service` | Lista |
+| Sincronización de dimensiones | `integracion_dimensiones_service` | Lista |
+| Hechos de visita | `integracion_visitas_service` | Lista |
+| Los 5 indicadores (4 de visita + VENTAS) | `integracion_indicadores_service` | Lista |
+| Notas de conocimientos | `conocimientos_service.integrar_conocimientos` | Lista |
+| Médicos TOP (§7.3) | `visita_top_service` (migración `0034`) | Lista |
+| Equivalencias y diagnóstico de IR | `integracion_ir_service` | Lista |
+
+`integracion_visitas_service.integrar_todo` es el orquestador: resuelve una sola
+vez los lotes del ciclo y sus estados, integra, calcula los indicadores y dispara
+**un** recálculo al final.
+
 ## Lo que todavía no está
 
-Esta es la **Fase A**: el esquema y el usuario, que es lo que desbloquea a
-Mallén para desarrollar su carga. Falta el proceso de integración de §7.1
-(validar, integrar, recalcular, cerrar el lote), las reglas de médicos TOP de
-§7.3, y el módulo IR, cuya estructura sigue preliminar hasta que Close-Up
-entregue la definición del indicador y el formato real del archivo.
+**El indicador EVO_IR no se construye.** El módulo de Prescripción IR resuelve
+las equivalencias (médico, producto, período) y diagnostica qué enlaza y qué no,
+pero **no escribe en `FACT_EVOIR`** — a propósito: sigue pendiente que Close-Up
+entregue la definición del indicador y el formato real del archivo. El
+diagnóstico existe justamente para tener la evidencia con la que decidir cuándo
+construirlo.
+
+> Nota de versión: este documento cita el *Requerimiento de Datos* **v1.0**.
+> Existe una **V2** posterior, que es de donde sale el §9 (infraestructura) que
+> usa `verificar_servidor.sh`. Antes de tomar los números de sección de aquí como
+> definitivos, confirmar contra la versión firmada.
