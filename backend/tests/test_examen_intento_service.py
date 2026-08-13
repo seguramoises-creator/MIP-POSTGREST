@@ -122,43 +122,64 @@ def test_preparar_intento_crea_intento_y_preguntas_presentadas():
 
 
 def test_preparar_intento_vencido_falla():
-    """RN-06: fecha_limite en el pasado debe levantar ValueError antes de cualquier query."""
+    """RN-06: fecha_limite en el pasado debe levantar ValueError sin crear el intento.
+
+    El vencimiento se mide contra el día LOCAL del país del evaluado, así que el
+    guard SÍ consulta la dimensión del RM (una lectura indexada); lo que no debe
+    ocurrir es que se persista un intento. Antes se afirmaba "ninguna query", que
+    era un proxy más frágil: el llamador (`iniciar_intento`) ya había consultado
+    la asignación de todos modos.
+    """
     db = MagicMock()
+    db.query.return_value.filter.return_value.scalar.return_value = "America/Santo_Domingo"
     fecha_pasada = (datetime.now() - timedelta(days=2)).date()
     asig = _asig(estado="pendiente", fecha_limite=fecha_pasada)
     with pytest.raises(ValueError, match="vencida"):
         svc.preparar_intento(db, asig, "RM", 5, {})
-    # El guard dispara antes de tocar la BD
-    db.query.assert_not_called()
+    db.add.assert_not_called()
+    db.commit.assert_not_called()
 
 
 def test_preparar_intento_fecha_limite_datetime_no_rompe():
     """Regresión: fecha_limite llega como DATETIME (naive desde la BD), no
-    como date. La comparación no debe romper (antes: TypeError date>datetime)."""
+    como date. La comparación no debe romper (antes: TypeError date>datetime).
+
+    El primer `FakeQuery` de cada lista es la resolución del país del evaluado
+    (devuelve None → `hoy_local` cae a UTC). Las fechas se construyen en UTC a
+    propósito: comparar un límite en hora del servidor contra un "hoy" en UTC
+    haría que el test cambiara de resultado según la hora del día en que corra.
+    """
+    from datetime import timezone
     from tests.conftest import FakeQuery
+
+    def _ahora_utc():
+        return datetime.now(timezone.utc).replace(tzinfo=None)
+
+    def _queries():
+        return [
+            FakeQuery(),  # país del evaluado → None → UTC
+            FakeQuery(first_result=_examen_mock(estado="activo")),
+            FakeQuery(all_result=[_pregunta_mock(1)]),
+        ]
+
     # Futura (datetime): procede a crear el intento sin TypeError
     db = MagicMock()
-    asig = _asig(estado="pendiente", fecha_limite=datetime.now() + timedelta(days=3))
-    db.query.side_effect = [
-        FakeQuery(first_result=_examen_mock(estado="activo")),
-        FakeQuery(all_result=[_pregunta_mock(1)]),
-    ]
+    asig = _asig(estado="pendiente", fecha_limite=_ahora_utc() + timedelta(days=3))
+    db.query.side_effect = _queries()
     result = svc.preparar_intento(db, asig, "RM", 5, {}, rng=random.Random(0))
     assert hasattr(result, "_preguntas_presentadas")
 
     # Hoy (datetime, día local): el plazo es inclusivo → NO debe vencer
     db_hoy = MagicMock()
-    asig_hoy = _asig(estado="pendiente", fecha_limite=datetime.now())
-    db_hoy.query.side_effect = [
-        FakeQuery(first_result=_examen_mock(estado="activo")),
-        FakeQuery(all_result=[_pregunta_mock(1)]),
-    ]
+    asig_hoy = _asig(estado="pendiente", fecha_limite=_ahora_utc())
+    db_hoy.query.side_effect = _queries()
     assert hasattr(svc.preparar_intento(db_hoy, asig_hoy, "RM", 5, {}, rng=random.Random(0)),
                    "_preguntas_presentadas")
 
     # Pasada (datetime): debe levantar 'vencida'
     db2 = MagicMock()
-    asig2 = _asig(estado="pendiente", fecha_limite=datetime.now() - timedelta(days=2))
+    db2.query.return_value.filter.return_value.scalar.return_value = None
+    asig2 = _asig(estado="pendiente", fecha_limite=_ahora_utc() - timedelta(days=2))
     with pytest.raises(ValueError, match="vencida"):
         svc.preparar_intento(db2, asig2, "RM", 5, {})
 
@@ -446,3 +467,38 @@ def test_finalizar_resultado_no_alimenta_kpi(monkeypatch):
     # notif desactivada: _finalizar_resultado no debe tocar el KPI ni notificar
     svc._finalizar_resultado(db, intento, examen, asignacion, correctas=3, total=5)
     assert llamado["kpi"] is False
+
+
+def test_vencimiento_usa_el_dia_local_del_evaluado_no_el_del_servidor():
+    """El plazo se mide en el día del EVALUADO, no en el del servidor.
+
+    Un mismo servidor atiende varios países. En el instante elegido —1-feb 01:00
+    UTC— en República Dominicana (UTC−4) todavía es 31-ene 21:00. Con la fecha
+    límite el 31-ene, el evaluado está dentro de su plazo y debe poder rendir;
+    con el reloj del servidor en UTC ya sería 1-feb y perdería su último día sin
+    que nada se lo explique.
+    """
+    from datetime import timezone as _tz
+    from unittest.mock import patch
+    from tests.conftest import FakeQuery
+
+    instante = datetime(2026, 2, 1, 1, 0, tzinfo=_tz.utc)
+
+    class _RelojFijo(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return instante.astimezone(tz) if tz else instante.replace(tzinfo=None)
+
+    db = MagicMock()
+    db.query.side_effect = [
+        FakeQuery(scalar_result="DO"),                       # país del evaluado
+        FakeQuery(scalar_result="America/Santo_Domingo"),    # zona horaria del país
+        FakeQuery(first_result=_examen_mock(estado="activo")),
+        FakeQuery(all_result=[_pregunta_mock(1)]),
+    ]
+    asig = _asig(estado="pendiente", fecha_limite=datetime(2026, 1, 31, 12, 0))
+
+    with patch("app.core.tiempo.datetime", _RelojFijo):
+        result = svc.preparar_intento(db, asig, "RM", 5, {}, rng=random.Random(0))
+
+    assert hasattr(result, "_preguntas_presentadas")

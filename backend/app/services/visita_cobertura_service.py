@@ -309,20 +309,8 @@ def _dias_habiles(inicio, fin) -> int:
     return d or CICLO_DIAS_DEFAULT
 
 
-def _dia_actual_ciclo(ciclo) -> int:
-    """Día hábil actual del ciclo (desde fecha_inicio hasta hoy), acotado a [1, dias]."""
-    dias = _dias_habiles(getattr(ciclo, "fecha_inicio", None), getattr(ciclo, "fecha_fin", None))
-    inicio = getattr(ciclo, "fecha_inicio", None)
-    if not inicio:
-        return min(8, dias)
-    hoy = date.today()
-    transcurridos, cur = 0, inicio
-    while cur <= hoy and cur <= getattr(ciclo, "fecha_fin", hoy):
-        if cur.weekday() < 5:
-            transcurridos += 1
-        cur += timedelta(days=1)
-    return max(1, min(transcurridos or 1, dias))
-
-
 # El módulo "Proyección Visita" fue retirado (jul-2026): Cobertura Predictiva absorbe
 # su rol de proyección. Las funciones proyeccion()/ranking_proyeccion() se eliminaron.
+# `_dia_actual_ciclo` sobrevivió a ese retiro sin ningún llamador y se eliminó en
+# ago-2026: además de ser código muerto, resolvía "hoy" con el reloj del servidor,
+# justo la trampa que un servidor multipaís no puede dejar a mano de nadie.

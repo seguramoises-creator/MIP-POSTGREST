@@ -6,6 +6,7 @@ palabras del nombre coinciden con un médico ya registrado, se avisa al usuario.
 from loguru import logger
 from sqlalchemy.orm import Session
 
+from app.core.tiempo import hoy_local
 from app.models.visita import MedicoVisita, MedicoClasificacion
 from app.models.dimensiones import Especialidad, RepresentanteMedico, Linea, Medico
 from app.schemas.visita import MedicoVisitaCrear, MedicoVisitaActualizar
@@ -135,7 +136,7 @@ def crear_medico(db: Session, datos: MedicoVisitaCrear, usuario_id: int | None) 
         kol=datos.kol,
         segmento=datos.segmento,
         observaciones=datos.observaciones,
-        fecha_alta=datos.fecha_alta or _date.today(),
+        fecha_alta=datos.fecha_alta or hoy_local(db, _pais_de_vm(db, datos.vm_id)),
         ciclos_sin_visita=0,
         activo=True,
         # Alta sujeta a aprobación del Gerente de Distrito; efectiva el próximo ciclo.
@@ -452,6 +453,15 @@ def importar_desde_categorizacion(db: Session, usuario_id: int | None = None) ->
         if vm not in _ciclo_cache:
             _ciclo_cache[vm] = ciclo_actual_id(db, vm)
         return _ciclo_cache[vm]
+
+    # La fecha de alta es el día LOCAL del VM, no el del servidor: una carga
+    # masiva puede traer VMs de países distintos en el mismo archivo.
+    _hoy_cache: dict[int, "_date"] = {}
+
+    def _hoy_de_vm(vm: int):
+        if vm not in _hoy_cache:
+            _hoy_cache[vm] = hoy_local(db, _pais_de_vm(db, vm))
+        return _hoy_cache[vm]
     # Médicos ya existentes en el panel (vm_id + nombre en MAYÚSCULAS) para no duplicar.
     existentes = {(m.vm_id, (m.nombre_completo or "").upper())
                   for m in db.query(MedicoVisita.vm_id, MedicoVisita.nombre_completo).all()}
@@ -479,7 +489,7 @@ def importar_desde_categorizacion(db: Session, usuario_id: int | None = None) ->
             # sin requerir aprobación uno-por-uno del GD. El alta individual por un RM
             # sí queda PENDIENTE_ALTA (ver crear_medico).
             estado_aprobacion="APROBADO", ciclo_alta_id=_ciclo_de_vm(f["vm_id"]),
-            fecha_alta=_date.today(), solicitado_por=usuario_id,
+            fecha_alta=_hoy_de_vm(f["vm_id"]), solicitado_por=usuario_id,
             fecha_solicitud=ahora, aprobado_por=usuario_id, fecha_aprobacion=ahora,
             registrado_por=usuario_id))
         creados += 1

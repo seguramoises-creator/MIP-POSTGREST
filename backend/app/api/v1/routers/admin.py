@@ -640,7 +640,7 @@ def ciclo_salud(id: int, db: Session = Depends(get_db), _=AnyAuth):
     """Indicadores de salud del ciclo: ventana temporal, estado, completitud de
     planeación, cobertura del panel, configuración (parrilla/costo) y ciclos vencidos
     sin cerrar del país. Alimenta el panel de salud del frontend."""
-    from datetime import date
+    from app.core.tiempo import hoy_local
     from sqlalchemy import func, distinct
     from app.models.dimensiones import RepresentanteMedico
     from app.models.visita import (
@@ -650,7 +650,9 @@ def ciclo_salud(id: int, db: Session = Depends(get_db), _=AnyAuth):
     if not c:
         raise HTTPException(404, "Ciclo no encontrado")
 
-    hoy = date.today()
+    # El progreso del ciclo se mide contra el día LOCAL de SU país: con la hora
+    # del servidor, un ciclo de un país y otro se cortarían el mismo instante.
+    hoy = hoy_local(db, c.pais_codigo)
     totales = c.dias_laborables or _dias_habiles(db, c.pais_codigo, c.fecha_inicio, c.fecha_fin)
     transcurridos = _dias_habiles(db, c.pais_codigo, c.fecha_inicio, min(hoy, c.fecha_fin)) if hoy >= c.fecha_inicio else 0
     restantes = _dias_habiles(db, c.pais_codigo, hoy, c.fecha_fin) if hoy <= c.fecha_fin else 0

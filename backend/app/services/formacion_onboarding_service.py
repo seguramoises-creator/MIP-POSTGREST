@@ -25,6 +25,8 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core.tiempo import hoy_local
+from app.models.dimensiones import RepresentanteMedico
 from app.models.formacion import (
     OnboardingAsignacion, OnboardingPaso, OnboardingPasoProgreso, OnboardingPlantilla,
 )
@@ -149,7 +151,10 @@ def asignar(db: Session, plantilla_id: int, rm_id: int,
     pasos = pasos_de(db, plantilla_id)
     a = OnboardingAsignacion(
         plantilla_id=plantilla_id, rm_id=rm_id,
-        fecha_inicio=fecha_inicio or date.today(),
+        # Día local del RM al que se le asigna, no el del servidor.
+        fecha_inicio=fecha_inicio or hoy_local(
+            db, db.query(RepresentanteMedico.pais_codigo)
+                  .filter(RepresentanteMedico.id == rm_id).scalar()),
         paso_actual_id=pasos[0].id if pasos else None,
         progreso_pct=0, asignada_por=getattr(actor, "id", None))
     db.add(a)

@@ -139,7 +139,10 @@ def crear_hoja(db: Session, gd_user: Usuario, datos) -> CoachingSesion:
     # La fecha la fija el SERVIDOR (nunca el cliente) y en hora LOCAL del país del RM:
     # el día del coaching es el día laboral del GD, no el día UTC — que a partir de las
     # 8 p.m. en RD ya avanzó al siguiente.
-    datos.fecha_coaching = hoy_local(db, rm.pais_codigo) if rm else date.today()
+    # Sin RM no hay país que resolver y `hoy_local` cae a UTC. Se usa igual en vez
+    # de `date.today()` para que NINGÚN camino dependa del reloj del servidor: en
+    # un servidor multipaís ese reloj no es el día de nadie en particular.
+    datos.fecha_coaching = hoy_local(db, rm.pais_codigo if rm else None)
 
     errores = validar(db, datos)
     if errores:

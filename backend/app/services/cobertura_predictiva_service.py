@@ -85,6 +85,7 @@ from app.models.dimensiones import (
 )
 from app.models.hechos import Visita
 from app.models.visita import PlaneacionCiclo, VisitaRegistro, MedicoVisita
+from app.core.tiempo import hoy_local
 
 
 # Pisos fijos de semáforo (no parametrizables, igual que en el Excel de referencia)
@@ -252,7 +253,7 @@ def calcular_cobertura_rm(
         raise ValueError(f"Ciclo ID={ciclo_id} no encontrado")
 
     if fecha_corte is None:
-        fecha_corte = date.today()
+        fecha_corte = hoy_local(db, rm.pais_codigo)
 
     meta_cobertura = obtener_meta_cobertura(db, rm.pais_codigo, rm.linea_id, ciclo_id)  # H
     feriados = _feriados_pais(db, rm.pais_codigo, ciclo.fecha_inicio, ciclo.fecha_fin)
@@ -395,8 +396,10 @@ def calcular_cobertura_equipo(
     `GET /dashboard/comercial` (ventas/EVO IR/cuota) con las métricas
     predictivas de cobertura y ritmo de ejecución.
     """
+    # Sin `pais_codigo` (consulta multipaís) `hoy_local` cae a UTC, que es el
+    # comportamiento histórico: no hay un país cuyo día operativo aplicar.
     if fecha_corte is None:
-        fecha_corte = date.today()
+        fecha_corte = hoy_local(db, pais_codigo)
 
     q = db.query(RepresentanteMedico.id).join(
         TargetMedico, TargetMedico.rm_id == RepresentanteMedico.id
@@ -604,7 +607,7 @@ def dashboard_vivo(db: Session, ciclo_codigo: str, pais_codigo: str,
         return {"ok": False, "mensaje": f"Ciclo '{ciclo_codigo}' no encontrado para país '{pais_codigo}'",
                 "total_rms": 0, "detalle_rms": []}
     if fecha_corte is None:
-        fecha_corte = date.today()
+        fecha_corte = hoy_local(db, pais_codigo)
 
     meta = obtener_meta_cobertura(db, pais_codigo)
     N = obtener_dias_habiles_ciclo(db, ciclo)
@@ -916,7 +919,7 @@ def calcular_cobertura_sp(
     jul-2026: el cálculo es 100% Python (calcular_cobertura_py) para dejar el
     core agnóstico de BD."""
     if fecha_corte is None:
-        fecha_corte = date.today()
+        fecha_corte = hoy_local(db, pais_codigo)
     try:
         result = calcular_cobertura_py(db, ciclo_codigo, pais_codigo.upper(), fecha_corte,
                                        representante_key, linea)
@@ -1034,7 +1037,7 @@ def get_dashboard_cat(
     del equipo + detalle por VM. Compatible con el contrato del frontend.
     """
     if fecha_corte is None:
-        fecha_corte = date.today()
+        fecha_corte = hoy_local(db, pais_codigo)
 
     # Resolver ciclo_key + pais_key más reciente para este ciclo_codigo
     ciclo_row = db.execute(

@@ -1017,7 +1017,7 @@ async def cargar_excel_cat(
     if calcular_al_cargar and stats.get("ciclos", 0) == 0 or (stats.get("target", 0) > 0 or stats.get("visitas", 0) > 0):
         # Calcular para todos los ciclos recién cargados
         from app.services.cobertura_predictiva_service import get_ciclos_cat as _get_ciclos
-        from datetime import date as _date
+        from app.core.tiempo import hoy_local
         ciclos = _get_ciclos(db, pais_codigo=pais_codigo)
         resultados_sp = []
         for c in ciclos[:10]:  # máximo 10 ciclos activos por país
@@ -1026,7 +1026,7 @@ async def cargar_excel_cat(
                     db,
                     ciclo_codigo=c["codigo_ciclo"],
                     pais_codigo=pais_codigo,
-                    fecha_corte=_date.today(),
+                    fecha_corte=hoy_local(db, pais_codigo),
                 )
                 resultados_sp.append({"ciclo": c["codigo_ciclo"], **r})
             except Exception:

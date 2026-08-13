@@ -21,6 +21,8 @@ que solo excluye sábado y domingo e ignora los feriados.
 """
 from datetime import date, timedelta
 
+from app.core.tiempo import hoy_local
+
 from loguru import logger
 from sqlalchemy.orm import Session
 
@@ -228,7 +230,11 @@ def procesar_avisos(db: Session, hoy: date | None = None) -> dict:
     from app.models.visita import AVISO_ESCALAMIENTO, AVISO_RECORDATORIO
     from app.services import config_service, notification_service
 
-    hoy = hoy or date.today()
+    # `hoy` lo resuelve CADA CICLO contra su propio país (más abajo), no una vez
+    # para toda la corrida: un mismo servidor atiende varios países y un cron que
+    # decide "hoy" una sola vez le aplicaría a todos el día de uno. Cuando el
+    # llamador lo impone (pruebas, corridas puntuales), ese valor manda tal cual.
+    hoy_impuesto = hoy
 
     # I5: interruptor de emergencia — sin redesplegar. Si está apagado, ni siquiera
     # se leen los otros parámetros: la corrida completa se omite y queda en el log.
@@ -249,6 +255,7 @@ def procesar_avisos(db: Session, hoy: date | None = None) -> dict:
     # rechazaría el registro igual. Solo se procesan los ciclos VIGENTES: cuya
     # ventana [fecha_inicio, fecha_fin] contiene HOY.
     for ciclo in db.query(Ciclo).filter(Ciclo.cerrado == False).all():  # noqa: E712
+        hoy = hoy_impuesto or hoy_local(db, ciclo.pais_codigo)
         if not (ciclo.fecha_inicio <= hoy <= ciclo.fecha_fin):
             continue
 

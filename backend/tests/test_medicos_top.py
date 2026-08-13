@@ -1106,3 +1106,44 @@ def test_endpoint_apaga_avisos_y_procesar_avisos_no_hace_nada(escenario, monkeyp
     assert r == {"recordatorios": 0, "escalamientos": 0}
     assert llamadas["n"] == 0
     assert db.query(AvisoTopEnviado).count() == 0
+
+
+def test_procesar_avisos_usa_el_dia_local_de_cada_pais(escenario, monkeypatch):
+    """El cron recorre los ciclos ABIERTOS de TODOS los países, así que no puede
+    decidir "hoy" una sola vez con el reloj del servidor.
+
+    El instante elegido lo demuestra: 1-feb 01:00 UTC es todavía el 31-ene 21:00
+    en República Dominicana (UTC−4). El ciclo termina el 31-ene, así que con el
+    día local del país sigue VIGENTE y se procesa; con el reloj en UTC ya sería
+    1-feb y el ciclo quedaría fuera de ventana, sin avisar a nadie — el
+    representante perdería su último día de reclamo, en silencio.
+    """
+    from datetime import timezone as _tz
+
+    db = escenario["db"]
+    db.query(Pais).filter_by(codigo="DO").one().zona_horaria = "America/Santo_Domingo"
+    enviados = []
+    monkeypatch.setattr(
+        "app.services.notification_service.notificar_top_pendiente",
+        lambda *a, **k: (enviados.append(a) or True))
+    escenario["rm"].email = "rm@ejemplo.com"
+    t = _medico(db, escenario, "DOCTOR TOP", True)
+    _planear(db, escenario, t, tipo="V", semana=1, dia="Lunes")
+    db.commit()
+    _publicar(db, escenario)
+
+    instante = datetime(2026, 2, 1, 1, 0, tzinfo=_tz.utc)
+
+    class _RelojFijo(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return instante.astimezone(tz) if tz else instante.replace(tzinfo=None)
+
+    monkeypatch.setattr("app.core.tiempo.datetime", _RelojFijo)
+
+    # Sin `hoy`: obliga a resolverlo por país, que es lo que se está probando.
+    r = top.procesar_avisos(db)
+
+    assert r["recordatorios"] == 1, (
+        "El ciclo debe seguir vigente: en RD todavía es 31-ene, el último día")
+    assert len(enviados) == 1

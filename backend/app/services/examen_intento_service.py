@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from loguru import logger
 from sqlalchemy.orm import Session
 
+from app.core.tiempo import hoy_local
 from app.models.exam_models import (
     AsignacionExamen,
     Examen,
@@ -20,6 +21,24 @@ from app.models.exam_models import (
 # nota y aprobado/reprobado, pero NO el detalle — para que no lo reuse de guía si se le reasigna
 # el mismo examen. Gerencia lo ve completo siempre (por otra vía, examen_resultados_service).
 FEEDBACK_HORAS = 48
+
+
+def _pais_del_evaluado(db: Session, asignacion) -> str | None:
+    """País del RM (o del Gerente) al que se le asignó el examen.
+
+    Devuelve None si no se puede resolver; `hoy_local` cae entonces a UTC, que
+    es el comportamiento histórico — nunca revienta el inicio de un intento por
+    un dato de dimensión incompleto.
+    """
+    from app.models.dimensiones import Gerente, RepresentanteMedico
+
+    if asignacion.evaluado_rm_id:
+        return (db.query(RepresentanteMedico.pais_codigo)
+                .filter(RepresentanteMedico.id == asignacion.evaluado_rm_id).scalar())
+    if asignacion.evaluado_gerente_id:
+        return (db.query(Gerente.pais_codigo)
+                .filter(Gerente.id == asignacion.evaluado_gerente_id).scalar())
+    return None
 
 
 def feedback_vencido(intento) -> bool:
@@ -61,9 +80,14 @@ def preparar_intento(db: Session, asignacion, evaluado_tipo, evaluado_id, contex
         # contra la fecha local — no UTC — porque en husos negativos (ej. GMT-4) la
         # fecha UTC ya es del día siguiente al final de la tarde y haría "vencer" la
         # asignación un día antes. El plazo es inclusivo de todo el día límite.
+        #
+        # "Local" es la del PAÍS DEL EVALUADO, no la del servidor: el mismo
+        # servidor atiende varios países y quien rinde el examen lo hace en su
+        # propio día. Con el reloj del servidor, un evaluado de un huso más
+        # occidental perdería su último día de plazo.
         limite = asignacion.fecha_limite
         limite_date = limite.date() if isinstance(limite, datetime) else limite
-        if datetime.now().date() > limite_date:
+        if hoy_local(db, _pais_del_evaluado(db, asignacion)) > limite_date:
             raise ValueError("La asignación está vencida")
 
     rng = rng or random.Random()
