@@ -134,6 +134,12 @@ def escenario(db):
     db.add_all([
         UsuarioPais(usuario_id=usuario_gt_hn.id, pais_codigo="GT"),
         UsuarioPais(usuario_id=usuario_gt_hn.id, pais_codigo="HN"),
+        # El Gerente de Marca de DO SÍ tiene país asignado — sin esta fila,
+        # `paises_visibles` le devolvía `None` y el guard de país de la rama LINEA
+        # (`if paises is not None: ...`) nunca se ejercitaba: los tests de
+        # exclusión de Guatemala pasaban solo por el filtro de `linea_id`, no por
+        # el de país (hallazgo de revisión).
+        UsuarioPais(usuario_id=gerente_marca_do.id, pais_codigo="DO"),
     ])
     db.commit()
 
@@ -141,6 +147,8 @@ def escenario(db):
         "usuario_sin_paises": usuario_sin_paises,
         "usuario_gt_hn": usuario_gt_hn,
         "gerente_marca_do": gerente_marca_do,
+        "gm_do": gm_do,
+        "linea_a_gt": linea_a_gt,
         "rm_linea_a_distrito_1": rm_linea_a_distrito_1,
         "rm_linea_a_distrito_2": rm_linea_a_distrito_2,
         "rm_linea_b": rm_linea_b,
@@ -180,6 +188,23 @@ def test_el_pais_se_aplica_antes_que_la_linea(db, escenario):
     u = escenario["gerente_marca_do"]
     ids = scope.rm_ids_visibles(db, u, Alcance.LINEA)
     assert escenario["rm_linea_a_guatemala"].id not in ids
+
+
+def test_el_pais_excluye_aunque_la_linea_tambien_alcance_ese_pais(db, escenario):
+    """Ejercita DE VERDAD el filtro de país de la rama LINEA (no solo el de
+    `linea_id`): se le asigna al Gerente de Marca de DO una SEGUNDA línea —la
+    línea A de Guatemala— vía `DIM_GerenteLinea`, así que si el filtro de país
+    faltara, el RM de Guatemala pasaría el `linea_id.in_(...)` igual. Con el
+    filtro de país puesto, sigue quedando fuera porque el usuario solo tiene
+    DO en `FACT_UsuarioPais`."""
+    u = escenario["gerente_marca_do"]
+    db.add(GerenteLinea(gerente_id=escenario["gm_do"].id, linea_id=escenario["linea_a_gt"].id))
+    db.commit()
+
+    ids = scope.rm_ids_visibles(db, u, Alcance.LINEA)
+    assert escenario["rm_linea_a_guatemala"].id not in ids
+    # y sigue viendo lo suyo en DO, para confirmar que el filtro no se pasó de listo
+    assert escenario["rm_linea_a_distrito_1"].id in ids
 
 
 def test_el_pais_tambien_acota_el_alcance_total(db, escenario):

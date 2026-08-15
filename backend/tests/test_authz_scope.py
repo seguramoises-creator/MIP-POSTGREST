@@ -71,3 +71,12 @@ def test_assert_ve_rm_team_usa_conjunto_precomputado():
     with pytest.raises(HTTPException) as e:
         scope.assert_ve_rm(U(Rol.GERENTE_DISTRITO), 9, Alcance.TEAM, ids_equipo={4, 5})
     assert e.value.status_code == 403
+
+
+def test_assert_ve_rm_linea_usa_conjunto_precomputado():
+    """Simétrico al de TEAM: LINEA comparte la misma rama de `assert_ve_rm`
+    (el caller precomputa `ids_equipo` con `rm_ids_visibles(db, user, LINEA)`)."""
+    scope.assert_ve_rm(U(Rol.GERENTE_MARCA), 5, Alcance.LINEA, ids_equipo={4, 5})  # no lanza
+    with pytest.raises(HTTPException) as e:
+        scope.assert_ve_rm(U(Rol.GERENTE_MARCA), 9, Alcance.LINEA, ids_equipo={4, 5})
+    assert e.value.status_code == 403
