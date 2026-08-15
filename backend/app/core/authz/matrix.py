@@ -12,6 +12,7 @@ from app.core.authz.constantes import Accion, Alcance, Recurso
 # Celdas (una acción + su alcance)
 R_OWN = (Accion.READ, Alcance.OWN)
 R_TEAM = (Accion.READ, Alcance.TEAM)
+R_LINEA = (Accion.READ, Alcance.LINEA)
 R_ALL = (Accion.READ, Alcance.ALL)
 REG_OWN = (Accion.REGISTER, Alcance.OWN)
 REG_TEAM = (Accion.REGISTER, Alcance.TEAM)
@@ -47,11 +48,11 @@ MATRIZ: dict[str, dict] = {
     Recurso.CATEGORIZACION_DETALLE:  _fila(_N,      _N,       CFG,     R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.PLANEACION_CICLO:        _fila(REG_OWN, R_TEAM,   _N,      _N,      _N,      _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.COBERTURA_DIARIA:        _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
-    Recurso.COBERTURA_PREDICTIVA:    _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
+    Recurso.COBERTURA_PREDICTIVA:    _fila(R_OWN,   R_LINEA,  R_LINEA, R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),  # alcance de linea (spec §7): GD/Marca leen su linea completa; solo lectura, nunca escritura
     Recurso.PARRILLA_CONFIGURAR:     _fila(_N,      _N,       CFG,     _N,      _N,      _N,      R_ALL,   R_ALL,   _N,      ADMIN_CELL),  # decisión jul-2026: configura el Gerente de Producto (GERENTE_MARCA), no el GD
     Recurso.PARRILLA_CONSULTA:       _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
-    Recurso.PRODUCTIVIDAD_COMERCIAL: _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
-    Recurso.RANKING_RKT:             _fila(R_OWN,   R_TEAM,   R_ALL,   R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),
+    Recurso.PRODUCTIVIDAD_COMERCIAL: _fila(R_OWN,   R_LINEA,  R_LINEA, R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),  # idem: alcance de linea, GD/Marca leen su linea completa (spec §7)
+    Recurso.RANKING_RKT:             _fila(R_OWN,   R_LINEA,  R_LINEA, R_ALL,   R_ALL,   _N,      R_ALL,   R_ALL,   R_ALL,   ADMIN_CELL),  # idem: alcance de linea, GD/Marca leen su linea completa (spec §7)
     Recurso.COACHING_HOJA:           _fila(R_OWN,   REG_TEAM, _N,      _N,      R_TEAM,  R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.COACHING_KPI:            _fila(_N,      R_TEAM,   _N,      _N,      R_ALL,   R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.EXAMEN_RENDIR:           _fila(REG_OWN, R_TEAM,   _N,      _N,      R_TEAM,  R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),  # GD ve resultados de su equipo (Exámenes — Equipo; decisión jul-2026 = app gobierna)

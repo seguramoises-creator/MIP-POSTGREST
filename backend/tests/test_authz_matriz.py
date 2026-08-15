@@ -24,6 +24,7 @@ AT = (Accion.APPROVE, Alcance.TEAM)
 ET = (Accion.EXPORT, Alcance.TEAM)
 EA = (Accion.EXPORT, Alcance.ALL)
 AD = (Accion.ADMIN, Alcance.ALL)
+RL = (Accion.READ, Alcance.LINEA)
 _ = None
 
 # Transcripción independiente del spec §5 (una lista de 10 por recurso, en orden COLS)
@@ -35,11 +36,11 @@ ORACULO = {
     Recurso.CATEGORIZACION_DETALLE:  [_,  _,  CF, RA, _,  RA, RA, RA, _,  AD],
     Recurso.PLANEACION_CICLO:        [GO, RT, _,  _,  _,  _,  RA, RA, _,  AD],
     Recurso.COBERTURA_DIARIA:        [RO, RT, RA, RA, RA, RA, RA, RA, RA, AD],
-    Recurso.COBERTURA_PREDICTIVA:    [RO, RT, RA, RA, RA, RA, RA, RA, _,  AD],
+    Recurso.COBERTURA_PREDICTIVA:    [RO, RL, RL, RA, RA, RA, RA, RA, _,  AD],
     Recurso.PARRILLA_CONFIGURAR:     [_,  _,  CF, _,  _,  _,  RA, RA, _,  AD],
     Recurso.PARRILLA_CONSULTA:       [RO, RT, RA, RA, RA, RA, RA, RA, RA, AD],
-    Recurso.PRODUCTIVIDAD_COMERCIAL: [RO, RT, RA, RA, RA, _,  RA, RA, RA, AD],
-    Recurso.RANKING_RKT:             [RO, RT, RA, RA, RA, _,  RA, RA, RA, AD],
+    Recurso.PRODUCTIVIDAD_COMERCIAL: [RO, RL, RL, RA, RA, _,  RA, RA, RA, AD],
+    Recurso.RANKING_RKT:             [RO, RL, RL, RA, RA, _,  RA, RA, RA, AD],
     Recurso.COACHING_HOJA:           [RO, GT, _,  _,  RT, RA, RA, RA, _,  AD],
     Recurso.COACHING_KPI:            [_,  RT, _,  _,  RA, RA, RA, RA, _,  AD],
     Recurso.EXAMEN_RENDIR:           [GO, RT, _,  _,  RT, RA, RA, RA, _,  AD],
@@ -113,3 +114,39 @@ def test_roles_legacy_derivados_por_regla():
 def test_matriz_cubre_los_13_roles_del_enum():
     for recurso, fila in MATRIZ.items():
         assert set(fila) == set(Rol), f"{recurso}: la fila no cubre los 13 roles del enum"
+
+
+"""El alcance de línea SOLO va en recursos de lectura.
+
+La matriz guarda una celda por (recurso, rol) y una acción de escritura implica
+lectura al MISMO alcance. Si a `medico.panel` —donde el GD aprueba— se le pusiera
+alcance de línea, el GD podría aprobar médicos de representantes ajenos. La regla
+del spec §7 es que `linea` solo se asigna a recursos que se leen.
+"""
+
+RECURSOS_DE_LINEA = [Recurso.RANKING_RKT, Recurso.PRODUCTIVIDAD_COMERCIAL,
+                     Recurso.COBERTURA_PREDICTIVA]
+
+
+def test_el_gerente_de_marca_lee_su_linea():
+    for r in RECURSOS_DE_LINEA:
+        assert MATRIZ[r][Rol.GERENTE_MARCA] == (Accion.READ, Alcance.LINEA), r
+
+
+def test_el_gerente_de_distrito_lee_su_linea():
+    for r in RECURSOS_DE_LINEA:
+        assert MATRIZ[r][Rol.GERENTE_DISTRITO] == (Accion.READ, Alcance.LINEA), r
+
+
+def test_el_gerente_de_distrito_sigue_actuando_solo_sobre_su_equipo():
+    """La otra mitad del acuerdo: lee su línea, escribe sobre su equipo."""
+    accion, alcance = MATRIZ[Recurso.MEDICO_PANEL][Rol.GERENTE_DISTRITO]
+    assert alcance == Alcance.TEAM, "aprobar médicos no puede alcanzar toda la línea"
+
+
+def test_ningun_recurso_de_escritura_tiene_alcance_de_linea():
+    """Barrido: si alguien añade `linea` a una celda de escritura, esto lo caza."""
+    escrituras = {Accion.REGISTER, Accion.CONFIGURE, Accion.APPROVE}
+    culpables = [(r, rol) for r, fila in MATRIZ.items() for rol, celda in fila.items()
+                 if celda and celda[0] in escrituras and celda[1] == Alcance.LINEA]
+    assert not culpables, culpables
