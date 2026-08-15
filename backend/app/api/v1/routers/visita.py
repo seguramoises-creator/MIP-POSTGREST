@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, st
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles, get_current_active_user
+from app.core.authz.paises import PaisPermitido
 from app.models.usuario import Rol
 from app.schemas.visita import (
     MedicoVisitaCrear, MedicoVisitaActualizar, MedicoVisitaResponse, VisitaRegistrar,
@@ -153,7 +154,8 @@ def mi_gerente(vm_id: int | None = None, db: Session = Depends(get_db), current_
 
 
 @router.get("/vms", response_model=list[dict])
-def listar_vms(pais_codigo: str | None = None, db: Session = Depends(get_db), current_user=RequireAnyAuth):
+def listar_vms(pais_codigo: str | None = Depends(PaisPermitido), db: Session = Depends(get_db),
+               current_user=RequireAnyAuth):
     """Visitadores médicos (DIM_RM) — para que ADMIN/GERENTE elijan el panel a ver.
     `pais_codigo` (aislamiento multipaís): sin filtro, listaba VMs de TODOS los países."""
     from app.models.dimensiones import RepresentanteMedico
@@ -165,7 +167,7 @@ def listar_vms(pais_codigo: str | None = None, db: Session = Depends(get_db), cu
 
 @router.get("/medicos", response_model=list[dict])
 def listar_medicos(vm_id: int | None = None, incluir_inactivos: bool = False,
-                   lite: bool = False, pais_codigo: str | None = None,
+                   lite: bool = False, pais_codigo: str | None = Depends(PaisPermitido),
                    db: Session = Depends(get_db), current_user=ReadMedicoPanel):
     """Panel médico. El VM ve solo el suyo; ADMIN/GERENTE pueden filtrar por ?vm_id=.
     `incluir_inactivos=true` incluye los médicos desactivados (para reactivarlos).
@@ -417,7 +419,7 @@ def importar_medicos_categorizacion(db: Session = Depends(get_db), current_user=
 
 
 @router.get("/gerentes", response_model=list[dict])
-def listar_gerentes(pais_codigo: str | None = None,
+def listar_gerentes(pais_codigo: str | None = Depends(PaisPermitido),
                     db: Session = Depends(get_db), current_user=RequireAnyAuth):
     """Gerentes de Distrito (para el filtro de cobertura). `pais_codigo` (aislamiento
     multipaís, opcional/retrocompatible): acota a los gerentes de ese país."""
@@ -431,7 +433,7 @@ def listar_gerentes(pais_codigo: str | None = None,
 @router.get("/cobertura/resumen", response_model=dict)
 def cobertura_resumen(ciclo_id: int | None = None, vm_id: int | None = None,
                       gerente_id: int | None = None, linea_id: int | None = None,
-                      solo_ruptura: bool = False, pais_codigo: str | None = None,
+                      solo_ruptura: bool = False, pais_codigo: str | None = Depends(PaisPermitido),
                       db: Session = Depends(get_db), current_user=ReadCobertura):
     """Dashboard de Cobertura: gauges (cobertura/V+R/gap), desglose A/B/C, listas y ruptura.
     El VM ve su propia cobertura; ADMIN/GERENTE ven el equipo o filtran por visitador
@@ -445,7 +447,7 @@ def cobertura_resumen(ciclo_id: int | None = None, vm_id: int | None = None,
 
 @router.get("/cobertura/ranking", response_model=dict)
 def cobertura_ranking(metrica: str = "cobertura", ciclo_id: int | None = None,
-                      pais_codigo: str | None = None,
+                      pais_codigo: str | None = Depends(PaisPermitido),
                       db: Session = Depends(get_db), current_user=ReadCobertura):
     """Detalle desplegable por visitador: ranking de quién cumple/no el indicador.
     metrica: 'cobertura' | 'completa' | 'sin_visitar'.
@@ -636,7 +638,7 @@ def resumen_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
 # ── Ruptura de secuencia / Cierre de ciclo (Parte 5) ──────────────────────────
 @router.get("/ruptura", response_model=dict)
 def estado_ruptura(vm_id: int | None = None, gerente_id: int | None = None,
-                   linea_id: int | None = None, pais_codigo: str | None = None,
+                   linea_id: int | None = None, pais_codigo: str | None = Depends(PaisPermitido),
                    db: Session = Depends(get_db), current_user=ReadCobertura):
     """Médicos en ruptura por severidad (1 / 2 / ≥3 ciclos sin visita). El VM ve el suyo;
     gestión puede filtrar por Gerente de Distrito (?gerente_id=), Línea (?linea_id=) y
@@ -680,7 +682,8 @@ def historial_cierres(db: Session = Depends(get_db), current_user=RequireCierre)
 
 # ── Parrilla promocional / Muestras (Parte 6) ─────────────────────────────────
 @router.get("/lineas", response_model=list[dict])
-def listar_lineas(pais_codigo: str | None = None, db: Session = Depends(get_db), current_user=RequireAnyAuth):
+def listar_lineas(pais_codigo: str | None = Depends(PaisPermitido), db: Session = Depends(get_db),
+                  current_user=RequireAnyAuth):
     """Líneas de producto (para el selector de la parrilla).
     `pais_codigo` (aislamiento multipaís): sin filtro, listaba líneas de TODOS los países."""
     from app.services import visita_parrilla_service

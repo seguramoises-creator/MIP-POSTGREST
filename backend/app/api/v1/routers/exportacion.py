@@ -27,6 +27,7 @@ from app.core.authz.deps import autorizar_export, Autorizacion
 from app.core.authz.constantes import Recurso
 from app.core.authz import scope
 from app.core.authz.audit import registrar_evento_seguridad
+from app.core.authz.paises import PaisPermitido
 from app.services import exportacion_service
 
 router = APIRouter(prefix="/exportacion", tags=["Exportación"])
@@ -65,7 +66,7 @@ def _stream(buffer, media_type: str, filename: str) -> StreamingResponse:
 
 @router.get("/ranking/excel", summary="Exportar ranking a Excel (.xlsx)")
 def exportar_ranking_excel(
-    pais_codigo: Optional[str] = None,
+    pais_codigo: Optional[str] = Depends(PaisPermitido),
     ciclo_id: Optional[int] = None,
     tipo_ranking: str = "MENSUAL",
     db: Session = Depends(get_db),
@@ -78,7 +79,7 @@ def exportar_ranking_excel(
 
 @router.get("/ranking/pdf", summary="Exportar ranking a PDF (tabular)")
 def exportar_ranking_pdf(
-    pais_codigo: Optional[str] = None,
+    pais_codigo: Optional[str] = Depends(PaisPermitido),
     ciclo_id: Optional[int] = None,
     tipo_ranking: str = "MENSUAL",
     top: Optional[int] = None,
@@ -94,7 +95,7 @@ def exportar_ranking_pdf(
 
 @router.get("/reconocimientos/excel", summary="Exportar reconocimientos a Excel (.xlsx)")
 def exportar_reconocimientos_excel(
-    pais_codigo: Optional[str] = None,
+    pais_codigo: Optional[str] = Depends(PaisPermitido),
     ciclo_id: Optional[int] = None,
     db: Session = Depends(get_db),
     auth: Autorizacion = ExportRanking,
@@ -106,7 +107,7 @@ def exportar_reconocimientos_excel(
 
 @router.get("/reconocimientos/pdf", summary="Exportar reconocimientos a PDF (tabular)")
 def exportar_reconocimientos_pdf(
-    pais_codigo: Optional[str] = None,
+    pais_codigo: Optional[str] = Depends(PaisPermitido),
     ciclo_id: Optional[int] = None,
     db: Session = Depends(get_db),
     auth: Autorizacion = ExportRanking,

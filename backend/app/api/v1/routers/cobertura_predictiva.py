@@ -49,6 +49,7 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_db, get_current_active_user, require_roles
 from app.core.authz.deps import require
 from app.core.authz.constantes import Accion, Recurso
+from app.core.authz.paises import PaisPermitido, exigir_pais
 from app.models.usuario import Rol, Usuario
 from app.models.dimensiones import (
     RepresentanteMedico, Ciclo, TargetMedico, Feriado, ParametroCobertura, Gerente,
@@ -129,7 +130,7 @@ def _verificar_acceso_rm(db: Session, current_user: Usuario, rm_id: int) -> Repr
 @router.get("/resumen", response_model=dict, summary="Resumen de cobertura predictiva del equipo")
 def resumen_cobertura(
     ciclo_id: int = Query(..., description="Ciclo a evaluar"),
-    pais_codigo: Optional[str] = None,
+    pais_codigo: Optional[str] = Depends(PaisPermitido),
     gerente_id: Optional[int] = None,
     linea_id: Optional[int] = None,
     fecha_corte: Optional[date] = Query(None, description="Por defecto: hoy"),
@@ -174,7 +175,7 @@ def detalle_cobertura_rm(
 
 @router.get("/vivo/ciclos", summary="Ciclos reales (Config.DIM_Ciclo) para el selector")
 def vivo_ciclos(
-    pais_codigo: Optional[str] = Query(None, description="Código de país, ej. DO"),
+    pais_codigo: Optional[str] = Depends(PaisPermitido),
     db: Session = Depends(get_db),
     _current_user: Usuario = ReadCobertura,
 ):
@@ -194,6 +195,9 @@ def vivo_dashboard(
     """Cobertura y ritmo calculados en vivo: programado = médicos planeados en
     Planeación del Ciclo; realizado = visitas ejecutadas; días hábiles del ciclo
     menos los transcurridos. Sin Excel ni materialización."""
+    # `pais_codigo` es requerido aquí (Query(...)), a diferencia de `PaisPermitido` (opcional):
+    # se valida a mano con el mismo guard en vez de cambiar el contrato del endpoint.
+    exigir_pais(db, current_user, pais_codigo)
     gd = _scope_gd_nombre(db, current_user, gd)  # el GD se limita a su equipo
     return dashboard_vivo(db, ciclo_codigo=ciclo_codigo, pais_codigo=pais_codigo,
                           fecha_corte=fecha_corte, linea=linea, gd=gd)
@@ -209,6 +213,9 @@ def vivo_categorias(
     db: Session = Depends(get_db),
     current_user: Usuario = ReadCobertura,
 ):
+    # `pais_codigo` es requerido aquí (Query(...)), a diferencia de `PaisPermitido` (opcional):
+    # se valida a mano con el mismo guard en vez de cambiar el contrato del endpoint.
+    exigir_pais(db, current_user, pais_codigo)
     gd = _scope_gd_nombre(db, current_user, gd)  # el GD se limita a su equipo
     return categorias_vivo(db, ciclo_codigo=ciclo_codigo, pais_codigo=pais_codigo,
                            gd=gd, linea=linea, rep=rep)

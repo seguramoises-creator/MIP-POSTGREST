@@ -20,6 +20,7 @@ from sqlalchemy import func
 from app.core.deps import get_db, get_current_active_user, require_roles
 from app.core.authz.deps import require
 from app.core.authz.constantes import Accion, Recurso
+from app.core.authz.paises import PaisPermitido, exigir_pais
 from app.core.pagination import PaginationParams, paginate_list
 from app.models.usuario import Rol
 from app.models.hechos import ResultadoIndicador
@@ -36,7 +37,7 @@ ReadProductividad = Depends(require(Accion.READ, Recurso.PRODUCTIVIDAD_COMERCIAL
 
 @router.get("", response_model=dict, summary="KPIs generales de productividad (paginado)")
 def get_productividad(
-    pais_codigo: Optional[str] = Query(None),
+    pais_codigo: Optional[str] = Depends(PaisPermitido),
     ciclo_id: Optional[int] = Query(None),
     linea_id: Optional[int] = Query(None),
     params: PaginationParams = Depends(),
@@ -262,6 +263,9 @@ def get_productividad_pais(
     current_user=ReadProductividad,
 ):
     """KPIs de productividad consolidados por país — todos los RMs."""
+    # `pais_codigo` viene por la URL (path param), no por querystring: no puede usar la
+    # dependency `PaisPermitido` (lee de `Query`), así que se valida a mano con el mismo guard.
+    exigir_pais(db, current_user, pais_codigo)
     q = db.query(
         RepresentanteMedico.id.label("rm_id"),
         RepresentanteMedico.nombre.label("rm_nombre"),
@@ -297,7 +301,7 @@ def get_productividad_pais(
 
 @router.get("/resumen", response_model=dict, summary="Resumen ejecutivo de productividad")
 def get_resumen_productividad(
-    pais_codigo: Optional[str] = None,
+    pais_codigo: Optional[str] = Depends(PaisPermitido),
     ciclo_id: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user=ReadProductividad,

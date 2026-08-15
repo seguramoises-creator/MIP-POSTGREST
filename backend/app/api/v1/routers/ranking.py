@@ -11,6 +11,7 @@ from sqlalchemy import func, Integer
 from app.core.deps import get_db, get_current_active_user
 from app.core.authz.deps import require
 from app.core.authz.constantes import Accion, Recurso
+from app.core.authz.paises import PaisPermitido
 from app.models.usuario import Rol
 from app.models.hechos import RankingRM
 from app.models.dimensiones import RepresentanteMedico, Linea, Gerente, Pais, Ciclo
@@ -116,7 +117,7 @@ def _score_por_rm_ciclo(db: Session, ciclo_id: int, tipo: str, pais_codigo: Opti
 
 @router.get("", response_model=dict, summary="Ranking acumulado (paginado)")
 def get_ranking(
-    pais_codigo: Optional[str] = None,
+    pais_codigo: Optional[str] = Depends(PaisPermitido),
     ciclo_id: Optional[int] = None,
     tipo: str = "MENSUAL",
     top: Optional[int] = None,
