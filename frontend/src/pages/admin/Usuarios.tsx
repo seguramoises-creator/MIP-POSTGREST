@@ -10,6 +10,7 @@ import {
   DialogTitle, DialogContent, DialogActions, TextField, Alert,
   CircularProgress, MenuItem, Select, FormControl, InputLabel, FormHelperText,
   IconButton, Tooltip, Stack, Divider, InputAdornment, Checkbox, FormControlLabel,
+  OutlinedInput,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -201,7 +202,13 @@ export default function Usuarios() {
     return false;
   };
   const submitCreate = () => { if (!emailInvalido()) createMut.mutate(); };
-  const submitUpdate = () => { if (!emailInvalido()) updateMut.mutate(); };
+  const submitUpdate = () => {
+    if (emailInvalido()) return;
+    const id = editItem?.id;
+    updateMut.mutate(undefined, {
+      onSuccess: () => { if (id != null) paisesMut.mutate({ id, paises: form.paises || [] }); },
+    });
+  };
 
   const createMut = useMutation({
     mutationFn: () => api.post('/admin/usuarios', form),
@@ -263,14 +270,31 @@ export default function Usuarios() {
     onError: (e: any) => showMsg(errorMsg(e), 'error'),
   });
 
-  const handleEdit = (row: any) => {
+  const handleEdit = async (row: any) => {
     setEditItem(row);
     setNuevaPass('');
     setEditBloqueado(!!row.bloqueado);
     setForm({ nombre_completo: row.nombre_completo || '', email: row.email || '', rol: row.rol || '',
-              pais_codigo: row.pais_codigo ?? '', rm_id: row.rm_id ?? null, gerente_id: row.gerente_id ?? null });
+              pais_codigo: row.pais_codigo ?? '', rm_id: row.rm_id ?? null, gerente_id: row.gerente_id ?? null,
+              paises: [] });
     setOpenEdit(true);
+    // Los países visibles del usuario se cargan aparte (endpoint propio de alcance) para no
+    // acoplar el PUT de perfil con el PUT de alcance — cada uno reemplaza su propio conjunto.
+    try {
+      const r = await api.get(`/admin/usuarios/${row.id}/paises`);
+      setForm((f) => ({ ...f, paises: r.data?.paises || [] }));
+    } catch {
+      // si falla la carga, se deja vacío (= todos los países); el admin puede corregirlo a mano
+    }
   };
+
+  // Fija los países visibles del usuario editado. Se dispara junto con "Actualizar" —
+  // reemplaza el conjunto completo (PUT), no lo añade.
+  const paisesMut = useMutation({
+    mutationFn: (v: { id: number; paises: string[] }) =>
+      api.put(`/admin/usuarios/${v.id}/paises`, { paises: v.paises }),
+    onError: (e: any) => showMsg(errorMsg(e), 'error'),
+  });
 
   const usuarios: any[] = Array.isArray(data) ? data : [];
 
@@ -528,6 +552,36 @@ export default function Usuarios() {
             {renderPais()}
             {renderRelacion()}
 
+            {/* Alcance de países visibles (Security.FACT_UsuarioPais). Independiente del
+                "País" de arriba (contexto/vínculo del usuario): esto restringe qué países
+                puede CONSULTAR en el sistema. */}
+            <FormControl fullWidth size="small">
+              <InputLabel>Países visibles</InputLabel>
+              <Select
+                multiple
+                label="Países visibles"
+                value={Array.isArray(form.paises) ? form.paises : []}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setForm({ ...form, paises: typeof v === 'string' ? v.split(',') : v });
+                }}
+                input={<OutlinedInput label="Países visibles" />}
+                renderValue={(selected: string[]) =>
+                  selected.length === 0 ? 'Todos los países' : selected.join(', ')
+                }
+              >
+                {(Array.isArray(paises) ? paises : []).map((p: any) => (
+                  <MenuItem key={p.codigo} value={p.codigo}>
+                    <Checkbox size="small" checked={(form.paises || []).includes(p.codigo)} />
+                    {p.codigo} — {p.nombre}
+                  </MenuItem>
+                ))}
+              </Select>
+              <FormHelperText>
+                Sin países seleccionados, el usuario ve todos. Con países, solo esos.
+              </FormHelperText>
+            </FormControl>
+
             {/* Casilla de bloqueo: marcada = usuario bloqueado; desmarcar = desbloquear. */}
             <FormControlLabel
               control={
@@ -586,9 +640,9 @@ export default function Usuarios() {
           <Button
             variant="contained"
             onClick={submitUpdate}
-            disabled={updateMut.isPending || (form.rol === 'REPRESENTANTE_MEDICO' && !form.rm_id)}
+            disabled={updateMut.isPending || paisesMut.isPending || (form.rol === 'REPRESENTANTE_MEDICO' && !form.rm_id)}
           >
-            {updateMut.isPending ? <CircularProgress size={18} /> : 'Actualizar'}
+            {updateMut.isPending || paisesMut.isPending ? <CircularProgress size={18} /> : 'Actualizar'}
           </Button>
         </DialogActions>
       </Dialog>

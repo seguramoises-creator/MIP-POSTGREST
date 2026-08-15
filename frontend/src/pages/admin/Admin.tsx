@@ -21,7 +21,7 @@ import {
   TableRow, Paper, Button, Chip, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, Grid, Alert,
   CircularProgress, MenuItem, Select, FormControl, InputLabel, FormHelperText,
-  IconButton, Tooltip, Autocomplete,
+  IconButton, Tooltip, Autocomplete, Checkbox,
 } from '@mui/material';
 import { Add, Refresh, TableChart, Edit, Upload, ToggleOn, ToggleOff, LockOpen, Lock, Delete, Psychology, TrendingUp, LocalHospital } from '@mui/icons-material';
 import { api } from '../../services/api';
@@ -189,6 +189,103 @@ function GerenteProductoSelector({ value, onChange, paisCodigo, label = 'Gerente
   );
 }
 
+/**
+ * LineaReadOnly — Muestra la línea (nombre visible, nunca ID crudo) en solo lectura.
+ * Usada para `DIM_Gerente.linea_id`: se conserva por compatibilidad ("línea principal
+ * heredada"), pero la fuente de verdad de las líneas de un gerente pasó a ser
+ * `DIM_GerenteLinea` (ver GerenteLineasEditor).
+ */
+function LineaReadOnly({ lineaId, paisCodigo, label }: {
+  lineaId: string | number | '';
+  paisCodigo: string | number | '';
+  label: string;
+}) {
+  const { data: lineas } = useLineas(paisCodigo);
+  const l = (lineas || []).find((x) => String(x.id) === String(lineaId));
+  return (
+    <TextField
+      fullWidth size="small" label={label}
+      value={l ? `${l.codigo} — ${l.nombre}` : (lineaId ? String(lineaId) : '—')}
+      InputProps={{ readOnly: true }}
+      disabled
+    />
+  );
+}
+
+/**
+ * GerenteLineasEditor — Selector múltiple de líneas de un gerente, respaldado por
+ * `DIM_GerenteLinea` (Tarea 1) vía `GET/PUT /admin/gerentes/{id}/lineas`.
+ *
+ * Es un mini-formulario AUTOCONTENIDO con su propio botón "Guardar líneas": el PUT
+ * reemplaza el conjunto completo (no se puede mezclar con el PUT de los demás campos
+ * del gerente, que va a un endpoint distinto).
+ */
+function GerenteLineasEditor({ gerenteId, paisCodigo }: {
+  gerenteId: number | undefined;
+  paisCodigo: string | number | '';
+}) {
+  const qc = useQueryClient();
+  const { data: lineas } = useLineas(paisCodigo);
+  const [selected, setSelected] = useState<number[]>([]);
+  const [cargado, setCargado] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    setCargado(false);
+    setSelected([]);
+    if (!gerenteId) return;
+    api.get(`/admin/gerentes/${gerenteId}/lineas`)
+      .then((r) => setSelected(r.data?.lineas || []))
+      .finally(() => setCargado(true));
+  }, [gerenteId]);
+
+  const saveMut = useMutation({
+    mutationFn: () => api.put(`/admin/gerentes/${gerenteId}/lineas`, { lineas: selected }),
+    onSuccess: () => { setMsg('Líneas guardadas'); qc.invalidateQueries({ queryKey: ['gerentes'] }); },
+    onError: (e: any) => setMsg(`Error: ${e.response?.data?.detail || e.message}`),
+  });
+
+  if (!gerenteId) return null;
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <FormControl fullWidth size="small" disabled={!cargado}>
+        <InputLabel>Líneas asignadas</InputLabel>
+        <Select
+          multiple
+          label="Líneas asignadas"
+          value={selected}
+          onChange={(e) => {
+            const v = e.target.value;
+            setSelected(typeof v === 'string' ? v.split(',').map(Number) : (v as number[]));
+          }}
+          renderValue={(sel: number[]) =>
+            sel.length === 0
+              ? '— Sin líneas asignadas —'
+              : (lineas || []).filter((l) => sel.includes(l.id)).map((l) => l.codigo).join(', ')
+          }
+        >
+          {(lineas || []).map((l) => (
+            <MenuItem key={l.id} value={l.id}>
+              <Checkbox size="small" checked={selected.includes(l.id)} />
+              {l.codigo} — {l.nombre}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+        <Button size="small" variant="outlined" disabled={saveMut.isPending || !cargado}
+          onClick={() => saveMut.mutate()}>
+          {saveMut.isPending ? <CircularProgress size={16} /> : 'Guardar líneas'}
+        </Button>
+        {msg && (
+          <Typography variant="caption" color={msg.startsWith('Error') ? 'error' : 'success.main'}>{msg}</Typography>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
 // ── Botón de importación desde Excel ──────────────────────────────────
 /**
  * ImportButton — Botón que abre un selector de archivo Excel.
@@ -246,6 +343,8 @@ type FieldDef = {
   isLinea?: boolean;   // true = usar LineaSelector (filtrado por pais_codigo del mismo form)
   isGerente?: boolean; // true = usar GerenteSelector (filtrado por pais_codigo del mismo form)
   isGerenteProducto?: boolean; // true = usar GerenteProductoSelector (DIM_Gerente con código GP*)
+  isLineaReadOnly?: boolean;   // true = mostrar la línea en solo lectura (nombre visible, nunca ID)
+  isLineasGerente?: boolean;   // true = usar GerenteLineasEditor (DIM_GerenteLinea, GET/PUT propios)
 };
 
 // ── Pestaña genérica de catálogo ──────────────────────────────────────
@@ -376,8 +475,22 @@ function CatalogoTab({
 
   // Renderiza un campo del formulario según su tipo
   const renderField = (f: FieldDef) => (
-    <Grid item xs={12} sm={6} key={f.key}>
-      {f.isPais ? (
+    <Grid item xs={12} sm={f.isLineasGerente ? 12 : 6} key={f.key}>
+      {f.isLineasGerente ? (
+        // Campo especial: selector múltiple de líneas de un gerente (DIM_GerenteLinea).
+        // Solo tiene sentido en Editar (necesita el id del registro ya existente).
+        <GerenteLineasEditor
+          gerenteId={editItem?.id}
+          paisCodigo={form['pais_codigo'] || editItem?.pais_codigo || ''}
+        />
+      ) : f.isLineaReadOnly ? (
+        // Campo especial: línea principal heredada, en solo lectura (nombre visible)
+        <LineaReadOnly
+          lineaId={form[f.key] || ''}
+          paisCodigo={form['pais_codigo'] || editItem?.pais_codigo || ''}
+          label={f.label}
+        />
+      ) : f.isPais ? (
         // Campo especial: selector de país con formato "CR — Costa Rica"
         <PaisSelector value={form[f.key] || ''} onChange={(v) => setForm({ ...form, [f.key]: v }) } />
       ) : f.isLinea ? (
@@ -1562,6 +1675,18 @@ const TABS_DIM = [
       { key: 'email', label: 'Email' },
       { key: 'tipo', label: 'Tipo', options: ['DISTRITO', 'MARCA', 'REGIONAL'] },
       { key: 'fecha_ingreso', label: 'Fecha Ingreso', type: 'date' },
+    ],
+    // En Editar, `linea_id` pasa a solo lectura ("línea principal heredada") — la fuente
+    // de verdad de las líneas de un gerente es `DIM_GerenteLinea` (selector múltiple propio).
+    editFields: [
+      { key: 'pais_codigo', label: 'País', isPais: true },
+      { key: 'linea_id', label: 'Línea principal (heredada)', isLineaReadOnly: true },
+      { key: 'codigo', label: 'Código (GD001...)' },
+      { key: 'nombre', label: 'Nombre Completo' },
+      { key: 'email', label: 'Email' },
+      { key: 'tipo', label: 'Tipo', options: ['DISTRITO', 'MARCA', 'REGIONAL'] },
+      { key: 'fecha_ingreso', label: 'Fecha Ingreso', type: 'date' },
+      { key: 'lineas_editor', label: 'Líneas asignadas', isLineasGerente: true },
     ],
   },
   {

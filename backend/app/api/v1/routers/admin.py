@@ -41,6 +41,7 @@ from app.schemas.schemas import (
 )
 from app.schemas.common import Msg, PagedResponse
 from app.core.security import hash_password
+from app.services import alcance_service
 
 router = APIRouter(prefix="/admin", tags=["Administración"])
 AdminOnly = Depends(require_roles(Rol.ADMIN))
@@ -148,6 +149,18 @@ def update_gerente(id: int, data: GerenteCreate, db: Session = Depends(get_db), 
         setattr(obj, k, v)
     db.commit(); db.refresh(obj)
     return obj
+
+
+@router.get("/gerentes/{gerente_id}/lineas", summary="Líneas asignadas a un gerente")
+def get_lineas_gerente(gerente_id: int, db: Session = Depends(get_db), _=AdminOnly):
+    return {"lineas": sorted(alcance_service.lineas_de(db, gerente_id))}
+
+
+@router.put("/gerentes/{gerente_id}/lineas", summary="Fijar las líneas de un gerente (reemplaza el conjunto)")
+def put_lineas_gerente(gerente_id: int, payload: dict, db: Session = Depends(get_db), _=AdminOnly):
+    alcance_service.fijar_lineas(db, gerente_id, payload.get("lineas", []))
+    db.commit()
+    return {"lineas": sorted(alcance_service.lineas_de(db, gerente_id))}
 
 
 # ── Representantes Médicos ────────────────────────────────────────────────────
@@ -999,6 +1012,19 @@ def delete_usuario(id: int, db: Session = Depends(get_db), _=AdminOnly):
     obj.activo = False
     db.commit()
     return Msg(message="Usuario desactivado")
+
+
+@router.get("/usuarios/{usuario_id}/paises", summary="Países visibles para un usuario")
+def get_paises_usuario(usuario_id: int, db: Session = Depends(get_db), _=AdminOnly):
+    return {"paises": sorted(alcance_service.paises_de(db, usuario_id))}
+
+
+@router.put("/usuarios/{usuario_id}/paises", summary="Fijar los países de un usuario (reemplaza el conjunto)")
+def put_paises_usuario(usuario_id: int, payload: dict, db: Session = Depends(get_db), _=AdminOnly):
+    """Lista vacía = todos los países (spec §3)."""
+    alcance_service.fijar_paises(db, usuario_id, payload.get("paises", []))
+    db.commit()
+    return {"paises": sorted(alcance_service.paises_de(db, usuario_id))}
 
 
 @router.post("/usuarios/{id}/reenviar-activacion", response_model=Msg,
