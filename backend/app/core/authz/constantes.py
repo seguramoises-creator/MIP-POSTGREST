@@ -23,10 +23,14 @@ class Alcance(str, Enum):
     NONE = "none"
     OWN = "own"
     TEAM = "team"
+    LINEA = "linea"
     ALL = "all"
 
 
-_ORDEN = {Alcance.NONE: 0, Alcance.OWN: 1, Alcance.TEAM: 2, Alcance.ALL: 3}
+# LINEA va entre TEAM y ALL: un Gerente de Marca ve más que un equipo (su línea
+# en todos los distritos) y menos que todo (solo su línea). El orden lo usa
+# `alcance_min` para capar el export por la lectura del módulo.
+_ORDEN = {Alcance.NONE: 0, Alcance.OWN: 1, Alcance.TEAM: 2, Alcance.LINEA: 3, Alcance.ALL: 4}
 
 
 def alcance_min(a: Alcance, b: Alcance) -> Alcance:
