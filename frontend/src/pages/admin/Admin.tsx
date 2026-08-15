@@ -262,7 +262,8 @@ function GerenteLineasEditor({ gerenteId, paisCodigo }: {
           renderValue={(sel: number[]) =>
             sel.length === 0
               ? '— Sin líneas asignadas —'
-              : (lineas || []).filter((l) => sel.includes(l.id)).map((l) => l.codigo).join(', ')
+              : (lineas || []).filter((l) => sel.includes(l.id))
+                  .map((l) => `${l.codigo} — ${l.nombre}`).join(', ')
           }
         >
           {(lineas || []).map((l) => (

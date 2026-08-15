@@ -70,7 +70,8 @@ def db(motor):
 def escenario(db):
     do = Pais(codigo="DO", nombre="República Dominicana")
     gt = Pais(codigo="GT", nombre="Guatemala")
-    db.add_all([do, gt])
+    hn = Pais(codigo="HN", nombre="Honduras")
+    db.add_all([do, gt, hn])
     db.flush()
 
     linea_a = Linea(pais_codigo="DO", codigo="A", nombre="Línea A")
@@ -124,3 +125,38 @@ def test_asignar_lineas_reemplaza_el_conjunto(db, escenario):
     alcance_service.fijar_lineas(db, g.id, [escenario["linea_b"].id])
     db.commit()
     assert alcance_service.lineas_de(db, g.id) == {escenario["linea_b"].id}
+
+
+def test_asignar_pais_inexistente_no_cambia_la_tabla(db, escenario):
+    """El código de país no tiene FK (`Security.FACT_UsuarioPais.pais_codigo` es un
+    `String(10)` suelto): sin esta validación un típo como "XX" se guardaría sin
+    queja y dejaría al usuario sin ver ningún país real.
+
+    El orden importa: la implementación hace `delete` antes del `insert`, así que
+    si la validación no fuera lo primero, un típo BORRARÍA el conjunto vigente sin
+    reemplazarlo por nada válido. Por eso se deja un `fijar_paises` válido primero
+    y se comprueba que sobrevive intacto al intento fallido."""
+    u = escenario["usuario_gt_hn"]
+    alcance_service.fijar_paises(db, u.id, ["DO"])
+    db.commit()
+
+    with pytest.raises(alcance_service.AlcanceInvalidoError):
+        alcance_service.fijar_paises(db, u.id, ["XX"])
+    db.rollback()
+
+    assert alcance_service.paises_de(db, u.id) == {"DO"}
+
+
+def test_asignar_linea_inexistente_da_error_controlado(db, escenario):
+    """`DIM_GerenteLinea.linea_id` sí tiene FK, pero sin validar antes el error que
+    llega es un `IntegrityError` de PostgreSQL sin manejar (500 genérico). Debe ser
+    `AlcanceInvalidoError`, controlado, y no debe tocar el conjunto vigente."""
+    g = escenario["gerente_marca"]
+    alcance_service.fijar_lineas(db, g.id, [escenario["linea_a"].id])
+    db.commit()
+
+    with pytest.raises(alcance_service.AlcanceInvalidoError):
+        alcance_service.fijar_lineas(db, g.id, [999999])
+    db.rollback()
+
+    assert alcance_service.lineas_de(db, g.id) == {escenario["linea_a"].id}

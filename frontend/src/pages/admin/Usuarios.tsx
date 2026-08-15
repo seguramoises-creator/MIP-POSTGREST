@@ -566,9 +566,16 @@ export default function Usuarios() {
                   setForm({ ...form, paises: typeof v === 'string' ? v.split(',') : v });
                 }}
                 input={<OutlinedInput label="Países visibles" />}
-                renderValue={(selected: string[]) =>
-                  selected.length === 0 ? 'Todos los países' : selected.join(', ')
-                }
+                renderValue={(selected: string[]) => {
+                  if (selected.length === 0) return 'Todos los países';
+                  const lista = Array.isArray(paises) ? paises : [];
+                  return selected
+                    .map((cod) => {
+                      const p = lista.find((x: any) => x.codigo === cod);
+                      return p ? `${p.codigo} — ${p.nombre}` : cod;
+                    })
+                    .join(', ');
+                }}
               >
                 {(Array.isArray(paises) ? paises : []).map((p: any) => (
                   <MenuItem key={p.codigo} value={p.codigo}>

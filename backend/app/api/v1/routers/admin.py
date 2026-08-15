@@ -158,7 +158,11 @@ def get_lineas_gerente(gerente_id: int, db: Session = Depends(get_db), _=AdminOn
 
 @router.put("/gerentes/{gerente_id}/lineas", summary="Fijar las líneas de un gerente (reemplaza el conjunto)")
 def put_lineas_gerente(gerente_id: int, payload: dict, db: Session = Depends(get_db), _=AdminOnly):
-    alcance_service.fijar_lineas(db, gerente_id, payload.get("lineas", []))
+    try:
+        alcance_service.fijar_lineas(db, gerente_id, payload.get("lineas", []))
+    except alcance_service.AlcanceInvalidoError as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc))
     db.commit()
     return {"lineas": sorted(alcance_service.lineas_de(db, gerente_id))}
 
@@ -1022,7 +1026,11 @@ def get_paises_usuario(usuario_id: int, db: Session = Depends(get_db), _=AdminOn
 @router.put("/usuarios/{usuario_id}/paises", summary="Fijar los países de un usuario (reemplaza el conjunto)")
 def put_paises_usuario(usuario_id: int, payload: dict, db: Session = Depends(get_db), _=AdminOnly):
     """Lista vacía = todos los países (spec §3)."""
-    alcance_service.fijar_paises(db, usuario_id, payload.get("paises", []))
+    try:
+        alcance_service.fijar_paises(db, usuario_id, payload.get("paises", []))
+    except alcance_service.AlcanceInvalidoError as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc))
     db.commit()
     return {"paises": sorted(alcance_service.paises_de(db, usuario_id))}
 
