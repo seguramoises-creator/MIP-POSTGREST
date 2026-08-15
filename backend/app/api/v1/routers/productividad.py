@@ -147,6 +147,11 @@ def get_productividad_rm(
     if not rm:
         from fastapi import HTTPException
         raise HTTPException(404, "RM no encontrado")
+    # Hallazgo Critical de revisión (ago-2026, ronda 2): mismo patrón que
+    # `cobertura_predictiva._verificar_acceso_rm` — el resto de roles (ADMIN, GERPROD,
+    # PRESIDENCIA, DIR_COMERCIAL, GERENTE_MARCA) no tenían ningún límite de país aquí; un
+    # `rm_id` explícito de otro país saltaba el piso aunque `get_productividad` ya lo tuviera.
+    exigir_pais(db, current_user, rm.pais_codigo)
 
     q = db.query(
         Indicador.codigo,

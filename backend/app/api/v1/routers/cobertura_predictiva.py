@@ -108,7 +108,15 @@ def _scope_gd_nombre(db: Session, current_user: Usuario, gd: Optional[str]) -> O
 
 
 def _verificar_acceso_rm(db: Session, current_user: Usuario, rm_id: int) -> RepresentanteMedico:
-    """Valida que el usuario autenticado pueda ver el detalle de este RM."""
+    """Valida que el usuario autenticado pueda ver el detalle de este RM.
+
+    Hallazgo Critical de revisión (ago-2026, ronda 2, mismo patrón que `_cobertura_base` en
+    `visita_cobertura_service.py`): esta función solo acotaba por ROL (RM=propio, GD=su
+    equipo) — ADMIN/GERENTE_PRODUCTIVIDAD/PRESIDENCIA/DIR_COMERCIAL/GERENTE_MARCA pasaban de
+    largo sin ningún límite de país, así que un `rm_id` explícito de otro país saltaba el
+    piso igual que el `vm_id` de Cobertura del módulo Visita. `exigir_pais` cierra esto para
+    TODOS los roles (RM/GD incluidos: es redundante pero inofensivo para su propio caso, ya
+    que su propio país siempre está entre los permitidos)."""
     rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == rm_id).first()
     if not rm:
         raise HTTPException(404, f"RM ID={rm_id} no encontrado")
@@ -119,6 +127,9 @@ def _verificar_acceso_rm(db: Session, current_user: Usuario, rm_id: int) -> Repr
     elif current_user.rol == Rol.GERENTE_DISTRITO:
         if not current_user.gerente_id or rm.gerente_id != current_user.gerente_id:
             raise HTTPException(403, "Este RM no pertenece a su equipo.")
+
+    from app.core.authz.paises import exigir_pais
+    exigir_pais(db, current_user, rm.pais_codigo)
 
     return rm
 

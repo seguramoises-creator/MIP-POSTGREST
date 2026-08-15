@@ -133,10 +133,19 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
     Solo incluye médicos VIGENTES para el ciclo: excluye altas pendientes/rechazadas
     y respeta el ciclo efectivo de alta/baja (aprobación del Gerente de Distrito).
 
-    Filtros: `vm_id` (un visitador) tiene prioridad; si no, `gerente_id`/`linea_id`/
+    Filtros: `vm_id` (un visitador) acota a ese único visitador; `gerente_id`/`linea_id`/
     `pais_codigo` restringen a los médicos de ese distrito/línea/país; `solo_ruptura`
-    deja solo los de 3+ ciclos sin visita. `permitidos` (piso de país del usuario, ver
-    `_rm_ids_por`) se aplica siempre, con o sin `vm_id` explícito."""
+    deja solo los de 3+ ciclos sin visita.
+
+    `permitidos` (hallazgo Critical de revisión, ago-2026, ronda 2) se aplica SIEMPRE, CON
+    o SIN `vm_id` explícito — ya no es excluyente. Hasta esta corrección, `vm_id` tenía
+    prioridad EXCLUSIVA (`if vm_id: ... else: ...`) y `_rm_ids_por` (donde vive el piso de
+    país) nunca se llamaba cuando `vm_id` venía en la query: un usuario con `{DO}` que
+    pidiera el `vm_id` de un visitador de Guatemala se saltaba el piso por completo. Ahora
+    el filtro de `vm_id` y el de `rm_ids`/`permitidos` se aplican los DOS, con AND: si el
+    `vm_id` pedido no pertenece a los países permitidos, la intersección queda vacía (mismo
+    resultado que hoy para un `vm_id` inexistente — no se distingue "no existe" de "no
+    autorizado", igual que `exigir_pais`)."""
     from app.services.visita_aprobacion_service import ordenes_ciclo, cuenta_en_ciclo
     ordenes = ordenes_ciclo(db)
     ciclo_orden = ordenes.get(ciclo_id)
@@ -144,10 +153,9 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
     mq = db.query(MedicoVisita)
     if vm_id:
         mq = mq.filter(MedicoVisita.vm_id == vm_id)
-    else:
-        rm_ids = _rm_ids_por(db, gerente_id, linea_id, pais_codigo, permitidos)
-        if rm_ids is not None:
-            mq = mq.filter(MedicoVisita.vm_id.in_(rm_ids or [-1]))  # [] => sin médicos
+    rm_ids = _rm_ids_por(db, gerente_id, linea_id, pais_codigo, permitidos)
+    if rm_ids is not None:
+        mq = mq.filter(MedicoVisita.vm_id.in_(rm_ids or [-1]))  # [] => sin médicos
     if solo_ruptura:
         mq = mq.filter(MedicoVisita.ciclos_sin_visita >= 3)
     medicos = [m for m in mq.all() if cuenta_en_ciclo(m, ciclo_orden, ordenes)]
@@ -204,7 +212,10 @@ def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | Non
     Filtrable por visitador (vm_id), Gerente de Distrito (gerente_id), Línea (linea_id),
     país (pais_codigo, aislamiento multipaís cuando no hay vm_id/gerente_id/linea_id) y
     solo médicos en ruptura de secuencia (solo_ruptura). `permitidos` = piso de país del
-    usuario (ver `_rm_ids_por`): se aplica siempre, la haya pedido el cliente o no."""
+    usuario (ver `_rm_ids_por`): se aplica siempre, la haya pedido el cliente o no —
+    incluido cuando `vm_id` viene explícito (ronda 2, ver `_cobertura_base`): el filtro de
+    `vm_id` y el de `permitidos` van los DOS, con AND, en las tres consultas de esta
+    función (panel principal vía `_cobertura_base`, ruptura, acompañamiento)."""
     ciclo_id = ciclo_id or ciclo_por_defecto(db, pais_codigo=pais_codigo)
     if ciclo_id is None:
         return {"ciclo_id": None, "panel": 0, "visitados": 0, "con_revisita": 0,
@@ -214,18 +225,19 @@ def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | Non
     base = _cobertura_base(db, ciclo_id, vm_id, gerente_id, linea_id, solo_ruptura, pais_codigo,
                            permitidos)
     # Ruptura de secuencia (≥3 ciclos sin visita) — respeta los mismos filtros de scope.
+    # `vm_id` y `rm_ids`/`permitidos` se aplican los DOS (AND), no excluyentes: ver docstring.
     rq = db.query(MedicoVisita).filter(
         MedicoVisita.activo == True, MedicoVisita.ciclos_sin_visita >= 3)  # noqa: E712
     if vm_id:
         rq = rq.filter(MedicoVisita.vm_id == vm_id)
-    else:
-        rm_ids = _rm_ids_por(db, gerente_id, linea_id, pais_codigo, permitidos)
-        if rm_ids is not None:
-            rq = rq.filter(MedicoVisita.vm_id.in_(rm_ids or [-1]))
+    rm_ids = _rm_ids_por(db, gerente_id, linea_id, pais_codigo, permitidos)
+    if rm_ids is not None:
+        rq = rq.filter(MedicoVisita.vm_id.in_(rm_ids or [-1]))
     base["ruptura"] = [{"id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria,
                         "ciclos_sin_visita": m.ciclos_sin_visita}
                        for m in rq.order_by(MedicoVisita.ciclos_sin_visita.desc()).all()]
     # KPI de acompañamiento: visitas ejecutadas acompañadas por el GD (respeta el scope).
+    # Mismo patrón AND que arriba: `vm_id` explícito ya no salta el piso de `permitidos`.
     aq = db.query(VisitaRegistro).filter(
         VisitaRegistro.ciclo_id == ciclo_id, VisitaRegistro.ejecutada == True,  # noqa: E712
         VisitaRegistro.acompanado == True)  # noqa: E712
@@ -234,11 +246,10 @@ def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | Non
     if vm_id:
         aq = aq.filter(VisitaRegistro.vm_id == vm_id)
         eq = eq.filter(VisitaRegistro.vm_id == vm_id)
-    else:
-        rm_ids_a = _rm_ids_por(db, gerente_id, linea_id, pais_codigo, permitidos)
-        if rm_ids_a is not None:
-            aq = aq.filter(VisitaRegistro.vm_id.in_(rm_ids_a or [-1]))
-            eq = eq.filter(VisitaRegistro.vm_id.in_(rm_ids_a or [-1]))
+    rm_ids_a = _rm_ids_por(db, gerente_id, linea_id, pais_codigo, permitidos)
+    if rm_ids_a is not None:
+        aq = aq.filter(VisitaRegistro.vm_id.in_(rm_ids_a or [-1]))
+        eq = eq.filter(VisitaRegistro.vm_id.in_(rm_ids_a or [-1]))
     acomp, total_ejec = aq.count(), eq.count()
     base["acompanadas"] = acomp
     base["visitas_ejecutadas"] = total_ejec
@@ -249,11 +260,15 @@ def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | Non
     # Cuando se consulta un solo visitador (RM), se agrega cómo va SU LÍNEA COMPLETA — para que el
     # RM compare su programación (panel propio) contra el total de su línea, sin ver el agregado
     # de toda la empresa. Solo cifras agregadas de la línea (sin nombres de médicos de otros VM).
+    # Si `vm_id` no está en `permitidos` (ronda 2), `base` de arriba ya quedó vacío por el AND —
+    # este bloque además se salta entero: sin él, `rm.linea_id`/`Linea.nombre` de un VM ajeno se
+    # habrían leído igual (metadato menor, pero de un país fuera del piso del usuario).
     if vm_id:
         from app.models.dimensiones import RepresentanteMedico, Linea
         rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
-        if rm and rm.linea_id:
-            lb = _cobertura_base(db, ciclo_id, None, None, rm.linea_id, False)
+        vm_permitido = permitidos is None or bool(rm and rm.pais_codigo in permitidos)
+        if rm and rm.linea_id and vm_permitido:
+            lb = _cobertura_base(db, ciclo_id, None, None, rm.linea_id, False, permitidos=permitidos)
             ln = db.query(Linea.nombre).filter(Linea.id == rm.linea_id).scalar()
             base["linea_total"] = {
                 "linea_id": rm.linea_id, "linea_nombre": ln or f"Línea #{rm.linea_id}",

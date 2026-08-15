@@ -544,15 +544,20 @@ def test_listar_medicos_service_sin_pais_no_restringe(monkeypatch):
     assert {m["id"] for m in out} == {1, 2}
 
 
-def test_listar_medicos_service_con_vm_id_ignora_pais(monkeypatch):
-    """Con `vm_id` explícito, el filtro por país no debe tocarse (prioridad de vm_id,
-    igual que en el resto del módulo)."""
+def test_listar_medicos_service_con_vm_id_y_pais_contradictorio_no_ve_nada(monkeypatch):
+    """Ronda 2 (hallazgo Critical de revisión, ago-2026): `vm_id` YA NO tiene prioridad
+    exclusiva sobre `pais_codigo`/`permitidos` — se aplican los DOS con AND. Si el `vm_id`
+    pedido no pertenece al país filtrado (aquí el 100 es de DO, se filtra por GT), el panel
+    queda vacío en vez de devolver el médico igual."""
     monkeypatch.setattr(cob, "ciclo_por_defecto", lambda db: None)
     medicos = [_med(1, vm_id=100)]
+    rms_gt = []  # el RM 100 es de DO: no aparece al filtrar por GT
 
     def query(*args):
         if _es(args, MedicoVisita):
             return _FakeQuery(medicos)
+        if _es(args, RepresentanteMedico.id):
+            return _FakeQuery(rms_gt, proj=("id",))
         if args and args[0] is RepresentanteMedico.id and len(args) == 2:
             return _FakeQuery([], proj=("id", "linea_id"))
         if args and args[0] is Especialidad.id:
@@ -565,16 +570,72 @@ def test_listar_medicos_service_con_vm_id_ignora_pais(monkeypatch):
     db = MagicMock()
     db.query.side_effect = query
 
-    # pais_codigo="GT" (distinto del médico) pero vm_id=100 manda: sigue viendo el médico.
     out = vs.listar_medicos(db, vm_id=100, pais_codigo="GT", lite=True)
+    assert out == []
+
+
+def test_listar_medicos_service_con_vm_id_y_pais_coincidente_si_ve(monkeypatch):
+    """Compatibilidad: `vm_id` + `pais_codigo` que SÍ coinciden (el VM es de ese país)
+    siguen funcionando con normalidad — el AND no bloquea lo legítimo."""
+    monkeypatch.setattr(cob, "ciclo_por_defecto", lambda db: None)
+    medicos = [_med(1, vm_id=100)]
+    rms_do = [_rm(100, pais_codigo="DO")]
+
+    def query(*args):
+        if _es(args, MedicoVisita):
+            return _FakeQuery(medicos)
+        if _es(args, RepresentanteMedico.id):
+            return _FakeQuery(rms_do, proj=("id",))
+        if args and args[0] is RepresentanteMedico.id and len(args) == 2:
+            return _FakeQuery([], proj=("id", "linea_id"))
+        if args and args[0] is Especialidad.id:
+            return _FakeQuery([], proj=("id", "nombre"))
+        if args and args[0] is Linea.id:
+            return _FakeQuery([], proj=("id", "nombre"))
+        if args and args[0] is VisitaRegistro.medico_id:
+            return _FakeQuery([], proj=None)
+        raise AssertionError(args)
+    db = MagicMock()
+    db.query.side_effect = query
+
+    out = vs.listar_medicos(db, vm_id=100, pais_codigo="DO", lite=True)
     assert [m["id"] for m in out] == [1]
+
+
+def test_listar_medicos_service_con_vm_id_y_permitidos_contradictorio_no_ve_nada(monkeypatch):
+    """El caso REAL del hallazgo: sin `pais_codigo` explícito (el cliente no lo manda) pero
+    con `permitidos` restringido — el piso se aplica igual, aunque nadie pidió país."""
+    monkeypatch.setattr(cob, "ciclo_por_defecto", lambda db: None)
+    medicos = [_med(1, vm_id=100)]
+    rms_do = []  # el 100 es de GT: no aparece al filtrar por permitidos={DO}
+
+    def query(*args):
+        if _es(args, MedicoVisita):
+            return _FakeQuery(medicos)
+        if _es(args, RepresentanteMedico.id):
+            return _FakeQuery(rms_do, proj=("id",))
+        if args and args[0] is RepresentanteMedico.id and len(args) == 2:
+            return _FakeQuery([], proj=("id", "linea_id"))
+        if args and args[0] is Especialidad.id:
+            return _FakeQuery([], proj=("id", "nombre"))
+        if args and args[0] is Linea.id:
+            return _FakeQuery([], proj=("id", "nombre"))
+        if args and args[0] is VisitaRegistro.medico_id:
+            return _FakeQuery([], proj=None)
+        raise AssertionError(args)
+    db = MagicMock()
+    db.query.side_effect = query
+
+    out = vs.listar_medicos(db, vm_id=100, permitidos={"DO"}, lite=True)
+    assert out == []
 
 
 # ── Routers: verifican que pais_codigo llega al servicio ────────────────────────
 def test_router_visita_medicos_pasa_pais_codigo(monkeypatch):
     llamada = {}
 
-    def fake_listar(db, vm_id=None, incluir_inactivos=False, lite=False, pais_codigo=None):
+    def fake_listar(db, vm_id=None, incluir_inactivos=False, lite=False, pais_codigo=None,
+                    permitidos=None):
         llamada["pais_codigo"] = pais_codigo
         return []
     monkeypatch.setattr(vs, "listar_medicos", fake_listar)

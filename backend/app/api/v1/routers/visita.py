@@ -174,10 +174,13 @@ def listar_medicos(vm_id: int | None = None, incluir_inactivos: bool = False,
     `incluir_inactivos=true` incluye los médicos desactivados (para reactivarlos).
     `lite=true` devuelve solo los campos de LISTA (rendimiento; la ficha completa se
     obtiene con GET /visita/medicos/{id} al editar).
-    `pais_codigo` (aislamiento multipaís): sin `vm_id`, acota el panel agregado a un país."""
+    `pais_codigo` (aislamiento multipaís): sin `vm_id`, acota el panel agregado a un país.
+    `permitidos` (piso de país, siempre — incluso con `vm_id` explícito, ver
+    `visita_service.listar_medicos`)."""
     vm = _scope_vm(current_user, vm_id)
+    permitidos = _scope.paises_visibles(db, current_user)
     return visita_service.listar_medicos(db, vm_id=vm, incluir_inactivos=incluir_inactivos,
-                                         lite=lite, pais_codigo=pais_codigo)
+                                         lite=lite, pais_codigo=pais_codigo, permitidos=permitidos)
 
 
 @router.get("/medicos/existentes", response_model=list[dict])

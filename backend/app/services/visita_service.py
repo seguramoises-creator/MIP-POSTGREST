@@ -241,24 +241,31 @@ def actualizar_medico(db: Session, medico: MedicoVisita,
 
 def listar_medicos(db: Session, vm_id: int | None = None, ciclo_id: int | None = None,
                    incluir_inactivos: bool = False, lite: bool = False,
-                   pais_codigo: str | None = None) -> list[dict]:
+                   pais_codigo: str | None = None,
+                   permitidos: set[str] | None = None) -> list[dict]:
     """Lista los médicos del panel (opcionalmente de un VM), con el nombre de la
     especialidad y el estado de visita del ciclo (para el Panel Médico enriquecido):
     `estado_visita` = 'vr' (Vista+Revisita), 'v' (una visita), 'sin' (sin visitar).
 
     `pais_codigo` (aislamiento multipaís): sin `vm_id`, si se indica se filtran los
     médicos a los paneles de VMs de ese país (sin filtro, listaba el panel agregado
-    de TODOS los países)."""
-    from app.services.visita_cobertura_service import ciclo_por_defecto, _mapa_visitas
+    de TODOS los países).
+
+    `permitidos` (hallazgo Critical de revisión, ago-2026, ronda 2 — mismo patrón que
+    `visita_cobertura_service._cobertura_base`): piso de país del usuario
+    (`scope.paises_visibles`), aplicado SIEMPRE, CON o SIN `vm_id` explícito. Antes,
+    `vm_id` tenía prioridad EXCLUSIVA (`if vm_id: ... elif pais_codigo: ...`) y el filtro
+    de país nunca corría si venía `vm_id` — un usuario restringido a `{DO}` que pidiera el
+    panel de un `vm_id` de otro país lo veía completo."""
+    from app.services.visita_cobertura_service import ciclo_por_defecto, _mapa_visitas, _rm_ids_por
 
     q = db.query(MedicoVisita)
     if not incluir_inactivos:
         q = q.filter(MedicoVisita.activo == True)  # noqa: E712
     if vm_id:
         q = q.filter(MedicoVisita.vm_id == vm_id)
-    elif pais_codigo:
-        rm_ids = [r[0] for r in db.query(RepresentanteMedico.id)
-                  .filter(RepresentanteMedico.pais_codigo == pais_codigo).all()]
+    rm_ids = _rm_ids_por(db, None, None, pais_codigo, permitidos)
+    if rm_ids is not None:
         q = q.filter(MedicoVisita.vm_id.in_(rm_ids or [-1]))
     medicos = q.order_by(MedicoVisita.nombre_completo).all()
     esp_ids = {m.especialidad_id for m in medicos if m.especialidad_id}
