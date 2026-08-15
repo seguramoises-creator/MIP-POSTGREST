@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles, get_current_active_user
 from app.core.authz.paises import PaisPermitido
+from app.core.authz import scope as _scope
 from app.models.usuario import Rol
 from app.schemas.visita import (
     MedicoVisitaCrear, MedicoVisitaActualizar, MedicoVisitaResponse, VisitaRegistrar,
@@ -438,11 +439,16 @@ def cobertura_resumen(ciclo_id: int | None = None, vm_id: int | None = None,
     """Dashboard de Cobertura: gauges (cobertura/V+R/gap), desglose A/B/C, listas y ruptura.
     El VM ve su propia cobertura; ADMIN/GERENTE ven el equipo o filtran por visitador
     (?vm_id=), Gerente de Distrito (?gerente_id=), Línea (?linea_id=), país (?pais_codigo=,
-    aislamiento multipaís) y ruptura (?solo_ruptura=)."""
+    aislamiento multipaís) y ruptura (?solo_ruptura=).
+
+    `permitidos` (hallazgo Critical de revisión, ago-2026): se pasa SIEMPRE al servicio como
+    piso de país, exista o no `pais_codigo` en la query — omitirlo ya no basta para ver otro
+    país (antes bastaba con no mandarlo)."""
     from app.services import visita_cobertura_service
     vm = _scope_vm(current_user, vm_id)
+    permitidos = _scope.paises_visibles(db, current_user)
     return visita_cobertura_service.resumen_cobertura(
-        db, ciclo_id, vm, gerente_id, linea_id, solo_ruptura, pais_codigo)
+        db, ciclo_id, vm, gerente_id, linea_id, solo_ruptura, pais_codigo, permitidos)
 
 
 @router.get("/cobertura/ranking", response_model=dict)
@@ -451,9 +457,11 @@ def cobertura_ranking(metrica: str = "cobertura", ciclo_id: int | None = None,
                       db: Session = Depends(get_db), current_user=ReadCobertura):
     """Detalle desplegable por visitador: ranking de quién cumple/no el indicador.
     metrica: 'cobertura' | 'completa' | 'sin_visitar'.
-    `pais_codigo` (aislamiento multipaís): acota el ranking a los VMs de ese país."""
+    `pais_codigo` (aislamiento multipaís): acota el ranking a los VMs de ese país.
+    `permitidos` (piso de país, siempre — ver `cobertura_resumen`)."""
     from app.services import visita_cobertura_service
-    return visita_cobertura_service.ranking_visitadores(db, ciclo_id, metrica, pais_codigo)
+    permitidos = _scope.paises_visibles(db, current_user)
+    return visita_cobertura_service.ranking_visitadores(db, ciclo_id, metrica, pais_codigo, permitidos)
 
 
 # ── Registro de visita (Parte 4) ──────────────────────────────────────────────
@@ -642,10 +650,12 @@ def estado_ruptura(vm_id: int | None = None, gerente_id: int | None = None,
                    db: Session = Depends(get_db), current_user=ReadCobertura):
     """Médicos en ruptura por severidad (1 / 2 / ≥3 ciclos sin visita). El VM ve el suyo;
     gestión puede filtrar por Gerente de Distrito (?gerente_id=), Línea (?linea_id=) y
-    País (?pais_codigo=, aislamiento multipaís del agregado "todos los visitadores")."""
+    País (?pais_codigo=, aislamiento multipaís del agregado "todos los visitadores").
+    `permitidos` (piso de país, siempre — ver `cobertura_resumen`)."""
     from app.services import visita_cierre_service
+    permitidos = _scope.paises_visibles(db, current_user)
     return visita_cierre_service.estado_ruptura(
-        db, _scope_vm(current_user, vm_id), gerente_id, linea_id, pais_codigo)
+        db, _scope_vm(current_user, vm_id), gerente_id, linea_id, pais_codigo, permitidos)
 
 
 @router.get("/cierre/previsualizar", response_model=dict)

@@ -12,6 +12,7 @@ from app.core.deps import get_db, get_current_active_user
 from app.core.authz.deps import require
 from app.core.authz.constantes import Accion, Recurso
 from app.core.authz.paises import PaisPermitido
+from app.core.authz import scope
 from app.models.usuario import Rol
 from app.models.hechos import RankingRM
 from app.models.dimensiones import RepresentanteMedico, Linea, Gerente, Pais, Ciclo
@@ -92,7 +93,8 @@ def _ciclos_acumulados(db: Session, ciclo_id: int):
     return (ids or [ciclo_id]), sel
 
 
-def _ultimo_ciclo(db: Session, pais_codigo: Optional[str], tipo: str) -> Optional[int]:
+def _ultimo_ciclo(db: Session, pais_codigo: Optional[str], tipo: str,
+                  permitidos: Optional[set] = None) -> Optional[int]:
     q = (
         db.query(RankingRM.ciclo_id)
         .join(Ciclo, Ciclo.id == RankingRM.ciclo_id)
@@ -100,18 +102,30 @@ def _ultimo_ciclo(db: Session, pais_codigo: Optional[str], tipo: str) -> Optiona
     )
     if pais_codigo:
         q = q.filter(RankingRM.pais_codigo == pais_codigo)
+    if permitidos is not None:
+        q = q.filter(RankingRM.pais_codigo.in_(permitidos))
     row = q.order_by(Ciclo.anio.desc(), Ciclo.numero.desc()).limit(1).first()
     return row.ciclo_id if row else None
 
 
-def _score_por_rm_ciclo(db: Session, ciclo_id: int, tipo: str, pais_codigo: Optional[str]) -> dict:
-    """Devuelve {rm_id: score_avg} para UN ciclo. rm_id ausente = sin datos (None implícito)."""
+def _score_por_rm_ciclo(db: Session, ciclo_id: int, tipo: str, pais_codigo: Optional[str],
+                        permitidos: Optional[set] = None) -> dict:
+    """Devuelve {rm_id: score_avg} para UN ciclo. rm_id ausente = sin datos (None implícito).
+
+    `permitidos` (hallazgo Critical de revisión, ago-2026) = `scope.paises_visibles(db, user)`,
+    aplicado SIEMPRE como piso — `ciclo_id` identifica un país por sí solo (`Ciclo.pais_codigo`
+    NOT NULL), así que un `ciclo_id` de otro país sin `pais_codigo` explícito coleaba datos de
+    ese país igual; el guard de endpoint (`exigir_pais`) solo valida el parámetro literal, no
+    lo que `ciclo_id` resuelve. `permitidos` cierra eso filtrando toda consulta a `RankingRM`
+    a los países del usuario, aunque no se haya pedido `pais_codigo`."""
     q = (
         db.query(RankingRM.rm_id, func.avg(RankingRM.score_total).label("sc"))
         .filter(RankingRM.ciclo_id == ciclo_id, RankingRM.tipo_ranking == tipo.upper())
     )
     if pais_codigo:
         q = q.filter(RankingRM.pais_codigo == pais_codigo)
+    if permitidos is not None:
+        q = q.filter(RankingRM.pais_codigo.in_(permitidos))
     return {r.rm_id: float(r.sc) for r in q.group_by(RankingRM.rm_id).all() if r.sc is not None}
 
 
@@ -125,6 +139,15 @@ def get_ranking(
     db: Session = Depends(get_db),
     current_user=ReadRanking,
 ):
+    # Hallazgo Critical de revisión (ago-2026): `pais_codigo` es opcional, y con `ciclo_id`
+    # explícito (que resuelve un país por sí solo — `Ciclo.pais_codigo` NOT NULL) el guard de
+    # endpoint (`PaisPermitido`/`exigir_pais`) no se dispara: valida el parámetro literal, no
+    # lo que el `ciclo_id` implica. `permitidos` es el piso real — se calcula una sola vez y se
+    # pasa a TODAS las consultas de `RankingRM` de esta función (helpers y `sub` más abajo),
+    # exista o no `pais_codigo` en la query. `None` = usuario sin país asignado (sin filtro,
+    # comportamiento histórico intacto).
+    permitidos = scope.paises_visibles(db, current_user)
+
     # FIX (jul-2026, bug latente hoy inalcanzable desde la UI): `_ultimo_ciclo`
     # sin `pais_codigo` elegía el ciclo más reciente de CUALQUIER país (cada
     # ciclo_id pertenece a uno solo), y el resultado terminaba siendo el de un
@@ -132,7 +155,7 @@ def get_ranking(
     # no hay bug (el país se resuelve del propio ciclo en `_ciclos_acumulados`);
     # sin país NI ciclo_id, mejor dejarlo sin resolver — cae en el "sin datos"
     # de abajo en vez de un resultado silenciosamente incorrecto.
-    ciclo_efectivo = ciclo_id or (_ultimo_ciclo(db, pais_codigo, tipo) if pais_codigo else None)
+    ciclo_efectivo = ciclo_id or (_ultimo_ciclo(db, pais_codigo, tipo, permitidos) if pais_codigo else None)
     if not ciclo_efectivo:
         return {"items": [], "total": 0, "page": 1, "size": params.size,
                 "pages": 1, "ciclo_efectivo": None}
@@ -140,24 +163,27 @@ def get_ranking(
     ciclo_ids, ciclo_sel = _ciclos_acumulados(db, ciclo_efectivo)
     num_ciclos_total = len(ciclo_ids)
 
-    # Todos los ciclos del año desde DIM_Ciclo (las 12 columnas)
-    todos_ciclos = (
+    # Todos los ciclos del año desde DIM_Ciclo (las 12 columnas). Floor de país aquí también:
+    # si `ciclo_sel` resultó de un `ciclo_id` de un país fuera de `permitidos`, este filtro deja
+    # la lista vacía (en vez de listar la estructura de año/ciclos de un país ajeno).
+    todos_ciclos_q = (
         db.query(Ciclo)
         .filter(
             Ciclo.pais_codigo == (ciclo_sel.pais_codigo if ciclo_sel else pais_codigo),
             Ciclo.anio    == (ciclo_sel.anio    if ciclo_sel else None),
             Ciclo.activo  == True,
         )
-        .order_by(Ciclo.numero.asc())
-        .all()
-    ) if ciclo_sel else []
+    )
+    if permitidos is not None:
+        todos_ciclos_q = todos_ciclos_q.filter(Ciclo.pais_codigo.in_(permitidos))
+    todos_ciclos = todos_ciclos_q.order_by(Ciclo.numero.asc()).all() if ciclo_sel else []
 
     ciclo_num_a_id = {c.numero: c.id for c in todos_ciclos}
 
     # Score por cada ciclo del año (0 si no hay datos cargados aún)
     scores_por_ciclo: dict[int, dict] = {}
     for c in todos_ciclos:
-        scores_por_ciclo[c.numero] = _score_por_rm_ciclo(db, c.id, tipo, pais_codigo)
+        scores_por_ciclo[c.numero] = _score_por_rm_ciclo(db, c.id, tipo, pais_codigo, permitidos)
 
     # Score del ciclo anterior para calcular tendencia
     score_prev: dict = {}
@@ -172,11 +198,11 @@ def get_ranking(
             ).scalar()
         if prev_id:
             score_prev = scores_por_ciclo.get(ciclo_sel.numero - 1,
-                         _score_por_rm_ciclo(db, prev_id, tipo, pais_codigo))
+                         _score_por_rm_ciclo(db, prev_id, tipo, pais_codigo, permitidos))
 
     # Score del ciclo actual (ultimo de los acumulados) para comparar
     score_actual = scores_por_ciclo.get(ciclo_sel.numero if ciclo_sel else 0,
-                   _score_por_rm_ciclo(db, ciclo_efectivo, tipo, pais_codigo))
+                   _score_por_rm_ciclo(db, ciclo_efectivo, tipo, pais_codigo, permitidos))
 
     # Subquery: promedio acumulado por RM (AVG de ciclos 1..N)
     sub = (
@@ -193,6 +219,8 @@ def get_ranking(
     )
     if pais_codigo:
         sub = sub.filter(RankingRM.pais_codigo == pais_codigo)
+    if permitidos is not None:
+        sub = sub.filter(RankingRM.pais_codigo.in_(permitidos))
     # FAIL-CLOSED: era `if rol == RM and current_user.rm_id`. Con rm_id nulo la condición era
     # falsa, el filtro NO se aplicaba y el representante veía el ranking COMPLETO de todos sus
     # compañeros. El representante usa /ranking/mi-posicion; aquí solo puede ver su fila.
@@ -310,7 +338,17 @@ def get_ranking_regional(
     todos los representantes elegibles de todos los países juntos por ese
     mismo número — es una vista en vivo, no requiere "generar" nada.
     """
-    paises = [p for (p,) in db.query(Pais.codigo).filter(Pais.activo == True).all()]  # noqa: E712
+    # Hallazgo Critical de revisión (ago-2026): este endpoint no recibe `pais_codigo` — no
+    # había NADA que cablear con `PaisPermitido`, así que quedó iterando TODOS los países
+    # activos sin ningún límite, exponiendo nombre/línea/gerente/score de los mejores
+    # representantes de toda la operación. Se filtra la lista de países candidatos por
+    # `paises_visibles` ANTES de iterar: un usuario con países asignados nunca ve entrar a
+    # `combinado` un RM de un país fuera de su alcance.
+    permitidos = scope.paises_visibles(db, current_user)
+    q_paises = db.query(Pais.codigo).filter(Pais.activo == True)  # noqa: E712
+    if permitidos is not None:
+        q_paises = q_paises.filter(Pais.codigo.in_(permitidos))
+    paises = [p for (p,) in q_paises.all()]
     combinado: list = []
     for pais_codigo in paises:
         for rm_id, (score, elegible) in _acumulado_por_pais(db, pais_codigo).items():

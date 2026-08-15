@@ -375,7 +375,7 @@ def test_resumen_cobertura_propaga_pais_a_partes_internas(monkeypatch):
     llamados_base = []
 
     def fake_base(db, ciclo_id, vm_id, gerente_id=None, linea_id=None,
-                  solo_ruptura=False, pais_codigo=None):
+                  solo_ruptura=False, pais_codigo=None, permitidos=None):
         llamados_base.append(pais_codigo)
         return {"panel": 0, "visitados": 0, "con_revisita": 0, "sin_visitar": 0,
                 "pct_cobertura": 0, "pct_completa": 0, "pct_gap": 0,
@@ -384,7 +384,7 @@ def test_resumen_cobertura_propaga_pais_a_partes_internas(monkeypatch):
 
     llamados_rm = []
 
-    def fake_rm_ids_por(db, gerente_id, linea_id, pais_codigo=None):
+    def fake_rm_ids_por(db, gerente_id, linea_id, pais_codigo=None, permitidos=None):
         llamados_rm.append(pais_codigo)
         return [100] if pais_codigo == "DO" else None
     monkeypatch.setattr(cob, "_rm_ids_por", fake_rm_ids_por)
@@ -415,7 +415,7 @@ def test_resumen_cobertura_sin_pais_no_restringe(monkeypatch):
     _patch_gating_cob(monkeypatch)
 
     def fake_base(db, ciclo_id, vm_id, gerente_id=None, linea_id=None,
-                  solo_ruptura=False, pais_codigo=None):
+                  solo_ruptura=False, pais_codigo=None, permitidos=None):
         assert pais_codigo is None
         return {"panel": 2, "visitados": 0, "con_revisita": 0, "sin_visitar": 2,
                 "pct_cobertura": 0, "pct_completa": 0, "pct_gap": 100,
@@ -443,7 +443,7 @@ def test_ranking_visitadores_filtra_por_pais(monkeypatch):
     monkeypatch.setattr(cob, "ciclo_por_defecto", lambda db, vm_id=None, pais_codigo=None: 10)
     monkeypatch.setattr(
         cob, "_rm_ids_por",
-        lambda db, g, l, pais_codigo=None: [100] if pais_codigo == "DO" else None)
+        lambda db, g, l, pais_codigo=None, permitidos=None: [100] if pais_codigo == "DO" else None)
     monkeypatch.setattr(
         cob, "_cobertura_base",
         lambda db, ciclo_id, vm: {"pct_completa": 50, "sin_visitar": 0, "pct_cobertura": 80})
@@ -586,7 +586,8 @@ def test_router_visita_medicos_pasa_pais_codigo(monkeypatch):
 def test_router_cobertura_resumen_pasa_pais_codigo(monkeypatch):
     llamada = {}
 
-    def fake_resumen(db, ciclo_id, vm_id, gerente_id, linea_id, solo_ruptura, pais_codigo):
+    def fake_resumen(db, ciclo_id, vm_id, gerente_id, linea_id, solo_ruptura, pais_codigo,
+                     permitidos=None):
         llamada["pais_codigo"] = pais_codigo
         return {}
     monkeypatch.setattr(cob, "resumen_cobertura", fake_resumen)
@@ -598,7 +599,7 @@ def test_router_cobertura_resumen_pasa_pais_codigo(monkeypatch):
 def test_router_cobertura_ranking_pasa_pais_codigo(monkeypatch):
     llamada = {}
 
-    def fake_ranking(db, ciclo_id, metrica, pais_codigo):
+    def fake_ranking(db, ciclo_id, metrica, pais_codigo, permitidos=None):
         llamada["pais_codigo"] = pais_codigo
         return {}
     monkeypatch.setattr(cob, "ranking_visitadores", fake_ranking)

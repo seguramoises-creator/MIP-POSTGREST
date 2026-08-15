@@ -30,12 +30,18 @@ def exigir_pais(db: Session, user, pais_codigo: str | None) -> None:
 
 
 def PaisPermitido(
-    pais_codigo: str | None = Query(None),
+    pais_codigo: str | None = Query(None, description="Código de país, ej. DO"),
     user: Usuario = Depends(get_current_active_user),
     db: Session = Depends(get_db),
 ) -> str | None:
     """Dependency que sustituye a `pais_codigo: str | None = Query(None)` en un
     endpoint: lee el parámetro, lo valida contra los países del usuario y lo
-    devuelve. Migrar un endpoint es cambiar la declaración de su parámetro."""
+    devuelve. Migrar un endpoint es cambiar la declaración de su parámetro.
+
+    (Minor de revisión, ago-2026): la descripción de Swagger es genérica a propósito —
+    varios endpoints cableados a esta dependency traían su propio texto (p.ej. "Código de
+    país, ej. DO"); al sustituir `Query(None, description=...)` por esta dependency se
+    perdía. Mantener aquí un texto razonable por defecto evita que Swagger quede sin
+    descripción en ninguno de los sitios donde se usa."""
     exigir_pais(db, user, pais_codigo)
     return pais_codigo

@@ -82,4 +82,8 @@ def test_ranking_actual_no_resuelve_ultimo_ciclo_sin_pais():
     un país arbitrario disfrazado de "todos los países". Ahora debe quedar sin
     resolver (cae en el "sin datos" ya existente) en vez de adivinar mal."""
     fuente = inspect.getsource(router_rk.get_ranking)
-    assert "_ultimo_ciclo(db, pais_codigo, tipo) if pais_codigo else None" in fuente
+    # ago-2026 (hallazgo Critical de revisión): `_ultimo_ciclo` ahora recibe también
+    # `permitidos` (piso de país) — la firma de la llamada cambió, pero el punto que
+    # prueba este test (sin país NI ciclo_id, no se resuelve un ciclo "de cualquier
+    # país") sigue intacto.
+    assert "_ultimo_ciclo(db, pais_codigo, tipo, permitidos) if pais_codigo else None" in fuente

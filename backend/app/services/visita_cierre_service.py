@@ -43,25 +43,25 @@ def _severidad(n: int) -> str:
 
 def estado_ruptura(db: Session, vm_id: int | None = None,
                    gerente_id: int | None = None, linea_id: int | None = None,
-                   pais_codigo: str | None = None) -> dict:
+                   pais_codigo: str | None = None,
+                   permitidos: set[str] | None = None) -> dict:
     """Médicos en ruptura agrupados por severidad (1 / 2 / ≥3 ciclos sin visita).
     Filtros (gestión): `vm_id` (un visitador), `gerente_id`/`linea_id` (distrito/línea),
     `pais_codigo` (aislamiento multipaís, jul-2026: cuando ADMIN/gerencias consultan
     "todos los visitadores" sin distrito/línea, sin este filtro se mezclaban médicos de
-    TODOS los países del sistema)."""
+    TODOS los países del sistema). `permitidos` (hallazgo Critical de revisión, ago-2026)
+    = `scope.paises_visibles(db, user)`, piso que se aplica SIEMPRE, aunque el cliente no
+    haya mandado `pais_codigo` — antes, omitir `pais_codigo` sin distrito/línea devolvía
+    médicos en ruptura de TODOS los países sin que el guard del endpoint lo detectara."""
     from app.services.visita_cobertura_service import _rm_ids_por
     q = db.query(MedicoVisita).filter(
         MedicoVisita.activo == True, MedicoVisita.ciclos_sin_visita >= SEV_ALERTA)  # noqa: E712
     if vm_id:
         q = q.filter(MedicoVisita.vm_id == vm_id)
-    rm_ids = _rm_ids_por(db, gerente_id, linea_id)  # None = sin filtro de distrito/línea
+    # None solo si no hay NINGÚN filtro (ni distrito/línea/país/permitidos) — ver `_rm_ids_por`.
+    rm_ids = _rm_ids_por(db, gerente_id, linea_id, pais_codigo, permitidos)
     if rm_ids is not None:
         q = q.filter(MedicoVisita.vm_id.in_(rm_ids or [-1]))
-    elif pais_codigo:
-        # Sin distrito/línea (agregado): acotar por país si se indicó.
-        rm_ids_pais = [r[0] for r in db.query(RepresentanteMedico.id)
-                       .filter(RepresentanteMedico.pais_codigo == pais_codigo).all()]
-        q = q.filter(MedicoVisita.vm_id.in_(rm_ids_pais or [-1]))
     medicos = q.order_by(MedicoVisita.ciclos_sin_visita.desc()).all()
 
     vm_ids = {m.vm_id for m in medicos}

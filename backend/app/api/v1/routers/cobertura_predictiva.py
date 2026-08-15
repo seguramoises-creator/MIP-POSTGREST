@@ -145,6 +145,13 @@ def resumen_cobertura(
     ciclo = db.query(Ciclo).filter(Ciclo.id == ciclo_id).first()
     if not ciclo:
         raise HTTPException(404, f"Ciclo ID={ciclo_id} no encontrado")
+    # Hallazgo Critical de revisión (ago-2026): `pais_codigo` es opcional y ya se valida con
+    # `PaisPermitido`, pero un `ciclo_id` de OTRO país colaba los datos igual (cada ciclo
+    # pertenece a un solo país — `Ciclo.pais_codigo` NOT NULL). Aquí, a diferencia de
+    # `ranking.py`/`productividad.py`, ya se trae el `Ciclo` completo, así que el país REAL
+    # de la consulta es `ciclo.pais_codigo` — se valida ese, no el parámetro que el cliente
+    # pudo omitir.
+    exigir_pais(db, current_user, ciclo.pais_codigo)
 
     gerente_id = _aplicar_alcance_equipo(current_user, gerente_id)
 

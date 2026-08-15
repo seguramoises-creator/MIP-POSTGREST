@@ -21,6 +21,7 @@ from app.core.deps import get_db, get_current_active_user, require_roles
 from app.core.authz.deps import require
 from app.core.authz.constantes import Accion, Recurso
 from app.core.authz.paises import PaisPermitido, exigir_pais
+from app.core.authz import scope
 from app.core.pagination import PaginationParams, paginate_list
 from app.models.usuario import Rol
 from app.models.hechos import ResultadoIndicador
@@ -74,6 +75,14 @@ def get_productividad(
 
     if pais_codigo:
         q = q.filter(ResultadoIndicador.pais_codigo == pais_codigo)
+    # Hallazgo Critical de revisión (ago-2026): `pais_codigo` es opcional y el filtro de
+    # arriba solo actúa si el cliente lo manda. Sin él, esta consulta no tenía NINGÚN otro
+    # límite de país (a diferencia de `ranking.py`, aquí no hay `ciclo_id` de por medio: el
+    # hueco es más simple — basta con omitir el parámetro). `permitidos` es el piso real:
+    # se aplica SIEMPRE que el usuario tenga países asignados, lo haya pedido o no.
+    permitidos = scope.paises_visibles(db, current_user)
+    if permitidos is not None:
+        q = q.filter(ResultadoIndicador.pais_codigo.in_(permitidos))
     if ciclo_id:
         q = q.filter(ResultadoIndicador.ciclo_id == ciclo_id)
     if linea_id:
@@ -322,6 +331,10 @@ def get_resumen_productividad(
 
     if pais_codigo:
         q = q.filter(ResultadoIndicador.pais_codigo == pais_codigo)
+    # Mismo hallazgo Critical que `get_productividad`: floor de país siempre aplicado.
+    permitidos = scope.paises_visibles(db, current_user)
+    if permitidos is not None:
+        q = q.filter(ResultadoIndicador.pais_codigo.in_(permitidos))
     if ciclo_id:
         q = q.filter(ResultadoIndicador.ciclo_id == ciclo_id)
 
