@@ -163,10 +163,16 @@ def cerrar_ciclo(db: Session, ciclo_id: int | None, usuario_id: int | None) -> d
     return _resumen_cierre(db, ciclo_id, aplicar=True, usuario_id=usuario_id)
 
 
-def historial_cierres(db: Session, limite: int = 24) -> list[dict]:
-    """Cierres registrados, del más reciente al más antiguo, con el nombre del ciclo."""
-    filas = (db.query(CierreCicloVisita)
-             .order_by(CierreCicloVisita.fecha_cierre.desc()).limit(limite).all())
+def historial_cierres(db: Session, limite: int = 24,
+                      permitidos: set[str] | None = None) -> list[dict]:
+    """Cierres registrados, del más reciente al más antiguo, con el nombre del ciclo.
+    `permitidos` (piso de país, ronda 3): `None` = todos (usuario sin país asignado);
+    conjunto = solo cierres de ciclos de esos países."""
+    q = db.query(CierreCicloVisita)
+    if permitidos is not None:
+        q = q.join(Ciclo, Ciclo.id == CierreCicloVisita.ciclo_id).filter(
+            Ciclo.pais_codigo.in_(permitidos or {"__ninguno__"}))
+    filas = q.order_by(CierreCicloVisita.fecha_cierre.desc()).limit(limite).all()
     ciclo_ids = {f.ciclo_id for f in filas}
     ciclos = dict(db.query(Ciclo.id, Ciclo.nombre).filter(Ciclo.id.in_(ciclo_ids)).all()) if ciclo_ids else {}
     return [{

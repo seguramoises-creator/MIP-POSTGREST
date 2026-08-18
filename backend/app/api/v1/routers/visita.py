@@ -80,6 +80,63 @@ def _rol(u) -> str:
     return u.rol.value if hasattr(u.rol, "value") else str(u.rol)
 
 
+def _exigir_pais_vm(db, current_user, vm_id: int | None) -> None:
+    """Exige que el país del VM (`Config.DIM_RM`) esté entre los países permitidos del
+    usuario. `vm_id=None` no valida nada (no hay entidad que resolver).
+
+    Extraído de `_scope_vm` (Bloqueante 1 de revisión, ago-2026, ronda 3) para reusarlo en
+    TODOS los sitios donde un `vm_id` explícito llega desde el cliente y no pasa por
+    `_scope_vm`/`_vm_registro` — la ronda 2 solo cerró los que pasaban por ahí; quedaron
+    `mi_gerente`, `obtener_medico`/`actualizar_medico`/baja/reactivar (roles distintos de
+    REPRESENTANTE_MEDICO), `crear_medico` y `costo/roi` con el mismo `vm_id` SIN piso."""
+    if vm_id is None:
+        return
+    from app.models.dimensiones import RepresentanteMedico
+    rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
+    if rm is not None:
+        exigir_pais(db, current_user, rm.pais_codigo)
+
+
+def _exigir_pais_medico(db, current_user, medico_id: int | None) -> None:
+    """Exige el país del médico (vía el país de su `vm_id`) — mismo criterio que
+    `_exigir_pais_vm`, para endpoints que reciben `medico_id` en vez de `vm_id`."""
+    if medico_id is None:
+        return
+    from app.models.visita import MedicoVisita
+    vm_id = db.query(MedicoVisita.vm_id).filter(MedicoVisita.id == medico_id).scalar()
+    _exigir_pais_vm(db, current_user, vm_id)
+
+
+def _exigir_pais_linea(db, current_user, linea_id: int | None) -> None:
+    """Exige el país de la línea (`Config.DIM_Linea`, `pais_codigo` NOT NULL)."""
+    if linea_id is None:
+        return
+    from app.models.dimensiones import Linea
+    pc = db.query(Linea.pais_codigo).filter(Linea.id == linea_id).scalar()
+    if pc is not None:
+        exigir_pais(db, current_user, pc)
+
+
+def _exigir_pais_ciclo(db, current_user, ciclo_id: int | None) -> None:
+    """Exige el país del ciclo (`Config.DIM_Ciclo`, `pais_codigo` NOT NULL)."""
+    if ciclo_id is None:
+        return
+    from app.models.dimensiones import Ciclo
+    pc = db.query(Ciclo.pais_codigo).filter(Ciclo.id == ciclo_id).scalar()
+    if pc is not None:
+        exigir_pais(db, current_user, pc)
+
+
+def _exigir_pais_gerente(db, current_user, gerente_id: int | None) -> None:
+    """Exige el país del gerente (`Config.DIM_Gerente`, `pais_codigo` NOT NULL)."""
+    if gerente_id is None:
+        return
+    from app.models.dimensiones import Gerente
+    pc = db.query(Gerente.pais_codigo).filter(Gerente.id == gerente_id).scalar()
+    if pc is not None:
+        exigir_pais(db, current_user, pc)
+
+
 def _scope_vm(db, current_user, vm_id: int | None) -> int | None:
     """Un REPRESENTANTE_MEDICO se fuerza a su propio rm_id; los demás pasan vm_id libre,
     PERO si vienen con un `vm_id` explícito se exige que el país de ese VM esté entre los
@@ -97,11 +154,7 @@ def _scope_vm(db, current_user, vm_id: int | None) -> int | None:
         if not rm:
             raise HTTPException(status_code=403, detail="Tu usuario no está vinculado a un representante (rm_id).")
         return rm
-    if vm_id is not None:
-        from app.models.dimensiones import RepresentanteMedico
-        rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
-        if rm is not None:
-            exigir_pais(db, current_user, rm.pais_codigo)
+    _exigir_pais_vm(db, current_user, vm_id)
     return vm_id
 
 
@@ -149,11 +202,14 @@ def listar_centros(pais_codigo: str | None = None, db: Session = Depends(get_db)
 @router.get("/mi-gerente", response_model=dict)
 def mi_gerente(vm_id: int | None = None, db: Session = Depends(get_db), current_user=RequireAnyAuth):
     """Gerente de Distrito de la línea del visitador. Para un REPRESENTANTE_MEDICO
-    se resuelve por su propio rm_id; ADMIN/gerentes pueden pasar ?vm_id=."""
+    se resuelve por su propio rm_id; ADMIN/gerentes pueden pasar ?vm_id=.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): antes leía `rid = vm_id` directo, sin
+    pasar por `_scope_vm` ni `exigir_pais` — devolvía gerente, línea y nombre del VM de
+    CUALQUIER país. Ahora usa `_scope_vm` (fuerza al REP a su propio rm_id, valida país
+    para los demás roles)."""
     from app.models.dimensiones import RepresentanteMedico, Gerente, Linea
-    rid = vm_id
-    if rid is None and _rol(current_user) == "REPRESENTANTE_MEDICO":
-        rid = getattr(current_user, "rm_id", None)
+    rid = _scope_vm(db, current_user, vm_id)
     if not rid:
         return {"gerente": None, "linea": None, "vm": None}
     rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == rid).first()
@@ -219,12 +275,18 @@ def listar_medicos_existentes(vm_id: int | None = None, db: Session = Depends(ge
 @router.get("/medicos/{medico_id}", response_model=dict)
 def obtener_medico(medico_id: int, db: Session = Depends(get_db), current_user=ReadMedicoPanel):
     """Ficha COMPLETA de un médico (para editar). El VM solo ve los de su panel.
-    Declarado DESPUÉS de /medicos/existentes para no interceptar esa ruta literal."""
+    Declarado DESPUÉS de /medicos/existentes para no interceptar esa ruta literal.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): el guard de panel solo se aplicaba a
+    REPRESENTANTE_MEDICO — ADMIN/GERENTE podían pedir la ficha COMPLETA (nombre, dirección,
+    GPS, teléfono, exequátur) de un `medico_id` de cualquier país sin ningún piso. Se exige
+    el país del médico (vía el VM de su panel) para TODOS los roles."""
     m = visita_service.obtener_ficha_medico(db, medico_id)
     if not m:
         raise HTTPException(status_code=404, detail="Médico no encontrado.")
     if _rol(current_user) == "REPRESENTANTE_MEDICO" and m.get("vm_id") != getattr(current_user, "rm_id", None):
         raise HTTPException(status_code=403, detail="Solo puedes ver los médicos de tu panel.")
+    _exigir_pais_vm(db, current_user, m.get("vm_id"))
     return m
 
 
@@ -232,10 +294,15 @@ def obtener_medico(medico_id: int, db: Session = Depends(get_db), current_user=R
 def actualizar_medico(medico_id: int, datos: MedicoVisitaActualizar,
                       db: Session = Depends(get_db), current_user=RequireVisita):
     """Edita un médico o lo activa/desactiva (campo `activo`). El VM solo puede
-    modificar médicos de su propio panel."""
+    modificar médicos de su propio panel.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): mismo hallazgo que `obtener_medico`
+    pero en ESCRITURA — ADMIN/GERENTE podían editar cualquier médico por id sin piso de
+    país."""
     m = visita_service.obtener_medico(db, medico_id)
     if not m:
         raise HTTPException(status_code=404, detail="Médico no encontrado.")
+    _exigir_pais_vm(db, current_user, m.vm_id)
     if _rol(current_user) == "REPRESENTANTE_MEDICO":
         rm = _scope_vm(db, current_user, None)
         if m.vm_id != rm:
@@ -265,10 +332,14 @@ def actualizar_medico(medico_id: int, datos: MedicoVisitaActualizar,
 
 
 def _medico_de_mi_panel(db, current_user, m):
+    """(Bloqueante 1 de revisión, ago-2026, ronda 3): antes solo restringía por panel al
+    REPRESENTANTE_MEDICO — ADMIN/GERENTE podían solicitar baja/reactivar un médico de
+    cualquier país sin piso. `_exigir_pais_vm` corre para TODOS los roles."""
     if _rol(current_user) == "REPRESENTANTE_MEDICO":
         rm = _scope_vm(db, current_user, None)
         if m.vm_id != rm:
             raise HTTPException(status_code=403, detail="Este médico no pertenece a tu panel.")
+    _exigir_pais_vm(db, current_user, m.vm_id)
 
 
 @router.post("/medicos/{medico_id}/baja", response_model=dict)
@@ -316,11 +387,16 @@ def obtener_clasificacion(medico_id: int, db: Session = Depends(get_db), current
     """Plantilla de clasificación capturada al dar de alta el médico.
 
     La usa el Gerente de Distrito para revisarla (y corregirla) antes de aprobar. NO
-    devuelve categoría: se revela al aprobar."""
+    devuelve categoría: se revela al aprobar.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): sin ningún piso de país (ni siquiera el
+    de panel del REPRESENTANTE_MEDICO) — cualquier rol de `RequireVisita` podía leer la
+    plantilla de clasificación de un médico de otro país."""
     from app.models.visita import MedicoClasificacion
     m = visita_service.obtener_medico(db, medico_id)
     if not m:
         raise HTTPException(status_code=404, detail="Médico no encontrado.")
+    _exigir_pais_vm(db, current_user, m.vm_id)
     c = db.query(MedicoClasificacion).filter(
         MedicoClasificacion.medico_visita_id == medico_id).first()
     if not c:
@@ -426,6 +502,10 @@ def crear_medico(datos: MedicoVisitaCrear, db: Session = Depends(get_db), curren
     # El VM solo registra en su propio panel.
     if _rol(current_user) == "REPRESENTANTE_MEDICO":
         datos.vm_id = _scope_vm(db, current_user, None)
+    else:
+        # (Bloqueante 1 de revisión, ago-2026, ronda 3): ADMIN/GERENTE mandaban `vm_id`
+        # libre en el body — podían registrar un médico en el panel de un VM de otro país.
+        _exigir_pais_vm(db, current_user, datos.vm_id)
     try:
         return visita_service.crear_medico(db, datos, getattr(current_user, "id", None))
     except visita_service.DuplicadoMedicoError as e:
@@ -586,7 +666,16 @@ async def subir_foto_visita(
 def obtener_foto_visita_endpoint(
     visita_id: int, db: Session = Depends(get_db), current_user=RequireVisita,
 ):
-    """Devuelve la imagen de la visita (BLOB). 404 si no tiene foto."""
+    """Devuelve la imagen de la visita (BLOB). 404 si no tiene foto.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3, hallazgo adicional): `visita_id` no es
+    uno de los 5 identificadores nombrados en el hallazgo, pero es la misma clase de bug —
+    determina un país (vía el `vm_id` de la visita) sin ningún piso. Resuelto el país
+    ANTES de leer el contenido: no tiene sentido comprobar después de haber devuelto ya
+    los bytes de la foto."""
+    from app.models.visita import VisitaRegistro
+    vm_id = db.query(VisitaRegistro.vm_id).filter(VisitaRegistro.id == visita_id).scalar()
+    _exigir_pais_vm(db, current_user, vm_id)
     from fastapi import Response
     from app.services import visita_registro_service
     data = visita_registro_service.obtener_foto_visita(db, visita_id)
@@ -656,7 +745,12 @@ def desbloquear_planeacion(vm_id: int, motivo: str = Body(..., embed=True),
                            db: Session = Depends(get_db), current_user=RequireDesbloqueo):
     """Devuelve la planeación a borrador. **Solo ADMIN** y con motivo: queda registrado quién
     desbloqueó, cuándo y por qué (`PlaneacionEvento`, append-only). `vm_id` es obligatorio —
-    un admin desbloquea la de un representante concreto, nunca la suya "por defecto"."""
+    un admin desbloquea la de un representante concreto, nunca la suya "por defecto".
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3 — señalado explícitamente): `RequireDesbloqueo`
+    exige `Rol.ADMIN` pero eso NO exime del país — la frontera es ortogonal al rol. Un ADMIN
+    acotado a un país no debe poder desbloquear la planeación de un VM de otro."""
+    _exigir_pais_vm(db, current_user, vm_id)
     from app.services import visita_planeacion_service
     try:
         return visita_planeacion_service.desbloquear_planeacion(
@@ -690,7 +784,11 @@ def estado_ruptura(vm_id: int | None = None, gerente_id: int | None = None,
 
 @router.get("/cierre/previsualizar", response_model=dict)
 def previsualizar_cierre(ciclo_id: int | None = None, db: Session = Depends(get_db), current_user=RequireCierre):
-    """Simula el cierre del ciclo (sin escribir): cuántos se resetean/incrementan y si ya está cerrado."""
+    """Simula el cierre del ciclo (sin escribir): cuántos se resetean/incrementan y si ya está cerrado.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): `RequireCierre` (ADMIN+GERENTE_PRODUCTIVIDAD)
+    no exime del país — un `ciclo_id` de otro país no debe poder simularse/cerrarse."""
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_cierre_service
     try:
         return visita_cierre_service.previsualizar_cierre(db, ciclo_id)
@@ -700,7 +798,11 @@ def previsualizar_cierre(ciclo_id: int | None = None, db: Session = Depends(get_
 
 @router.post("/cierre", response_model=dict, status_code=status.HTTP_201_CREATED)
 def cerrar_ciclo(ciclo_id: int | None = None, db: Session = Depends(get_db), current_user=RequireCierre):
-    """Cierra el ciclo de visita: hace rodar `ciclos_sin_visita`. Idempotente (409 si ya se cerró)."""
+    """Cierra el ciclo de visita: hace rodar `ciclos_sin_visita`. Idempotente (409 si ya se cerró).
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): mismo piso que `previsualizar_cierre` —
+    ser ADMIN/GERENTE_PRODUCTIVIDAD no exime del país."""
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_cierre_service
     try:
         return visita_cierre_service.cerrar_ciclo(db, ciclo_id, getattr(current_user, "id", None))
@@ -715,9 +817,16 @@ def cerrar_ciclo(ciclo_id: int | None = None, db: Session = Depends(get_db), cur
 
 @router.get("/cierre/historial", response_model=list[dict])
 def historial_cierres(db: Session = Depends(get_db), current_user=RequireCierre):
-    """Historial de cierres de ciclo de visita, del más reciente al más antiguo."""
+    """Historial de cierres de ciclo de visita, del más reciente al más antiguo.
+
+    No recibe ningún identificador del cliente (fuera del alcance estricto de este
+    hallazgo), pero por construcción mezclaba cierres de TODOS los países — hallazgo
+    adicional (ronda 3): se le agrega el mismo piso de país (`permitidos`), consistente
+    con el resto del módulo, aunque el dato (conteos agregados, sin PII) es de menor
+    severidad que el resto de los hallazgos de esta ronda."""
     from app.services import visita_cierre_service
-    return visita_cierre_service.historial_cierres(db)
+    permitidos = _scope.paises_visibles(db, current_user)
+    return visita_cierre_service.historial_cierres(db, permitidos=permitidos)
 
 
 # ── Parrilla promocional / Muestras (Parte 6) ─────────────────────────────────
@@ -737,7 +846,10 @@ def listar_lineas(pais_codigo: str | None = Depends(PaisPermitido), db: Session 
 def parrilla_ultima_linea(ciclo_id: int | None = None,
                           db: Session = Depends(get_db), current_user=ReadParrilla):
     """Línea de la parrilla más reciente — para que las pantallas de consulta arranquen
-    en el último registro, no en la primera línea del catálogo."""
+    en el último registro, no en la primera línea del catálogo.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): `ciclo_id` explícito sin piso de país."""
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_parrilla_service
     return {"linea_id": visita_parrilla_service.ultima_linea_con_parrilla(db, ciclo_id)}
 
@@ -748,11 +860,19 @@ def obtener_parrilla(linea_id: int | None = None, ciclo_id: int | None = None,
                      db: Session = Depends(get_db), current_user=ReadParrilla):
     """Parrilla del ciclo para una línea. Sin `linea_id` se usa la línea del VM
     (el RM usa la suya propia; gestión puede indicar `vm_id`). El VM SOLO ve
-    parrillas publicadas; el Gerente de Producto ve también los borradores."""
+    parrillas publicadas; el Gerente de Producto ve también los borradores.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): con `linea_id` explícito el piso de país
+    del `vm_id` (vía `_scope_vm`) se saltaba entero — la rama `if linea_id is None` es la
+    ÚNICA que pasa por `_scope_vm`. `_exigir_pais_linea`/`_exigir_pais_ciclo` cierran el
+    resto de las combinaciones."""
     from app.services import visita_parrilla_service
     if linea_id is None:
         vm = _scope_vm(db, current_user, vm_id)
         linea_id = visita_parrilla_service.linea_de_vm(db, vm) if vm else None
+    else:
+        _exigir_pais_linea(db, current_user, linea_id)
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     if linea_id is None:
         raise HTTPException(status_code=400, detail="Indica la línea (linea_id).")
     solo_pub = _rol(current_user) in ("REPRESENTANTE_MEDICO", "GERENTE_DISTRITO", "CONSULTA")
@@ -769,11 +889,17 @@ def listar_productos(linea_id: int | None = None, db: Session = Depends(get_db),
 @router.get("/parrilla/penetracion", response_model=dict)
 def parrilla_penetracion(linea_id: int | None = None, ciclo_id: int | None = None,
                          db: Session = Depends(get_db), current_user=ReadParrilla):
-    """Penetración del ciclo por producto (médicos alcanzados, muestras, promedio/visita)."""
+    """Penetración del ciclo por producto (médicos alcanzados, muestras, promedio/visita).
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): mismo hallazgo que `obtener_parrilla` —
+    con `linea_id` explícito no había piso de país."""
     from app.services import visita_parrilla_service
     if linea_id is None:
         vm = _scope_vm(db, current_user, None)
         linea_id = visita_parrilla_service.linea_de_vm(db, vm) if vm else None
+    else:
+        _exigir_pais_linea(db, current_user, linea_id)
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     if linea_id is None:
         raise HTTPException(status_code=400, detail="Indica la línea (linea_id).")
     return visita_parrilla_service.penetracion_ciclo(db, ciclo_id, linea_id)
@@ -782,7 +908,12 @@ def parrilla_penetracion(linea_id: int | None = None, ciclo_id: int | None = Non
 @router.post("/parrilla/publicar", response_model=dict)
 def publicar_parrilla(linea_id: int, ciclo_id: int | None = None,
                       db: Session = Depends(get_db), current_user=ConfigurarParrilla):
-    """Publica la parrilla al equipo (Gerente de Producto). El VM la recibe en solo lectura."""
+    """Publica la parrilla al equipo (Gerente de Producto). El VM la recibe en solo lectura.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): `linea_id`/`ciclo_id` sin piso de país —
+    ni siquiera exige `Rol.ADMIN`, la puede llamar `GERENTE_MARCA`."""
+    _exigir_pais_linea(db, current_user, linea_id)
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_parrilla_service
     try:
         n = visita_parrilla_service.publicar_parrilla(db, ciclo_id, linea_id, getattr(current_user, "id", None))
@@ -794,7 +925,12 @@ def publicar_parrilla(linea_id: int, ciclo_id: int | None = None,
 @router.post("/parrilla", response_model=dict, status_code=status.HTTP_201_CREATED)
 def guardar_parrilla(datos: ParrillaGuardar, db: Session = Depends(get_db), current_user=ConfigurarParrilla):
     """Guarda (reemplaza) la parrilla de una línea en el ciclo. Solo Gerente de Producto.
-    Queda en borrador hasta publicar."""
+    Queda en borrador hasta publicar.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): `datos.linea_id`/`datos.ciclo_id`
+    (payload) sin piso de país."""
+    _exigir_pais_linea(db, current_user, datos.linea_id)
+    _exigir_pais_ciclo(db, current_user, datos.ciclo_id)
     from app.services import visita_parrilla_service
     try:
         n = visita_parrilla_service.guardar_parrilla(
@@ -807,7 +943,12 @@ def guardar_parrilla(datos: ParrillaGuardar, db: Session = Depends(get_db), curr
 @router.post("/muestras", response_model=dict, status_code=status.HTTP_201_CREATED)
 def registrar_muestras(datos: MuestrasRegistrar, vm_id: int | None = None,
                        db: Session = Depends(get_db), current_user=RequireVisita):
-    """Registra muestras entregadas a un médico del panel. El VM va contra su panel."""
+    """Registra muestras entregadas a un médico del panel. El VM va contra su panel.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): `datos.medico_id` sin piso de país —
+    el `vm_id` ya se valida vía `_vm_registro`, pero el médico del payload podía ser de
+    otro país/panel sin que nada lo detectara."""
+    _exigir_pais_medico(db, current_user, datos.medico_id)
     from app.services import visita_parrilla_service
     try:
         n = visita_parrilla_service.registrar_muestras(
@@ -833,14 +974,25 @@ def resumen_muestras(vm_id: int | None = None, ciclo_id: int | None = None,
 @router.get("/costo/parametros", response_model=dict)
 def obtener_parametros_costo(linea_id: int | None = None, ciclo_id: int | None = None,
                              db: Session = Depends(get_db), current_user=RequireFinanciero):
-    """Parámetros de costo resueltos (cascada línea → default del ciclo). Solo gestión."""
+    """Parámetros de costo resueltos (cascada línea → default del ciclo). Solo gestión.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): toda la sección Costo & ROI recibía
+    `linea_id`/`ciclo_id`/`vm_id` sin ningún piso de país — dato financiero (costos,
+    ingresos, utilidad, ROI, salarios)."""
+    _exigir_pais_linea(db, current_user, linea_id)
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_costo_service
     return visita_costo_service.obtener_parametros(db, ciclo_id, linea_id)
 
 
 @router.post("/costo/parametros", response_model=dict, status_code=status.HTTP_201_CREATED)
 def guardar_parametros_costo(datos: ParametroCostoGuardar, db: Session = Depends(get_db), current_user=ConfigurarCosto):
-    """Configura los parámetros de costo del ciclo (por línea o default). Solo gestión."""
+    """Configura los parámetros de costo del ciclo (por línea o default). Solo gestión.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): igual que `obtener_parametros_costo`,
+    en escritura."""
+    _exigir_pais_linea(db, current_user, datos.linea_id)
+    _exigir_pais_ciclo(db, current_user, datos.ciclo_id)
     from app.services import visita_costo_service
     try:
         return visita_costo_service.guardar_parametros(db, datos, getattr(current_user, "id", None))
@@ -852,14 +1004,26 @@ def guardar_parametros_costo(datos: ParametroCostoGuardar, db: Session = Depends
 def costo_roi(vm_id: int | None = None, ciclo_id: int | None = None,
               db: Session = Depends(get_db), current_user=LeerCostoFull):
     """Costo & ROI del ciclo: costo por contacto/médico, ingresos, utilidad y ROI. Solo gestión
-    (dato financiero). El representante ve su recorte en /costo/mi-linea."""
+    (dato financiero). El representante ve su recorte en /costo/mi-linea.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3 — señalado explícitamente en el hallazgo):
+    `vm_id` se pasaba DIRECTO a `visita_costo_service.roi` sin pasar por `_scope_vm` ni por
+    ningún guard de país. `LeerCostoFull` exige alcance ALL de RBAC (visión total del
+    módulo), pero alcance y país son ejes ortogonales — un ADMIN con alcance ALL puede
+    seguir acotado a un subconjunto de países en `FACT_UsuarioPais`."""
+    _exigir_pais_vm(db, current_user, vm_id)
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_costo_service
     return visita_costo_service.roi(db, ciclo_id, vm_id)
 
 
 @router.get("/costo/ranking", response_model=dict)
 def costo_ranking(ciclo_id: int | None = None, db: Session = Depends(get_db), current_user=RequireCierre):
-    """Detalle desplegable de ROI por VM (peor primero). Solo gestión (dato financiero)."""
+    """Detalle desplegable de ROI por VM (peor primero). Solo gestión (dato financiero).
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): `ciclo_id` sin piso de país; también
+    `RequireCierre` (ADMIN+GERENTE_PRODUCTIVIDAD) no exime del país."""
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_costo_service
     return visita_costo_service.roi_ranking(db, ciclo_id)
 
@@ -892,7 +1056,12 @@ def costo_estructura(linea_id: int | None = None, ciclo_id: int | None = None,
                      db: Session = Depends(get_db), current_user=LeerCostoFull):
     """Modelo financiero completo (costo fijo, muestras, pool de ventas, plan anual,
     resumen ROI e impacto de cobertura) por (ciclo, línea). Incluye el estado de aprobación.
-    #15: SOLO FINANZAS/Director/ADMIN (dato con salarios/costos). El GD/RM usan /costo/mi-linea."""
+    #15: SOLO FINANZAS/Director/ADMIN (dato con salarios/costos). El GD/RM usan /costo/mi-linea.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): `linea_id`/`ciclo_id` sin piso de país —
+    el más sensible del módulo (salarios, costos fijos, pool de ventas, presupuesto anual)."""
+    _exigir_pais_linea(db, current_user, linea_id)
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_costo_service
     full = visita_costo_service.calcular_full(db, ciclo_id, linea_id)
     return {**full, **visita_costo_service.estado_estructura(db, ciclo_id, linea_id)}
@@ -902,7 +1071,10 @@ def costo_estructura(linea_id: int | None = None, ciclo_id: int | None = None,
 def costo_hojas(ciclo_id: int | None = None, db: Session = Depends(get_db), current_user=LeerCostoVer):
     """Hojas de Costo/ROI creadas en el ciclo (una por línea), la ÚLTIMA creada primero. Sirve
     para que un rol de solo lectura navegue/filtre entre las hojas de los distintos visitadores/
-    distritos sin entrar a la vista de configuración."""
+    distritos sin entrar a la vista de configuración.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): `ciclo_id` sin piso de país."""
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_costo_service
     return visita_costo_service.listar_hojas(db, ciclo_id)
 
@@ -914,7 +1086,12 @@ def costo_mi_linea(ciclo_id: int | None = None, linea_id: int | None = None,
     """Vista ACOTADA de Costo & ROI (sin salarios/costos): unidades a producir por contacto para
     el 100% del presupuesto + impacto de la cobertura en el presupuesto de la línea. La usan el
     REPRESENTANTE (su línea), el GERENTE DE DISTRITO (la de su equipo — #15) y los roles de
-    CONSULTA/observación (visión total → eligen la hoja/línea que quieren ver, solo lectura)."""
+    CONSULTA/observación (visión total → eligen la hoja/línea que quieren ver, solo lectura).
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): la rama del observador con alcance ALL
+    tomaba `linea_id` directo — alcance (RBAC) y país (frontera) son ejes ortogonales; un
+    observador ALL puede seguir acotado a un subconjunto de países. `ciclo_id` también se
+    valida para las tres ramas."""
     from app.services import visita_costo_service
     current_user = _auth.usuario
     rol = _rol(current_user)
@@ -923,9 +1100,11 @@ def costo_mi_linea(ciclo_id: int | None = None, linea_id: int | None = None,
     elif rol == "GERENTE_DISTRITO":
         linea = _linea_del_gerente(db, current_user)
     elif _auth.alcance == _Alc.ALL:
+        _exigir_pais_linea(db, current_user, linea_id)
         linea = linea_id  # observador con visión total: ve la hoja de la línea elegida
     else:
         raise HTTPException(403, "Esta vista es para el representante, el gerente de distrito o un rol de consulta.")
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     if not linea:
         raise HTTPException(400, "Elige una hoja (línea) para ver.")
     return visita_costo_service.vista_representante(db, ciclo_id, linea)
@@ -935,7 +1114,12 @@ def costo_mi_linea(ciclo_id: int | None = None, linea_id: int | None = None,
 def guardar_costo_estructura(datos: CostoEstructuraGuardar, background_tasks: BackgroundTasks,
                              db: Session = Depends(get_db), current_user=ConfigurarCosto):
     """Guarda la estructura (Finanzas configura → estado BORRADOR). Una config ya APROBADA solo
-    la edita ADMIN (debe reabrirse primero). Si guarda Finanzas (no ADMIN), avisa al Director."""
+    la edita ADMIN (debe reabrirse primero). Si guarda Finanzas (no ADMIN), avisa al Director.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): `datos.linea_id`/`datos.ciclo_id` sin
+    piso de país."""
+    _exigir_pais_linea(db, current_user, datos.linea_id)
+    _exigir_pais_ciclo(db, current_user, datos.ciclo_id)
     from app.services import visita_costo_service
     from app.core.authz.audit import registrar_evento_seguridad
     es_admin = _rol(current_user) == "ADMIN"
@@ -969,7 +1153,11 @@ def guardar_costo_estructura(datos: CostoEstructuraGuardar, background_tasks: Ba
 def aprobar_costo_estructura(linea_id: int | None = None, ciclo_id: int | None = None,
                              db: Session = Depends(get_db), current_user=AprobarCosto):
     """Director aprueba la estructura de Costo/ROI (BORRADOR → APROBADO). El que configura
-    (Finanzas) NO puede aprobar: la matriz separa CONFIGURE (Finanzas) de APPROVE (Director)."""
+    (Finanzas) NO puede aprobar: la matriz separa CONFIGURE (Finanzas) de APPROVE (Director).
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): `linea_id`/`ciclo_id` sin piso de país."""
+    _exigir_pais_linea(db, current_user, linea_id)
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_costo_service
     from app.core.authz.audit import registrar_evento_seguridad
     try:
@@ -986,7 +1174,12 @@ def aprobar_costo_estructura(linea_id: int | None = None, ciclo_id: int | None =
 def reabrir_costo_estructura(linea_id: int | None = None, ciclo_id: int | None = None,
                              db: Session = Depends(get_db), current_user=RequireDesbloqueo):
     """Reabre una estructura APROBADA (→ BORRADOR). **Solo ADMIN** (excepción de dato cerrado),
-    auditada."""
+    auditada.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3 — mismo patrón que `/planeacion/desbloquear`):
+    `RequireDesbloqueo` (solo ADMIN) no exime del país."""
+    _exigir_pais_linea(db, current_user, linea_id)
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_costo_service
     from app.core.authz.audit import registrar_evento_seguridad
     try:
@@ -1006,7 +1199,11 @@ async def importar_costo_excel(linea_id: int | None = None, ciclo_id: int | None
                                db: Session = Depends(get_db), current_user=ConfigurarCosto):
     """Importa los datos financieros por producto desde un Excel (.xlsx). Columnas:
     producto, costo_unitario_muestra, cantidad_muestras, pool_ventas, visitas_detalladas,
-    presupuesto_anual, precio_prom."""
+    presupuesto_anual, precio_prom.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): `linea_id`/`ciclo_id` sin piso de país."""
+    _exigir_pais_linea(db, current_user, linea_id)
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_costo_service
     nombre = (archivo.filename or "").lower()
     if not (nombre.endswith(".xlsx") or nombre.endswith(".xls")):

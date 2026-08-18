@@ -71,7 +71,9 @@ def motor():
 def db(motor):
     Sesion = sessionmaker(bind=motor)
     s = Sesion()
-    for tabla in ('"Visita"."DIM_MedicoVisita"', '"Config"."DIM_RM"', '"Config"."DIM_Ciclo"',
+    for tabla in ('"Visita"."MedicoSolicitudCambio"', '"Visita"."FactVisita"',
+                  '"Visita"."CierreCicloVisita"', '"Visita"."DIM_MedicoVisita"',
+                  '"Config"."DIM_RM"', '"Config"."DIM_Ciclo"',
                   '"Config"."DIM_Linea"', '"Security"."FACT_UsuarioPais"',
                   '"Security"."DIM_Usuario"', '"Config"."DIM_Pais"'):
         s.execute(text(f"DELETE FROM {tabla}"))
@@ -119,12 +121,29 @@ def escenario(db):
     db.flush()
 
     # Ficha médica COMPLETA en el panel del VM de RD — es el dato personal que no debe fugarse.
-    db.add(MedicoVisita(
+    medico_secreto = MedicoVisita(
         vm_id=vm_do.id, nombre_completo="DR SECRETO RD", nombre="Secreto", apellidos="RD",
         direccion="Calle Falsa 123, Santo Domingo", telefono="809-555-0000",
         email="secreto@example.com", exequatur="EXQ-0001",
         latitud=18.4861, longitud=-69.9312,
-    ))
+        # APROBADO (default del modelo): habilita el flujo de "cambio propuesto" (ronda 3).
+    )
+    # Segundo médico de RD, PENDIENTE_ALTA: para `listar_aprobaciones`/`listar_pendientes`
+    # (ronda 3) — debe desaparecer de la bandeja de un usuario acotado a GT.
+    medico_pendiente = MedicoVisita(
+        vm_id=vm_do.id, nombre_completo="DR PENDIENTE RD", nombre="Pendiente", apellidos="RD",
+        estado_aprobacion="PENDIENTE_ALTA",
+    )
+    db.add_all([medico_secreto, medico_pendiente])
+    db.flush()
+
+    # Cambio propuesto pendiente sobre el médico YA aprobado de RD — para
+    # `resolver_cambio_medico` (ronda 3).
+    from app.models.visita import MedicoSolicitudCambio
+    solicitud_cambio = MedicoSolicitudCambio(
+        medico_visita_id=medico_secreto.id, cambios_json='{"telefono": "809-000-0000"}',
+        estado="PENDIENTE")
+    db.add(solicitud_cambio)
     db.flush()
 
     usuario_gt = Usuario(username="scope_gt_bloqueante1", hashed_password="x",
@@ -134,8 +153,11 @@ def escenario(db):
     db.add(UsuarioPais(usuario_id=usuario_gt.id, pais_codigo="GT"))
     db.commit()
 
-    return {"usuario_gt": usuario_gt, "ciclo_gt": ciclo_gt, "vm_do": vm_do, "vm_do2": vm_do2,
-            "vm_gt": vm_gt}
+    return {"usuario_gt": usuario_gt, "ciclo_gt": ciclo_gt, "ciclo_do": ciclo_do,
+            "vm_do": vm_do, "vm_do2": vm_do2, "vm_gt": vm_gt,
+            "linea_do": linea_do, "linea_gt": linea_gt,
+            "medico_secreto": medico_secreto, "medico_pendiente": medico_pendiente,
+            "solicitud_cambio": solicitud_cambio}
 
 
 # ── Test 1: LECTURA — el vector más grave (ficha médica completa) ─────────────
@@ -184,7 +206,7 @@ def test_usuario_sin_paises_asignados_sigue_pudiendo_usar_cualquier_vm_id(db, es
     # → sin 403, ve la ficha del médico del primer VM de RD con normalidad.
     r = visita_router.listar_medicos_existentes(
         vm_id=escenario["vm_do2"].id, db=db, current_user=admin_sin_paises)
-    assert [m["nombre_completo"] for m in r] == ["DR SECRETO RD"]
+    assert "DR SECRETO RD" in [m["nombre_completo"] for m in r]
 
     # Escritura: mismo vm_id de RD, sin 403 (no llega a persistir nada porque items=[]).
     n = visita_router.guardar_planeacion(
@@ -201,3 +223,265 @@ def test_listar_vms_sin_pais_codigo_aplica_el_piso_de_pais(db, escenario):
         pais_codigo=None, db=db, current_user=escenario["usuario_gt"])}
     assert nombres == {"VM Guatemala"}
     assert "VM República Dominicana" not in nombres
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# RONDA 3 — re-revisión: la enumeración exhaustiva encontró 3 rutas nombradas
+# (`mi-gerente`, `costo/roi`, `planeacion/desbloquear`) más otras que aparecieron
+# al barrer TODO `vm_id`/`rm_id`/`gerente_id`/`ciclo_id`/`medico_id`/`linea_id` que
+# entra del cliente en visita.py. Un test por ruta cerrada — todos con el mismo
+# patrón: usuario ADMIN acotado a `{GT}`, identificador de una entidad de RD →
+# 403. La tabla completa de la enumeración va en el informe de cierre.
+# ═════════════════════════════════════════════════════════════════════════════
+import asyncio
+
+from app.core.authz.deps import Autorizacion
+from app.core.authz.constantes import Alcance
+from app.schemas.visita import (
+    ClasificacionCrear, MedicoVisitaCrear, MedicoVisitaActualizar, ParrillaGuardar,
+    MuestrasRegistrar, ParametroCostoGuardar, CostoEstructuraGuardar,
+)
+
+
+def _clasificacion():
+    return ClasificacionCrear(pacientes_semana=10, costo_consulta=100,
+                              potencial_prescripcion="1", ubicacion_territorial="A", kol_nivel="Ninguno")
+
+
+def _403(fn, *a, **kw):
+    with pytest.raises(HTTPException) as exc:
+        fn(*a, **kw)
+    assert exc.value.status_code == 403
+    return exc.value
+
+
+# ── mi-gerente (señalado explícitamente) ───────────────────────────────────────
+def test_mi_gerente_con_vm_id_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.mi_gerente, vm_id=escenario["vm_do"].id, db=db,
+        current_user=escenario["usuario_gt"])
+
+
+# ── Panel médico: lectura/escritura por medico_id, sin pasar por _scope_vm ─────
+def test_obtener_medico_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.obtener_medico, medico_id=escenario["medico_secreto"].id,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_actualizar_medico_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.actualizar_medico, medico_id=escenario["medico_secreto"].id,
+        datos=MedicoVisitaActualizar(subespecialidad="Cardiología pediátrica"), db=db,
+        current_user=escenario["usuario_gt"])
+
+
+def test_solicitar_baja_medico_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.solicitar_baja, medico_id=escenario["medico_secreto"].id,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_reactivar_medico_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.reactivar_medico, medico_id=escenario["medico_secreto"].id,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_obtener_clasificacion_medico_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.obtener_clasificacion, medico_id=escenario["medico_secreto"].id,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_crear_medico_en_panel_de_otro_pais_da_403(db, escenario):
+    """ADMIN (no REPRESENTANTE_MEDICO) mandando `datos.vm_id` de un VM de RD."""
+    datos = MedicoVisitaCrear(vm_id=escenario["vm_do"].id, nombre_completo="NUEVO MEDICO",
+                              clasificacion=_clasificacion())
+    _403(visita_router.crear_medico, datos=datos, db=db, current_user=escenario["usuario_gt"])
+
+
+# ── Aprobación (fix en `puede_aprobar`, cierra 4 rutas + filtra el listado) ────
+def test_aprobar_medico_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.aprobar_medico, medico_id=escenario["medico_secreto"].id,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_rechazar_medico_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.rechazar_medico, medico_id=escenario["medico_secreto"].id,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_actualizar_clasificacion_medico_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.actualizar_clasificacion, medico_id=escenario["medico_secreto"].id,
+        datos=_clasificacion(), db=db, current_user=escenario["usuario_gt"])
+
+
+def test_resolver_cambio_medico_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.resolver_cambio_medico, solicitud_id=escenario["solicitud_cambio"].id,
+        aprobar=True, motivo=None, db=db, current_user=escenario["usuario_gt"])
+
+
+def test_listar_aprobaciones_excluye_pendientes_de_otro_pais(db, escenario):
+    """`listar_pendientes` ahora también FILTRA por país (antes solo bloqueaba el acceso
+    directo): el médico PENDIENTE_ALTA de RD no debe aparecer en la bandeja de un usuario
+    acotado a GT, aunque no haya pedido ningún filtro."""
+    r = visita_router.listar_aprobaciones(db=db, current_user=escenario["usuario_gt"])
+    nombres = {x["nombre_completo"] for x in r}
+    assert "DR PENDIENTE RD" not in nombres
+
+
+# ── Desbloqueo de planeación (señalado explícitamente: ADMIN no exime del país) ─
+def test_desbloquear_planeacion_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.desbloquear_planeacion, vm_id=escenario["vm_do"].id,
+        motivo="prueba", ciclo_id=None, db=db, current_user=escenario["usuario_gt"])
+
+
+# ── Cierre de ciclo ─────────────────────────────────────────────────────────────
+def test_previsualizar_cierre_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.previsualizar_cierre, ciclo_id=escenario["ciclo_do"].id,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_cerrar_ciclo_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.cerrar_ciclo, ciclo_id=escenario["ciclo_do"].id,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_historial_cierres_excluye_cierres_de_otro_pais(db, escenario):
+    """`historial_cierres` no toma ningún identificador del cliente, pero mezclaba
+    cierres de TODOS los países — hallazgo adicional de la ronda 3 (ver informe)."""
+    from app.models.visita import CierreCicloVisita
+    db.add_all([
+        CierreCicloVisita(ciclo_id=escenario["ciclo_do"].id, panel=1),
+        CierreCicloVisita(ciclo_id=escenario["ciclo_gt"].id, panel=2),
+    ])
+    db.commit()
+    r = visita_router.historial_cierres(db=db, current_user=escenario["usuario_gt"])
+    ciclos = {x["ciclo_id"] for x in r}
+    assert escenario["ciclo_do"].id not in ciclos
+    assert escenario["ciclo_gt"].id in ciclos
+
+
+# ── Parrilla promocional ─────────────────────────────────────────────────────────
+def test_parrilla_ultima_linea_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.parrilla_ultima_linea, ciclo_id=escenario["ciclo_do"].id,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_obtener_parrilla_con_linea_id_de_otro_pais_da_403(db, escenario):
+    """`linea_id` explícito saltaba entero el piso de `_scope_vm` (solo corría en la
+    rama sin `linea_id`)."""
+    _403(visita_router.obtener_parrilla, linea_id=escenario["linea_do"].id, ciclo_id=None,
+        vm_id=None, db=db, current_user=escenario["usuario_gt"])
+
+
+def test_parrilla_penetracion_con_linea_id_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.parrilla_penetracion, linea_id=escenario["linea_do"].id,
+        ciclo_id=None, db=db, current_user=escenario["usuario_gt"])
+
+
+def test_publicar_parrilla_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.publicar_parrilla, linea_id=escenario["linea_do"].id, ciclo_id=None,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_guardar_parrilla_de_otro_pais_da_403(db, escenario):
+    datos = ParrillaGuardar(linea_id=escenario["linea_do"].id, items=[])
+    _403(visita_router.guardar_parrilla, datos=datos, db=db, current_user=escenario["usuario_gt"])
+
+
+def test_registrar_muestras_a_medico_de_otro_pais_da_403(db, escenario):
+    """`vm_id` va del propio país del usuario (GT, pasa `_vm_registro`), pero
+    `datos.medico_id` es de un médico de RD — `_exigir_pais_medico` lo detecta."""
+    datos = MuestrasRegistrar(medico_id=escenario["medico_secreto"].id,
+                              entregas=[{"producto": "Producto X", "cantidad": 1}])
+    _403(visita_router.registrar_muestras, datos=datos, vm_id=escenario["vm_gt"].id,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+# ── Costo & ROI — dato financiero, la sección completa ─────────────────────────
+def test_obtener_parametros_costo_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.obtener_parametros_costo, linea_id=escenario["linea_do"].id,
+        ciclo_id=None, db=db, current_user=escenario["usuario_gt"])
+
+
+def test_guardar_parametros_costo_de_otro_pais_da_403(db, escenario):
+    datos = ParametroCostoGuardar(linea_id=escenario["linea_do"].id, costo_visita=1, costo_muestra=1)
+    _403(visita_router.guardar_parametros_costo, datos=datos, db=db,
+        current_user=escenario["usuario_gt"])
+
+
+def test_costo_roi_con_vm_id_de_otro_pais_da_403(db, escenario):
+    """EL TEST SEÑALADO EXPLÍCITAMENTE — dato financiero (costo por contacto, ingresos,
+    utilidad, ROI). Verificado también por mutación (ver informe)."""
+    _403(visita_router.costo_roi, vm_id=escenario["vm_do"].id, ciclo_id=None,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_costo_ranking_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.costo_ranking, ciclo_id=escenario["ciclo_do"].id,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_costo_estructura_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.costo_estructura, linea_id=escenario["linea_do"].id, ciclo_id=None,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_costo_hojas_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.costo_hojas, ciclo_id=escenario["ciclo_do"].id,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_costo_mi_linea_alcance_all_con_linea_de_otro_pais_da_403(db, escenario):
+    """Alcance RBAC (ALL) y país (frontera) son ejes ortogonales: un observador ALL
+    sigue acotado a `{GT}`."""
+    auth = Autorizacion(usuario=escenario["usuario_gt"], alcance=Alcance.ALL)
+    _403(visita_router.costo_mi_linea, ciclo_id=None, linea_id=escenario["linea_do"].id,
+        db=db, _auth=auth)
+
+
+def test_guardar_costo_estructura_de_otro_pais_da_403(db, escenario):
+    datos = CostoEstructuraGuardar(linea_id=escenario["linea_do"].id)
+    _403(visita_router.guardar_costo_estructura, datos=datos, background_tasks=_FakeBT(),
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_aprobar_costo_estructura_de_otro_pais_da_403(db, escenario):
+    _403(visita_router.aprobar_costo_estructura, linea_id=escenario["linea_do"].id, ciclo_id=None,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_reabrir_costo_estructura_de_otro_pais_da_403(db, escenario):
+    """Mismo patrón que `/planeacion/desbloquear`: `RequireDesbloqueo` (solo ADMIN) no
+    exime del país."""
+    _403(visita_router.reabrir_costo_estructura, linea_id=escenario["linea_do"].id, ciclo_id=None,
+        db=db, current_user=escenario["usuario_gt"])
+
+
+def test_importar_costo_excel_de_otro_pais_da_403(db, escenario):
+    class _FakeUpload:
+        filename = "datos.xlsx"
+        async def read(self):
+            return b""
+    exc = None
+    try:
+        asyncio.run(visita_router.importar_costo_excel(
+            linea_id=escenario["linea_do"].id, ciclo_id=None, archivo=_FakeUpload(),
+            db=db, current_user=escenario["usuario_gt"]))
+    except HTTPException as e:
+        exc = e
+    assert exc is not None and exc.status_code == 403
+
+
+class _FakeBT:
+    def add_task(self, *a, **kw):
+        pass
+
+
+# ── Foto de visita (hallazgo adicional: mismo bug, otro identificador) ─────────
+def test_obtener_foto_visita_de_otro_pais_da_403(db, escenario):
+    from app.models.visita import VisitaRegistro
+    from datetime import datetime, timezone
+    v = VisitaRegistro(vm_id=escenario["vm_do"].id, medico_id=escenario["medico_secreto"].id,
+                       ciclo_id=escenario["ciclo_do"].id, fecha_hora=datetime.now(timezone.utc),
+                       ejecutada=True, tipo_visita="V")
+    db.add(v)
+    db.commit()
+    _403(visita_router.obtener_foto_visita_endpoint, visita_id=v.id, db=db,
+        current_user=escenario["usuario_gt"])

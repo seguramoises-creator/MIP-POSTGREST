@@ -74,15 +74,31 @@ def _gerente_id_de_medico(db: Session, m: MedicoVisita) -> int | None:
 
 
 def puede_aprobar(db: Session, usuario, m: MedicoVisita) -> bool:
-    """ADMIN y GER. PRODUCTIVIDAD aprueban cualquiera; el GERENTE_DISTRITO solo los
-    médicos de su distrito (VM.gerente_id == su propio gerente_id)."""
+    """ADMIN y GER. PRODUCTIVIDAD aprueban cualquiera (dentro de su país — ver abajo); el
+    GERENTE_DISTRITO solo los médicos de su distrito (VM.gerente_id == su propio gerente_id).
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 3): el `return True` de ADMIN/GERENTE_
+    PRODUCTIVIDAD no tenía piso de país — de ahí colgaban `aprobar_medico`, `rechazar_medico`,
+    `resolver_cambio_medico`, `actualizar_clasificacion` y `listar_aprobaciones`/
+    `listar_pendientes` (esta última ahora también FILTRA por país, no solo bloquea el
+    acceso directo — antes un ADMIN acotado veía en su bandeja las solicitudes pendientes
+    de TODOS los países). Devuelve `bool` (no levanta 403) a propósito: es el mismo
+    predicado que usa `listar_pendientes` para filtrar una lista, y ahí un país ajeno debe
+    excluirse en silencio, no abortar el listado completo."""
     rol = usuario.rol.value if hasattr(usuario.rol, "value") else str(usuario.rol)
-    if rol in ("ADMIN", "GERENTE_PRODUCTIVIDAD"):
-        return True
     if rol == "GERENTE_DISTRITO":
         mi_gerente = getattr(usuario, "gerente_id", None)
-        return mi_gerente is not None and _gerente_id_de_medico(db, m) == mi_gerente
-    return False
+        if not (mi_gerente is not None and _gerente_id_de_medico(db, m) == mi_gerente):
+            return False
+    elif rol not in ("ADMIN", "GERENTE_PRODUCTIVIDAD"):
+        return False
+    from app.core.authz.scope import paises_visibles
+    permitidos = paises_visibles(db, usuario)
+    if permitidos is not None:
+        rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == m.vm_id).first()
+        if not rm or rm.pais_codigo not in permitidos:
+            return False
+    return True
 
 
 def solicitar_baja(db: Session, m: MedicoVisita, usuario) -> MedicoVisita:
