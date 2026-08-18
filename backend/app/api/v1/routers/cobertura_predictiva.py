@@ -262,9 +262,19 @@ def listar_parametros(
     db: Session = Depends(get_db),
     current_user: Usuario = AdminOGerProd,
 ):
+    """(Bloqueante 1, ronda 4 — hallazgo #4): `pais_codigo` es OPCIONAL, y omitirlo devolvía
+    la configuración de TODOS los países. El arreglo no es exigir el parámetro (rompería al
+    usuario sin restricción, que debe seguir viendo todo): es aplicar el piso `paises_visibles`
+    cuando no viene. Ojo con `None` (sin filtro, abre) vs `set()` (nada visible, cierra):
+    ambos son falsy, por eso la comparación es `is not None`."""
     q = db.query(ParametroCobertura).filter(ParametroCobertura.activo == True)
     if pais_codigo:
+        exigir_pais(db, current_user, pais_codigo)
         q = q.filter(ParametroCobertura.pais_codigo == pais_codigo)
+    else:
+        permitidos = paises_visibles(db, current_user)
+        if permitidos is not None:
+            q = q.filter(ParametroCobertura.pais_codigo.in_(permitidos))
     if linea_id:
         q = q.filter(ParametroCobertura.linea_id == linea_id)
     if ciclo_id:
@@ -289,7 +299,12 @@ def upsert_parametro(
     Upsert sobre la clave única (pais_codigo, linea_id, ciclo_id). Dejar
     linea_id y/o ciclo_id en NULL define una meta más general (ver
     resolución en cascada de `obtener_meta_cobertura`).
+
+    (Bloqueante 1, ronda 4 — hallazgo #2): `body.pais_codigo` sin guard permitía fijar la
+    meta de cobertura de OTRO país, alterando su KPI. Está activo en la UI
+    (`CoberturaPredictivaAdmin.tsx`).
     """
+    exigir_pais(db, current_user, body.pais_codigo)
     filtros = [ParametroCobertura.pais_codigo == body.pais_codigo]
     filtros.append(
         ParametroCobertura.linea_id.is_(None) if body.linea_id is None
@@ -337,9 +352,16 @@ def listar_feriados(
     db: Session = Depends(get_db),
     current_user: Usuario = AdminOGerProd,
 ):
+    """(Bloqueante 1, ronda 4 — hallazgo #4): mismo caso que `GET /parametros` — sin
+    `pais_codigo` devolvía los feriados de todos los países. Piso `paises_visibles`."""
     q = db.query(Feriado).filter(Feriado.activo == True)
     if pais_codigo:
+        exigir_pais(db, current_user, pais_codigo)
         q = q.filter(Feriado.pais_codigo == pais_codigo)
+    else:
+        permitidos = paises_visibles(db, current_user)
+        if permitidos is not None:
+            q = q.filter(Feriado.pais_codigo.in_(permitidos))
     if desde:
         q = q.filter(Feriado.fecha >= desde)
     if hasta:
@@ -357,6 +379,9 @@ def crear_feriado(
     db: Session = Depends(get_db),
     current_user: Usuario = AdminOGerProd,
 ):
+    """(Bloqueante 1, ronda 4 — hallazgo #3): `body.pais_codigo` sin guard permitía crear
+    feriados en otro país, alterando su cálculo de días hábiles (NETWORKDAYS)."""
+    exigir_pais(db, current_user, body.pais_codigo)
     existente = db.query(Feriado).filter(
         Feriado.pais_codigo == body.pais_codigo, Feriado.fecha == body.fecha,
     ).first()
@@ -538,6 +563,11 @@ async def cargar_target_medicos(
             la carga, queda registrada en "advertencias".
     Idempotente: filas que ya existen para (rm_id, ciclo_id, medico_codigo)
     se omiten, no se duplican.
+
+    (Bloqueante 1, ronda 4 — hallazgo #7): el identificador de cliente aquí es `ciclo_id`
+    (Form), y cada ciclo pertenece a un solo país (`Ciclo.pais_codigo` NOT NULL). Sin guard
+    se podía sembrar el universo target de otro país; los RM salen del Excel y la
+    discrepancia de país solo generaba «advertencias», que no bloquean.
     """
     if modo.upper() not in {"SIMULACION", "PRODUCCION"}:
         raise HTTPException(400, "Modo debe ser SIMULACION o PRODUCCION")
@@ -545,6 +575,7 @@ async def cargar_target_medicos(
     ciclo = db.query(Ciclo).filter(Ciclo.id == ciclo_id).first()
     if not ciclo:
         raise HTTPException(404, f"Ciclo ID={ciclo_id} no encontrado")
+    exigir_pais(db, current_user, ciclo.pais_codigo)
 
     content = await archivo.read()
     _validar_archivo_excel(archivo.filename, content)
@@ -653,6 +684,9 @@ async def cargar_visitas(
     NO es idempotente: es una bitácora de eventos (append-only); cargar el
     mismo archivo dos veces duplica las visitas. A diferencia de
     Target_Medicos, no tiene restricción de unicidad en BD.
+
+    (Bloqueante 1, ronda 4 — hallazgo #7): mismo caso que `cargar/target-medicos` — el piso
+    va sobre el país del `ciclo_id` recibido.
     """
     if modo.upper() not in {"SIMULACION", "PRODUCCION"}:
         raise HTTPException(400, "Modo debe ser SIMULACION o PRODUCCION")
@@ -660,6 +694,7 @@ async def cargar_visitas(
     ciclo = db.query(Ciclo).filter(Ciclo.id == ciclo_id).first()
     if not ciclo:
         raise HTTPException(404, f"Ciclo ID={ciclo_id} no encontrado")
+    exigir_pais(db, current_user, ciclo.pais_codigo)
 
     content = await archivo.read()
     _validar_archivo_excel(archivo.filename, content)
@@ -742,8 +777,17 @@ def listar_ciclos_cat(
     _current_user: Usuario = ReadCobertura,
     db: Session = Depends(get_db),
 ):
-    """Lista los ciclos promocionales cargados en cat.DimCiclo para poblar selectores."""
-    return get_ciclos_cat(db, pais_codigo=pais_codigo)
+    """Lista los ciclos promocionales cargados en cat.DimCiclo para poblar selectores.
+
+    (Bloqueante 1, ronda 4 — hallazgo #5): mismo criterio que `vivo/ciclos` — con
+    `pais_codigo` se valida; sin él se aplica el piso `paises_visibles` en vez de listar
+    los ciclos de todos los países."""
+    if pais_codigo:
+        exigir_pais(db, _current_user, pais_codigo)
+        permitidos = None
+    else:
+        permitidos = paises_visibles(db, _current_user)
+    return get_ciclos_cat(db, pais_codigo=pais_codigo, permitidos=permitidos)
 
 
 # ── GET /cobertura-predictiva/cat/dashboard ─────────────────────────────────
@@ -761,7 +805,11 @@ def dashboard_4dx(
     """
     Lee de cat.vwDashboardCoberturaPredictivaGD el resultado más cercano a la
     fecha de corte. Aplica auto-filtro por scope para GERENTE_DISTRITO y REPRESENTANTE_MEDICO.
+
+    (Bloqueante 1, ronda 4 — hallazgo #5): `pais_codigo` era requerido pero SIN guard, a
+    diferencia de `vivo/dashboard` (mismo patrón, un router sí y otro no).
     """
+    exigir_pais(db, _current_user, pais_codigo)
     from datetime import date as _date
     fecha = None
     if fecha_corte:
@@ -807,7 +855,10 @@ def cobertura_por_categoria(
     Devuelve para cada categoría de médico (A/B/C/D) el total de médicos programados,
     los visitados (al menos una visita 'Realizada') y los pendientes, con porcentaje.
     Útil para las barras de progreso del dashboard de Cobertura Predictiva.
+
+    (Bloqueante 1, ronda 4 — hallazgo #5): `pais_codigo` requerido pero sin guard.
     """
+    exigir_pais(db, _current_user, pais_codigo)
     # Auto-filtro por scope
     if _current_user.rol == Rol.REPRESENTANTE_MEDICO:
         if not _current_user.rm_id:
@@ -848,9 +899,17 @@ def reset_datos_cat(
     4. (opcional) cat.DimMedico, cat.DimCiclo, cat.DimRepresentanteMedico, cat.DimEspecialidad
 
     SOLO para usuarios ADMIN o GERENTE_PRODUCTIVIDAD.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 4 — hallazgo #1, el más grave del barrido):
+    `pais_codigo` llegaba CRUDO del cliente y se borraban KPIs, visitas, target y —con
+    `incluir_dims=true`— las dimensiones del país indicado, SIN ningún piso de país. Un
+    GERENTE_PRODUCTIVIDAD acotado a GT podía borrar los datos de RD. El guard va lo primero:
+    antes de resolver `PaisKey` y antes de cualquier DELETE.
     """
     from sqlalchemy import text as _t
     from loguru import logger as _log
+
+    exigir_pais(db, _current_user, pais_codigo)
 
     try:
         # Resolver pais_key
@@ -972,7 +1031,11 @@ def calcular_sp(
     Materializa los KPIs de cobertura predictiva en cat.KpiCoberturaPredictiva
     para el ciclo/país/fecha indicados. Elimina los resultados anteriores para
     esa combinación (FechaCorte + CicloKey) y los recalcula frescos.
+
+    (Bloqueante 1, ronda 4 — hallazgo #6): ESCRITURA con `pais_codigo` crudo del cliente —
+    materializaba (borrando y recalculando) los KPIs de otro país.
     """
+    exigir_pais(db, _current_user, pais_codigo)
     from datetime import date as _date
     fecha = None
     if fecha_corte:
@@ -1018,7 +1081,11 @@ async def cargar_excel_cat(
 
     Si `calcular_al_cargar=true`, ejecuta automáticamente el SP de cálculo
     (cat.sp_CalcularCoberturaPredictiva) para cada ciclo cargado.
+
+    (Bloqueante 1, ronda 4 — hallazgo #6): `pais_codigo` llega por Form y sin guard cargaba
+    target y visitas en otro país. El guard va antes de leer el archivo.
     """
+    exigir_pais(db, _current_user, pais_codigo)
     if not archivo.filename.lower().endswith(".xlsx"):
         raise HTTPException(status_code=400, detail="Solo se aceptan archivos .xlsx")
 

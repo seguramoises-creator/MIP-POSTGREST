@@ -722,8 +722,13 @@ from app.models.cat_models import (
 )
 
 
-def get_ciclos_cat(db: Session, pais_codigo: Optional[str] = None) -> list:
-    """Lista ciclos desde cat.DimCiclo para los selectores del frontend."""
+def get_ciclos_cat(db: Session, pais_codigo: Optional[str] = None,
+                   permitidos: Optional[set] = None) -> list:
+    """Lista ciclos desde cat.DimCiclo para los selectores del frontend.
+
+    `permitidos`: piso de país del usuario cuando no llega `pais_codigo` explícito
+    (`None` = sin filtro / ve todo; `set()` = no ve nada). Mismo contrato que
+    `ciclos_vivo` — ver `scope.paises_visibles`."""
     q = db.query(
         CatDimCiclo.ciclo_key,
         CatDimCiclo.codigo_ciclo,
@@ -741,6 +746,8 @@ def get_ciclos_cat(db: Session, pais_codigo: Optional[str] = None) -> list:
     )
     if pais_codigo:
         q = q.filter(CatDimPais.codigo_pais == pais_codigo.upper())
+    elif permitidos is not None:
+        q = q.filter(CatDimPais.codigo_pais.in_({p.upper() for p in permitidos}))
     rows = q.order_by(CatDimCiclo.fecha_inicio.desc()).all()
     return [
         {

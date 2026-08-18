@@ -519,8 +519,14 @@ def crear_medico(datos: MedicoVisitaCrear, db: Session = Depends(get_db), curren
 def importar_medicos_categorizacion(db: Session = Depends(get_db), current_user=RequireCierre):
     """Carga masiva del Panel Médico desde los datos ya cargados en Categorización:
     crea los médicos faltantes (dedup por VM + nombre), asignados a su VM y en estado
-    PENDIENTE_ALTA. Solo ADMIN / GERENTE_PRODUCTIVIDAD."""
-    return visita_service.importar_desde_categorizacion(db, getattr(current_user, "id", None))
+    PENDIENTE_ALTA. Solo ADMIN / GERENTE_PRODUCTIVIDAD.
+
+    (Bloqueante 1, ago-2026, ronda 4 — hallazgo #9): escritura masiva sin piso de país —
+    creaba médicos en los paneles de los VM de todos los países. `paises_visibles` puede
+    devolver `None` (sin filtro) o un conjunto; el servicio distingue ambos con `is None`."""
+    from app.core.authz.scope import paises_visibles
+    return visita_service.importar_desde_categorizacion(
+        db, getattr(current_user, "id", None), permitidos=paises_visibles(db, current_user))
 
 
 @router.get("/gerentes", response_model=list[dict])
@@ -962,7 +968,14 @@ def registrar_muestras(datos: MuestrasRegistrar, vm_id: int | None = None,
 @router.get("/muestras/resumen", response_model=dict)
 def resumen_muestras(vm_id: int | None = None, ciclo_id: int | None = None,
                      db: Session = Depends(get_db), current_user=ReadParrilla):
-    """Resumen de muestras por producto: entregadas, médicos alcanzados, meta y cobertura."""
+    """Resumen de muestras por producto: entregadas, médicos alcanzados, meta y cobertura.
+
+    (Bloqueante 1 de revisión, ago-2026, ronda 4 — hallazgo #8): la tabla de la ronda 3 dio
+    esta ruta por cubierta vía `_scope_vm`, pero recibe DOS identificadores: `vm_id` (sí
+    cubierto) y `ciclo_id` (no). Sin `vm_id`, el servicio agregaba las muestras y las metas
+    de parrilla de TODO el ciclo pedido, de cualquier país. Mismo cierre que
+    `/costo/ranking` y `/parrilla/ultima-linea`."""
+    _exigir_pais_ciclo(db, current_user, ciclo_id)
     from app.services import visita_parrilla_service
     return visita_parrilla_service.resumen_muestras(db, ciclo_id, _scope_vm(db, current_user, vm_id))
 

@@ -442,9 +442,17 @@ ORDER BY rm.id, m."NombreMedico", sn."Periodo" DESC
 """
 
 
-def importar_desde_categorizacion(db: Session, usuario_id: int | None = None) -> dict:
+def importar_desde_categorizacion(db: Session, usuario_id: int | None = None,
+                                  permitidos: set | None = None) -> dict:
     """Crea en el Panel Médico los médicos cargados en Categorización que aún no
-    existan (dedup por VM + nombre). Quedan en PENDIENTE_ALTA. Idempotente."""
+    existan (dedup por VM + nombre). Quedan en PENDIENTE_ALTA. Idempotente.
+
+    `permitidos` (Bloqueante 1, ago-2026, ronda 4 — hallazgo #9): piso de país del usuario.
+    Es una ESCRITURA MASIVA que, sin él, creaba médicos en los paneles de los VM de TODOS
+    los países. Mismo criterio con el que se cerró `GET /cierre/historial` en la ronda 3:
+    no recibe identificador del cliente, pero mezcla países por construcción. `None` = sin
+    filtro (el usuario ve todo); `set()` = ningún país visible → no se importa nada. Ambos
+    son falsy: la comprobación es `is not None`."""
     from datetime import date as _date, datetime as _dt, timezone as _tz
     from sqlalchemy import text
     from app.schemas.visita import validar_nombre_medico
@@ -474,7 +482,19 @@ def importar_desde_categorizacion(db: Session, usuario_id: int | None = None) ->
                   for m in db.query(MedicoVisita.vm_id, MedicoVisita.nombre_completo).all()}
     vistos: set[tuple[int, str]] = set()
     creados = omitidos = invalidos = 0
+    _pais_cache: dict[int, str | None] = {}
+
+    def _vm_permitido(vm: int) -> bool:
+        if permitidos is None:
+            return True
+        if vm not in _pais_cache:
+            _pais_cache[vm] = _pais_de_vm(db, vm)
+        return _pais_cache[vm] in permitidos
+
     for f in filas:
+        if not _vm_permitido(f["vm_id"]):
+            omitidos += 1
+            continue
         try:
             nombre = validar_nombre_medico(f["nombre"])   # MAYÚSCULAS, ≥2 palabras, sin puntos
         except (ValueError, AttributeError):
