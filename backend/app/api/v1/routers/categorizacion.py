@@ -246,6 +246,13 @@ def get_componentes(
 # ── GET /categorizacion/diagnostico ───────────────────────────────────────────
 @router.get("/diagnostico", summary="Diagnóstico: conteos de tablas del schema cat")
 def get_diagnostico(
+    # Quedó SIN dependencia de autenticación (ago-2026): era el único de los 20 endpoints
+    # de este router sin guard, y el router no declara `dependencies` globales, así que
+    # respondía 200 a cualquiera sin token. Devuelve el mensaje crudo de las excepciones
+    # (`f"ERROR: {exc}"`), o sea nombres de tablas y columnas del esquema `cat` servidos a
+    # internet. Va con CONFIGURE, no con READ: es una herramienta de operación, no un dato
+    # del módulo.
+    _current_user: Usuario = RequireAdminCat,
     db: Session = Depends(get_db),
 ):
     """Endpoint temporal de diagnóstico — retorna conteos de tablas clave."""
