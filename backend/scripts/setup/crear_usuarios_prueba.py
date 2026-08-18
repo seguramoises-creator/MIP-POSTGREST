@@ -11,6 +11,7 @@ Todos comparten la misma contraseña de prueba (abajo). NO son cuentas de produc
 bórralas cuando termines de validar.
 """
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -43,11 +44,18 @@ USUARIOS = [
     ("qa_analista",     Rol.ANALISTA_DATOS,         "QA Analista de Datos"),
     ("qa_finanzas",     Rol.FINANZAS,               "QA Finanzas"),
     ("qa_producto",     Rol.GERENTE_MARCA,          "QA Gerente de Producto"),
+    # Coordinador Mercadeo Internacional (7º rol de la gerencia de Mallén): "acceso total,
+    # países Guatemala y Honduras". Lleva rol GERENTE_MARKETING a propósito — su diferencia
+    # con la Gerencia de Mercadeo NO es de rol sino de PAÍS, y el país es ortogonal a la
+    # matriz (vive en Security.FACT_UsuarioPais, no en una celda). Acotarlo es asignarle
+    # {GT, HN}; sin filas vería todos los países, como cualquier otro.
+    ("qa_coordinador",  Rol.GERENTE_MARKETING,      "QA Coordinador Mercadeo Internacional"),
 ]
 
 
 def main() -> None:
     hashed = hash_password(PASSWORD)
+    ahora = datetime.now(timezone.utc)
     db = SessionLocal()
     creados, actualizados = 0, 0
     try:
@@ -60,6 +68,11 @@ def main() -> None:
                 u.debe_cambiar_password = False
                 u.bloqueado_hasta = None
                 u.intentos_fallidos = 0
+                # Las cuentas creadas antes de la migración 0023 quedaron con fecha por el
+                # backfill; una creada por este script después, no. Sin esto, re-ejecutarlo
+                # no repara una cuenta que no puede entrar.
+                if u.activado_en is None:
+                    u.activado_en = ahora
                 actualizados += 1
                 print(f"  [OK] {username:16} actualizado  ({rol.value})")
             else:
@@ -72,6 +85,12 @@ def main() -> None:
                     activo=True,
                     debe_cambiar_password=False,
                     intentos_fallidos=0,
+                    # SIN esto la cuenta nace con `activado_en` NULL y auth.py corta el login
+                    # con 403 ANTES de verificar la contraseña: la cuenta existe, la clave es
+                    # correcta y aun así no se puede entrar. Mismo defecto que se corrigió en
+                    # crear_admin_pg.py (e6315ca) y que aquí seguía vivo. Estas cuentas no se
+                    # activan por enlace: el script ya les fija la clave.
+                    activado_en=ahora,
                 ))
                 creados += 1
                 print(f"  [OK] {username:16} creado       ({rol.value})")
