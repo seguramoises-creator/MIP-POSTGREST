@@ -31,7 +31,25 @@ from app.core.security import hash_password
 from app.models.usuario import Usuario, Rol
 from app.models.dimensiones import Gerente, RepresentanteMedico
 
-PASSWORD = "PruebaVista2026!"
+def _password() -> str:
+    """La clave NO vive en el código. Este repositorio es PÚBLICO, y hasta ago-2026 tenía
+    aquí una constante en claro que era la contraseña real de nueve cuentas vivas en dos
+    servidores — con roles de lectura amplia (Presidencia, Director Comercial, Analista).
+    Cualquiera que encontrara el repo tenía credenciales válidas contra producción.
+
+    Sin `QA_PASSWORD` en el entorno se genera una al azar y se imprime UNA vez. Así cada
+    ambiente termina con la suya: si calidad y producción compartieran clave, una prueba
+    contra calidad llevaría sin quererlo las credenciales de producción.
+
+    Cumple la política (≥12, mayúscula, minúscula, dígito y especial) por construcción: el
+    sufijo la garantiza pase lo que pase con el azar de `token_urlsafe`.
+    """
+    from os import environ
+    import secrets
+    return environ.get("QA_PASSWORD") or (secrets.token_urlsafe(12) + "Aa1!")
+
+
+PASSWORD = _password()
 
 # username -> (rol, nombre visible). Solo roles que hoy no tienen cuenta;
 # puedes agregar/quitar filas sin problema (el script es idempotente).
@@ -117,8 +135,12 @@ def main() -> None:
 
     print(f"""
 ¡Listo!  creados={creados}  actualizados={actualizados}
-  Contraseña de todas las cuentas QA: {PASSWORD}
-  (Cuentas de prueba — bórralas al terminar la validación.)
+
+  Contraseña de las cuentas QA (esta corrida): {PASSWORD}
+
+  Se muestra UNA sola vez y no queda escrita en ninguna parte: guárdala ahora.
+  Para volver a fijar una conocida:  QA_PASSWORD='...' python {Path(__file__).name}
+  Cuentas de prueba — bórralas al terminar la validación.
 """)
 
 
