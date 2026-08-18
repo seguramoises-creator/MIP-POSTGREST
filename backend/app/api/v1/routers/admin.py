@@ -14,6 +14,7 @@ from app.core.deps import get_db, get_current_active_user, require_roles
 from app.core.authz.audit import registrar_evento_seguridad
 from app.core.authz.deps import require as _require_authz
 from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec
+from app.core.authz.paises import exigir_gestion_alcance
 from app.models.usuario import Usuario, Rol
 from app.models.dimensiones import (
     Pais, Linea, Gerente, RepresentanteMedico, Producto,
@@ -151,13 +152,27 @@ def update_gerente(id: int, data: GerenteCreate, db: Session = Depends(get_db), 
     return obj
 
 
+def _pais_del_gerente(db: Session, gerente_id: int) -> set[str]:
+    """El país que alcanza un gerente, para el guard de gestión de alcance. Un gerente
+    inexistente devuelve el conjunto vacío, que `exigir_gestion_alcance` trata como
+    "fuera de alcance" para un actor restringido: así un id inventado no sirve para
+    sondear qué gerentes existen."""
+    g = db.query(Gerente.pais_codigo).filter(Gerente.id == gerente_id).first()
+    return {g[0]} if g else set()
+
+
 @router.get("/gerentes/{gerente_id}/lineas", summary="Líneas asignadas a un gerente")
-def get_lineas_gerente(gerente_id: int, db: Session = Depends(get_db), _=AdminOnly):
+def get_lineas_gerente(gerente_id: int, db: Session = Depends(get_db), actor=AdminOnly):
+    exigir_gestion_alcance(db, actor, _pais_del_gerente(db, gerente_id))
     return {"lineas": sorted(alcance_service.lineas_de(db, gerente_id))}
 
 
 @router.put("/gerentes/{gerente_id}/lineas", summary="Fijar las líneas de un gerente (reemplaza el conjunto)")
-def put_lineas_gerente(gerente_id: int, payload: dict, db: Session = Depends(get_db), _=AdminOnly):
+def put_lineas_gerente(gerente_id: int, payload: dict, db: Session = Depends(get_db), actor=AdminOnly):
+    # Mismo hueco que en /usuarios/{id}/paises: sin esto, un ADMIN acotado a un país
+    # reasignaba las líneas de un gerente de otro. Aquí el "objetivo" es el país del
+    # gerente, no un conjunto asignado.
+    exigir_gestion_alcance(db, actor, _pais_del_gerente(db, gerente_id))
     try:
         alcance_service.fijar_lineas(db, gerente_id, payload.get("lineas", []))
     except alcance_service.AlcanceInvalidoError as exc:
@@ -1019,15 +1034,24 @@ def delete_usuario(id: int, db: Session = Depends(get_db), _=AdminOnly):
 
 
 @router.get("/usuarios/{usuario_id}/paises", summary="Países visibles para un usuario")
-def get_paises_usuario(usuario_id: int, db: Session = Depends(get_db), _=AdminOnly):
+def get_paises_usuario(usuario_id: int, db: Session = Depends(get_db), actor=AdminOnly):
+    exigir_gestion_alcance(db, actor, alcance_service.paises_de(db, usuario_id))
     return {"paises": sorted(alcance_service.paises_de(db, usuario_id))}
 
 
 @router.put("/usuarios/{usuario_id}/paises", summary="Fijar los países de un usuario (reemplaza el conjunto)")
-def put_paises_usuario(usuario_id: int, payload: dict, db: Session = Depends(get_db), _=AdminOnly):
-    """Lista vacía = todos los países (spec §3)."""
+def put_paises_usuario(usuario_id: int, payload: dict, db: Session = Depends(get_db), actor=AdminOnly):
+    """Lista vacía = todos los países (spec §3).
+
+    Esta ruta ESCRIBE la frontera de país, no la lee: es la que decide qué ve todo el
+    resto del sistema. `exigir_gestion_alcance` impide que un ADMIN acotado otorgue
+    fuera de su alcance — incluida la lista vacía, que significa "todos" y era la
+    escalada más corta que había.
+    """
+    deseados = payload.get("paises", [])
+    exigir_gestion_alcance(db, actor, alcance_service.paises_de(db, usuario_id), deseados)
     try:
-        alcance_service.fijar_paises(db, usuario_id, payload.get("paises", []))
+        alcance_service.fijar_paises(db, usuario_id, deseados)
     except alcance_service.AlcanceInvalidoError as exc:
         db.rollback()
         raise HTTPException(422, str(exc))
