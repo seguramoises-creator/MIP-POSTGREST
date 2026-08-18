@@ -244,10 +244,15 @@ def test_listar_lineas_service_sin_pais_no_restringe():
 
 
 def test_router_listar_lineas_pasa_pais_codigo(monkeypatch):
+    """El router ahora también pasa `permitidos` (piso de país, ver `_scope.paises_visibles`)
+    como tercer argumento posicional a `visita_parrilla_service.listar_lineas`. Con
+    `pais_codigo` explícito el router no calcula el piso (queda en `None`) — lo que este
+    test sigue comprobando es que el `pais_codigo` pedido se propaga tal cual al servicio."""
     llamada = {}
 
-    def fake_listar(db, pais_codigo=None):
+    def fake_listar(db, pais_codigo=None, permitidos=None):
         llamada["pais_codigo"] = pais_codigo
+        llamada["permitidos"] = permitidos
         return []
     monkeypatch.setattr(parrilla_svc, "listar_lineas", fake_listar)
     visita_router.listar_lineas(pais_codigo="DO", db=MagicMock(), current_user=SimpleNamespace())

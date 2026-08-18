@@ -131,11 +131,23 @@ def _cobertura_bypass(db, current_user, vm_id, ciclo_id):
 
 def test_vm_id_de_otro_pais_no_filtra_nada(db, escenario):
     """EL TEST QUE REPRODUCE EL HALLAZGO CRITICAL (ronda 2): un usuario con `{DO}` que pide
-    la cobertura de un `vm_id` de GT no debe recibir su panel."""
-    r = _cobertura_bypass(db, escenario["usuario_do"], escenario["vm_gt"].id,
+    la cobertura de un `vm_id` de GT no debe recibir su panel.
+
+    CONTRATO CAMBIADO (cierre de bloqueantes, ago-2026): antes de este cierre el endpoint
+    devolvía un panel VACÍO (`panel == 0`, `sin_visita == []`) — el filtro simplemente no
+    encontraba nada bajo el piso de país. Desde que `_scope_vm` (`visita.py`) resuelve el
+    `vm_id` y valida su país con `exigir_pais` ANTES de llegar al servicio, el mismo intento
+    ahora se rechaza con 403 explícito. Se prefiere la denegación explícita al vacío porque
+    un resultado vacío es ambiguo — el usuario lo lee como "no hay datos" y el desarrollador
+    como un posible bug de consulta — mientras que 403 dice sin ambigüedad "no tienes acceso
+    a ese país", y es coherente con `exigir_pais`, que ya responde 403 en el resto de la
+    aplicación (por ejemplo, `pais_codigo` explícito fuera del piso del usuario)."""
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as exc:
+        _cobertura_bypass(db, escenario["usuario_do"], escenario["vm_gt"].id,
                           escenario["ciclo_do"].id)
-    assert r["panel"] == 0
-    assert r["sin_visita"] == []
+    assert exc.value.status_code == 403
 
 
 def test_vm_id_del_propio_pais_si_funciona(db, escenario):

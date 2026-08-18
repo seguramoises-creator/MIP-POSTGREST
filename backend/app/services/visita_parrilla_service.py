@@ -34,11 +34,16 @@ def linea_de_vm(db: Session, vm_id: int) -> int | None:
     return rm.linea_id if rm else None
 
 
-def listar_lineas(db: Session, pais_codigo: str | None = None) -> list[dict]:
-    """`pais_codigo` (aislamiento multipaís): sin filtro, listaba líneas de TODOS los países."""
+def listar_lineas(db: Session, pais_codigo: str | None = None,
+                  permitidos: set[str] | None = None) -> list[dict]:
+    """`pais_codigo` (aislamiento multipaís): sin filtro, listaba líneas de TODOS los países.
+    `permitidos`: piso de país del usuario cuando no llega `pais_codigo` explícito
+    (`None` = todos, ver `scope.paises_visibles`)."""
     q = db.query(Linea).filter(Linea.activo == True)  # noqa: E712
     if pais_codigo:
         q = q.filter(Linea.pais_codigo == pais_codigo)
+    elif permitidos is not None:
+        q = q.filter(Linea.pais_codigo.in_(permitidos))
     return [{"id": l.id, "nombre": l.nombre} for l in q.order_by(Linea.nombre).all()]
 
 

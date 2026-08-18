@@ -122,6 +122,28 @@ def test_validar_rechaza_valores_invalidos():
                           "accion": "admin", "alcance": "all"})  # 'admin' no asignable
 
 
+def test_validar_acepta_alcance_linea():
+    """Bloqueante 2 de revisión (ago-2026): `Alcance.LINEA` no existía para la matriz
+    editable — un `PUT /authz/matriz` con alcance `linea` respondía 400 «Alcance
+    inválido», dejando las 3 celdas de este trabajo ineditables desde la UI."""
+    assert edicion._validar({"rol": "GERENTE_MARCA", "recurso": Recurso.COBERTURA_DIARIA,
+                             "accion": "read", "alcance": "linea"}) == \
+        ("GERENTE_MARCA", Recurso.COBERTURA_DIARIA, "read", "linea")
+
+
+def test_aplicar_cambios_acepta_alcance_linea():
+    """Mismo hallazgo, verificado end-to-end vía `aplicar_cambios` (lo que respalda
+    `PUT /authz/matriz`): antes de la corrección, esta llamada lanzaba
+    `CambioInvalidoError` (\"Alcance inválido: 'linea'\")."""
+    db = FakeSession()
+    gm = SimpleNamespace(rol=Rol.GERENTE_MARCA)
+    n = edicion.aplicar_cambios(db, ADMIN, [
+        {"rol": "GERENTE_MARCA", "recurso": Recurso.COBERTURA_DIARIA, "accion": "read", "alcance": "linea"},
+    ])
+    assert n == 1
+    assert engine.can(gm, Accion.READ, Recurso.COBERTURA_DIARIA) == Alcance.LINEA
+
+
 def test_validar_acepta_valido_y_denegacion():
     assert edicion._validar({"rol": "FINANZAS", "recurso": Recurso.COBERTURA_DIARIA,
                              "accion": "read", "alcance": "all"}) == \

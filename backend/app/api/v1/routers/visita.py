@@ -8,7 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, st
 from sqlalchemy.orm import Session
 
 from app.core.deps import get_db, require_roles, get_current_active_user
-from app.core.authz.paises import PaisPermitido
+from app.core.authz.paises import PaisPermitido, exigir_pais
 from app.core.authz import scope as _scope
 from app.models.usuario import Rol
 from app.schemas.visita import (
@@ -80,13 +80,28 @@ def _rol(u) -> str:
     return u.rol.value if hasattr(u.rol, "value") else str(u.rol)
 
 
-def _scope_vm(current_user, vm_id: int | None) -> int | None:
-    """Un REPRESENTANTE_MEDICO se fuerza a su propio rm_id; los demás pasan vm_id libre."""
+def _scope_vm(db, current_user, vm_id: int | None) -> int | None:
+    """Un REPRESENTANTE_MEDICO se fuerza a su propio rm_id; los demás pasan vm_id libre,
+    PERO si vienen con un `vm_id` explícito se exige que el país de ese VM esté entre los
+    países permitidos del usuario.
+
+    (Bloqueante 1 de revisión, ago-2026): antes un `vm_id` explícito quedaba SIN piso de
+    país, también en lectura — `GET /visita/medicos/existentes?vm_id=` devolvía la ficha
+    médica completa (nombre, dirección, GPS, teléfono, exequátur) de todos los médicos del
+    país de ESE vm_id, sin importar los países del usuario que hace la llamada. Mismo
+    criterio que `_verificar_acceso_rm`/`get_productividad_rm`: cuando el identificador
+    señala una sola entidad, el guard va en el resolvedor. NO cubre el equipo (un GD puede
+    pasar el vm_id de otro distrito) — ese agujero es preexistente y va en otro trabajo."""
     if _rol(current_user) == "REPRESENTANTE_MEDICO":
         rm = getattr(current_user, "rm_id", None)
         if not rm:
             raise HTTPException(status_code=403, detail="Tu usuario no está vinculado a un representante (rm_id).")
         return rm
+    if vm_id is not None:
+        from app.models.dimensiones import RepresentanteMedico
+        rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
+        if rm is not None:
+            exigir_pais(db, current_user, rm.pais_codigo)
     return vm_id
 
 
@@ -158,11 +173,17 @@ def mi_gerente(vm_id: int | None = None, db: Session = Depends(get_db), current_
 def listar_vms(pais_codigo: str | None = Depends(PaisPermitido), db: Session = Depends(get_db),
                current_user=RequireAnyAuth):
     """Visitadores médicos (DIM_RM) — para que ADMIN/GERENTE elijan el panel a ver.
-    `pais_codigo` (aislamiento multipaís): sin filtro, listaba VMs de TODOS los países."""
+    `pais_codigo` (aislamiento multipaís): sin filtro, listaba VMs de TODOS los países.
+    `permitidos` (Menor de revisión, ago-2026): sin `pais_codigo` seguía listando VMs de
+    TODOS los países — el piso de país se aplica siempre, no solo cuando llega el filtro."""
     from app.models.dimensiones import RepresentanteMedico
     q = db.query(RepresentanteMedico).filter(RepresentanteMedico.activo == True)  # noqa: E712
     if pais_codigo:
         q = q.filter(RepresentanteMedico.pais_codigo == pais_codigo)
+    else:
+        permitidos = _scope.paises_visibles(db, current_user)
+        if permitidos is not None:
+            q = q.filter(RepresentanteMedico.pais_codigo.in_(permitidos))
     return [{"id": r.id, "nombre": r.nombre} for r in q.order_by(RepresentanteMedico.nombre).all()]
 
 
@@ -177,7 +198,7 @@ def listar_medicos(vm_id: int | None = None, incluir_inactivos: bool = False,
     `pais_codigo` (aislamiento multipaís): sin `vm_id`, acota el panel agregado a un país.
     `permitidos` (piso de país, siempre — incluso con `vm_id` explícito, ver
     `visita_service.listar_medicos`)."""
-    vm = _scope_vm(current_user, vm_id)
+    vm = _scope_vm(db, current_user, vm_id)
     permitidos = _scope.paises_visibles(db, current_user)
     return visita_service.listar_medicos(db, vm_id=vm, incluir_inactivos=incluir_inactivos,
                                          lite=lite, pais_codigo=pais_codigo, permitidos=permitidos)
@@ -189,7 +210,7 @@ def listar_medicos_existentes(vm_id: int | None = None, db: Session = Depends(ge
     """Médicos ya registrados en otros paneles del mismo país, para COPIAR al panel del
     VM (evita reescribir la ficha). El VM se fuerza a su propio rm_id; ADMIN/GERENTE
     deben indicar el visitador destino con ?vm_id=."""
-    vm = _scope_vm(current_user, vm_id)
+    vm = _scope_vm(db, current_user, vm_id)
     if not vm:
         raise HTTPException(status_code=400, detail="Indica el visitador destino (vm_id).")
     return visita_service.listar_medicos_existentes(db, vm)
@@ -216,7 +237,7 @@ def actualizar_medico(medico_id: int, datos: MedicoVisitaActualizar,
     if not m:
         raise HTTPException(status_code=404, detail="Médico no encontrado.")
     if _rol(current_user) == "REPRESENTANTE_MEDICO":
-        rm = _scope_vm(current_user, None)
+        rm = _scope_vm(db, current_user, None)
         if m.vm_id != rm:
             raise HTTPException(status_code=403, detail="Este médico no pertenece a tu panel.")
         # El REP no deja el cambio activo por su cuenta: queda pendiente de validación del
@@ -243,9 +264,9 @@ def actualizar_medico(medico_id: int, datos: MedicoVisitaActualizar,
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-def _medico_de_mi_panel(current_user, m):
+def _medico_de_mi_panel(db, current_user, m):
     if _rol(current_user) == "REPRESENTANTE_MEDICO":
-        rm = _scope_vm(current_user, None)
+        rm = _scope_vm(db, current_user, None)
         if m.vm_id != rm:
             raise HTTPException(status_code=403, detail="Este médico no pertenece a tu panel.")
 
@@ -258,7 +279,7 @@ def solicitar_baja(medico_id: int, db: Session = Depends(get_db), current_user=R
     m = visita_service.obtener_medico(db, medico_id)
     if not m:
         raise HTTPException(status_code=404, detail="Médico no encontrado.")
-    _medico_de_mi_panel(current_user, m)
+    _medico_de_mi_panel(db, current_user, m)
     aps.solicitar_baja(db, m, current_user)
     return {"id": m.id, "estado_aprobacion": m.estado_aprobacion}
 
@@ -272,7 +293,7 @@ def reactivar_medico(medico_id: int, db: Session = Depends(get_db), current_user
     m = visita_service.obtener_medico(db, medico_id)
     if not m:
         raise HTTPException(status_code=404, detail="Médico no encontrado.")
-    _medico_de_mi_panel(current_user, m)
+    _medico_de_mi_panel(db, current_user, m)
     m.activo = True
     m.estado_aprobacion = "PENDIENTE_ALTA"
     m.ciclo_alta_id = ciclo_actual_id(db, m.vm_id)
@@ -404,7 +425,7 @@ def crear_medico(datos: MedicoVisitaCrear, db: Session = Depends(get_db), curren
     confirmar_duplicado=true)."""
     # El VM solo registra en su propio panel.
     if _rol(current_user) == "REPRESENTANTE_MEDICO":
-        datos.vm_id = _scope_vm(current_user, None)
+        datos.vm_id = _scope_vm(db, current_user, None)
     try:
         return visita_service.crear_medico(db, datos, getattr(current_user, "id", None))
     except visita_service.DuplicadoMedicoError as e:
@@ -426,11 +447,17 @@ def importar_medicos_categorizacion(db: Session = Depends(get_db), current_user=
 def listar_gerentes(pais_codigo: str | None = Depends(PaisPermitido),
                     db: Session = Depends(get_db), current_user=RequireAnyAuth):
     """Gerentes de Distrito (para el filtro de cobertura). `pais_codigo` (aislamiento
-    multipaís, opcional/retrocompatible): acota a los gerentes de ese país."""
+    multipaís, opcional/retrocompatible): acota a los gerentes de ese país.
+    `permitidos` (Menor de revisión, ago-2026): sin `pais_codigo` seguía listando
+    gerentes de TODOS los países — el piso de país se aplica siempre."""
     from app.models.dimensiones import Gerente
     q = db.query(Gerente).filter(Gerente.tipo == "DISTRITO", Gerente.activo == True)  # noqa: E712
     if pais_codigo:
         q = q.filter(Gerente.pais_codigo == pais_codigo)
+    else:
+        permitidos = _scope.paises_visibles(db, current_user)
+        if permitidos is not None:
+            q = q.filter(Gerente.pais_codigo.in_(permitidos))
     return [{"id": g.id, "nombre": g.nombre} for g in q.order_by(Gerente.nombre).all()]
 
 
@@ -448,7 +475,7 @@ def cobertura_resumen(ciclo_id: int | None = None, vm_id: int | None = None,
     piso de país, exista o no `pais_codigo` en la query — omitirlo ya no basta para ver otro
     país (antes bastaba con no mandarlo)."""
     from app.services import visita_cobertura_service
-    vm = _scope_vm(current_user, vm_id)
+    vm = _scope_vm(db, current_user, vm_id)
     permitidos = _scope.paises_visibles(db, current_user)
     return visita_cobertura_service.resumen_cobertura(
         db, ciclo_id, vm, gerente_id, linea_id, solo_ruptura, pais_codigo, permitidos)
@@ -468,8 +495,8 @@ def cobertura_ranking(metrica: str = "cobertura", ciclo_id: int | None = None,
 
 
 # ── Registro de visita (Parte 4) ──────────────────────────────────────────────
-def _vm_registro(current_user, vm_id: int | None) -> int:
-    vm = _scope_vm(current_user, vm_id)
+def _vm_registro(db, current_user, vm_id: int | None) -> int:
+    vm = _scope_vm(db, current_user, vm_id)
     if not vm:
         raise HTTPException(status_code=400, detail="Indica el visitador (vm_id).")
     return vm
@@ -485,7 +512,7 @@ def causas_no_visita(current_user=RequireAnyAuth):
 def mis_visitas_hoy(vm_id: int | None = None, db: Session = Depends(get_db), current_user=RequireVisita):
     """Visitas registradas hoy por el VM (feed del móvil)."""
     from app.services import visita_registro_service
-    return visita_registro_service.visitas_del_dia(db, _vm_registro(current_user, vm_id))
+    return visita_registro_service.visitas_del_dia(db, _vm_registro(db, current_user, vm_id))
 
 
 @router.get("/historial", response_model=list[dict])
@@ -495,14 +522,14 @@ def historial_visitas(vm_id: int | None = None, dias: int = 30,
     ve su comentario, pero nunca puede modificarlos — no existen endpoints de
     edición/borrado de visitas."""
     from app.services import visita_registro_service
-    return visita_registro_service.historial_visitas(db, _vm_registro(current_user, vm_id), dias)
+    return visita_registro_service.historial_visitas(db, _vm_registro(db, current_user, vm_id), dias)
 
 
 @router.get("/agenda-hoy", response_model=list[dict])
 def agenda_hoy(vm_id: int | None = None, db: Session = Depends(get_db), current_user=RequireVisita):
     """Médicos programados del VM para hoy (agenda), con su estado pendiente/registrada."""
     from app.services import visita_registro_service
-    return visita_registro_service.agenda_hoy(db, _vm_registro(current_user, vm_id))
+    return visita_registro_service.agenda_hoy(db, _vm_registro(db, current_user, vm_id))
 
 
 @router.post("/registrar", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -575,7 +602,7 @@ def obtener_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
                        db: Session = Depends(get_db), current_user=ReadPlaneacion):
     """Planeación del ciclo del VM (ítems Vista/Revisita por médico). El VM ve la suya."""
     from app.services import visita_planeacion_service
-    return visita_planeacion_service.listar_planeacion(db, _vm_registro(current_user, vm_id), ciclo_id)
+    return visita_planeacion_service.listar_planeacion(db, _vm_registro(db, current_user, vm_id), ciclo_id)
 
 
 @router.post("/planeacion", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -586,7 +613,7 @@ def guardar_planeacion(datos: PlaneacionGuardar, vm_id: int | None = None, ciclo
     from app.services import visita_planeacion_service
     try:
         n = visita_planeacion_service.guardar_planeacion(
-            db, _vm_registro(current_user, vm_id), ciclo_id, datos.items, getattr(current_user, "id", None))
+            db, _vm_registro(db, current_user, vm_id), ciclo_id, datos.items, getattr(current_user, "id", None))
         return {"guardadas": n}
     except visita_planeacion_service.PlaneacionPublicadaError as e:
         # No es ValueError: sin este except escapaba como 500 "Error interno del servidor" y
@@ -601,7 +628,7 @@ def estado_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
                       db: Session = Depends(get_db), current_user=ReadPlaneacion):
     """Si la planeación del ciclo está publicada (congelada) + su historial de eventos."""
     from app.services import visita_planeacion_service
-    return visita_planeacion_service.estado_planeacion(db, _vm_registro(current_user, vm_id), ciclo_id)
+    return visita_planeacion_service.estado_planeacion(db, _vm_registro(db, current_user, vm_id), ciclo_id)
 
 
 @router.post("/planeacion/publicar", response_model=dict)
@@ -612,7 +639,7 @@ def publicar_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
     from app.services import visita_planeacion_service
     try:
         return visita_planeacion_service.publicar_planeacion(
-            db, _vm_registro(current_user, vm_id), ciclo_id, getattr(current_user, "id", None))
+            db, _vm_registro(db, current_user, vm_id), ciclo_id, getattr(current_user, "id", None))
     except visita_planeacion_service.PlaneacionPublicadaError as e:
         raise HTTPException(status.HTTP_409_CONFLICT, str(e))
     except visita_planeacion_service.TopSinPlanearError as e:
@@ -643,7 +670,7 @@ def resumen_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
                        db: Session = Depends(get_db), current_user=ReadPlaneacion):
     """Resumen de la planeación: cobertura planeada, carga por día y aviso de Cat A sin Revisita."""
     from app.services import visita_planeacion_service
-    return visita_planeacion_service.resumen_planeacion(db, _vm_registro(current_user, vm_id), ciclo_id)
+    return visita_planeacion_service.resumen_planeacion(db, _vm_registro(db, current_user, vm_id), ciclo_id)
 
 
 # ── Ruptura de secuencia / Cierre de ciclo (Parte 5) ──────────────────────────
@@ -658,7 +685,7 @@ def estado_ruptura(vm_id: int | None = None, gerente_id: int | None = None,
     from app.services import visita_cierre_service
     permitidos = _scope.paises_visibles(db, current_user)
     return visita_cierre_service.estado_ruptura(
-        db, _scope_vm(current_user, vm_id), gerente_id, linea_id, pais_codigo, permitidos)
+        db, _scope_vm(db, current_user, vm_id), gerente_id, linea_id, pais_codigo, permitidos)
 
 
 @router.get("/cierre/previsualizar", response_model=dict)
@@ -698,9 +725,12 @@ def historial_cierres(db: Session = Depends(get_db), current_user=RequireCierre)
 def listar_lineas(pais_codigo: str | None = Depends(PaisPermitido), db: Session = Depends(get_db),
                   current_user=RequireAnyAuth):
     """Líneas de producto (para el selector de la parrilla).
-    `pais_codigo` (aislamiento multipaís): sin filtro, listaba líneas de TODOS los países."""
+    `pais_codigo` (aislamiento multipaís): sin filtro, listaba líneas de TODOS los países.
+    `permitidos` (Menor de revisión, ago-2026): sin `pais_codigo` seguía listando líneas
+    de TODOS los países — el piso de país se aplica siempre."""
     from app.services import visita_parrilla_service
-    return visita_parrilla_service.listar_lineas(db, pais_codigo)
+    permitidos = _scope.paises_visibles(db, current_user) if not pais_codigo else None
+    return visita_parrilla_service.listar_lineas(db, pais_codigo, permitidos)
 
 
 @router.get("/parrilla/ultima-linea", response_model=dict)
@@ -721,7 +751,7 @@ def obtener_parrilla(linea_id: int | None = None, ciclo_id: int | None = None,
     parrillas publicadas; el Gerente de Producto ve también los borradores."""
     from app.services import visita_parrilla_service
     if linea_id is None:
-        vm = _scope_vm(current_user, vm_id)
+        vm = _scope_vm(db, current_user, vm_id)
         linea_id = visita_parrilla_service.linea_de_vm(db, vm) if vm else None
     if linea_id is None:
         raise HTTPException(status_code=400, detail="Indica la línea (linea_id).")
@@ -742,7 +772,7 @@ def parrilla_penetracion(linea_id: int | None = None, ciclo_id: int | None = Non
     """Penetración del ciclo por producto (médicos alcanzados, muestras, promedio/visita)."""
     from app.services import visita_parrilla_service
     if linea_id is None:
-        vm = _scope_vm(current_user, None)
+        vm = _scope_vm(db, current_user, None)
         linea_id = visita_parrilla_service.linea_de_vm(db, vm) if vm else None
     if linea_id is None:
         raise HTTPException(status_code=400, detail="Indica la línea (linea_id).")
@@ -781,7 +811,7 @@ def registrar_muestras(datos: MuestrasRegistrar, vm_id: int | None = None,
     from app.services import visita_parrilla_service
     try:
         n = visita_parrilla_service.registrar_muestras(
-            db, _vm_registro(current_user, vm_id), datos.ciclo_id, datos.medico_id,
+            db, _vm_registro(db, current_user, vm_id), datos.ciclo_id, datos.medico_id,
             datos.entregas, getattr(current_user, "id", None))
         return {"registradas": n}
     except ValueError as e:
@@ -793,7 +823,7 @@ def resumen_muestras(vm_id: int | None = None, ciclo_id: int | None = None,
                      db: Session = Depends(get_db), current_user=ReadParrilla):
     """Resumen de muestras por producto: entregadas, médicos alcanzados, meta y cobertura."""
     from app.services import visita_parrilla_service
-    return visita_parrilla_service.resumen_muestras(db, ciclo_id, _scope_vm(current_user, vm_id))
+    return visita_parrilla_service.resumen_muestras(db, ciclo_id, _scope_vm(db, current_user, vm_id))
 
 
 # ── Costo & ROI (Parte 8) ─────────────────────────────────────────────────────
@@ -836,7 +866,7 @@ def costo_ranking(ciclo_id: int | None = None, db: Session = Depends(get_db), cu
 
 def _linea_del_representante(db, current_user) -> int | None:
     """Línea del representante logueado (para auto-acotar su vista de Costo)."""
-    vm = _scope_vm(current_user, None)
+    vm = _scope_vm(db, current_user, None)
     if not vm:
         return None
     from app.services.visita_parrilla_service import linea_de_vm

@@ -30,7 +30,7 @@ class CambioPermiso(BaseModel):
     rol: str
     recurso: str
     accion: str | None = None   # None = denegar (borra la celda)
-    alcance: str | None = None  # own | team | all (requerido si hay acción)
+    alcance: str | None = None  # own | team | linea | all (requerido si hay acción)
 
 
 class CambiosPayload(BaseModel):

@@ -50,6 +50,7 @@ from app.core.deps import get_db, get_current_active_user, require_roles
 from app.core.authz.deps import require
 from app.core.authz.constantes import Accion, Recurso
 from app.core.authz.paises import PaisPermitido, exigir_pais
+from app.core.authz.scope import paises_visibles
 from app.models.usuario import Rol, Usuario
 from app.models.dimensiones import (
     RepresentanteMedico, Ciclo, TargetMedico, Feriado, ParametroCobertura, Gerente,
@@ -197,7 +198,10 @@ def vivo_ciclos(
     db: Session = Depends(get_db),
     _current_user: Usuario = ReadCobertura,
 ):
-    return ciclos_vivo(db, pais_codigo=pais_codigo)
+    """`permitidos` (Menor de revisión, ago-2026): sin `pais_codigo` seguía listando
+    ciclos de TODOS los países — el piso de país se aplica siempre."""
+    permitidos = paises_visibles(db, _current_user) if not pais_codigo else None
+    return ciclos_vivo(db, pais_codigo=pais_codigo, permitidos=permitidos)
 
 
 @router.get("/vivo/dashboard", summary="Dashboard 4DX EN VIVO (Planeación + Registro)")

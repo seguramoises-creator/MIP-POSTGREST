@@ -17,7 +17,7 @@ from app.models.usuario import Rol
 
 _ROLES_VALIDOS = {r.value for r in Rol}
 _ACCIONES_VALIDAS = {a.value for a in Accion}
-_ALCANCES_VALIDOS = {"own", "team", "all"}
+_ALCANCES_VALIDOS = {"own", "team", "linea", "all"}
 
 # Orden canónico de columnas (10 de la matriz + 3 derivados) para el contrato del GET.
 _ROLES_ORDEN = [
@@ -49,7 +49,7 @@ def _validar(cambio: dict):
         if accion == Accion.ADMIN.value:
             raise CambioInvalidoError("La acción 'admin' no es asignable desde la UI.")
         if alcance not in _ALCANCES_VALIDOS:
-            raise CambioInvalidoError(f"Alcance inválido: {alcance!r} (usa own/team/all).")
+            raise CambioInvalidoError(f"Alcance inválido: {alcance!r} (usa own/team/linea/all).")
     return rol, recurso, accion, alcance
 
 

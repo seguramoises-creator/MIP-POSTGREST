@@ -563,13 +563,18 @@ def _metricas_rm_vivo(db: Session, rm, ciclo, fecha_corte: date, meta: Decimal, 
     }
 
 
-def ciclos_vivo(db: Session, pais_codigo: Optional[str] = None) -> list:
-    """Ciclos reales (Config.DIM_Ciclo) para el selector — reemplaza cat.DimCiclo."""
+def ciclos_vivo(db: Session, pais_codigo: Optional[str] = None,
+                permitidos: Optional[set] = None) -> list:
+    """Ciclos reales (Config.DIM_Ciclo) para el selector — reemplaza cat.DimCiclo.
+    `permitidos`: piso de país del usuario cuando no llega `pais_codigo` explícito
+    (`None` = todos, ver `scope.paises_visibles`)."""
     from app.models.dimensiones import Pais
     paises = {p.codigo: p.nombre for p in db.query(Pais).all()}
     q = db.query(Ciclo).filter(Ciclo.activo == True)  # noqa: E712
     if pais_codigo:
         q = q.filter(Ciclo.pais_codigo == pais_codigo)
+    elif permitidos is not None:
+        q = q.filter(Ciclo.pais_codigo.in_(permitidos))
     out = []
     for c in q.order_by(Ciclo.anio.asc(), Ciclo.numero.asc()).all():
         meta = obtener_meta_cobertura(db, c.pais_codigo)
