@@ -20,7 +20,7 @@ import { MoreHoriz } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useNavSecciones, type Destino } from './useNavSecciones';
 import { NAV_ACTIVO, NAV_TAUPE, NAV_BORDE, NAV_FONDO, NAV_INACTIVO, TEXTO_TENUE, BOTTOM_NAV_H } from './navTokens';
-import { colorDeSeccion } from '../../theme/marca';
+import { colorDeSeccion, tinteDeSeccion } from '../../theme/marca';
 
 /**
  * Ancho mínimo de una ranura para que su etiqueta se lea entera ("Desempeño" es
@@ -82,6 +82,7 @@ export default function BottomNav({ activa, onPerfil }: Props) {
     etiqueta: string,
     activo: boolean,
     onClick: () => void,
+    tinte?: string,
   ) => (
     <ButtonBase
       key={key}
@@ -94,7 +95,10 @@ export default function BottomNav({ activa, onPerfil }: Props) {
         // El foco visible NO se hereda de MUI en ButtonBase: se declara para que
         // la navegación por teclado siga siendo utilizable.
         '&:focus-visible': { outline: `2px solid ${NAV_ACTIVO}`, outlineOffset: -2 },
-        '& .MuiSvgIcon-root': { fontSize: 24 },
+        // El icono lleva el tinte claro de su sección (pista de color, >=3:1 sobre la
+        // barra); la etiqueta hereda el blanco de arriba porque como texto pequeño
+        // necesita 4.5:1 y los tintes no llegan. Activo => blanco: ahí manda el contraste.
+        '& .MuiSvgIcon-root': { fontSize: 24, color: activo ? 'inherit' : (tinte ?? 'inherit') },
       }}
     >
       {icono}
@@ -123,7 +127,8 @@ export default function BottomNav({ activa, onPerfil }: Props) {
         }}
       >
         {directas.map((d) =>
-          ranura(d.titulo ?? 'inicio', d.icono, d.etiqueta, d.titulo === activa, () => irA(d)))}
+          ranura(d.titulo ?? 'inicio', d.icono, d.etiqueta, d.titulo === activa, () => irA(d),
+                 tinteDeSeccion(d.titulo ?? 'Inicio')))}
 
         {desbordadas.length > 0 &&
           ranura('mas', <MoreHoriz />, 'Más', enDesbordadas, () => setMasAbierto(true))}

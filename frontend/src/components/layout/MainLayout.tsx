@@ -150,9 +150,12 @@ export default function MainLayout() {
                   barra azul— pintaría de blanco TODO el rectángulo, logo incluido.
                   No hace falta: su fondo ya es azul marino (rgb(0,26,59)), casi el
                   mismo que el extremo izquierdo del degradado, que es donde cae. */}
+              {/* 26px dejaba el logotipo ilegible: el vectorial de Mallén reserva casi la
+                  mitad de su alto al aire sobre la abeja, así que la marca ocupa bastante
+                  menos que la caja. A 40px la palabra MALLĒN se lee y la abeja se distingue,
+                  que es lo que hace reconocible la barra de un vistazo. */}
               <Box component="img" src={logoImg} alt="Laboratorios Mallén"
-                   sx={{ height: 26, width: 'auto', display: 'block', flexShrink: 0,
-                         borderRadius: 0.5 }} />
+                   sx={{ height: 40, width: 'auto', display: 'block', flexShrink: 0 }} />
               <Typography noWrap sx={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.01em', minWidth: 0 }}>
                 {seccionActiva?.titulo ?? 'Inicio'}
               </Typography>
@@ -173,7 +176,7 @@ export default function MainLayout() {
               <CicloPaisBadge />
             </Box>
           </Toolbar>
-          <TopTabs items={seccionActiva?.items ?? []} />
+          <TopTabs items={seccionActiva?.items ?? []} seccion={seccionActiva?.titulo ?? 'Inicio'} />
         </AppBar>
 
         {/* Perfil — recoge lo que antes colgaba del avatar de arriba a la derecha. */}

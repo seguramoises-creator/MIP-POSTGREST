@@ -12,8 +12,9 @@ import { Box, ButtonBase, Typography } from '@mui/material';
 
 import type { NavItem } from './Sidebar';
 import { NAV_ACTIVO, NAV_BORDE, NAV_INACTIVO } from './navTokens';
+import { tinteDeSeccion } from '../../theme/marca';
 
-export default function TopTabs({ items }: { items: NavItem[] }) {
+export default function TopTabs({ items, seccion }: { items: NavItem[]; seccion?: string | null }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const activaRef = useRef<HTMLButtonElement | null>(null);
@@ -56,7 +57,10 @@ export default function TopTabs({ items }: { items: NavItem[] }) {
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25,
               color: activa ? NAV_ACTIVO : NAV_INACTIVO,
               '&:focus-visible': { outline: `2px solid ${NAV_ACTIVO}`, outlineOffset: -2 },
-              '& .MuiSvgIcon-root': { fontSize: 24 },
+              // Los ítems de una misma sección comparten su tinte: la fila entera se lee
+              // como un bloque y refuerza en qué sección estás, sin repetir la etiqueta.
+              // La activa vuelve a blanco, que es el máximo contraste disponible.
+              '& .MuiSvgIcon-root': { fontSize: 24, color: activa ? 'inherit' : tinteDeSeccion(seccion) },
             }}
           >
             {item.icon}

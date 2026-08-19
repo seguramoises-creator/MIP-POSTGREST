@@ -61,3 +61,32 @@ export const COLOR_SECCION: Record<string, string> = {
 export function colorDeSeccion(titulo?: string | null): string {
   return (titulo && COLOR_SECCION[titulo]) || TAUPE;
 }
+
+/**
+ * Tinte CLARO de cada sección, para los ICONOS sobre las barras oscuras.
+ *
+ * El color pleno de `COLOR_SECCION` está pensado para superficie clara y sobre el
+ * taupe de las barras se hunde (el verde clínico da 1.4:1). Estos tintes son la
+ * misma familia de matiz llevada a alta luminancia: mantienen la pista de color
+ * —rojizo=campo, verdoso=médicos, ámbar=desempeño— y superan el 3:1 que WCAG
+ * 1.4.11 exige a los elementos gráficos, medidos contra el PEOR tramo del
+ * degradado (#686158): entre 3.60:1 y 4.78:1.
+ *
+ * La ETIQUETA se queda en blanco (6.11:1), no en el tinte: como texto pequeño
+ * necesitaría 4.5:1 y estos tintes no llegan. Así el icono aporta el color y el
+ * texto conserva la legibilidad al sol, que es el requisito que manda en la barra.
+ */
+export const TINTE_SECCION: Record<string, string> = {
+  'Inicio':                '#FFB3B8',
+  'Operación diaria':      '#FFB3B8',
+  'Maestros y planeación': '#A8E0D2',
+  'Desempeño y análisis':  '#F7CE9B',
+  'Formación':             '#B9D4EA',
+  'Datos':                 '#D9C2E8',
+  'Sistema':               '#E8E3DC',
+};
+
+/** Tinte claro de una sección para las barras oscuras; blanco si no está mapeada. */
+export function tinteDeSeccion(titulo?: string | null): string {
+  return (titulo && TINTE_SECCION[titulo]) || '#FFFFFF';
+}

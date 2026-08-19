@@ -1031,7 +1031,7 @@ function DimTabWithPais({ tabConfig }: { tabConfig: (typeof TABS_DIM)[0] }) {
     <Box>
       {/* País activo (informativo — se cambia desde el selector superior) */}
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2,
-                 bgcolor: '#e3f2fd', borderRadius: 2, px: 2, py: 1.5 }}>
+                 bgcolor: '#F4F1EE', borderRadius: 2, px: 2, py: 1.5 }}>
         <Typography variant="body2" color="primary.main" fontWeight={600}>
           {tabConfig.label} — {paisCodigo
             ? (paises || []).find((p: any) => p.codigo === paisCodigo)
@@ -1844,40 +1844,45 @@ export default function Admin() {
             scrollButtons="auto"
             sx={{
               mb: 0,
-              borderBottom: '3px solid #1565c0',
+              borderBottom: '3px solid #686158',
               '& .MuiTab-root': {
                 bgcolor: '#bbdefb',
                 borderTopLeftRadius: 8,
                 borderTopRightRadius: 8,
                 mr: 0.5,
                 mb: 0,
-                color: '#1565c0',
+                color: '#686158',
                 fontWeight: 600,
                 minHeight: 40,
                 fontSize: 13,
                 lineHeight: 1.2,
                 textTransform: 'none',
                 '&.Mui-selected': {
-                  bgcolor: '#1565c0',
+                  bgcolor: '#686158',
                   color: 'white',
                   fontWeight: 700,
+                  // El icono lleva su color de función, que sobre el taupe de la pestaña
+                  // seleccionada quedaría ilegible (el verde clínico da 1.4:1 contra él).
+                  // Al seleccionar vuelve a blanco: ahí la pastilla ya indica DÓNDE estás,
+                  // y el color de función solo hace falta para localizarla entre las demás.
+                  '& .MuiSvgIcon-root': { color: 'white !important' },
                 },
                 '&:hover:not(.Mui-selected)': {
-                  bgcolor: '#90caf9',
+                  bgcolor: '#D8D2CB',
                 },
               },
               '& .MuiTabs-indicator': { display: 'none' },
             }}
           >
             {TABS_DIM.map((t) => <Tab key={t.label} label={t.label} />)}
-            <Tab label="Rangos de Puntuación" icon={<TableChart fontSize="small" />} iconPosition="start" />
-            <Tab label="Importar DIMs" icon={<Upload fontSize="small" />} iconPosition="start" />
-            <Tab label="Mantenimiento" icon={<Delete fontSize="small" />} iconPosition="start" />
-            <Tab label="Matriz LSII" icon={<Psychology fontSize="small" />} iconPosition="start" />
-            <Tab label="Cobertura Predictiva" icon={<TrendingUp fontSize="small" />} iconPosition="start" />
-            <Tab label="Categorización Médica" icon={<LocalHospital fontSize="small" />} iconPosition="start" />
-            <Tab label="Especialidades y Centros" icon={<LocalHospital fontSize="small" />} iconPosition="start" />
-            <Tab label="Provincias y Municipios" icon={<LocalHospital fontSize="small" />} iconPosition="start" />
+            <Tab label="Rangos de Puntuación" icon={<TableChart fontSize="small" sx={{ color: '#B4661E' }} />} iconPosition="start" />
+            <Tab label="Importar DIMs" icon={<Upload fontSize="small" sx={{ color: '#7A5C8E' }} />} iconPosition="start" />
+            <Tab label="Mantenimiento" icon={<Delete fontSize="small" sx={{ color: '#C81E2A' }} />} iconPosition="start" />
+            <Tab label="Matriz LSII" icon={<Psychology fontSize="small" sx={{ color: '#4E6E8E' }} />} iconPosition="start" />
+            <Tab label="Cobertura Predictiva" icon={<TrendingUp fontSize="small" sx={{ color: '#F63440' }} />} iconPosition="start" />
+            <Tab label="Categorización Médica" icon={<LocalHospital fontSize="small" sx={{ color: '#2F7D6E' }} />} iconPosition="start" />
+            <Tab label="Especialidades y Centros" icon={<LocalHospital fontSize="small" sx={{ color: '#2F7D6E' }} />} iconPosition="start" />
+            <Tab label="Provincias y Municipios" icon={<LocalHospital fontSize="small" sx={{ color: '#2F7D6E' }} />} iconPosition="start" />
           </Tabs>
 
           <Box sx={{ mt: 3 }}>
