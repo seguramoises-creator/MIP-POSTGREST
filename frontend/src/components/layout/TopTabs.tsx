@@ -11,7 +11,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Box, ButtonBase, Typography } from '@mui/material';
 
 import type { NavItem } from './Sidebar';
-import { NAV_ACTIVO, NAV_BORDE, NAV_INACTIVO } from './navTokens';
+import { NAV_ACTIVO, NAV_INACTIVO } from './navTokens';
 import { tinteDeSeccion } from '../../theme/marca';
 
 export default function TopTabs({ items, seccion }: { items: NavItem[]; seccion?: string | null }) {
@@ -42,8 +42,11 @@ export default function TopTabs({ items, seccion }: { items: NavItem[]; seccion?
         display: 'flex', gap: 0.5, overflowX: 'auto', bgcolor: 'transparent',
         justifyContent: 'center',
         '& > *': { flexShrink: 0 },
-        borderTop: `1px solid ${NAV_BORDE}`,
-        px: 1, minHeight: 0,
+        // El logo desborda 24px hacia esta fila (ver MainLayout). Sin reservarle sitio,
+        // la primera pestaña quedaría DEBAJO de él — invisible en móvil, donde la fila
+        // arranca pegada a la izquierda en vez de centrarse. 132px = ancho del logo a
+        // 78px de alto (proporción 1.59:1) más holgura.
+        pl: '132px', pr: 1, minHeight: 0,
         // La barra de scroll horizontal en escritorio ensucia y ocupa alto; el
         // desplazamiento sigue disponible con rueda, gesto y teclado.
         scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' },
@@ -59,7 +62,7 @@ export default function TopTabs({ items, seccion }: { items: NavItem[]; seccion?
             onClick={() => navigate(item.path)}
             aria-current={activa ? 'page' : undefined}
             sx={{
-              flex: '0 0 auto', px: 1.5, pt: 1, pb: 0,
+              flex: '0 0 auto', px: 1.5, pt: 0.25, pb: 0.5,
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25,
               color: activa ? NAV_ACTIVO : NAV_INACTIVO,
               '&:focus-visible': { outline: `2px solid ${NAV_ACTIVO}`, outlineOffset: -2 },
