@@ -1,0 +1,38 @@
+# Publica el frontend en la RED INTERNA (no solo en loopback), para poder abrir VISTA
+# desde un móvil o cualquier otro equipo del mismo segmento.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.lan.yml up -d frontend
+#
+# Requiere FRONTEND_BIND_ADDR con la IP interna del servidor, p.ej. en el .env:
+#   FRONTEND_BIND_ADDR=192.168.5.21
+#
+# ── POR QUÉ ESTO VA EN UN ARCHIVO APARTE ──────────────────────────────────────
+# El compose base ata el frontend a `127.0.0.1` A PROPÓSITO: en producción hay un nginx
+# del host que termina el TLS y hace proxy 443 → 127.0.0.1:8090. Si el contenedor
+# publicara en todas las interfaces, cualquiera podría entrar por el puerto directo y
+# saltarse ese nginx — es decir, saltarse el HTTPS. Este override NO se usa en un
+# servidor que ya tenga frontal con TLS.
+#
+# ── LO QUE ESTÁS ACEPTANDO AL USARLO ──────────────────────────────────────────
+# VISTA queda servida por HTTP SIN CIFRAR. Las contraseñas de quien entre viajan en
+# claro por la red interna. Es tolerable en un ambiente de calidad sobre una red
+# corporativa y con datos de prueba; deja de serlo en cuanto ese servidor tenga datos
+# reales o salga de la red interna. La solución definitiva es dominio + certificado,
+# no este archivo.
+#
+# ── ALCANCE ───────────────────────────────────────────────────────────────────
+# Solo llega quien esté en la MISMA red (Wi-Fi de la oficina o VPN). Desde fuera no
+# se alcanza: 192.168.x.x no es enrutable por internet. Para eso hace falta un frontal
+# público o un túnel inverso, no este override.
+#
+# Ata a una IP CONCRETA, no a 0.0.0.0: si el servidor tuviera otra interfaz (una
+# pública, una de gestión), `0.0.0.0` lo publicaría también ahí sin que se note.
+#
+# Nota: NO lleva `!override` (que exige Compose 2.24+ y falla al interpretar en versiones
+# anteriores). Las listas de puertos se FUSIONAN, así que el resultado son las dos
+# publicaciones — la de loopback que ya había y esta. Conviven sin chocar: son direcciones
+# de origen distintas sobre el mismo puerto, y dejar viva la de loopback no cuesta nada.
+services:
+  frontend:
+    ports:
+      - "${FRONTEND_BIND_ADDR:?define FRONTEND_BIND_ADDR con la IP interna del servidor}:${FRONTEND_PORT:-8090}:80"
