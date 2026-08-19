@@ -244,7 +244,12 @@ export default function MainLayout() {
         {/* Área de información: blanca/gris claro como siempre. El azul se queda
             en las dos barras, que son el marco de la app. */}
         <Box sx={{
-          flexGrow: 1, p: { xs: 1.5, sm: 3 }, bgcolor: APP_FONDO, minWidth: 0, overflowX: 'hidden',
+          flexGrow: 1, bgcolor: APP_FONDO, minWidth: 0, overflowX: 'hidden',
+          // El relleno SUPERIOR va aparte del resto y mucho menor: con los 24px
+          // uniformes quedaba una banda muerta entre el menú y el primer elemento de
+          // cada pantalla, que se leía como un corte y no como aire. Los laterales sí
+          // necesitan ese aire — son el margen de lectura del contenido.
+          pt: { xs: 1, sm: 1.25 }, px: { xs: 1.5, sm: 3 },
           pb: { xs: `calc(${BOTTOM_NAV_H}px + env(safe-area-inset-bottom, 0px) + 16px)`,
                 sm: `calc(${BOTTOM_NAV_H}px + env(safe-area-inset-bottom, 0px) + 24px)` },
         }}>
