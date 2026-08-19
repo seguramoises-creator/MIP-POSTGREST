@@ -9,7 +9,7 @@ import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { authService } from '../../services/auth.service';
 import { Rol } from '../../types';
-import logoImg from '../../assets/vista-logo.svg';
+import logoImg from '../../assets/mallen-logo.svg';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -98,15 +98,21 @@ export default function Login() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0a1a4e 0%, #1a237e 40%, #0d47a1 75%, #01579b 100%)',
+        // Degradado del taupe Mallén. El rojo de marca NO entra aquí: como fondo a pantalla
+        // completa competiría con el botón de acción, que es lo único que debe pedir el clic.
+        background: 'linear-gradient(135deg, #2A2622 0%, #3A342F 40%, #584F46 75%, #686158 100%)',
       }}
     >
       <Card sx={{ width: 440, mx: 2, borderRadius: 3, boxShadow: 24, overflow: 'hidden' }}>
-        {/* Logo — ocupa el ancho completo del card, sin márgenes */}
-        <Box sx={{ lineHeight: 0, width: '100%' }}>
+        {/* El logotipo a color de Mallén es vector SIN fondo propio, y sus contraformas
+            (los huecos de la abeja y de las letras) están dibujadas en blanco. Necesita
+            por tanto una superficie clara y aire alrededor: a sangre, como iba el logo
+            anterior —que traía su propio fondo oscuro incrustado—, las contraformas se
+            confundirían con el borde de la tarjeta. */}
+        <Box sx={{ bgcolor: '#FFFFFF', px: 5, py: 4, lineHeight: 0 }}>
           <img
             src={logoImg}
-            alt="VISTA — Inteligencia Comercial"
+            alt="Laboratorios Mallén"
             style={{ width: '100%', height: 'auto', display: 'block' }}
           />
         </Box>

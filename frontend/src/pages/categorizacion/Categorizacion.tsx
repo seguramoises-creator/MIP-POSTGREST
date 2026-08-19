@@ -122,7 +122,7 @@ const PIE_COLORS = ['#00897b', '#283593', '#ef6c00', '#455a64', '#9e9e9e'];
 // Degradados por categoría (para gradiente en chip)
 const CAT_GRAD: Record<string, string> = {
   A: 'linear-gradient(135deg, #00695c 0%, #00897b 100%)',
-  B: 'linear-gradient(135deg, #1a237e 0%, #283593 100%)',
+  B: 'linear-gradient(135deg, #686158 0%, #283593 100%)',
   C: 'linear-gradient(135deg, #e65100 0%, #ef6c00 100%)',
   D: 'linear-gradient(135deg, #37474f 0%, #455a64 100%)',
   '?': 'linear-gradient(135deg, #546e7a 0%, #78909c 100%)',
@@ -499,7 +499,7 @@ function CategorizacionMotor() {
         <Grid item xs={12} xl={6}>
           <Paper elevation={3} sx={{ display: 'flex', flexDirection: 'column', height: 560, overflow: 'hidden', borderRadius: 2, border: '1px solid #e0e0e0' }}>
             {/* Encabezado */}
-            <Box sx={{ background: 'linear-gradient(135deg,#1a237e 0%,#283593 100%)', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
+            <Box sx={{ background: 'linear-gradient(135deg,#686158 0%,#283593 100%)', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
               <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.92rem', letterSpacing: 1, flexGrow: 1 }}>
                 CATEGORIZACIÓN POR REPRESENTANTE
               </Typography>
@@ -536,7 +536,7 @@ function CategorizacionMotor() {
                     return [
                       /* fila de equipo */
                       <TableRow key={`eq-${eq}`} sx={{ bgcolor: eqIdx % 2 === 0 ? '#e8eaf6' : '#ede7f6' }}>
-                        <TableCell sx={{ pl: 2, fontWeight: 800, fontSize: '0.82rem', color: '#1a237e',
+                        <TableCell sx={{ pl: 2, fontWeight: 800, fontSize: '0.82rem', color: '#686158',
                           borderLeft: '4px solid #3f51b5', letterSpacing: 0.3 }}>
                           ▸ {eq}
                         </TableCell>
@@ -573,7 +573,7 @@ function CategorizacionMotor() {
                     ];
                   })}
                   {/* Total general */}
-                  <TableRow sx={{ bgcolor: '#1a237e' }}>
+                  <TableRow sx={{ bgcolor: '#686158' }}>
                     <TableCell sx={{ color: '#fff', fontWeight: 800, fontSize: '0.84rem', pl: 2, letterSpacing: 0.5 }}>
                       TOTAL GENERAL
                     </TableCell>

@@ -10,7 +10,7 @@ import { useState, useEffect, useMemo } from 'react';
 import BottomNav from './BottomNav';
 import TopTabs from './TopTabs';
 import { useNavSecciones } from './useNavSecciones';
-import { APP_FONDO, BOTTOM_NAV_H, NAV_ACTIVO, NAV_AZUL, NAV_FONDO, TEXTO_TENUE } from './navTokens';
+import { APP_FONDO, BOTTOM_NAV_H, NAV_ACTIVO, NAV_TAUPE, NAV_FONDO, TEXTO_TENUE } from './navTokens';
 import InstalarAppDialog from '../InstalarAppDialog';
 import AvisoErrorGlobal from '../AvisoErrorGlobal';
 import { useAuthStore } from '../../store/auth.store';
@@ -18,7 +18,7 @@ import { usePermisosStore } from '../../store/permisos.store';
 import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
 import { miGerente, type MiGerente } from '../../services/visita.service';
-import logoImg from '../../assets/vista-logo.svg';
+import logoImg from '../../assets/mallen-logo-blanco.svg';
 import CicloPaisBadge from '../CicloPaisBadge';
 import CicloPaisHeader from '../CicloPaisHeader';
 import { useCicloStore } from '../../store/ciclo.store';
@@ -150,7 +150,7 @@ export default function MainLayout() {
                   barra azul— pintaría de blanco TODO el rectángulo, logo incluido.
                   No hace falta: su fondo ya es azul marino (rgb(0,26,59)), casi el
                   mismo que el extremo izquierdo del degradado, que es donde cae. */}
-              <Box component="img" src={logoImg} alt="VISTA"
+              <Box component="img" src={logoImg} alt="Laboratorios Mallén"
                    sx={{ height: 26, width: 'auto', display: 'block', flexShrink: 0,
                          borderRadius: 0.5 }} />
               <Typography noWrap sx={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.01em', minWidth: 0 }}>
@@ -184,7 +184,7 @@ export default function MainLayout() {
           PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, pb: 'env(safe-area-inset-bottom, 0px)' } }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, pt: 2, pb: 1.5 }}>
-            <Avatar sx={{ width: 44, height: 44, bgcolor: NAV_AZUL, fontWeight: 700 }}>
+            <Avatar sx={{ width: 44, height: 44, bgcolor: NAV_TAUPE, fontWeight: 700 }}>
               {nombreCompleto?.[0]?.toUpperCase() || 'U'}
             </Avatar>
             <Box sx={{ minWidth: 0 }}>

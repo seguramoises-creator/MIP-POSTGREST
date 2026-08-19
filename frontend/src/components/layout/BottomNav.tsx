@@ -19,7 +19,8 @@ import { MoreHoriz } from '@mui/icons-material';
 
 import { useAuthStore } from '../../store/auth.store';
 import { useNavSecciones, type Destino } from './useNavSecciones';
-import { NAV_ACTIVO, NAV_AZUL, NAV_BORDE, NAV_FONDO, NAV_INACTIVO, TEXTO_TENUE, BOTTOM_NAV_H } from './navTokens';
+import { NAV_ACTIVO, NAV_TAUPE, NAV_BORDE, NAV_FONDO, NAV_INACTIVO, TEXTO_TENUE, BOTTOM_NAV_H } from './navTokens';
+import { colorDeSeccion } from '../../theme/marca';
 
 /**
  * Ancho mínimo de una ranura para que su etiqueta se lea entera ("Desempeño" es
@@ -129,7 +130,7 @@ export default function BottomNav({ activa, onPerfil }: Props) {
 
         {ranura(
           'perfil',
-          <Avatar sx={{ width: 24, height: 24, fontSize: 12, bgcolor: NAV_ACTIVO, color: NAV_AZUL, fontWeight: 700 }}>
+          <Avatar sx={{ width: 24, height: 24, fontSize: 12, bgcolor: NAV_ACTIVO, color: NAV_TAUPE, fontWeight: 700 }}>
             {nombreCompleto?.[0]?.toUpperCase() || 'U'}
           </Avatar>,
           'Perfil', false, onPerfil,
@@ -148,7 +149,11 @@ export default function BottomNav({ activa, onPerfil }: Props) {
         <List sx={{ pb: 1 }}>
           {desbordadas.map((d) => (
             <ListItemButton key={d.titulo} onClick={() => irA(d)} selected={d.titulo === activa}>
-              <ListItemIcon sx={{ color: d.titulo === activa ? NAV_AZUL : TEXTO_TENUE, minWidth: 40 }}>
+              {/* Color por sección, activa o no: el color aquí IDENTIFICA la familia de
+                  trabajo (rojo=campo, verde=médicos, ámbar=desempeño…), no señala selección.
+                  Teñir solo la activa desperdiciaría justo la pista que hace localizable una
+                  lista de más de treinta módulos. La selección ya la marca el fondo del ítem. */}
+              <ListItemIcon sx={{ color: colorDeSeccion(d.titulo), minWidth: 40 }}>
                 {d.icono}
               </ListItemIcon>
               <ListItemText

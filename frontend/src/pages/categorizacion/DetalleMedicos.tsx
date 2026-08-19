@@ -27,7 +27,7 @@ import { api } from '../../services/api';
 // A = Teal esmeralda  B = Azul zafiro  C = Ámbar dorado  D = Gris acero
 const CAT_PAL: Record<string, { dark: string; mid: string; light: string; glow: string; text: string }> = {
   A: { dark: '#00695c', mid: '#00897b', light: '#e0f2f1', glow: '#00897b60', text: '#fff' },
-  B: { dark: '#1a237e', mid: '#283593', light: '#e8eaf6', glow: '#3949ab60', text: '#fff' },
+  B: { dark: '#686158', mid: '#283593', light: '#e8eaf6', glow: '#3949ab60', text: '#fff' },
   C: { dark: '#e65100', mid: '#ef6c00', light: '#fff3e0', glow: '#f57c0060', text: '#fff' },
   D: { dark: '#37474f', mid: '#455a64', light: '#eceff1', glow: '#546e7a60', text: '#fff' },
   '?': { dark: '#424242', mid: '#757575', light: '#f5f5f5', glow: '#9e9e9e40', text: '#fff' },
@@ -333,7 +333,7 @@ export default function DetalleMedicos() {
               transition: 'all 0.2s ease',
               // ACTIVO cuando no hay categoría seleccionada
               ...(categoria === '' ? {
-                background: 'linear-gradient(135deg, #1a237e 0%, #283593 50%, #3949ab 100%)',
+                background: 'linear-gradient(135deg, #686158 0%, #283593 50%, #3949ab 100%)',
                 color: '#fff',
                 border: '2px solid transparent',
                 boxShadow: '0 4px 14px #3949ab50',
@@ -343,7 +343,7 @@ export default function DetalleMedicos() {
                 border: '2px solid #e0e4ea',
                 boxShadow: 'none',
                 '&:hover': {
-                  background: 'linear-gradient(135deg, #1a237e 0%, #3949ab 100%)',
+                  background: 'linear-gradient(135deg, #686158 0%, #3949ab 100%)',
                   color: '#fff',
                   borderColor: 'transparent',
                   boxShadow: '0 4px 14px #3949ab50',
@@ -542,7 +542,7 @@ export default function DetalleMedicos() {
         {/* Header degradado */}
         <Box
           sx={{
-            background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 40%, #1976d2 100%)',
+            background: 'linear-gradient(135deg, #584F46 0%, #1565c0 40%, #1976d2 100%)',
             px: 3, py: 1.5,
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}

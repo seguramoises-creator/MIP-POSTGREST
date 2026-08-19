@@ -22,7 +22,7 @@ export default function CicloPaisBadge() {
       display: 'flex', alignItems: 'center', gap: 0.75, whiteSpace: 'nowrap',
       px: 1, py: 0.4, borderRadius: 5, bgcolor: '#f1f5f9', border: '1px solid #e2e8f0',
     }}>
-      <Typography variant="caption" sx={{ fontWeight: 800, color: '#0d1b4c', lineHeight: 1 }}>{paisCodigo}</Typography>
+      <Typography variant="caption" sx={{ fontWeight: 800, color: '#2A2622', lineHeight: 1 }}>{paisCodigo}</Typography>
 
       {/* Nombre del ciclo — oculto en móvil para no saturar */}
       <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1, display: { xs: 'none', sm: 'inline' } }}>

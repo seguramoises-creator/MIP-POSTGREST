@@ -94,7 +94,7 @@ export default function CambiarPassword() {
   return (
     <Box sx={{
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'linear-gradient(135deg, #0a1a4e 0%, #1a237e 40%, #0d47a1 75%, #01579b 100%)',
+      background: 'linear-gradient(135deg, #2A2622 0%, #686158 40%, #584F46 75%, #686158 100%)',
     }}>
       <Card sx={{ width: 460, mx: 2, borderRadius: 3, boxShadow: 24 }}>
         <CardContent sx={{ p: 4 }}>

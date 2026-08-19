@@ -53,7 +53,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: b
           onClick={() => { try { sessionStorage.clear(); } catch { /* noop */ } window.location.reload(); }}
           style={{
             marginTop: 8, padding: '10px 22px', fontSize: 16, borderRadius: 8,
-            border: 'none', background: '#1a237e', color: '#fff', fontWeight: 700, cursor: 'pointer',
+            border: 'none', background: '#686158', color: '#fff', fontWeight: 700, cursor: 'pointer',
           }}
         >
           Recargar

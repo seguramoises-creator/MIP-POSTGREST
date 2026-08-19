@@ -6,7 +6,7 @@ import {
 } from '@mui/material';
 import { CheckCircle, RadioButtonUnchecked, HowToReg } from '@mui/icons-material';
 import { authService } from '../../services/auth.service';
-import logoImg from '../../assets/vista-logo.svg';
+import logoImg from '../../assets/mallen-logo.svg';
 
 // Mismo criterio que `password_policy_service.es_especial` del backend: especial es
 // cualquier carácter que no sea letra, número ni espacio. \p{L}/\p{N} tratan los acentos
@@ -91,12 +91,12 @@ export default function ActivarCuenta() {
   return (
     <Box sx={{
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'linear-gradient(135deg, #0a1a4e 0%, #1a237e 40%, #0d47a1 75%, #01579b 100%)',
+      background: 'linear-gradient(135deg, #2A2622 0%, #686158 40%, #584F46 75%, #686158 100%)',
       py: 4,
     }}>
       <Card sx={{ width: 460, mx: 2, borderRadius: 3, boxShadow: 24, overflow: 'hidden' }}>
         <Box sx={{ lineHeight: 0, width: '100%' }}>
-          <img src={logoImg} alt="VISTA" style={{ width: '100%', height: 'auto', display: 'block' }} />
+          <img src={logoImg} alt="Laboratorios Mallén" style={{ width: '100%', height: 'auto', display: 'block' }} />
         </Box>
 
         <CardContent sx={{ p: 4, pt: 3 }}>

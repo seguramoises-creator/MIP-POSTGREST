@@ -63,10 +63,33 @@ const Conocimientos = lazyWithReload(() => import('./pages/conocimientos/Conocim
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
 
 const theme = createTheme({
-  palette: { primary: { main: '#1a237e' }, secondary: { main: '#0d47a1' }, background: { default: '#f5f6fa' } },
+  // Marca Laboratorios Mallén (colores extraídos del vectorial del logo, ver theme/marca.ts).
+  // El rojo es `primary` porque manda en las ACCIONES: botones, estado activo, acentos.
+  // `contrastText` en blanco explícito — MUI calcularía negro sobre este rojo (3.83:1 con
+  // blanco, 5.5:1 con negro), y un botón de acción con texto negro rompería la marca.
+  // `dark` es el rojo oscurecido: es el único que pasa AA como TEXTO sobre blanco (5.71:1),
+  // así que los enlaces y el texto rojo deben tirar de él, no del rojo puro.
+  palette: {
+    primary:    { main: '#F63440', dark: '#C81E2A', contrastText: '#FFFFFF' },
+    secondary:  { main: '#686158', dark: '#3A342F', contrastText: '#FFFFFF' },
+    background: { default: '#F6F4F2' },
+    text:       { primary: '#2E2A26', secondary: '#57504A' },
+  },
   typography: { fontFamily: '"Inter","Roboto","Helvetica","Arial",sans-serif' },
   shape: { borderRadius: 8 },
   components: {
+    // El rojo de marca como TEXTO sobre blanco da 3.83:1 — por debajo del 4.5:1 de AA.
+    // Como fondo de botón no hay problema (el blanco encima da 21:1), pero MUI tiñe
+    // enlaces y botones de texto con `primary.main` por omisión, y ahí el mismo rojo
+    // deja de leerse. Estos tres overrides los mandan a `primary.dark` (#C81E2A, 5.71:1).
+    // Sin esto, cada enlace de la app queda por debajo del mínimo accesible.
+    MuiLink: { styleOverrides: { root: ({ theme }: any) => ({ color: theme.palette.primary.dark }) } },
+    MuiButton: {
+      styleOverrides: {
+        textPrimary:    ({ theme }: any) => ({ color: theme.palette.primary.dark }),
+        outlinedPrimary:({ theme }: any) => ({ color: theme.palette.primary.dark }),
+      },
+    },
     // Congelamiento en móvil (Safari iOS / Android): el scroll-lock de los overlays
     // de MUI pone el <body> en position:fixed + backdrop y en Safari iOS a veces NO
     // se revierte al cerrar; tras abrir varios Select/menús (los filtros) el body
@@ -89,7 +112,7 @@ const theme = createTheme({
                 borderWidth: 1.5,
                 boxShadow: '0 2px 10px rgba(26,35,126,0.06)',
                 transition: 'box-shadow .2s ease, border-color .2s ease',
-                '&:hover': { borderColor: '#1a237e', boxShadow: '0 4px 16px rgba(26,35,126,0.12)' },
+                '&:hover': { borderColor: '#686158', boxShadow: '0 4px 16px rgba(26,35,126,0.12)' },
               }
             : {},
       },

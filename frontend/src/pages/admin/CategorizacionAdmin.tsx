@@ -210,7 +210,7 @@ function TabClasificacion() {
       <Paper variant="outlined">
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ bgcolor: '#1a237e' }}>
+            <TableRow sx={{ bgcolor: '#686158' }}>
               {['País','Clase','Puntaje Mín','Puntaje Máx','Activo','Vigente Desde','Vigente Hasta',''].map(h => (
                 <TableCell key={h} sx={{ color: '#fff', fontWeight: 700, fontSize: '0.78rem' }}>{h}</TableCell>
               ))}
@@ -376,7 +376,7 @@ function TabReglas() {
       <Paper variant="outlined" sx={{ mb: 3 }}>
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ bgcolor: '#1a237e' }}>
+            <TableRow sx={{ bgcolor: '#686158' }}>
               {['Componente','Tipo','Peso (%)',''].map(h => (
                 <TableCell key={h} sx={{ color: '#fff', fontWeight: 700, fontSize: '0.78rem' }}>{h}</TableCell>
               ))}
@@ -438,7 +438,7 @@ function TabReglas() {
       <Paper variant="outlined">
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ bgcolor: '#1a237e' }}>
+            <TableRow sx={{ bgcolor: '#686158' }}>
               {['Componente','Criterio','Valor Texto','Mín','Máx','Puntaje %','País','Activo',''].map(h => (
                 <TableCell key={h} sx={{ color: '#fff', fontWeight: 700, fontSize: '0.78rem' }}>{h}</TableCell>
               ))}

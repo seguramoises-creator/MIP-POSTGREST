@@ -305,7 +305,7 @@ function ProductividadGerencia() {
             {cicloNombre && (
               <Box sx={{ ml:'auto' }}>
                 <Chip label={'Mostrando: ' + cicloNombre}
-                  sx={{ bgcolor:'#1a237e', color:'#fff', fontWeight:700, fontSize:13, height:32, px:1 }} />
+                  sx={{ bgcolor:'#686158', color:'#fff', fontWeight:700, fontSize:13, height:32, px:1 }} />
               </Box>
             )}
           </Box>
@@ -315,7 +315,7 @@ function ProductividadGerencia() {
       {/* ── Gráfico: indicadores × ciclos ─────────────────────── */}
       {grafData.length > 0 && (
         <Card elevation={2} sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
-          <Box sx={{ bgcolor: '#1a237e', px: 3, py: 1.2 }}>
+          <Box sx={{ bgcolor: '#686158', px: 3, py: 1.2 }}>
             <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: 14,
               textTransform: 'uppercase', letterSpacing: '0.8px' }}>
               Comparativo por Indicador y Ciclo — % Cumplimiento Promedio
@@ -351,7 +351,7 @@ function ProductividadGerencia() {
       ) : (
         <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
           {/* Barra azul MIP */}
-          <Box sx={{ bgcolor: '#1a237e', py: 1.5, textAlign: 'center' }}>
+          <Box sx={{ bgcolor: '#686158', py: 1.5, textAlign: 'center' }}>
             <Typography sx={{ color:'#fff', fontWeight:800, fontSize:15, letterSpacing:'1.5px', textTransform:'uppercase' }}>
               Mapa Integral de Productividad
             </Typography>
@@ -366,7 +366,7 @@ function ProductividadGerencia() {
                 {/* ── Fila 1: grupos ─────────────────────── */}
                 <TableRow sx={{ bgcolor: '#2e7d32' }}>
                   {/* RK ACUM */}
-                  <TableCell rowSpan={3} sx={{ ...TH_BASE, minWidth: 38, whiteSpace:'pre-line', bgcolor:'#0d47a1' }}>
+                  <TableCell rowSpan={3} sx={{ ...TH_BASE, minWidth: 38, whiteSpace:'pre-line', bgcolor:'#584F46' }}>
                     {'RK\nACUM'}
                   </TableCell>
                   {/* RK CICLO */}
@@ -407,7 +407,7 @@ function ProductividadGerencia() {
                     );
                   })}
                   <TableCell rowSpan={2}
-                    sx={{ ...TH_BASE, bgcolor: '#0d47a1', minWidth: 36, fontSize: 10 }}>
+                    sx={{ ...TH_BASE, bgcolor: '#584F46', minWidth: 36, fontSize: 10 }}>
                     TOTAL
                   </TableCell>
                 </TableRow>
@@ -497,7 +497,7 @@ function ProductividadGerencia() {
                       <TableCell sx={{ ...TD, p: 0.5 }}>
                         <Box sx={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          bgcolor: '#1a237e', color: '#fff', borderRadius: '50%',
+                          bgcolor: '#686158', color: '#fff', borderRadius: '50%',
                           width: 28, height: 28, fontWeight: 900, fontSize: 13,
                         }}>
                           {rkAcum}
@@ -546,7 +546,7 @@ function ProductividadGerencia() {
                       {/* TOTAL ciclo */}
                       <TableCell sx={{ ...TD, bgcolor: '#e8eaf6' }}>
                         {row.total != null
-                          ? <Typography sx={{ fontSize:12, fontWeight:800, color:'#1a237e' }}>{Number(row.total).toFixed(1)}</Typography>
+                          ? <Typography sx={{ fontSize:12, fontWeight:800, color:'#686158' }}>{Number(row.total).toFixed(1)}</Typography>
                           : <Typography sx={{ color:'text.disabled', fontSize:12 }}>—</Typography>}
                       </TableCell>
                       {/* TOTAL ACUM — suma de todos los ciclos */}

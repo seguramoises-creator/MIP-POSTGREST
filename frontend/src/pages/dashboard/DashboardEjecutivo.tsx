@@ -515,7 +515,7 @@ export default function DashboardEjecutivo() {
               <Box sx={{ ml: 'auto' }}>
                 <Chip
                   label={`Mostrando: ${cicloNombre}`}
-                  sx={{ bgcolor: '#1a237e', color: '#fff', fontWeight: 700, fontSize: 15, height: 36, px: 1.5, letterSpacing: 0.5, borderRadius: 2 }}
+                  sx={{ bgcolor: '#686158', color: '#fff', fontWeight: 700, fontSize: 15, height: 36, px: 1.5, letterSpacing: 0.5, borderRadius: 2 }}
                 />
               </Box>
             )}

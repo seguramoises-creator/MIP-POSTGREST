@@ -124,12 +124,12 @@ export default function RupturaVisita() {
 
       {/* Requerimiento Mallén (Item 2): filtros por representante / GD / línea (solo gestión). */}
       {esGestor && (
-        <Card variant="outlined" sx={{ mb: 2, bgcolor: '#fff', borderColor: '#1a237e',
+        <Card variant="outlined" sx={{ mb: 2, bgcolor: '#fff', borderColor: '#686158',
                                    borderWidth: 1.5, borderRadius: 3 }}>
           <Box sx={{ p: 1.5 }}>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }} flexWrap="wrap" useFlexGap>
               <Stack direction="row" spacing={0.75} alignItems="center"
-                     sx={{ color: '#1a237e', width: { xs: '100%', md: 'auto' },
+                     sx={{ color: '#686158', width: { xs: '100%', md: 'auto' },
                            pb: { xs: 1, md: 0 }, mb: { xs: 0.5, md: 0 },
                            borderBottom: { xs: '1px solid #EEF0F4', md: 'none' } }}>
                 <FilterList fontSize="small" />

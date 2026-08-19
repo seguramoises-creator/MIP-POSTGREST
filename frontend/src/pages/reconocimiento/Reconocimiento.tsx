@@ -217,7 +217,7 @@ export default function Reconocimiento() {
             {cicloNombre && (
               <Box sx={{ ml: 'auto' }}>
                 <Chip label={'Mostrando: ' + cicloNombre}
-                  sx={{ bgcolor: '#1a237e', color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
+                  sx={{ bgcolor: '#686158', color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
               </Box>
             )}
           </Box>
@@ -248,7 +248,7 @@ export default function Reconocimiento() {
           {/* ── MIP TABLE ────────────────────────────────────── */}
           <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden', mb: 4 }}>
             {/* Título granate */}
-            <Box sx={{ bgcolor: '#1a237e', py: 1.8, textAlign: 'center' }}>
+            <Box sx={{ bgcolor: '#686158', py: 1.8, textAlign: 'center' }}>
               <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 16, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
                 Mapa Integral de Productividad
               </Typography>
@@ -284,8 +284,8 @@ export default function Reconocimiento() {
                       { label: 'Puntos Acum',  align: 'center' as const },
                     ].map(({ label, align, w }) => (
                       <TableCell key={label} align={align}
-                        sx={{ fontWeight: 800, fontSize: 13, color: '#1a237e',
-                              borderBottom: '2px solid #1a237e', py: 1.2,
+                        sx={{ fontWeight: 800, fontSize: 13, color: '#686158',
+                              borderBottom: '2px solid #686158', py: 1.2,
                               ...(w ? { width: w } : {}) }}>
                         {label}
                       </TableCell>
@@ -306,7 +306,7 @@ export default function Reconocimiento() {
                     const rowBg     = pos === 1 ? '#fffde7' : pos % 2 === 0 ? '#f9f9f9' : '#fff';
                     return (
                       <TableRow key={row.rm_id} sx={{ bgcolor: rowBg }}>
-                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: 14, color: '#1a237e', py: 1.4 }}>
+                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: 14, color: '#686158', py: 1.4 }}>
                           {pos}
                         </TableCell>
                         <TableCell sx={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase', py: 1.4 }}>
@@ -338,7 +338,7 @@ export default function Reconocimiento() {
               {loadingRec ? <CircularProgress /> : (
                 <TableContainer component={Paper} elevation={2} sx={{ borderRadius: 2 }}>
                   <Table size="small">
-                    <TableHead sx={{ bgcolor: '#1a237e' }}>
+                    <TableHead sx={{ bgcolor: '#686158' }}>
                       <TableRow>
                         {['RM', 'Premio', 'Score (%)', 'Posición', 'Fecha', 'Certificado'].map(h => (
                           <TableCell key={h} sx={{ color: 'white', fontWeight: 700, fontSize: 13 }}>{h}</TableCell>

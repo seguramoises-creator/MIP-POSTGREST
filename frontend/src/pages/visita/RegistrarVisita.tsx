@@ -17,8 +17,8 @@ import {
 } from '../../services/farmacias.service';
 
 // ── Paleta profesional (médica / farmacéutica) ───────────────────────────────
-const NAVY = '#0d1b4c';       // azul corporativo profundo
-const AZUL_VISTA = '#1a237e'; // azul de VISTA (primary.main) — titulo y borde de tarjeta
+const NAVY = '#2A2622';       // azul corporativo profundo
+const AZUL_VISTA = '#686158'; // azul de VISTA (primary.main) — titulo y borde de tarjeta
 const TEAL = '#0f9b8e';       // acento clínico (teal-verde)
 const INK = '#1e293b';        // texto principal
 const SOFT_SHADOW = '0 1px 3px rgba(16,24,40,0.06), 0 6px 20px rgba(16,24,40,0.05)';
@@ -489,7 +489,7 @@ export default function RegistrarVisita() {
                                        flex: { xs: '1 1 100%', sm: '1 1 40%' } }}>
                               <Checkbox size="small" checked={on} onChange={() => toggleProd(p, idx)} sx={{ p: 0.5 }} />
                               <Avatar sx={{ width: 22, height: 22, fontSize: 11, fontWeight: 800, flexShrink: 0,
-                                            bgcolor: p.prioridad === 1 ? '#1a237e' : p.prioridad === 2 ? '#1565c0' : '#90a4ae' }}>
+                                            bgcolor: p.prioridad === 1 ? '#686158' : p.prioridad === 2 ? '#1565c0' : '#90a4ae' }}>
                                 {p.prioridad}
                               </Avatar>
                               <Box sx={{ minWidth: 0, flex: 1 }}>

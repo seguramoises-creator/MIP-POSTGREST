@@ -99,7 +99,7 @@ export default function SaludCiclo() {
         <Grid item xs={6} sm={4} md={2.4}>
           <Metrica icon={<EventAvailable sx={{ fontSize: 16 }} />} label="DÍAS HÁBILES"
             valor={`${data.dias_transcurridos}/${data.dias_totales}`} pct={data.progreso_pct}
-            sub={`${data.dias_restantes} restantes`} color="#1a237e" />
+            sub={`${data.dias_restantes} restantes`} color="#686158" />
         </Grid>
         <Grid item xs={6} sm={4} md={2.4}>
           <Metrica icon={<FactCheck sx={{ fontSize: 16 }} />} label="PLANEACIÓN VM"

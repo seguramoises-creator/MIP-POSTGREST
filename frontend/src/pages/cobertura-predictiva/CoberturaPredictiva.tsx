@@ -127,7 +127,7 @@ interface CoberturaCategoria {
 // ── Panel: Cobertura por categoría de médico ──────────────────────────────────
 const COLORES_CAT: Record<string, { main: string; bg: string; text: string }> = {
   A: { main: '#1b5e20', bg: '#e8f5e9', text: '#1b5e20' },
-  B: { main: '#0d47a1', bg: '#e3f2fd', text: '#0d47a1' },
+  B: { main: '#584F46', bg: '#e3f2fd', text: '#584F46' },
   C: { main: '#e65100', bg: '#fff3e0', text: '#e65100' },
   D: { main: '#b71c1c', bg: '#ffebee', text: '#b71c1c' },
 };
@@ -414,7 +414,7 @@ const DashboardTab = ({
             <Typography fontWeight={700} color="#1565c0">
               Ciclo {data.ciclo?.codigo} · Corte: {data.fecha_corte}
             </Typography>
-            {data.fuente && <Chip label={data.fuente} size="small" sx={{ bgcolor: '#bbdefb', color: '#0d47a1', fontWeight: 600 }} />}
+            {data.fuente && <Chip label={data.fuente} size="small" sx={{ bgcolor: '#bbdefb', color: '#584F46', fontWeight: 600 }} />}
           </Box>
           <Box display="flex" alignItems="center" gap={2}>
             <Typography variant="body2" color="text.secondary">

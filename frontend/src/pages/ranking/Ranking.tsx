@@ -302,7 +302,7 @@ function RankingGerencia() {
                 {cicloNombre && (
                   <Box sx={{ ml: 'auto' }}>
                     <Chip label={'Mostrando: ' + cicloNombre}
-                      sx={{ bgcolor: '#1a237e', color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
+                      sx={{ bgcolor: '#686158', color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
                   </Box>
                 )}
               </>
@@ -319,7 +319,7 @@ function RankingGerencia() {
         /* ── TABLA MIP ─────────────────────────────────────────── */
         <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
           {/* Barra granate */}
-          <Box sx={{ bgcolor: '#1a237e', py: 1.8, textAlign: 'center' }}>
+          <Box sx={{ bgcolor: '#686158', py: 1.8, textAlign: 'center' }}>
             <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 16,
               letterSpacing: '1.5px', textTransform: 'uppercase' }}>
               Mapa Integral de Productividad
@@ -361,8 +361,8 @@ function RankingGerencia() {
                     { label: 'Acum',  align: 'left'   as const        },
                   ].map(({ label, align, w }) => (
                     <TableCell key={label} align={align}
-                      sx={{ fontWeight: 800, fontSize: 11, color: '#1a237e',
-                            borderBottom: '2px solid #1a237e',
+                      sx={{ fontWeight: 800, fontSize: 11, color: '#686158',
+                            borderBottom: '2px solid #686158',
                             ...(w ? { width: w, minWidth: w } : {}) }}>
                       {label}
                     </TableCell>
@@ -384,7 +384,7 @@ function RankingGerencia() {
                   return (
                     <TableRow key={String(row.rm_id) + '-' + i} sx={{ bgcolor: rowBg }}>
                       <TableCell align="center"
-                        sx={{ fontWeight: 700, fontSize: 11, color: '#1a237e' }}>{pos}</TableCell>
+                        sx={{ fontWeight: 700, fontSize: 11, color: '#686158' }}>{pos}</TableCell>
                       <TableCell sx={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
                         {row.linea_nombre && row.linea_nombre !== '—' ? row.linea_nombre : 'GENERAL'}
                       </TableCell>
@@ -415,13 +415,13 @@ function RankingGerencia() {
               {/* ── Fila de promedios ───────────────────────── */}
               {promedios && (
                 <TableFooter>
-                  <TableRow sx={{ bgcolor: '#c5cae9', borderTop: '4px solid #1a237e' }}>
+                  <TableRow sx={{ bgcolor: '#c5cae9', borderTop: '4px solid #686158' }}>
                     <TableCell align="center"
-                      sx={{ fontWeight: 900, fontSize: 10, color: '#1a237e', lineHeight: 1.1 }}>
+                      sx={{ fontWeight: 900, fontSize: 10, color: '#686158', lineHeight: 1.1 }}>
                       Ø
                     </TableCell>
                     <TableCell colSpan={2}
-                      sx={{ fontWeight: 800, fontSize: 10, color: '#1a237e', whiteSpace: 'nowrap' }}>
+                      sx={{ fontWeight: 800, fontSize: 10, color: '#686158', whiteSpace: 'nowrap' }}>
                       PROMEDIO · {itemsFiltrados.length} RMs
                     </TableCell>
                     {ciclosNums.length > 0
