@@ -42,11 +42,10 @@ export default function TopTabs({ items, seccion }: { items: NavItem[]; seccion?
         display: 'flex', gap: 0.5, overflowX: 'auto', bgcolor: 'transparent',
         justifyContent: 'center',
         '& > *': { flexShrink: 0 },
-        // El logo desborda 24px hacia esta fila (ver MainLayout). Sin reservarle sitio,
-        // la primera pestaña quedaría DEBAJO de él — invisible en móvil, donde la fila
-        // arranca pegada a la izquierda en vez de centrarse. 132px = ancho del logo a
-        // 78px de alto (proporción 1.59:1) más holgura.
-        pl: '132px', pr: 1, minHeight: 0,
+        // `flex: 1` la hace ocupar el hueco entre el logo y las píldoras de la derecha,
+        // dentro de la MISMA fila. Ya no lleva reserva a la izquierda: el logo es ahora
+        // un hermano en el flex, no algo que se le monte encima.
+        flex: 1, minWidth: 0, px: 1,
         // La barra de scroll horizontal en escritorio ensucia y ocupa alto; el
         // desplazamiento sigue disponible con rueda, gesto y teclado.
         scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' },
@@ -62,7 +61,7 @@ export default function TopTabs({ items, seccion }: { items: NavItem[]; seccion?
             onClick={() => navigate(item.path)}
             aria-current={activa ? 'page' : undefined}
             sx={{
-              flex: '0 0 auto', px: 1.5, pt: 0.25, pb: 0.5,
+              flex: '0 0 auto', px: 1.5, py: 0.5,
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25,
               color: activa ? NAV_ACTIVO : NAV_INACTIVO,
               '&:focus-visible': { outline: `2px solid ${NAV_ACTIVO}`, outlineOffset: -2 },

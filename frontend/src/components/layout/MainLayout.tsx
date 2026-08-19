@@ -139,7 +139,7 @@ export default function MainLayout() {
         >
           {/* Cabecera reducida a lo que informa: dónde estoy y sobre qué ciclo/país
               trabajo. La cuenta y la salida bajaron a la ranura Perfil. */}
-          <Toolbar variant="dense" sx={{ justifyContent: 'space-between', gap: 1, minHeight: 56 }}>
+          <Toolbar variant="dense" sx={{ gap: 1, minHeight: 72, alignItems: 'center' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
               {/* El logo vivía en el menú lateral y se fue con él al rediseñar la
                   navegación. Vuelve aquí, que es donde se ve en todas las pantallas.
@@ -150,15 +150,14 @@ export default function MainLayout() {
                   sección, el logo pasa a ser el único elemento de la izquierda y puede
                   ocupar ese espacio sin apretar nada. */}
               <Box component="img" src={logoImg} alt="Laboratorios Mallén"
-                   sx={{ height: 78, width: 'auto', display: 'block', flexShrink: 0,
-                         // El margen negativo va SOLO ABAJO, no repartido: simétrico
-                         // sacaría el logo 11px por encima del borde de la barra, donde
-                         // quedaría cortado contra el borde de la ventana. Así crece
-                         // hacia la fila de pestañas —que es espacio de la propia barra—
-                         // y permite cumplir las dos peticiones a la vez: logo mayor sin
-                         // empujar la fila hacia abajo.
-                         alignSelf: 'flex-start', mt: '2px', mb: '-24px' }} />
+                   sx={{ height: 60, width: 'auto', display: 'block', flexShrink: 0,
+                         // Sin márgenes negativos: la versión anterior hacía que el logo
+                         // desbordara hacia la fila de pestañas, y en las secciones de un
+                         // solo ítem esa fila NO se renderiza — el logo quedaba cortado por
+                         // el área de contenido. Ahora cabe entero en la barra. */}
+                          }} />
             </Box>
+            <TopTabs items={seccionActiva?.items ?? []} seccion={seccionActiva?.titulo ?? 'Inicio'} />
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
               {gd?.gerente && (
                 <Chip
@@ -175,7 +174,6 @@ export default function MainLayout() {
               <CicloPaisBadge />
             </Box>
           </Toolbar>
-          <TopTabs items={seccionActiva?.items ?? []} seccion={seccionActiva?.titulo ?? 'Inicio'} />
         </AppBar>
 
         {/* Perfil — recoge lo que antes colgaba del avatar de arriba a la derecha. */}
