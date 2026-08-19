@@ -84,7 +84,14 @@ export default function Login() {
       });
       navigate(tokens.debe_cambiar_password ? '/cambiar-password' : '/dashboard');
     } catch (err: any) {
-      const msg = err.response?.data?.detail || err.response?.data?.error || 'Credenciales incorrectas';
+      // SIN respuesta del servidor no se puede afirmar nada sobre las credenciales: la
+      // petición no llegó a salir. Antes se caía al «Credenciales incorrectas» por omisión
+      // y la app acusaba a la contraseña justo en el único caso en que no lo sabe — con el
+      // servidor apagado, sin red o con un túnel caído. Ese mensaje llegó a costar una tarde
+      // de buscar claves y restablecer cuentas mientras el problema era la conexión.
+      const msg = !err.response
+        ? 'No se pudo contactar el servidor. Revisa tu conexión y vuelve a intentar.'
+        : (err.response.data?.detail || err.response.data?.error || 'Credenciales incorrectas');
       setError(typeof msg === 'string' ? msg : 'Error al iniciar sesión');
     } finally {
       setLoading(false);
