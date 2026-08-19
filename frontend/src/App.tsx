@@ -83,6 +83,29 @@ const theme = createTheme({
     // enlaces y botones de texto con `primary.main` por omisión, y ahí el mismo rojo
     // deja de leerse. Estos tres overrides los mandan a `primary.dark` (#C81E2A, 5.71:1).
     // Sin esto, cada enlace de la app queda por debajo del mínimo accesible.
+    // Los avisos `info` venían en el azul por omisión de MUI — el último azul que
+    // quedaba en la app. Pasan a la paleta de Mallén: fondo cálido muy tenue, texto e
+    // icono en taupe.
+    //
+    // NO en rojo, aunque sea el color principal: esos mensajes («Estás viendo un ciclo
+    // distinto al abierto», «Selecciona un país») son ORIENTACIÓN, no errores. En rojo
+    // pleno quedarían idénticos a una alerta real y el usuario aprendería a ignorar el
+    // rojo — perdiendo justo el color que debe respetar cuando algo falla de verdad.
+    // El taupe los hace inconfundiblemente Mallén sin convertirlos en alarma.
+    MuiAlert: {
+      styleOverrides: {
+        standardInfo: {
+          backgroundColor: '#F4F1EE',   // taupe al ~6 %: se despega del blanco sin gritar
+          color: '#3A342F',             // 11.5:1 sobre ese fondo
+          '& .MuiAlert-icon': { color: '#686158' },
+        },
+        outlinedInfo: {
+          borderColor: 'rgba(104,97,88,0.5)',
+          color: '#3A342F',
+          '& .MuiAlert-icon': { color: '#686158' },
+        },
+      },
+    },
     MuiLink: { styleOverrides: { root: ({ theme }: any) => ({ color: theme.palette.primary.dark }) } },
     MuiButton: {
       styleOverrides: {
