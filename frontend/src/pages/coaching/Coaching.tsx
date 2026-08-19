@@ -320,7 +320,7 @@ export default function Coaching() {
           // El color del VALOR respeta la carta de los indicadores (catColor:
           // verde >=90, azul 80-89, naranja 60-79, rojo <60). El signo de la
           // variación se colorea por dirección (trendInfo).
-          { label: 'Total RMs',     value: dist?.total ?? '—',   sub: '— Equipo completo',  color: '#5c6bc0' },
+          { label: 'Total RMs',     value: dist?.total ?? '—',   sub: '— Equipo completo',  color: '#686158' },
           { label: 'Prom. MIP',     value: dist ? dist.avgPts.toFixed(1) : '—',
             sub: dist ? `${trendInfo(dist.avgPts - 80).simbolo} ${Math.abs(dist.avgPts - 80).toFixed(1)} pts` : '—',
             color: dist ? catColor(dist.avgPts) : '#584F46',
@@ -490,7 +490,7 @@ export default function Coaching() {
                   <Divider sx={{ my: 1.5 }} />
                   <Box sx={{ p: 1.5, bgcolor: '#f8f9fa', borderRadius: 1.5, border: '1px solid #EFEBE6' }}>
                     <Typography variant="caption"
-                      sx={{ color: '#5c6bc0', fontWeight: 700, textTransform: 'uppercase',
+                      sx={{ color: '#686158', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.8px', fontSize: '0.6rem' }}>
                       Principio Rector:
                     </Typography>

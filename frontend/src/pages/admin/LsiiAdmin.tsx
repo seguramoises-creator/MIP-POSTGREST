@@ -334,7 +334,7 @@ export default function LsiiAdmin() {
                 </Box>
 
                 {d.opciones.map((o, opIdx) => (
-                  <Box key={o.id ?? opIdx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, p: 1, borderRadius: 1.5, bgcolor: o.activo ? '#fafbfd' : '#fbeaea' }}>
+                  <Box key={o.id ?? opIdx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, p: 1, borderRadius: 1.5, bgcolor: o.activo ? '#F9F8F6' : '#fbeaea' }}>
                     <TextField size="small" type="number" label="Orden" sx={{ width: 80 }}
                       value={o.orden_opcion}
                       onChange={e => actualizarOpcion(idx, opIdx, { orden_opcion: Number(e.target.value) })}

@@ -401,7 +401,7 @@ export default function RegistrarVisita() {
             </Typography>
           </Box>
           <ToggleButtonGroup exclusive size="small" value={tipo} onChange={(_, v) => v && setTipo(v)}
-                             sx={{ bgcolor: '#fff', borderRadius: 2, '& .MuiToggleButton-root': { border: '1px solid #e2e8f0', fontWeight: 700, px: 1.5,
+                             sx={{ bgcolor: '#fff', borderRadius: 2, '& .MuiToggleButton-root': { border: '1px solid #E0DAD3', fontWeight: 700, px: 1.5,
                                    '&.Mui-selected': { bgcolor: NAVY, color: '#fff', '&:hover': { bgcolor: NAVY } } } }}>
             <ToggleButton value="V" disabled={sel?.tipo_visita === 'R'}
                           title={sel?.tipo_visita === 'R' ? 'La Vista de este médico ya fue registrada' : ''}>Vista</ToggleButton>
@@ -441,7 +441,7 @@ export default function RegistrarVisita() {
                     );
                     return (
                       <>
-                        <Stack direction="row" spacing={0.5} divider={<Divider orientation="vertical" flexItem sx={{ borderColor: '#e2e8f0' }} />}>
+                        <Stack direction="row" spacing={0.5} divider={<Divider orientation="vertical" flexItem sx={{ borderColor: '#E0DAD3' }} />}>
                           {stat('Tipo', tipo === 'R' ? 'Revisita' : 'Vista', NAVY)}
                           {stat('Productos', String(nProd), TEAL)}
                           {stat('Muestras', String(nMuestras), TEAL)}
@@ -475,7 +475,7 @@ export default function RegistrarVisita() {
                 {productos.length === 0 ? (
                   <Typography variant="caption" color="text.secondary">No hay parrilla de productos para esta línea.</Typography>
                 ) : (
-                  <Box sx={{ border: '1px solid #EFEBE6', borderRadius: 2, bgcolor: '#fafbfd', px: 1, py: 0.25 }}>
+                  <Box sx={{ border: '1px solid #EFEBE6', borderRadius: 2, bgcolor: '#F9F8F6', px: 1, py: 0.25 }}>
                     <Stack divider={<Divider sx={{ borderColor: '#f0f3f8' }} />}>
                       {productos.map((p, idx) => {
                         const det = detallados[p.producto];
@@ -872,7 +872,7 @@ export default function RegistrarVisita() {
         <ToggleButtonGroup exclusive size="small" value={tipoEntidad}
                            onChange={(_, v) => { if (v) { setTipoEntidad(v); setMsg(null); } }}
                            sx={{ mb: 2, bgcolor: '#fff', borderRadius: 2, boxShadow: SOFT_SHADOW,
-                                 '& .MuiToggleButton-root': { border: '1px solid #e2e8f0', fontWeight: 700, px: 2, textTransform: 'none',
+                                 '& .MuiToggleButton-root': { border: '1px solid #E0DAD3', fontWeight: 700, px: 2, textTransform: 'none',
                                        '&.Mui-selected': { bgcolor: NAVY, color: '#fff', '&:hover': { bgcolor: NAVY } } } }}>
           <ToggleButton value="medico"><MedicalServices sx={{ fontSize: 18, mr: 0.75 }} />Médico</ToggleButton>
           <ToggleButton value="farmacia"><LocalPharmacy sx={{ fontSize: 18, mr: 0.75 }} />Farmacia</ToggleButton>

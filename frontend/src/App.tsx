@@ -72,6 +72,10 @@ const theme = createTheme({
   palette: {
     primary:    { main: '#F63440', dark: '#C81E2A', contrastText: '#FFFFFF' },
     secondary:  { main: '#686158', dark: '#3A342F', contrastText: '#FFFFFF' },
+    // `info` se redefine porque MUI lo usa en TODO componente con color="info"
+    // (Chip, Button, Badge…), no solo en Alert: sin esto seguían saliendo azules
+    // sueltos por la app aunque el tema fuera de Mallén.
+    info:       { main: '#686158', dark: '#3A342F', light: '#8A8177', contrastText: '#FFFFFF' },
     background: { default: '#F6F4F2' },
     text:       { primary: '#2E2A26', secondary: '#57504A' },
   },

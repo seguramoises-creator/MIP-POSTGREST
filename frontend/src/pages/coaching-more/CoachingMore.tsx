@@ -370,7 +370,7 @@ export default function CoachingMore() {
           </Grid>
           <Grid item xs={12} sm={4}>
             {/* Leyenda de solo lectura: suma de visitas ACOMPAÑADAS de hoy (no editable). */}
-            <Box sx={{ border: '1px solid #e2e8f0', borderRadius: 1, px: 1.5, py: 0.75, minHeight: 56 }}>
+            <Box sx={{ border: '1px solid #E0DAD3', borderRadius: 1, px: 1.5, py: 0.75, minHeight: 56 }}>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 Médicos vistos ese día (visitas acompañadas)
               </Typography>

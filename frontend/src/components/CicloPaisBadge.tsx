@@ -20,7 +20,7 @@ export default function CicloPaisBadge() {
   return (
     <Box sx={{
       display: 'flex', alignItems: 'center', gap: 0.75, whiteSpace: 'nowrap',
-      px: 1, py: 0.4, borderRadius: 5, bgcolor: '#f1f5f9', border: '1px solid #e2e8f0',
+      px: 1, py: 0.4, borderRadius: 5, bgcolor: '#F4F1EE', border: '1px solid #E0DAD3',
     }}>
       <Typography variant="caption" sx={{ fontWeight: 800, color: '#2A2622', lineHeight: 1 }}>{paisCodigo}</Typography>
 

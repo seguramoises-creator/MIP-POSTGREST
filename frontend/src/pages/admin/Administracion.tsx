@@ -13,7 +13,9 @@ import CorreoAdmin from './CorreoAdmin';
 import MedicosTopConfigTab from './MedicosTopConfigTab';
 import CatalogoErrores from './CatalogoErrores';
 
-const NARANJA = '#ed6c02';
+// Antes era el naranja de Material (#ed6c02): el subrayado y la pestaña activa
+// de esta pantalla no seguían la marca. Ahora es el rojo de Mallén.
+const NARANJA = '#F63440';
 
 export default function Administracion() {
   const [tab, setTab] = useState(0);
