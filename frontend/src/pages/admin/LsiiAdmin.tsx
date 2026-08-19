@@ -190,7 +190,7 @@ export default function LsiiAdmin() {
       <Card elevation={0} sx={{ mb: 3, border: '1px solid #e0e7ef', borderRadius: 2 }}>
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-            <Lock fontSize="small" sx={{ color: '#1565c0' }} />
+            <Lock fontSize="small" sx={{ color: '#584F46' }} />
             <Typography variant="subtitle1" fontWeight={700}>Umbral de Corte de Cuadrantes</Typography>
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -280,9 +280,9 @@ export default function LsiiAdmin() {
                     {d.dimension_nombre || <span style={{ color: '#90a4ae' }}>(nueva dimensión sin nombre)</span>}
                   </Typography>
                   <Chip label={d.dimension_codigo || 'SIN CÓDIGO'} size="small" variant="outlined" />
-                  <Chip label={`Peso ${(d.peso_dimension * 100).toFixed(0)}%`} size="small" sx={{ bgcolor: '#e3f2fd', color: '#1565c0', fontWeight: 700 }} />
+                  <Chip label={`Peso ${(d.peso_dimension * 100).toFixed(0)}%`} size="small" sx={{ bgcolor: '#F4F1EE', color: '#584F46', fontWeight: 700 }} />
                   <Chip label={`${activeOptions} opción(es) activa(s)`} size="small" variant="outlined" />
-                  {!d.activo && <Chip label="Desactivada" size="small" color="default" sx={{ bgcolor: '#eceff1' }} />}
+                  {!d.activo && <Chip label="Desactivada" size="small" color="default" sx={{ bgcolor: '#EDE9E4' }} />}
                 </Box>
               </AccordionSummary>
               <AccordionDetails>

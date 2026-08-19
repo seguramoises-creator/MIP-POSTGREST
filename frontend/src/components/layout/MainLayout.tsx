@@ -144,23 +144,13 @@ export default function MainLayout() {
               {/* El logo vivía en el menú lateral y se fue con él al rediseñar la
                   navegación. Vuelve aquí, que es donde se ve en todas las pantallas.
 
-                  SIN filtro de color, a propósito: el archivo dice `.svg` pero es un
-                  JPEG incrustado, así que no tiene transparencia. Un
-                  `brightness(0) invert(1)` —lo natural para un logo oscuro sobre
-                  barra azul— pintaría de blanco TODO el rectángulo, logo incluido.
-                  No hace falta: su fondo ya es azul marino (rgb(0,26,59)), casi el
-                  mismo que el extremo izquierdo del degradado, que es donde cae. */}
-              {/* 26px dejaba el logotipo ilegible: el vectorial de Mallén reserva casi la
-                  mitad de su alto al aire sobre la abeja, así que la marca ocupa bastante
-                  menos que la caja: a 40px seguía leyéndose pequeña. A 52px —con la barra
-                  subida a 68 para alojarlo— el logotipo tiene la presencia que le
-                  corresponde a la marca del cliente. El alto de la barra y el del logo van
-                  juntos: subir solo el segundo lo recortaría por arriba y por abajo. */}
+                  64px: el vectorial de Mallén reserva casi la mitad de su alto al aire
+                  sobre la abeja, así que la marca ocupa bastante menos que su caja y los
+                  tamaños intermedios seguían leyéndose pequeños. Al quitar el título de
+                  sección, el logo pasa a ser el único elemento de la izquierda y puede
+                  ocupar ese espacio sin apretar nada. */}
               <Box component="img" src={logoImg} alt="Laboratorios Mallén"
-                   sx={{ height: 52, width: 'auto', display: 'block', flexShrink: 0 }} />
-              <Typography noWrap sx={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.01em', minWidth: 0 }}>
-                {seccionActiva?.titulo ?? 'Inicio'}
-              </Typography>
+                   sx={{ height: 64, width: 'auto', display: 'block', flexShrink: 0 }} />
             </Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
               {gd?.gerente && (

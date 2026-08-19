@@ -23,7 +23,7 @@ const TEAL = '#0f9b8e';       // acento clínico (teal-verde)
 const INK = '#1e293b';        // texto principal
 const SOFT_SHADOW = '0 1px 3px rgba(16,24,40,0.06), 0 6px 20px rgba(16,24,40,0.05)';
 // Tarjeta base: sombra suave en vez de bordes marcados (menos saturación visual).
-const cardSx = { borderRadius: 3, border: '1px solid #eef1f6', boxShadow: SOFT_SHADOW } as const;
+const cardSx = { borderRadius: 3, border: '1px solid #EFEBE6', boxShadow: SOFT_SHADOW } as const;
 // Encabezado de sección uniforme (ícono + título en mayúsculas discretas).
 const secHeadSx = { fontWeight: 800, letterSpacing: 0.6, textTransform: 'uppercase', color: 'text.secondary', fontSize: '0.72rem' } as const;
 
@@ -387,7 +387,7 @@ export default function RegistrarVisita() {
     <div ref={formRef}>
       <Card elevation={0} sx={{ ...cardSx, mb: 1 }}>
         <Box sx={{ background: `linear-gradient(120deg, ${NAVY}0d 0%, ${TEAL}0d 100%)`,
-                   borderBottom: '1px solid #eef1f6', px: 2, py: 1.5, display: 'flex', alignItems: 'center',
+                   borderBottom: '1px solid #EFEBE6', px: 2, py: 1.5, display: 'flex', alignItems: 'center',
                    gap: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
           {avatar(sel.nombre, sel.categoria, sel.medico_id, 42)}
           <Box sx={{ flex: 1, minWidth: 120 }}>
@@ -426,7 +426,7 @@ export default function RegistrarVisita() {
                 </Box>
                 <Box sx={{ flex: 1, borderRadius: 2, p: 1.25,
                            background: `linear-gradient(135deg, ${NAVY}0a 0%, ${TEAL}0f 100%)`,
-                           border: '1px solid #eef1f6' }}>
+                           border: '1px solid #EFEBE6' }}>
                   <Typography variant="caption" sx={{ ...secHeadSx, display: 'block', mb: 0.75 }}>
                     Resumen de la visita
                   </Typography>
@@ -475,7 +475,7 @@ export default function RegistrarVisita() {
                 {productos.length === 0 ? (
                   <Typography variant="caption" color="text.secondary">No hay parrilla de productos para esta línea.</Typography>
                 ) : (
-                  <Box sx={{ border: '1px solid #eef1f6', borderRadius: 2, bgcolor: '#fafbfd', px: 1, py: 0.25 }}>
+                  <Box sx={{ border: '1px solid #EFEBE6', borderRadius: 2, bgcolor: '#fafbfd', px: 1, py: 0.25 }}>
                     <Stack divider={<Divider sx={{ borderColor: '#f0f3f8' }} />}>
                       {productos.map((p, idx) => {
                         const det = detallados[p.producto];
@@ -489,7 +489,7 @@ export default function RegistrarVisita() {
                                        flex: { xs: '1 1 100%', sm: '1 1 40%' } }}>
                               <Checkbox size="small" checked={on} onChange={() => toggleProd(p, idx)} sx={{ p: 0.5 }} />
                               <Avatar sx={{ width: 22, height: 22, fontSize: 11, fontWeight: 800, flexShrink: 0,
-                                            bgcolor: p.prioridad === 1 ? '#686158' : p.prioridad === 2 ? '#1565c0' : '#90a4ae' }}>
+                                            bgcolor: p.prioridad === 1 ? '#686158' : p.prioridad === 2 ? '#584F46' : '#90a4ae' }}>
                                 {p.prioridad}
                               </Avatar>
                               <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -666,7 +666,7 @@ export default function RegistrarVisita() {
     <div ref={formRefFarmacia}>
       <Card elevation={0} sx={{ ...cardSx, mb: 1 }}>
         <Box sx={{ background: `linear-gradient(120deg, ${NAVY}0d 0%, ${TEAL}0d 100%)`,
-                   borderBottom: '1px solid #eef1f6', px: 2, py: 1.5 }}>
+                   borderBottom: '1px solid #EFEBE6', px: 2, py: 1.5 }}>
           <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" rowGap={0.3}>
             <Typography fontWeight={800} sx={{ color: INK, fontSize: 'clamp(0.82rem, 3.2vw, 1.05rem)' }}>
               {selFarmacia.nombre_completo}
@@ -851,7 +851,7 @@ export default function RegistrarVisita() {
             Va directo sobre la tarjeta: el panel dentro del panel que había antes
             solo existía para despegarlo del degradado. */}
         {!esVM && (
-          <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #EEF0F4' }}>
+          <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid #EDE9E4' }}>
             <TextField select fullWidth size="small" label="Visitador (VM)" value={vmId}
                        helperText="Elige el visitador para ver su agenda del día"
                        onChange={(e) => setVmId(e.target.value === '' ? '' : Number(e.target.value))}>
@@ -1014,7 +1014,7 @@ export default function RegistrarVisita() {
           <CardContent sx={{ py: 1.5 }}>
             <Stack direction="row" alignItems="center" spacing={1}
                    onClick={() => setVerHistorial((v) => !v)} sx={{ cursor: 'pointer' }}>
-              <Box sx={{ width: 30, height: 30, borderRadius: 1.5, bgcolor: '#eef1f6', display: 'grid', placeItems: 'center' }}>
+              <Box sx={{ width: 30, height: 30, borderRadius: 1.5, bgcolor: '#EFEBE6', display: 'grid', placeItems: 'center' }}>
                 <History sx={{ fontSize: 17, color: '#64748b' }} />
               </Box>
               <Typography variant="subtitle1" fontWeight={800} sx={{ color: INK }}>Visitas anteriores</Typography>

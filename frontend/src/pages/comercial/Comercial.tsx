@@ -159,8 +159,8 @@ export default function Comercial() {
                         <YAxis />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="ventas" fill="#1565c0" name="Ventas Reales" />
-                        <Bar dataKey="cuota" fill="#90caf9" name="Cuota" />
+                        <Bar dataKey="ventas" fill="#584F46" name="Ventas Reales" />
+                        <Bar dataKey="cuota" fill="#D8D2CB" name="Cuota" />
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>

@@ -59,7 +59,7 @@ const NIVEL_PAL: Record<string, PalEntry> = {
 };
 function nivPal(nivel: string): PalEntry {
   return NIVEL_PAL[nivel]
-    ?? { color: '#546e7a', light: '#eceff1', fill: '#cfd8dc', grad: 'linear-gradient(135deg,#37474f,#546e7a)', label: nivel };
+    ?? { color: '#546e7a', light: '#EDE9E4', fill: '#cfd8dc', grad: 'linear-gradient(135deg,#37474f,#546e7a)', label: nivel };
 }
 
 // ── descripciones de cuadrante ────────────────────────────────────────────────
@@ -148,7 +148,7 @@ const MatrizTooltip = ({ active, payload }: { active?: boolean; payload?: { payl
         </Box>
         <Box>
           <Typography fontSize="0.66rem" color="text.secondary">Receptividad</Typography>
-          <Typography fontWeight={800} fontSize="0.88rem" color="#1565c0">{Number(d.score_receptividad).toFixed(1)}</Typography>
+          <Typography fontWeight={800} fontSize="0.88rem" color="#584F46">{Number(d.score_receptividad).toFixed(1)}</Typography>
         </Box>
       </Box>
       <Chip label={pal.label} size="small" sx={{ bgcolor: pal.light, color: pal.color, fontWeight: 800, fontSize: '0.7rem', height: 22, mb: 0.5 }} />
@@ -184,7 +184,7 @@ function KpiRing({ value, color, label, caption }: { value: number; color: strin
               <Pie data={[{ v: pct }, { v: 100 - pct }]} dataKey="v" cx="50%" cy="50%"
                 innerRadius={18} outerRadius={26} startAngle={90} endAngle={-270} stroke="none" isAnimationActive={false}>
                 <Cell fill={color} />
-                <Cell fill="#e8eaf6" />
+                <Cell fill="#EFEBE6" />
               </Pie>
             </PieChart>
           </ResponsiveContainer>
@@ -346,7 +346,7 @@ export default function Lsii() {
   return (
     <Box>
       {/* Encabezado */}
-      <Box sx={{ background: 'linear-gradient(135deg,#686158 0%,#1565c0 60%,#0288d1 100%)', borderRadius: 3, p: { xs: 2, md: 2.5 }, mb: 3, color: '#fff', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+      <Box sx={{ background: 'linear-gradient(135deg,#686158 0%,#584F46 60%,#686158 100%)', borderRadius: 3, p: { xs: 2, md: 2.5 }, mb: 3, color: '#fff', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Box sx={{ width: 48, height: 48, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <Groups sx={{ fontSize: 28, color: '#fff' }} />
         </Box>
@@ -431,7 +431,7 @@ export default function Lsii() {
       {/* Tabs */}
       <Box mb={3}>
         <Tabs value={tab} onChange={(_, v) => setTab(v as number)} variant="scrollable" scrollButtons="auto"
-          sx={{ borderBottom: '3px solid #1565c0', '& .MuiTab-root': { bgcolor: '#bbdefb', borderTopLeftRadius: 8, borderTopRightRadius: 8, mr: 0.5, color: '#1565c0', fontWeight: 600, minHeight: 40, fontSize: 13, textTransform: 'none', '&.Mui-selected': { bgcolor: '#1565c0', color: '#fff', fontWeight: 700 }, '&:hover:not(.Mui-selected)': { bgcolor: '#90caf9' } }, '& .MuiTabs-indicator': { display: 'none' } }}>
+          sx={{ borderBottom: '3px solid #584F46', '& .MuiTab-root': { bgcolor: '#D8D2CB', borderTopLeftRadius: 8, borderTopRightRadius: 8, mr: 0.5, color: '#584F46', fontWeight: 600, minHeight: 40, fontSize: 13, textTransform: 'none', '&.Mui-selected': { bgcolor: '#584F46', color: '#fff', fontWeight: 700 }, '&:hover:not(.Mui-selected)': { bgcolor: '#D8D2CB' } }, '& .MuiTabs-indicator': { display: 'none' } }}>
           <Tab label="Matriz de Desarrollo" />
           {puedeEvaluar && <Tab label="Nueva Evaluacion" />}
         </Tabs>
@@ -452,12 +452,12 @@ export default function Lsii() {
               <Grid item xs={6} sm={3}>
                 <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, height: '100%' }}>
                   <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                    <Box sx={{ width: 48, height: 48, borderRadius: '50%', bgcolor: '#e3f2fd', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Groups sx={{ color: '#1565c0', fontSize: 24 }} />
+                    <Box sx={{ width: 48, height: 48, borderRadius: '50%', bgcolor: '#F4F1EE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <Groups sx={{ color: '#584F46', fontSize: 24 }} />
                     </Box>
                     <Box>
                       <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.58rem', color: 'text.secondary', display: 'block', letterSpacing: 0.5 }}>Colaboradores</Typography>
-                      <Typography fontWeight={900} fontSize="1.7rem" color="#1565c0" sx={{ lineHeight: 1.1 }}>{resumen?.total}</Typography>
+                      <Typography fontWeight={900} fontSize="1.7rem" color="#584F46" sx={{ lineHeight: 1.1 }}>{resumen?.total}</Typography>
                       <Typography variant="caption" color="text.secondary">Evaluados</Typography>
                     </Box>
                   </CardContent>
@@ -467,7 +467,7 @@ export default function Lsii() {
                 <KpiRing value={resumen!.promedioDesempeno} color="#00695c" label="Desempeno Promedio" caption="Promedio del equipo" />
               </Grid>
               <Grid item xs={6} sm={3}>
-                <KpiRing value={resumen!.promedioReceptividad} color="#1565c0" label="Receptividad Promedio" caption="Promedio del equipo" />
+                <KpiRing value={resumen!.promedioReceptividad} color="#584F46" label="Receptividad Promedio" caption="Promedio del equipo" />
               </Grid>
               <Grid item xs={6} sm={3}>
                 <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, height: '100%' }}>
@@ -491,7 +491,7 @@ export default function Lsii() {
             <Grid container spacing={3} mb={3} alignItems="stretch">
               <Grid item xs={12} md={8}>
                 <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  <Box sx={{ background: 'linear-gradient(135deg,#686158,#1565c0)', px: 2.5, py: 1.5, borderTopLeftRadius: 8, borderTopRightRadius: 8, display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
+                  <Box sx={{ background: 'linear-gradient(135deg,#686158,#584F46)', px: 2.5, py: 1.5, borderTopLeftRadius: 8, borderTopRightRadius: 8, display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
                     <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.92rem', letterSpacing: 0.5, flexGrow: 1 }}>MATRIZ LSII - DESEMPENO x RECEPTIVIDAD</Typography>
                     <Chip label={`${resumen?.total} VMs`} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.18)', color: '#fff', fontWeight: 700, fontSize: '0.72rem' }} />
                   </Box>
@@ -501,7 +501,7 @@ export default function Lsii() {
                     <Box sx={{ width: '100%', maxWidth: 700 }}>
                       <ResponsiveContainer width="100%" aspect={1}>
                       <ScatterChart margin={{ top: 24, right: 32, left: 8, bottom: 30 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e8eaf6" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#EFEBE6" />
                         {/* Sin reversed: Y alto arriba = alto desempeno
                             D2 bl (x<80,y<80)  |  D1 br (x>=80,y<80)
                             D3 tl (x<80,y>=80) |  D4 tr (x>=80,y>=80) */}
@@ -589,7 +589,7 @@ export default function Lsii() {
                             <Typography fontSize="0.72rem" sx={{ color: '#00695c', fontWeight: 800 }}>
                               D {Number(m.score_desempeno).toFixed(1)}
                             </Typography>
-                            <Typography fontSize="0.72rem" sx={{ color: '#1565c0', fontWeight: 800 }}>
+                            <Typography fontSize="0.72rem" sx={{ color: '#584F46', fontWeight: 800 }}>
                               R {Number(m.score_receptividad).toFixed(1)}
                             </Typography>
                           </Box>
@@ -644,7 +644,7 @@ export default function Lsii() {
               <Grid item xs={12} md={4}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, height: '100%' }}>
                   <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, flex: 1 }}>
-                    <Box sx={{ background: 'linear-gradient(135deg,#686158,#283593)', px: 2.5, py: 1.2, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}>
+                    <Box sx={{ background: 'linear-gradient(135deg,#686158,#4A433C)', px: 2.5, py: 1.2, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}>
                       <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.85rem', letterSpacing: 0.5 }}>DISTRIBUCION POR NIVEL</Typography>
                     </Box>
                     <Box sx={{ minHeight: 210, p: 1 }}>
@@ -676,7 +676,7 @@ export default function Lsii() {
                     <Box sx={{ minHeight: 190, p: 1, pt: 2 }}>
                       <ResponsiveContainer width="100%" height={190}>
                         <BarChart data={distribucionData} margin={{ top: 18, right: 8, left: -22, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e8eaf6" />
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#EFEBE6" />
                           <XAxis dataKey="nivel" tick={{ fontSize: 11, fontWeight: 700 }} />
                           <YAxis allowDecimals={false} width={28} tick={{ fontSize: 10, fill: '#78909c' }} />
                           <RTooltip formatter={(v: number, _n: string, p: { payload: typeof distribucionData[0] }) => [v, p?.payload?.name]} />
@@ -693,13 +693,13 @@ export default function Lsii() {
 
               <Grid item xs={12} md={8}>
                 <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  <Box sx={{ background: 'linear-gradient(135deg,#686158,#1565c0)', px: 2.5, py: 1.5, borderTopLeftRadius: 8, borderTopRightRadius: 8, flexShrink: 0 }}>
+                  <Box sx={{ background: 'linear-gradient(135deg,#686158,#584F46)', px: 2.5, py: 1.5, borderTopLeftRadius: 8, borderTopRightRadius: 8, flexShrink: 0 }}>
                     <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.92rem', letterSpacing: 0.5 }}>DETALLE POR COLABORADOR</Typography>
                   </Box>
                   <TableContainer sx={{ flex: 1 }}>
                     <Table size="small" stickyHeader>
                       <TableHead>
-                        <TableRow sx={{ '& th': { bgcolor: '#f5f7fa', borderBottom: '2px solid #e0e7ef', color: 'text.secondary', fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', py: 1 } }}>
+                        <TableRow sx={{ '& th': { bgcolor: '#F6F4F2', borderBottom: '2px solid #e0e7ef', color: 'text.secondary', fontWeight: 700, fontSize: '0.68rem', textTransform: 'uppercase', py: 1 } }}>
                           <TableCell>Colaborador</TableCell>
                           <TableCell>Desempeno</TableCell>
                           <TableCell>Receptividad</TableCell>
@@ -731,9 +731,9 @@ export default function Lsii() {
                               </TableCell>
                               <TableCell sx={{ py: 0.8 }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, minWidth: 90 }}>
-                                  <Typography fontWeight={700} fontSize="0.76rem" sx={{ minWidth: 32, color: '#1565c0' }}>{Number(r.score_receptividad).toFixed(1)}</Typography>
+                                  <Typography fontWeight={700} fontSize="0.76rem" sx={{ minWidth: 32, color: '#584F46' }}>{Number(r.score_receptividad).toFixed(1)}</Typography>
                                   <LinearProgress variant="determinate" value={Math.min(100, Number(r.score_receptividad))}
-                                    sx={{ flex: 1, height: 5, borderRadius: 3, bgcolor: '#e3f2fd', '& .MuiLinearProgress-bar': { bgcolor: '#1565c0', borderRadius: 3 } }} />
+                                    sx={{ flex: 1, height: 5, borderRadius: 3, bgcolor: '#F4F1EE', '& .MuiLinearProgress-bar': { bgcolor: '#584F46', borderRadius: 3 } }} />
                                 </Box>
                               </TableCell>
                               <TableCell align="center" sx={{ py: 0.8 }}>
@@ -767,7 +767,7 @@ export default function Lsii() {
         <Grid container spacing={3}>
           <Grid item xs={12} md={8}>
             <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2 }}>
-              <Box sx={{ background: 'linear-gradient(135deg,#686158,#1565c0)', px: 2.5, py: 1.5, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}>
+              <Box sx={{ background: 'linear-gradient(135deg,#686158,#584F46)', px: 2.5, py: 1.5, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}>
                 <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.92rem', letterSpacing: 0.5 }}>EVALUACION DE RECEPTIVIDAD / COMPROMISO</Typography>
                 <Typography sx={{ color: 'rgba(255,255,255,0.82)', fontSize: '0.78rem', mt: 0.3 }}>Seleccione el comportamiento que mejor describe al colaborador en cada dimension</Typography>
               </Box>
@@ -793,13 +793,13 @@ export default function Lsii() {
                 )}
 
                 {dimensiones.length > 0 && (
-                  <Box mb={2.5} sx={{ p: 1.5, bgcolor: '#f8fafd', borderRadius: 2, border: '1px solid #e0e7ef' }}>
+                  <Box mb={2.5} sx={{ p: 1.5, bgcolor: '#F9F8F6', borderRadius: 2, border: '1px solid #e0e7ef' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                       <Typography variant="caption" fontWeight={700} color="text.secondary">Progreso de evaluacion</Typography>
-                      <Typography variant="caption" fontWeight={800} color={completadas === dimensiones.length ? '#00695c' : '#1565c0'}>{completadas} / {dimensiones.length}</Typography>
+                      <Typography variant="caption" fontWeight={800} color={completadas === dimensiones.length ? '#00695c' : '#584F46'}>{completadas} / {dimensiones.length}</Typography>
                     </Box>
                     <LinearProgress variant="determinate" value={(completadas / dimensiones.length) * 100}
-                      sx={{ height: 8, borderRadius: 4, bgcolor: '#e3f2fd', '& .MuiLinearProgress-bar': { bgcolor: completadas === dimensiones.length ? '#00695c' : '#1565c0', borderRadius: 4 } }} />
+                      sx={{ height: 8, borderRadius: 4, bgcolor: '#F4F1EE', '& .MuiLinearProgress-bar': { bgcolor: completadas === dimensiones.length ? '#00695c' : '#584F46', borderRadius: 4 } }} />
                   </Box>
                 )}
 
@@ -810,10 +810,10 @@ export default function Lsii() {
                     const sel = selecciones[dim.dimension_codigo] != null;
                     const selectedOpId = selecciones[dim.dimension_codigo];
                     return (
-                      <Box key={dim.dimension_codigo} sx={{ mb: 2, borderRadius: 2, border: `1.5px solid ${sel ? '#1565c040' : '#e0e7ef'}`, overflow: 'hidden', transition: 'border-color 0.2s' }}>
+                      <Box key={dim.dimension_codigo} sx={{ mb: 2, borderRadius: 2, border: `1.5px solid ${sel ? '#584F4640' : '#e0e7ef'}`, overflow: 'hidden', transition: 'border-color 0.2s' }}>
                         {/* Cabecera de dimensión */}
-                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, px: 2, py: 1.2, bgcolor: sel ? '#eef4fd' : '#f8fafd', borderBottom: '1px solid #e8eaf6' }}>
-                          <Box sx={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, mt: 0.1, bgcolor: sel ? '#1565c0' : '#e0e7ef', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, px: 2, py: 1.2, bgcolor: sel ? '#F4F1EE' : '#F9F8F6', borderBottom: '1px solid #EFEBE6' }}>
+                          <Box sx={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, mt: 0.1, bgcolor: sel ? '#584F46' : '#e0e7ef', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Typography sx={{ color: sel ? '#fff' : '#546e7a', fontWeight: 900, fontSize: '0.65rem' }}>{idx + 1}</Typography>
                           </Box>
                           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -822,7 +822,7 @@ export default function Lsii() {
                               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.35, mt: 0.2 }}>{dim.dimension_descripcion}</Typography>
                             )}
                           </Box>
-                          {sel && <CheckCircle sx={{ color: '#1565c0', fontSize: 18, flexShrink: 0, mt: 0.1 }} />}
+                          {sel && <CheckCircle sx={{ color: '#584F46', fontSize: 18, flexShrink: 0, mt: 0.1 }} />}
                         </Box>
                         {/* Opciones como filas */}
                         {dim.opciones.map((op, oi) => {
@@ -834,16 +834,16 @@ export default function Lsii() {
                                 display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 0.9,
                                 cursor: 'pointer',
                                 bgcolor: isSelected ? '#ddeeff' : 'transparent',
-                                borderLeft: `3px solid ${isSelected ? '#1565c0' : 'transparent'}`,
+                                borderLeft: `3px solid ${isSelected ? '#584F46' : 'transparent'}`,
                                 borderBottom: oi < dim.opciones.length - 1 ? '1px solid #f0f2f5' : 'none',
                                 transition: 'background 0.15s, border-color 0.15s',
-                                '&:hover': { bgcolor: isSelected ? '#cce4f7' : '#f5f7fa' },
+                                '&:hover': { bgcolor: isSelected ? '#cce4f7' : '#F6F4F2' },
                               }}>
                               {/* Dot radio personalizado */}
                               <Box sx={{
                                 width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
-                                border: `2px solid ${isSelected ? '#1565c0' : '#b0bec5'}`,
-                                bgcolor: isSelected ? '#1565c0' : 'transparent',
+                                border: `2px solid ${isSelected ? '#584F46' : '#b0bec5'}`,
+                                bgcolor: isSelected ? '#584F46' : 'transparent',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 transition: 'all 0.15s',
                               }}>
@@ -871,7 +871,7 @@ export default function Lsii() {
 
                 <Button variant="contained" disabled={!formListo || mutEvaluar.isPending || esSoloLectura} size="large" fullWidth
                   onClick={() => mutEvaluar.mutate()}
-                  sx={{ borderRadius: 2, fontWeight: 700, py: 1.2, background: formListo ? 'linear-gradient(135deg,#686158,#1565c0)' : undefined }}>
+                  sx={{ borderRadius: 2, fontWeight: 700, py: 1.2, background: formListo ? 'linear-gradient(135deg,#686158,#584F46)' : undefined }}>
                   {mutEvaluar.isPending ? 'Registrando...' : 'Registrar Evaluacion LSII'}
                 </Button>
               </CardContent>
@@ -933,9 +933,9 @@ export default function Lsii() {
                           </Box>
                         </Grid>
                         <Grid item xs={6}>
-                          <Box sx={{ p: 1, bgcolor: '#e3f2fd', borderRadius: 1.5, textAlign: 'center' }}>
+                          <Box sx={{ p: 1, bgcolor: '#F4F1EE', borderRadius: 1.5, textAlign: 'center' }}>
                             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem', display: 'block' }}>Receptividad</Typography>
-                            <Typography fontWeight={800} color="#1565c0" fontSize="1rem">{Number(resultado.score_receptividad).toFixed(1)}</Typography>
+                            <Typography fontWeight={800} color="#584F46" fontSize="1rem">{Number(resultado.score_receptividad).toFixed(1)}</Typography>
                           </Box>
                         </Grid>
                       </Grid>

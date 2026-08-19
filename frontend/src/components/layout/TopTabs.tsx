@@ -35,9 +35,15 @@ export default function TopTabs({ items, seccion }: { items: NavItem[]; seccion?
       sx={{
         // Sin fondo propio: hereda el degradado del AppBar. Si se pintara aparte,
         // el degradado se reiniciaría aquí y se vería un corte a media barra.
+        // Centradas: la fila suele tener 4-8 ítems y alineada a la izquierda dejaba un
+        // vacío grande a la derecha en escritorio. `justifyContent: center` con
+        // `margin: auto` en el contenido permite centrar y seguir pudiendo desplazar
+        // cuando no caben — un `center` a secas recorta el primer ítem al desbordar.
         display: 'flex', gap: 0.5, overflowX: 'auto', bgcolor: 'transparent',
+        justifyContent: 'center',
+        '& > *': { flexShrink: 0 },
         borderTop: `1px solid ${NAV_BORDE}`,
-        px: 1,
+        px: 1, minHeight: 0,
         // La barra de scroll horizontal en escritorio ensucia y ocupa alto; el
         // desplazamiento sigue disponible con rueda, gesto y teclado.
         scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' },

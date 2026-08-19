@@ -34,7 +34,7 @@ interface Componente { ComponenteKey: number; CodigoComponente: string; NombreCo
 interface Regla { ReglaKey: number; CodigoComponente: string; NombreComponente: string; CodigoRegla: string; ValorMinimo: number | null; ValorMaximo: number | null; ValorTexto: string | null; Criterio: number; PuntajePct: number; PuntajePctDisplay: number; Activo: boolean; CodigoPais: string; }
 
 const STEPS = ['Seleccionar archivo', 'Seleccionar ciclo', 'Cargar y calcular'];
-const CLASE_COLORS: Record<string, string> = { A: '#1b5e20', B: '#1565c0', C: '#e65100', D: '#6a1b9a' };
+const CLASE_COLORS: Record<string, string> = { A: '#1b5e20', B: '#584F46', C: '#e65100', D: '#6a1b9a' };
 
 // ── Sub-componente: Pestaña Carga Excel ───────────────────────────────────────
 function TabCarga() {
@@ -452,7 +452,7 @@ function TabReglas() {
                 <TableCell>{r.ValorTexto || '—'}</TableCell>
                 <TableCell align="right">{r.ValorMinimo ?? '—'}</TableCell>
                 <TableCell align="right">{r.ValorMaximo ?? '—'}</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 700, color: '#1565c0' }}>
+                <TableCell align="center" sx={{ fontWeight: 700, color: '#584F46' }}>
                   {r.PuntajePctDisplay}%
                 </TableCell>
                 <TableCell>{r.CodigoPais}</TableCell>

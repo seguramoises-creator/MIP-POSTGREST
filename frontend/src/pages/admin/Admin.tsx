@@ -1186,7 +1186,7 @@ function CiclosPorPaisTab() {
 
       {/* Días no laborables (feriados) del país — se excluyen de los días laborables */}
       {paisCodigo && (
-        <Card variant="outlined" sx={{ mb: 2, bgcolor: '#f5f8ff', borderColor: '#bbdefb' }}>
+        <Card variant="outlined" sx={{ mb: 2, bgcolor: '#F7F5F2', borderColor: '#D8D2CB' }}>
           <CardContent sx={{ py: 1.5 }}>
             <Typography variant="subtitle2" fontWeight={700} gutterBottom>
               Días no laborables (feriados) — {paisNombre(String(paisCodigo))}
@@ -1846,7 +1846,7 @@ export default function Admin() {
               mb: 0,
               borderBottom: '3px solid #686158',
               '& .MuiTab-root': {
-                bgcolor: '#bbdefb',
+                bgcolor: '#D8D2CB',
                 borderTopLeftRadius: 8,
                 borderTopRightRadius: 8,
                 mr: 0.5,

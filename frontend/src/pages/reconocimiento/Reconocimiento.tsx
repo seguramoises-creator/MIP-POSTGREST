@@ -45,7 +45,7 @@ function Flag({ value }: { value: number }) {
 /* ── pódium ───────────────────────────────────────────────── */
 const PODIUM_CFG = [
   { pos: 1, icon: '🏆', label: 'Oro',    color: '#e65100', border: '#f9a825', bg: 'linear-gradient(160deg,#fffde7,#fff8e1)', shadow: '#f9a82566', large: true },
-  { pos: 2, icon: '🥈', label: 'Plata',  color: '#455a64', border: '#90a4ae', bg: 'linear-gradient(160deg,#eceff1,#f5f5f5)', shadow: '#90a4ae44' },
+  { pos: 2, icon: '🥈', label: 'Plata',  color: '#455a64', border: '#90a4ae', bg: 'linear-gradient(160deg,#EDE9E4,#f5f5f5)', shadow: '#90a4ae44' },
   { pos: 3, icon: '🥉', label: 'Bronce', color: '#bf360c', border: '#ff7043', bg: 'linear-gradient(160deg,#fff3e0,#fbe9e7)', shadow: '#ff704344' },
 ];
 
@@ -225,7 +225,7 @@ export default function Reconocimiento() {
       </Card>
 
       {mensaje && (
-        <Card elevation={0} sx={{ mb: 2, borderRadius: 2, bgcolor: '#e3f2fd', border: '1px solid #90caf9' }}>
+        <Card elevation={0} sx={{ mb: 2, borderRadius: 2, bgcolor: '#F4F1EE', border: '1px solid #D8D2CB' }}>
           <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
             <Typography variant="body2">{mensaje}</Typography>
           </CardContent>
@@ -252,7 +252,7 @@ export default function Reconocimiento() {
               <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 16, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
                 Mapa Integral de Productividad
               </Typography>
-              <Typography sx={{ color: '#c5cae9', fontWeight: 700, fontSize: 16, letterSpacing: '1px', textTransform: 'uppercase', mt: 0.3 }}>
+              <Typography sx={{ color: '#D8D2CB', fontWeight: 700, fontSize: 16, letterSpacing: '1px', textTransform: 'uppercase', mt: 0.3 }}>
                 Resultados Acumulados{cicloNum ? ` Ciclo ${cicloNum} ${cicloAnio}` : ''}
               </Typography>
             </Box>
@@ -275,7 +275,7 @@ export default function Reconocimiento() {
             <TableContainer>
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ bgcolor: '#f5f7fa' }}>
+                  <TableRow sx={{ bgcolor: '#F6F4F2' }}>
                     {[
                       { label: 'Rk Ciclo', align: 'center' as const, w: 80 },
                       { label: 'Linea',    align: 'left'   as const },

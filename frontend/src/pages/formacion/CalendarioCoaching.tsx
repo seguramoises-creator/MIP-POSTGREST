@@ -29,7 +29,7 @@ const ROLES_ESCRITURA = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO'];
 // solo consultarlas (GET, RequireLectura).
 const ROLES_CONFIG = ['ADMIN', 'GERENTE_PRODUCTIVIDAD'];
 const CUAD_COLOR: Record<string, string> = {
-  D1: '#c62828', D2: '#e65100', D3: '#1565c0', D4: '#2e7d32',
+  D1: '#c62828', D2: '#e65100', D3: '#584F46', D4: '#2e7d32',
 };
 
 export default function CalendarioCoaching() {

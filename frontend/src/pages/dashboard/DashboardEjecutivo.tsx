@@ -32,7 +32,7 @@ const SECTION_TITLE: React.CSSProperties = {
 
 function scoreColor(v: number): string {
   if (v >= 90) return '#2e7d32';
-  if (v >= 80) return '#1565c0';
+  if (v >= 80) return '#584F46';
   if (v >= 60) return '#f57f17';
   return '#c62828';
 }
@@ -148,7 +148,7 @@ function ConsolidadoCard({
         </Typography>
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.2, flex: 1 }}>
           {[
-            { label: 'Total RMs',    value: totalRms,                  color: '#1565c0',  size: 22 },
+            { label: 'Total RMs',    value: totalRms,                  color: '#584F46',  size: 22 },
             { label: 'Elegibles',    value: `${elegibles}`,            color: '#2e7d32',  size: 22,
               sub: `${pctElegibles.toFixed(1)}% del equipo` },
             { label: 'Máximo ciclo', value: `${scoreMax.toFixed(1)}%`, color: '#2e7d32',  size: 17 },
@@ -196,8 +196,8 @@ function TendenciaChart({ tendencia }: { tendencia: any[] }) {
         <AreaChart data={tendencia} margin={{ top: 22, right: 10, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#1565c0" stopOpacity={0.25} />
-              <stop offset="95%" stopColor="#1565c0" stopOpacity={0.02} />
+              <stop offset="5%" stopColor="#584F46" stopOpacity={0.25} />
+              <stop offset="95%" stopColor="#584F46" stopOpacity={0.02} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
@@ -211,17 +211,17 @@ function TendenciaChart({ tendencia }: { tendencia: any[] }) {
           <Area
             type="monotone"
             dataKey="score_promedio"
-            stroke="#1565c0"
+            stroke="#584F46"
             strokeWidth={2.5}
             fill="url(#areaGrad)"
-            dot={{ r: 5, fill: '#1565c0', stroke: '#fff', strokeWidth: 2 }}
+            dot={{ r: 5, fill: '#584F46', stroke: '#fff', strokeWidth: 2 }}
             activeDot={{ r: 7 }}
           >
             <LabelList
               dataKey="score_promedio"
               position="top"
               formatter={(v: number) => `${v.toFixed(1)}%`}
-              style={{ fontSize: 10, fontWeight: 700, fill: '#1565c0' }}
+              style={{ fontSize: 10, fontWeight: 700, fill: '#584F46' }}
             />
           </Area>
         </AreaChart>
@@ -231,7 +231,7 @@ function TendenciaChart({ tendencia }: { tendencia: any[] }) {
       <Box sx={{ display: 'flex', justifyContent: 'space-around' }}>
         {[
           { label: 'Mínimo ciclo', value: `${min.toFixed(1)}%`, color: '#c62828' },
-          { label: 'Promedio',     value: `${avg.toFixed(1)}%`, color: '#1565c0' },
+          { label: 'Promedio',     value: `${avg.toFixed(1)}%`, color: '#584F46' },
           { label: 'Máximo ciclo', value: `${max.toFixed(1)}%`, color: '#2e7d32' },
           { label: 'Crecimiento',  value: `${growth >= 0 ? '▲' : '▼'} ${Math.abs(growth).toFixed(1)} pp`, color: growth >= 0 ? '#2e7d32' : '#c62828' },
         ].map(stat => (
@@ -251,7 +251,7 @@ function TendenciaChart({ tendencia }: { tendencia: any[] }) {
 
 // ── Panel de distribución (donut + leyenda) ──────────────────────────────────
 
-const DIST_COLORS = ['#2e7d32', '#1565c0', '#f57f17', '#c62828'];
+const DIST_COLORS = ['#2e7d32', '#584F46', '#f57f17', '#c62828'];
 const DIST_LABELS = ['Excelente', 'Bueno', 'En Desarrollo', 'Crítico'];
 
 function DistribucionPanel({ dist, totalRms }: { dist: any; totalRms: number }) {
@@ -320,7 +320,7 @@ function RMRow({ rm, rank, isBottom }: { rm: any; rank: number; isBottom?: boole
   const pos = rm.posicion ?? rank;
   return (
     <TableRow hover>
-      <TableCell sx={{ py: 0.8, width: 32, fontWeight: 700, color: isBottom ? '#c62828' : '#1565c0', fontSize: 12 }}>
+      <TableCell sx={{ py: 0.8, width: 32, fontWeight: 700, color: isBottom ? '#c62828' : '#584F46', fontSize: 12 }}>
         #{pos}
       </TableCell>
       <TableCell sx={{ py: 0.8 }}>
@@ -631,11 +631,11 @@ export default function DashboardEjecutivo() {
                             <Radar
                               name="Real"
                               dataKey="real"
-                              stroke="#1976d2"
-                              fill="#1976d2"
+                              stroke="#686158"
+                              fill="#686158"
                               fillOpacity={0.22}
                               strokeWidth={2.2}
-                              dot={{ r: 3.5, fill: '#1976d2', strokeWidth: 0 }}
+                              dot={{ r: 3.5, fill: '#686158', strokeWidth: 0 }}
                             />
                           </RadarChart>
                         </ResponsiveContainer>
@@ -643,7 +643,7 @@ export default function DashboardEjecutivo() {
                         {/* Leyenda */}
                         <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, mt: 0.5 }}>
                           {[
-                            { color: '#1976d2', label: 'Real' },
+                            { color: '#686158', label: 'Real' },
                             { color: '#4caf50', label: 'Meta' },
                           ].map(l => (
                             <Box key={l.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
@@ -796,7 +796,7 @@ export default function DashboardEjecutivo() {
                       </Typography>
                       <Box sx={{ display: 'flex', justifyContent: 'space-around' }}>
                         {[
-                          { label: 'Total RMs',  value: total_rms,                        color: '#1565c0' },
+                          { label: 'Total RMs',  value: total_rms,                        color: '#584F46' },
                           { label: 'Elegibles',  value: d.total_elegibles ?? 0,           color: '#2e7d32' },
                           { label: 'IUP Prom.',  value: `${iupProm.toFixed(1)}%`,         color: scoreColor(iupProm) },
                         ].map(stat => (

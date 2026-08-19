@@ -27,12 +27,12 @@ import { api } from '../../services/api';
 // A = Teal esmeralda  B = Azul zafiro  C = Ámbar dorado  D = Gris acero
 const CAT_PAL: Record<string, { dark: string; mid: string; light: string; glow: string; text: string }> = {
   A: { dark: '#00695c', mid: '#00897b', light: '#e0f2f1', glow: '#00897b60', text: '#fff' },
-  B: { dark: '#686158', mid: '#283593', light: '#e8eaf6', glow: '#3949ab60', text: '#fff' },
+  B: { dark: '#686158', mid: '#4A433C', light: '#EFEBE6', glow: '#584F4660', text: '#fff' },
   C: { dark: '#e65100', mid: '#ef6c00', light: '#fff3e0', glow: '#f57c0060', text: '#fff' },
-  D: { dark: '#37474f', mid: '#455a64', light: '#eceff1', glow: '#546e7a60', text: '#fff' },
+  D: { dark: '#37474f', mid: '#455a64', light: '#EDE9E4', glow: '#546e7a60', text: '#fff' },
   '?': { dark: '#424242', mid: '#757575', light: '#f5f5f5', glow: '#9e9e9e40', text: '#fff' },
 };
-const CAT_COLORS = ['#00897b', '#283593', '#ef6c00', '#455a64', '#9e9e9e'];
+const CAT_COLORS = ['#00897b', '#4A433C', '#ef6c00', '#455a64', '#9e9e9e'];
 const CAT_LABEL: Record<string, string> = {
   A: 'Alto potencial',
   B: 'Potencial medio',
@@ -100,7 +100,7 @@ function CatChip({ cat }: { cat: string }) {
 
 function ScoreBar({ value }: { value: number }) {
   const pct = Math.min(100, Math.max(0, value));
-  const color = pct >= 70 ? '#00695c' : pct >= 50 ? '#283593' : pct >= 30 ? '#ef6c00' : '#455a64';
+  const color = pct >= 70 ? '#00695c' : pct >= 50 ? '#4A433C' : pct >= 30 ? '#ef6c00' : '#455a64';
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <Box sx={{ flex: 1, height: 6, bgcolor: '#e0e0e0', borderRadius: 3, overflow: 'hidden' }}>
@@ -129,7 +129,7 @@ function ComponenteRow({ key_ }: { key_: number }) {
       <Grid container spacing={1}>
         {comps.map((c) => {
           const pct = Math.min(100, Math.max(0, c.PuntajePct));
-          const color = pct >= 70 ? '#00695c' : pct >= 40 ? '#283593' : '#ef6c00';
+          const color = pct >= 70 ? '#00695c' : pct >= 40 ? '#4A433C' : '#ef6c00';
           const val = c.ValorEntradaTexto || (c.ValorEntradaNumero != null ? String(c.ValorEntradaNumero) : '—');
           return (
             <Grid item xs={12} sm={6} md={4} lg={2.4} key={c.CodigoComponente}>
@@ -248,7 +248,7 @@ export default function DetalleMedicos() {
         elevation={0}
         sx={{
           p: 2, mb: 3, border: '1px solid #e3e8f0', borderRadius: 3,
-          background: 'linear-gradient(135deg, #f0f4ff 0%, #fafbff 100%)',
+          background: 'linear-gradient(135deg, #F4F1EE 0%, #F9F8F6 100%)',
         }}
       >
         <Box display="flex" alignItems="center" gap={1} mb={1.5}>
@@ -333,20 +333,20 @@ export default function DetalleMedicos() {
               transition: 'all 0.2s ease',
               // ACTIVO cuando no hay categoría seleccionada
               ...(categoria === '' ? {
-                background: 'linear-gradient(135deg, #686158 0%, #283593 50%, #3949ab 100%)',
+                background: 'linear-gradient(135deg, #686158 0%, #4A433C 50%, #584F46 100%)',
                 color: '#fff',
                 border: '2px solid transparent',
-                boxShadow: '0 4px 14px #3949ab50',
+                boxShadow: '0 4px 14px #584F4650',
               } : {
-                background: '#f5f7fa',
+                background: '#F6F4F2',
                 color: '#78909c',
                 border: '2px solid #e0e4ea',
                 boxShadow: 'none',
                 '&:hover': {
-                  background: 'linear-gradient(135deg, #686158 0%, #3949ab 100%)',
+                  background: 'linear-gradient(135deg, #686158 0%, #584F46 100%)',
                   color: '#fff',
                   borderColor: 'transparent',
-                  boxShadow: '0 4px 14px #3949ab50',
+                  boxShadow: '0 4px 14px #584F4650',
                 },
               }),
             }}
@@ -355,8 +355,8 @@ export default function DetalleMedicos() {
               width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '0.62rem', fontWeight: 900,
-              bgcolor: categoria === '' ? 'rgba(255,255,255,0.22)' : '#e8eaf6',
-              color: categoria === '' ? '#fff' : '#3949ab',
+              bgcolor: categoria === '' ? 'rgba(255,255,255,0.22)' : '#EFEBE6',
+              color: categoria === '' ? '#fff' : '#584F46',
             }}>✦</Box>
             <Typography sx={{ fontSize: '0.77rem', fontWeight: 700, color: 'inherit', lineHeight: 1 }}>
               Todas
@@ -383,7 +383,7 @@ export default function DetalleMedicos() {
                     boxShadow: `0 4px 16px ${pal.glow}`,
                   } : {
                     // ── INACTIVO — gris neutro, nunca parece seleccionado ──
-                    background: '#f5f7fa',
+                    background: '#F6F4F2',
                     color: '#78909c',
                     border: '2px solid #e0e4ea',
                     boxShadow: 'none',
@@ -431,10 +431,10 @@ export default function DetalleMedicos() {
           <Grid item>
             <Box sx={{
               px: 2.5, py: 1.2, borderRadius: 2,
-              bgcolor: '#f0f4ff', border: '1px solid #c5cae9',
+              bgcolor: '#F4F1EE', border: '1px solid #D8D2CB',
               minWidth: 110, textAlign: 'center',
             }}>
-              <Typography sx={{ fontSize: '1.25rem', fontWeight: 800, color: '#1565c0', lineHeight: 1.2 }}>
+              <Typography sx={{ fontSize: '1.25rem', fontWeight: 800, color: '#584F46', lineHeight: 1.2 }}>
                 {statsGlobales.total_medicos.toLocaleString()}
               </Typography>
               <Typography sx={{ fontSize: '0.68rem', color: '#78909c', fontWeight: 600 }}>Total médicos</Typography>
@@ -542,7 +542,7 @@ export default function DetalleMedicos() {
         {/* Header degradado */}
         <Box
           sx={{
-            background: 'linear-gradient(135deg, #584F46 0%, #1565c0 40%, #1976d2 100%)',
+            background: 'linear-gradient(135deg, #584F46 0%, #584F46 40%, #686158 100%)',
             px: 3, py: 1.5,
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}
@@ -589,7 +589,7 @@ export default function DetalleMedicos() {
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small">
             <TableHead>
-              <TableRow sx={{ bgcolor: '#1976d2' }}>
+              <TableRow sx={{ bgcolor: '#686158' }}>
                 <TableCell sx={{ color: '#fff', fontWeight: 700, fontSize: '0.73rem', py: 0.8, minWidth: 30 }}></TableCell>
                 <TableCell sx={{ color: '#fff', fontWeight: 700, fontSize: '0.73rem', minWidth: 180 }}>MÉDICO</TableCell>
                 <TableCell sx={{ color: '#fff', fontWeight: 700, fontSize: '0.73rem', minWidth: 130 }}>ESPECIALIDAD</TableCell>
@@ -680,7 +680,7 @@ export default function DetalleMedicos() {
                     </TableRow>
                     {isExp && (
                       <TableRow key={`exp-${row.MedicoCategoriaKey}`}>
-                        <TableCell colSpan={9} sx={{ p: 0, bgcolor: '#f0f4f8' }}>
+                        <TableCell colSpan={9} sx={{ p: 0, bgcolor: '#F4F1EE' }}>
                           <Collapse in={isExp} unmountOnExit>
                             <Box sx={{ px: 2, py: 1 }}>
                               <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: pal.mid, mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>

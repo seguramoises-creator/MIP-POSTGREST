@@ -9,6 +9,6 @@ export const CAT_AV: Record<string, { bg: string; fg: string }> = {
 
 // `sx` listo para un <Chip>/<Avatar> con la categoría (fallback gris si viene vacía/desconocida).
 export const catChipSx = (categoria?: string | null) => {
-  const c = CAT_AV[(categoria || '').toUpperCase()] ?? { bg: '#ECEFF1', fg: '#546E7A' };
+  const c = CAT_AV[(categoria || '').toUpperCase()] ?? { bg: '#EDE9E4', fg: '#546E7A' };
   return { bgcolor: c.bg, color: c.fg, fontWeight: 700 };
 };

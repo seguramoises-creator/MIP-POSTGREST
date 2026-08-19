@@ -92,6 +92,38 @@ const theme = createTheme({
     // pleno quedarían idénticos a una alerta real y el usuario aprendería a ignorar el
     // rojo — perdiendo justo el color que debe respetar cuando algo falla de verdad.
     // El taupe los hace inconfundiblemente Mallén sin convertirlos en alarma.
+    // ETIQUETAS Y BORDES de los campos en el rojo de Mallén (petición del cliente).
+    //
+    // El borde en reposo va al 45 % de opacidad y no a rojo pleno: a plena intensidad
+    // toda la pantalla se vuelve un campo de alarmas y el ojo deja de distinguir qué
+    // pide atención. Al pasar el cursor sube al 70 % y al enfocar al rojo entero, así
+    // que el color sigue premiando la interacción en vez de gritar en reposo.
+    //
+    // La etiqueta usa el rojo OSCURO (#C81E2A, 5.71:1 sobre blanco): el rojo de marca
+    // como texto pequeño da 3.83:1 y no llega al mínimo accesible.
+    MuiOutlinedInput: {
+      styleOverrides: {
+        notchedOutline: { borderColor: 'rgba(246,52,64,0.45)' },
+        root: {
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(246,52,64,0.7)' },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#F63440', borderWidth: 2 },
+        },
+      },
+    },
+    // Va en MuiFormLabel y no solo en MuiInputLabel: InputLabel HEREDA de FormLabel, y
+    // la regla de FormLabel se emite después en la hoja, así que a igualdad de
+    // especificidad ganaba ella y la etiqueta seguía saliendo en taupe. Se descubrió
+    // midiendo el color ya renderizado, no leyendo el tema.
+    MuiFormLabel: {
+      styleOverrides: {
+        root: { color: '#C81E2A', '&.Mui-focused': { color: '#C81E2A' } },
+      },
+    },
+    MuiInputLabel: {
+      styleOverrides: {
+        root: { color: '#C81E2A', '&.Mui-focused': { color: '#C81E2A' } },
+      },
+    },
     MuiAlert: {
       styleOverrides: {
         // Avisos en el rojo de Mallén (decisión del cliente, reiterada). Fondo rosa muy

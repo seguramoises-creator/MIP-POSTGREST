@@ -38,7 +38,7 @@ const TH_BASE = {
 const TH_META = {
   fontSize: 10, fontWeight: 600, color: '#37474f',
   borderRight: '1px solid #e0e0e0', py: 0.3, px: 0.4,
-  textAlign: 'center' as const, bgcolor: '#eceff1',
+  textAlign: 'center' as const, bgcolor: '#EDE9E4',
 };
 const TD = {
   fontSize: 11, borderRight: '1px solid #e8e8e8', py: 0.4, px: 0.4,
@@ -46,7 +46,7 @@ const TD = {
 };
 
 const CICLO_COLORS = [
-  '#1565c0','#2e7d32','#6a1b9a','#e65100','#00838f',
+  '#584F46','#2e7d32','#6a1b9a','#e65100','#00838f',
   '#c62828','#f9a825','#37474f','#ad1457','#558b2f','#004d40',
 ];
 
@@ -355,7 +355,7 @@ function ProductividadGerencia() {
             <Typography sx={{ color:'#fff', fontWeight:800, fontSize:15, letterSpacing:'1.5px', textTransform:'uppercase' }}>
               Mapa Integral de Productividad
             </Typography>
-            <Typography sx={{ color:'#c5cae9', fontWeight:700, fontSize:15, letterSpacing:'1px', textTransform:'uppercase', mt:0.3 }}>
+            <Typography sx={{ color:'#D8D2CB', fontWeight:700, fontSize:15, letterSpacing:'1px', textTransform:'uppercase', mt:0.3 }}>
               Resultados{cicloNum ? ` Ciclo ${cicloNum} ${cicloAnio}` : ''}
             </Typography>
           </Box>
@@ -370,7 +370,7 @@ function ProductividadGerencia() {
                     {'RK\nACUM'}
                   </TableCell>
                   {/* RK CICLO */}
-                  <TableCell rowSpan={3} sx={{ ...TH_BASE, minWidth: 38, whiteSpace:'pre-line', bgcolor:'#1565c0' }}>
+                  <TableCell rowSpan={3} sx={{ ...TH_BASE, minWidth: 38, whiteSpace:'pre-line', bgcolor:'#584F46' }}>
                     {'RK\nCICLO'}
                   </TableCell>
                   {[
@@ -384,7 +384,7 @@ function ProductividadGerencia() {
                   ))}
                   {/* "CICLO N" spanning indicator columns + TOTAL */}
                   <TableCell colSpan={numIndCols + 1}
-                    sx={{ ...TH_BASE, bgcolor: '#1565c0', fontSize: 11, letterSpacing: '1px' }}>
+                    sx={{ ...TH_BASE, bgcolor: '#584F46', fontSize: 11, letterSpacing: '1px' }}>
                     {cicloNum ? `CICLO ${cicloNum}` : 'CICLO ACTUAL'}
                   </TableCell>
                   {/* TOTAL ACUM — columna fija fuera del span de ciclo */}
@@ -395,13 +395,13 @@ function ProductividadGerencia() {
                 </TableRow>
 
                 {/* ── Fila 2: nombres indicadores ────────── */}
-                <TableRow sx={{ bgcolor: '#1565c0' }}>
+                <TableRow sx={{ bgcolor: '#584F46' }}>
                   {indicadores.map(ind => {
                     const cfg = cfgByCode[ind];
                     const nombre = kpiNombre(ind, cfg?.nombre);
                     return (
                       <TableCell key={ind} colSpan={2}
-                        sx={{ ...TH_BASE, bgcolor: '#1565c0', minWidth: 76, textTransform:'uppercase', fontSize: 9 }}>
+                        sx={{ ...TH_BASE, bgcolor: '#584F46', minWidth: 76, textTransform:'uppercase', fontSize: 9 }}>
                         {nombre}
                       </TableCell>
                     );
@@ -413,10 +413,10 @@ function ProductividadGerencia() {
                 </TableRow>
 
                 {/* ── Fila 3: Resul / Ptos ───────────────── */}
-                <TableRow sx={{ bgcolor: '#1976d2' }}>
+                <TableRow sx={{ bgcolor: '#686158' }}>
                   {indicadores.map(ind => (
                     [['Resul', ind+'-r'], ['Ptos', ind+'-p']].map(([label, key]) => (
-                      <TableCell key={key} sx={{ ...TH_BASE, bgcolor: '#1976d2', fontSize: 11 }}>
+                      <TableCell key={key} sx={{ ...TH_BASE, bgcolor: '#686158', fontSize: 11 }}>
                         {label}
                       </TableCell>
                     ))
@@ -438,7 +438,7 @@ function ProductividadGerencia() {
                   <TableCell sx={{ ...TH_META, bgcolor: '#c8e6c9', fontWeight: 800, color:'#1b5e20' }}>
                     {indicadores.reduce((s, ind) => s + (Number(cfgByCode[ind]?.ponderacion_pct) || 0), 0).toFixed(0) || '—'}
                   </TableCell>
-                  <TableCell sx={{ ...TH_META, bgcolor: '#ede7f6' }} />
+                  <TableCell sx={{ ...TH_META, bgcolor: '#E9E4DD' }} />
                 </TableRow>
 
                 {/* ── Fila meta: Máximo % ────────────────── */}
@@ -452,7 +452,7 @@ function ProductividadGerencia() {
                     return <TableCell key={ind+'-mx'} colSpan={2} sx={{ ...TH_META }}>{v}</TableCell>;
                   })}
                   <TableCell sx={{ ...TH_META }} />
-                  <TableCell sx={{ ...TH_META, bgcolor: '#ede7f6' }} />
+                  <TableCell sx={{ ...TH_META, bgcolor: '#E9E4DD' }} />
                 </TableRow>
 
                 {/* ── Fila meta: Mínimo % ────────────────── */}
@@ -466,7 +466,7 @@ function ProductividadGerencia() {
                     return <TableCell key={ind+'-mn'} colSpan={2} sx={{ ...TH_META }}>{v}</TableCell>;
                   })}
                   <TableCell sx={{ ...TH_META }} />
-                  <TableCell sx={{ ...TH_META, bgcolor: '#ede7f6' }} />
+                  <TableCell sx={{ ...TH_META, bgcolor: '#E9E4DD' }} />
                 </TableRow>
               </TableHead>
 
@@ -544,13 +544,13 @@ function ProductividadGerencia() {
                         ];
                       })}
                       {/* TOTAL ciclo */}
-                      <TableCell sx={{ ...TD, bgcolor: '#e8eaf6' }}>
+                      <TableCell sx={{ ...TD, bgcolor: '#EFEBE6' }}>
                         {row.total != null
                           ? <Typography sx={{ fontSize:12, fontWeight:800, color:'#686158' }}>{Number(row.total).toFixed(1)}</Typography>
                           : <Typography sx={{ color:'text.disabled', fontSize:12 }}>—</Typography>}
                       </TableCell>
                       {/* TOTAL ACUM — suma de todos los ciclos */}
-                      <TableCell sx={{ ...TD, bgcolor: '#ede7f6' }}>
+                      <TableCell sx={{ ...TD, bgcolor: '#E9E4DD' }}>
                         {accumByRm[row.rm_id] != null && accumByRm[row.rm_id] > 0
                           ? <Typography sx={{ fontSize:12, fontWeight:800, color:'#4a148c' }}>{Number(accumByRm[row.rm_id]).toFixed(1)}</Typography>
                           : <Typography sx={{ color:'text.disabled', fontSize:12 }}>—</Typography>}

@@ -17,13 +17,13 @@ import { KPI_ORDEN, kpiNombre } from '../../constants/kpi';
 // ── helpers ───────────────────────────────────────────────────────────────────
 function catColor(v: number) {
   if (v >= 90) return '#2e7d32';
-  if (v >= 80) return '#1565c0';
+  if (v >= 80) return '#584F46';
   if (v >= 60) return '#ef6c00';
   return '#c62828';
 }
 function catInfo(v: number) {
   if (v >= 90) return { label: 'Excelente',    color: '#2e7d32', bg: '#e8f5e9' };
-  if (v >= 80) return { label: 'Bueno',         color: '#1565c0', bg: '#e3f2fd' };
+  if (v >= 80) return { label: 'Bueno',         color: '#584F46', bg: '#F4F1EE' };
   if (v >= 60) return { label: 'En Desarrollo', color: '#e65100', bg: '#fff3e0' };
   return              { label: 'Riesgo',        color: '#c62828', bg: '#ffebee' };
 }
@@ -37,7 +37,7 @@ function trendInfo(diff: number) {
 }
 
 // ── stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, color = '#1565c0', subColor }: {
+function StatCard({ label, value, sub, color = '#584F46', subColor }: {
   label: string; value: string | number; sub?: string; color?: string; subColor?: string;
 }) {
   return (
@@ -286,8 +286,8 @@ export default function Coaching() {
               sx={{ bgcolor: '#e8f5e9', color: '#2e7d32', fontWeight: 700, fontSize: '0.78rem',
                 height: 28, px: 0.5, border: '1px solid #a5d6a7' }} />
             <Chip label={`${dist.avgPts.toFixed(1)} pts promedio`} size="small"
-              sx={{ bgcolor: '#e3f2fd', color: '#1565c0', fontWeight: 700, fontSize: '0.78rem',
-                height: 28, px: 0.5, border: '1px solid #90caf9' }} />
+              sx={{ bgcolor: '#F4F1EE', color: '#584F46', fontWeight: 700, fontSize: '0.78rem',
+                height: 28, px: 0.5, border: '1px solid #D8D2CB' }} />
           </Box>
         )}
       </Box>
@@ -323,7 +323,7 @@ export default function Coaching() {
           { label: 'Total RMs',     value: dist?.total ?? '—',   sub: '— Equipo completo',  color: '#5c6bc0' },
           { label: 'Prom. MIP',     value: dist ? dist.avgPts.toFixed(1) : '—',
             sub: dist ? `${trendInfo(dist.avgPts - 80).simbolo} ${Math.abs(dist.avgPts - 80).toFixed(1)} pts` : '—',
-            color: dist ? catColor(dist.avgPts) : '#1565c0',
+            color: dist ? catColor(dist.avgPts) : '#584F46',
             subColor: dist ? trendInfo(dist.avgPts - 80).color : undefined },
           { label: 'Puntaje Máx.',  value: dist ? dist.maxPts.toFixed(1) : '—',
             sub: cicloNombre, color: dist ? catColor(dist.maxPts) : '#2e7d32' },
@@ -364,7 +364,7 @@ export default function Coaching() {
             <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2 }}>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <Box sx={{ width: 3, height: 20, bgcolor: '#1565c0', borderRadius: 2 }} />
+                  <Box sx={{ width: 3, height: 20, bgcolor: '#584F46', borderRadius: 2 }} />
                   <Typography variant="subtitle1" fontWeight={700}>
                     Scorecard Integral de Indicadores
                   </Typography>
@@ -377,7 +377,7 @@ export default function Coaching() {
                     margin={{ top: 4, right: 70, left: 4, bottom: 8 }}
                     barCategoryGap="28%"
                   >
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e8eaf6" />
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#EFEBE6" />
                     <XAxis
                       type="number"
                       domain={[0, xMax]}
@@ -394,7 +394,7 @@ export default function Coaching() {
                       axisLine={false}
                       tickLine={false}
                     />
-                    <Tooltip content={<ChartTooltip />} cursor={{ fill: '#f0f4ff' }} />
+                    <Tooltip content={<ChartTooltip />} cursor={{ fill: '#F4F1EE' }} />
                     {/* línea de referencia en 100% */}
                     <ReferenceLine x={100} stroke="#90a4ae" strokeDasharray="4 3"
                       label={{ value: 'Meta 100%', position: 'top', fontSize: 10, fill: '#90a4ae' }} />
@@ -424,7 +424,7 @@ export default function Coaching() {
                 <Box sx={{ display: 'flex', gap: 2, mt: 1.5, flexWrap: 'wrap', justifyContent: 'center' }}>
                   {[
                     { label: 'Excelente ≥ 90%',    color: '#2e7d32', bg: '#e8f5e9' },
-                    { label: 'Bueno 80–89%',        color: '#1565c0', bg: '#e3f2fd' },
+                    { label: 'Bueno 80–89%',        color: '#584F46', bg: '#F4F1EE' },
                     { label: 'En Desarrollo 60–79%',color: '#ef6c00', bg: '#fff3e0' },
                     { label: 'Riesgo < 60%',        color: '#c62828', bg: '#ffebee' },
                   ].map(cat => (
@@ -476,19 +476,19 @@ export default function Coaching() {
               <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, height: '100%' }}>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                    <Box sx={{ width: 3, height: 20, bgcolor: '#1565c0', borderRadius: 2 }} />
+                    <Box sx={{ width: 3, height: 20, bgcolor: '#584F46', borderRadius: 2 }} />
                     <Typography variant="subtitle1" fontWeight={700}>Distribución del Equipo</Typography>
                   </Box>
                   <DistCard label="Excelente"    count={dist.excelentes}   total={dist.total}
                     rangoLabel="≥ 90 puntos MIP"  color="#2e7d32" bg="#e8f5e9" miembros={dist.miembros.excelente} />
                   <DistCard label="Bueno"         count={dist.buenos}       total={dist.total}
-                    rangoLabel="80–89 puntos MIP" color="#1565c0" bg="#e3f2fd" miembros={dist.miembros.bueno} />
+                    rangoLabel="80–89 puntos MIP" color="#584F46" bg="#F4F1EE" miembros={dist.miembros.bueno} />
                   <DistCard label="En Desarrollo" count={dist.enDesarrollo} total={dist.total}
                     rangoLabel="60–79 puntos MIP" color="#e65100" bg="#fff3e0" miembros={dist.miembros.enDesarrollo} />
                   <DistCard label="Crítico"       count={dist.criticos}  total={dist.total}
                     rangoLabel="menor a 60 pts"   color="#c62828" bg="#ffebee" miembros={dist.miembros.critico} />
                   <Divider sx={{ my: 1.5 }} />
-                  <Box sx={{ p: 1.5, bgcolor: '#f8f9fa', borderRadius: 1.5, border: '1px solid #e8eaf6' }}>
+                  <Box sx={{ p: 1.5, bgcolor: '#f8f9fa', borderRadius: 1.5, border: '1px solid #EFEBE6' }}>
                     <Typography variant="caption"
                       sx={{ color: '#5c6bc0', fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.8px', fontSize: '0.6rem' }}>

@@ -36,7 +36,7 @@ const ROLES_ESCRITURA = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION'];
 const PRIORIDAD: Record<PrioridadBrecha, { label: string; color: string; bg: string; orden: number }> = {
   alta:        { label: 'Alta',        color: '#c62828', bg: '#ffebee', orden: 0 },
   media:       { label: 'Media',       color: '#e65100', bg: '#fff3e0', orden: 1 },
-  informativa: { label: 'Informativa', color: '#1565c0', bg: '#e3f2fd', orden: 2 },
+  informativa: { label: 'Informativa', color: '#584F46', bg: '#F4F1EE', orden: 2 },
 };
 
 // Etiqueta legible + ícono por regla. El texto explica en una línea qué causa

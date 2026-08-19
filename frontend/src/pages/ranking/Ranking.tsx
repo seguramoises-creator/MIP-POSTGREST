@@ -229,7 +229,7 @@ function RankingGerencia() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           {total > 0 && (
             <Chip label={total + ' RMs'} variant="outlined"
-              sx={{ fontWeight: 700, fontSize: 13, color: '#1565c0', borderColor: '#1565c0' }} />
+              sx={{ fontWeight: 700, fontSize: 13, color: '#584F46', borderColor: '#584F46' }} />
           )}
           {elegibles > 0 && (
             <Chip label={elegibles + ' elegibles'} variant="outlined"
@@ -324,7 +324,7 @@ function RankingGerencia() {
               letterSpacing: '1.5px', textTransform: 'uppercase' }}>
               Mapa Integral de Productividad
             </Typography>
-            <Typography sx={{ color: '#c5cae9', fontWeight: 700, fontSize: 16,
+            <Typography sx={{ color: '#D8D2CB', fontWeight: 700, fontSize: 16,
               letterSpacing: '1px', textTransform: 'uppercase', mt: 0.3 }}>
               Resultados Acumulados{cicloNum ? ` Ciclo ${cicloNum} ${cicloAnio}` : ''}
             </Typography>
@@ -349,7 +349,7 @@ function RankingGerencia() {
           <TableContainer>
             <Table size="small" sx={{ '& .MuiTableCell-root': { py: '2px', px: '6px' } }}>
               <TableHead>
-                <TableRow sx={{ bgcolor: '#f5f7fa' }}>
+                <TableRow sx={{ bgcolor: '#F6F4F2' }}>
                   {[
                     { label: 'Rk',    align: 'center' as const, w: 36 },
                     { label: 'Linea', align: 'left'   as const        },
@@ -415,7 +415,7 @@ function RankingGerencia() {
               {/* ── Fila de promedios ───────────────────────── */}
               {promedios && (
                 <TableFooter>
-                  <TableRow sx={{ bgcolor: '#c5cae9', borderTop: '4px solid #686158' }}>
+                  <TableRow sx={{ bgcolor: '#D8D2CB', borderTop: '4px solid #686158' }}>
                     <TableCell align="center"
                       sx={{ fontWeight: 900, fontSize: 10, color: '#686158', lineHeight: 1.1 }}>
                       Ø
@@ -464,7 +464,7 @@ function RankingGerencia() {
         /* ── TABLA SIMPLE (Regional / Anual) ───────────────────── */
         <TableContainer component={Paper} elevation={2} sx={{ borderRadius: 2 }}>
           <Table size="small">
-            <TableHead sx={{ bgcolor: '#f5f7fa' }}>
+            <TableHead sx={{ bgcolor: '#F6F4F2' }}>
               <TableRow>
                 {['#', 'Linea', 'RM', ...(tab === 1 ? ['País'] : []), 'Score'].map(h => (
                   <TableCell key={h}

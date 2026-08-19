@@ -75,7 +75,7 @@ function Gauge({ pct, color, label, metrica, titulo, sub, paisCodigo }: { pct: n
       <CardContent sx={{ textAlign: 'center' }}>
         <Box sx={{ position: 'relative', width: 130, height: 130, mx: 'auto' }}>
           <svg viewBox="0 0 130 130" width={130} height={130} style={{ transform: 'rotate(-90deg)' }}>
-            <circle cx={65} cy={65} r={r} fill="none" stroke="#eceff1" strokeWidth={11} />
+            <circle cx={65} cy={65} r={r} fill="none" stroke="#EDE9E4" strokeWidth={11} />
             <circle cx={65} cy={65} r={r} fill="none" stroke={color} strokeWidth={11} strokeLinecap="round"
                     strokeDasharray={circ} strokeDashoffset={off} />
           </svg>
@@ -187,7 +187,7 @@ export default function CoberturaDashboard() {
               <Stack direction="row" spacing={0.75} alignItems="center"
                      sx={{ color: '#686158', width: { xs: '100%', md: 'auto' },
                            pb: { xs: 1, md: 0 }, mb: { xs: 0.5, md: 0 },
-                           borderBottom: { xs: '1px solid #EEF0F4', md: 'none' } }}>
+                           borderBottom: { xs: '1px solid #EDE9E4', md: 'none' } }}>
                 <FilterList fontSize="small" />
                 <Typography variant="body2" sx={{ fontWeight: 700, letterSpacing: '0.02em' }}>Filtrar</Typography>
               </Stack>

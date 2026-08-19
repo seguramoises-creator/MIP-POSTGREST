@@ -19,7 +19,7 @@ import {
 } from '../../services/formacion.service';
 
 const DPAE: Record<number, { label: string; color: string }> = {
-  4: { label: 'Excelente (E)', color: '#2e7d32' }, 3: { label: 'Adecuado (A)', color: '#1565c0' },
+  4: { label: 'Excelente (E)', color: '#2e7d32' }, 3: { label: 'Adecuado (A)', color: '#584F46' },
   2: { label: 'En proceso (P)', color: '#e65100' }, 1: { label: 'Deficiente (D)', color: '#c62828' },
 };
 

@@ -31,7 +31,7 @@ import { useCicloStore } from '../../store/ciclo.store';
 // A = Teal esmeralda  B = Azul zafiro  C = Ámbar dorado  D = Gris acero
 const COL_COLORS = {
   A: { bg: '#00695c', light: '#e0f2f1' },
-  B: '#283593',
+  B: '#4A433C',
   C: '#ef6c00',
   D: '#455a64',
 } as const;
@@ -111,18 +111,18 @@ interface FilaEspecialidad {
 // ── Colores de categoría (sincronizados con DetalleMedicos.tsx) ───────────────
 const CAT_COLORS: Record<string, string> = {
   A: '#00897b',   // Teal esmeralda (un tono más claro)
-  B: '#283593',   // Azul zafiro
+  B: '#4A433C',   // Azul zafiro
   C: '#ef6c00',   // Ámbar dorado
   D: '#455a64',   // Gris acero
   '?': '#78909c',
 };
 
-const PIE_COLORS = ['#00897b', '#283593', '#ef6c00', '#455a64', '#9e9e9e'];
+const PIE_COLORS = ['#00897b', '#4A433C', '#ef6c00', '#455a64', '#9e9e9e'];
 
 // Degradados por categoría (para gradiente en chip)
 const CAT_GRAD: Record<string, string> = {
   A: 'linear-gradient(135deg, #00695c 0%, #00897b 100%)',
-  B: 'linear-gradient(135deg, #686158 0%, #283593 100%)',
+  B: 'linear-gradient(135deg, #686158 0%, #4A433C 100%)',
   C: 'linear-gradient(135deg, #e65100 0%, #ef6c00 100%)',
   D: 'linear-gradient(135deg, #37474f 0%, #455a64 100%)',
   '?': 'linear-gradient(135deg, #546e7a 0%, #78909c 100%)',
@@ -290,24 +290,24 @@ function CategorizacionMotor() {
           variant="scrollable"
           scrollButtons="auto"
           sx={{
-            borderBottom: '3px solid #1565c0',
+            borderBottom: '3px solid #584F46',
             '& .MuiTab-root': {
-              bgcolor: '#bbdefb',
+              bgcolor: '#D8D2CB',
               borderTopLeftRadius: 8,
               borderTopRightRadius: 8,
               mr: 0.5,
-              color: '#1565c0',
+              color: '#584F46',
               fontWeight: 600,
               minHeight: 40,
               fontSize: 13,
               textTransform: 'none',
               '&.Mui-selected': {
-                bgcolor: '#1565c0',
+                bgcolor: '#584F46',
                 color: '#fff',
                 fontWeight: 700,
               },
               '&:hover:not(.Mui-selected)': {
-                bgcolor: '#90caf9',
+                bgcolor: '#D8D2CB',
               },
             },
             '& .MuiTabs-indicator': { display: 'none' },
@@ -499,7 +499,7 @@ function CategorizacionMotor() {
         <Grid item xs={12} xl={6}>
           <Paper elevation={3} sx={{ display: 'flex', flexDirection: 'column', height: 560, overflow: 'hidden', borderRadius: 2, border: '1px solid #e0e0e0' }}>
             {/* Encabezado */}
-            <Box sx={{ background: 'linear-gradient(135deg,#686158 0%,#283593 100%)', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
+            <Box sx={{ background: 'linear-gradient(135deg,#686158 0%,#4A433C 100%)', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
               <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.92rem', letterSpacing: 1, flexGrow: 1 }}>
                 CATEGORIZACIÓN POR REPRESENTANTE
               </Typography>
@@ -535,7 +535,7 @@ function CategorizacionMotor() {
                     const reps = porRep.filter(r => r.equipo === eq);
                     return [
                       /* fila de equipo */
-                      <TableRow key={`eq-${eq}`} sx={{ bgcolor: eqIdx % 2 === 0 ? '#e8eaf6' : '#ede7f6' }}>
+                      <TableRow key={`eq-${eq}`} sx={{ bgcolor: eqIdx % 2 === 0 ? '#EFEBE6' : '#E9E4DD' }}>
                         <TableCell sx={{ pl: 2, fontWeight: 800, fontSize: '0.82rem', color: '#686158',
                           borderLeft: '4px solid #3f51b5', letterSpacing: 0.3 }}>
                           ▸ {eq}

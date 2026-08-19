@@ -20,7 +20,7 @@ export default function Administracion() {
 
   return (
     <Box sx={{ p: { xs: 1.5, sm: 3 } }}>
-      <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid #eef1f6' }}>
+      <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid #EFEBE6' }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs
             value={tab}

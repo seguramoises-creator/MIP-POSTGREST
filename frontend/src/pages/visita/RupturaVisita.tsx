@@ -131,7 +131,7 @@ export default function RupturaVisita() {
               <Stack direction="row" spacing={0.75} alignItems="center"
                      sx={{ color: '#686158', width: { xs: '100%', md: 'auto' },
                            pb: { xs: 1, md: 0 }, mb: { xs: 0.5, md: 0 },
-                           borderBottom: { xs: '1px solid #EEF0F4', md: 'none' } }}>
+                           borderBottom: { xs: '1px solid #EDE9E4', md: 'none' } }}>
                 <FilterList fontSize="small" />
                 <Typography variant="body2" sx={{ fontWeight: 700, letterSpacing: '0.02em' }}>Filtrar</Typography>
               </Stack>
