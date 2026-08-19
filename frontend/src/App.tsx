@@ -94,15 +94,23 @@ const theme = createTheme({
     // El taupe los hace inconfundiblemente Mallén sin convertirlos en alarma.
     MuiAlert: {
       styleOverrides: {
+        // Avisos en el rojo de Mallén (decisión del cliente, reiterada). Fondo rosa muy
+        // tenue, texto en rojo profundo (8.12:1) e icono en el rojo de marca (3.33:1,
+        // sobre el 3:1 que WCAG pide a los gráficos).
+        //
+        // El riesgo asumido: `info` y `error` comparten ahora familia de color, así que un
+        // aviso de orientación y uno de fallo se parecen. Se compensa con el PESO — el de
+        // error va en rojo pleno y con borde, el informativo se queda en el tinte suave —
+        // pero si algún día se ve que la gente ignora los errores, este es el sitio.
         standardInfo: {
-          backgroundColor: '#F4F1EE',   // taupe al ~6 %: se despega del blanco sin gritar
-          color: '#3A342F',             // 11.5:1 sobre ese fondo
-          '& .MuiAlert-icon': { color: '#686158' },
+          backgroundColor: '#FDEBEC',
+          color: '#8E1219',
+          '& .MuiAlert-icon': { color: '#F63440' },
         },
         outlinedInfo: {
-          borderColor: 'rgba(104,97,88,0.5)',
-          color: '#3A342F',
-          '& .MuiAlert-icon': { color: '#686158' },
+          borderColor: '#F63440',
+          color: '#8E1219',
+          '& .MuiAlert-icon': { color: '#F63440' },
         },
       },
     },

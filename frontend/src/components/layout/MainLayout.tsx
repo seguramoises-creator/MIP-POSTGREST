@@ -139,7 +139,7 @@ export default function MainLayout() {
         >
           {/* Cabecera reducida a lo que informa: dónde estoy y sobre qué ciclo/país
               trabajo. La cuenta y la salida bajaron a la ranura Perfil. */}
-          <Toolbar variant="dense" sx={{ justifyContent: 'space-between', gap: 1, minHeight: 52 }}>
+          <Toolbar variant="dense" sx={{ justifyContent: 'space-between', gap: 1, minHeight: 68 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
               {/* El logo vivía en el menú lateral y se fue con él al rediseñar la
                   navegación. Vuelve aquí, que es donde se ve en todas las pantallas.
@@ -152,10 +152,12 @@ export default function MainLayout() {
                   mismo que el extremo izquierdo del degradado, que es donde cae. */}
               {/* 26px dejaba el logotipo ilegible: el vectorial de Mallén reserva casi la
                   mitad de su alto al aire sobre la abeja, así que la marca ocupa bastante
-                  menos que la caja. A 40px la palabra MALLĒN se lee y la abeja se distingue,
-                  que es lo que hace reconocible la barra de un vistazo. */}
+                  menos que la caja: a 40px seguía leyéndose pequeña. A 52px —con la barra
+                  subida a 68 para alojarlo— el logotipo tiene la presencia que le
+                  corresponde a la marca del cliente. El alto de la barra y el del logo van
+                  juntos: subir solo el segundo lo recortaría por arriba y por abajo. */}
               <Box component="img" src={logoImg} alt="Laboratorios Mallén"
-                   sx={{ height: 40, width: 'auto', display: 'block', flexShrink: 0 }} />
+                   sx={{ height: 52, width: 'auto', display: 'block', flexShrink: 0 }} />
               <Typography noWrap sx={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.01em', minWidth: 0 }}>
                 {seccionActiva?.titulo ?? 'Inicio'}
               </Typography>
