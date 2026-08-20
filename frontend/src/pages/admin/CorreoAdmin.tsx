@@ -77,15 +77,18 @@ export default function CorreoAdmin() {
         </Stack>
         <Typography variant="body2" color="text.secondary" mb={2}>
           Este servidor envía TODOS los correos del sistema (recuperación de contraseña y
-          notificaciones). Para Gmail usa <strong>smtp.gmail.com</strong>, puerto <strong>587</strong>,
-          TLS activo y una <strong>App Password</strong> de 16 caracteres (no la clave normal).
+          notificaciones). El <strong>usuario es la dirección de correo completa</strong>, no un
+          alias: escribir «admin» en vez de «buzon@dominio.com» es el fallo más común.
+          El puerto manda sobre el cifrado — <strong>465 con SSL</strong> o
+          <strong>587 con TLS</strong>, nunca cruzados. Con Gmail hace falta además una
+          <strong>App Password</strong> de 16 caracteres, no la clave normal de la cuenta.
         </Typography>
 
         {msg && <Alert severity={msg.t} sx={{ mb: 2 }} onClose={() => setMsg(null)}>{msg.m}</Alert>}
 
         <Grid container spacing={2}>
           <Grid item xs={12} sm={8}>
-            <TextField fullWidth size="small" label="Servidor SMTP" placeholder="smtp.gmail.com"
+            <TextField fullWidth size="small" label="Servidor SMTP" placeholder="smtp.tu-proveedor.com"
                        value={cfg.server} onChange={(e) => set('server', e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={4}>
@@ -93,11 +96,11 @@ export default function CorreoAdmin() {
                        value={cfg.port} onChange={(e) => set('port', e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth size="small" label="Usuario (correo)" value={cfg.username}
+            <TextField fullWidth size="small" label="Usuario — dirección completa" value={cfg.username}
                        onChange={(e) => set('username', e.target.value)} />
           </Grid>
           <Grid item xs={12} sm={6}>
-            <TextField fullWidth size="small" label="Contraseña / App Password" type="password"
+            <TextField fullWidth size="small" label="Contraseña del buzón" type="password"
                        value={password} onChange={(e) => setPassword(e.target.value)}
                        placeholder={cfg.password_set ? '•••••••• (guardada — deja vacío para no cambiar)' : ''}
                        helperText={cfg.password_set ? 'Ya hay una guardada; escribe solo si la vas a cambiar.' : 'Requerida para autenticar.'} />
@@ -122,7 +125,7 @@ export default function CorreoAdmin() {
                   onChange={(e) => setCfg({ ...cfg, ssl: e.target.checked, tls: e.target.checked ? false : cfg.tls })} />}
                 label="SSL — puerto 465" />
               <Typography variant="caption" color="text.secondary">
-                Gmail: usa TLS con puerto 587 (SSL apagado).
+                Uno u otro, según el puerto: 465 → SSL · 587 → TLS. Nunca los dos.
               </Typography>
             </Stack>
           </Grid>
@@ -146,7 +149,8 @@ export default function CorreoAdmin() {
         </Stack>
         <Typography variant="caption" color="text.secondary" display="block" mt={1}>
           Guarda primero la configuración; la prueba usa lo guardado. Si falla, revisa el servidor,
-          puerto, usuario/contraseña (App Password en Gmail) y TLS/SSL.
+          puerto, que el usuario sea la dirección completa, la contraseña (App Password en
+          Gmail) y que el cifrado corresponda al puerto: 465 → SSL, 587 → TLS.
         </Typography>
       </CardContent>
     </Card>
