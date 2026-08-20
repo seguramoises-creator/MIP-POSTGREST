@@ -5,11 +5,12 @@
  */
 import { useState } from 'react';
 import { Box, Card, Tabs, Tab } from '@mui/material';
-import { People, Security, Lock, MarkEmailRead, ReportProblem, NotificationsActive } from '@mui/icons-material';
+import { People, Security, Lock, MarkEmailRead, ReportProblem, NotificationsActive , Palette } from '@mui/icons-material';
 import Usuarios from './Usuarios';
 import MatrizRoles from './MatrizRoles';
 import PasswordPolicyTab from './PasswordPolicyTab';
 import CorreoAdmin from './CorreoAdmin';
+import IdentidadVisual from './IdentidadVisual';
 import MedicosTopConfigTab from './MedicosTopConfigTab';
 import CatalogoErrores from './CatalogoErrores';
 import { ROJO } from '../../theme/marca';
@@ -42,6 +43,7 @@ export default function Administracion() {
             <Tab icon={<MarkEmailRead fontSize="small" />} iconPosition="start" label="Servidor de Correo (SMTP)" />
             <Tab icon={<NotificationsActive fontSize="small" />} iconPosition="start" label="Avisos Médicos TOP" />
             <Tab icon={<ReportProblem fontSize="small" />} iconPosition="start" label="Matriz de Errores" />
+            <Tab icon={<Palette fontSize="small" />} iconPosition="start" label="Identidad visual" />
           </Tabs>
         </Box>
 
@@ -51,7 +53,8 @@ export default function Administracion() {
             : tab === 2 ? <PasswordPolicyTab />
             : tab === 3 ? <CorreoAdmin />
             : tab === 4 ? <MedicosTopConfigTab />
-            : <CatalogoErrores />}
+            : tab === 5 ? <CatalogoErrores />
+            : <IdentidadVisual />}
         </Box>
       </Card>
     </Box>

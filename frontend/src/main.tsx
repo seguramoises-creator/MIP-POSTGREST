@@ -27,8 +27,15 @@ import '@fontsource/manrope/600.css'
 import '@fontsource/manrope/700.css'
 import '@fontsource/manrope/800.css'
 
+import { cargarMarca } from './theme/marcaViva'
+
+// Se espera a la marca ANTES de pintar. Si se renderizara primero, la pantalla
+// arrancaría con los colores de fábrica y saltaría a los del cliente medio segundo
+// después — un parpadeo que se lee como un fallo. `cargarMarca` nunca lanza: sin
+// conexión sigue con los de fábrica en vez de dejar la pantalla en blanco.
+cargarMarca().finally(() =>
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />
   </StrictMode>,
-)
+))

@@ -6,6 +6,10 @@ Indicadores, Tablas de puntuación, Ciclos, Reglas de Elegibilidad, Usuarios.
 import secrets
 from datetime import date, datetime, timezone
 from typing import Annotated, List, Optional
+import re
+
+from pydantic import BaseModel, Field
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -1153,6 +1157,42 @@ def get_config_correo(db: Session = Depends(get_db), _=AdminOnly):
         "password_set": bool(cfg["password"]),
         "habilitado": bool(cfg["server"]),
     }
+
+
+# ── Identidad visual (colores de marca) ────────────────────────────────────
+class MarcaConfig(BaseModel):
+    """Solo DOS colores. El resto de la escala —los taupes del degradado, el rojo
+    oscuro de los enlaces— se DERIVA de estos en el frontend, porque son relaciones
+    fijas: si el cliente pudiera fijar cada tono por separado, la primera vez que
+    alguien cambiara el principal sin ajustar los demás la paleta quedaría rota y
+    nadie sabría cuál de los ocho campos la descuadró."""
+    rojo: str = Field("", max_length=7, description="Color de acción, #rrggbb")
+    taupe: str = Field("", max_length=7, description="Color de estructura, #rrggbb")
+
+
+_RE_HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+@router.get("/config/marca", summary="Colores de marca vigentes")
+def get_config_marca(db: Session = Depends(get_db)):
+    """SIN autenticación a propósito: la pantalla de ENTRADA necesita estos colores
+    y ahí todavía no hay sesión. No son secreto — se ven en cada píxel de la app —
+    y sin este endpoint abierto el login se pintaría con la marca por defecto y
+    saltaría a la del cliente justo al entrar."""
+    return {"rojo": _cfg.obtener(db, "MARCA_ROJO") or "",
+            "taupe": _cfg.obtener(db, "MARCA_TAUPE") or ""}
+
+
+@router.put("/config/marca", response_model=Msg, summary="Guardar colores de marca")
+def put_config_marca(data: MarcaConfig, db: Session = Depends(get_db), _=AdminOnly):
+    """Un valor VACÍO borra la personalización y devuelve el color de fábrica: es la
+    forma de deshacer sin tener que recordar cuál era el original."""
+    for clave, valor in (("MARCA_ROJO", data.rojo), ("MARCA_TAUPE", data.taupe)):
+        v = (valor or "").strip()
+        if v and not _RE_HEX.match(v):
+            raise HTTPException(422, f"«{v}» no es un color válido. Usa el formato #RRGGBB.")
+        _cfg.fijar(db, clave, v.upper())
+    return Msg(message="Colores de marca guardados. Recarga la página para verlos.")
 
 
 @router.put("/config/correo", response_model=Msg, summary="Guardar configuración SMTP")

@@ -15,6 +15,7 @@ const DashboardEjecutivo = lazyWithReload(() => import('./pages/dashboard/Dashbo
 import { NAV_ITEMS } from './components/layout/Sidebar';
 import { Rol } from './types';
 import { BORDE, FONDO, ROJO, ROJO_OSCURO, ROJO_TENUE, SUPERFICIE, SUPERFICIE_3, TAUPE, TAUPE_CLARO, TAUPE_PROFUNDO, TEXTO, TEXTO_TENUE } from './theme/marca';
+import { marcaViva } from './theme/marcaViva';
 // El tema BEBE de los tokens: es la pieza que reparte color a todos los componentes
 // de MUI, así que si repitiera los hexadecimales el resto de la centralización
 // quedaría a medias.
@@ -74,8 +75,8 @@ const theme = createTheme({
   // `dark` es el rojo oscurecido: es el único que pasa AA como TEXTO sobre blanco (5.71:1),
   // así que los enlaces y el texto rojo deben tirar de él, no del rojo puro.
   palette: {
-    primary:    { main: ROJO, dark: ROJO_OSCURO, contrastText: '#FFFFFF' },
-    secondary:  { main: TAUPE, dark: TAUPE_PROFUNDO, contrastText: '#FFFFFF' },
+    primary:    { main: marcaViva.rojo, dark: marcaViva.rojoOscuro, contrastText: '#FFFFFF' },
+    secondary:  { main: marcaViva.taupe, dark: marcaViva.taupeProfundo, contrastText: '#FFFFFF' },
     // `info` se redefine porque MUI lo usa en TODO componente con color="info"
     // (Chip, Button, Badge…), no solo en Alert: sin esto seguían saliendo azules
     // sueltos por la app aunque el tema fuera de Mallén.
@@ -181,10 +182,10 @@ const theme = createTheme({
     },
     MuiOutlinedInput: {
       styleOverrides: {
-        notchedOutline: { borderColor: `${ROJO}73` },
+        notchedOutline: { borderColor: `${marcaViva.rojo}73` },
         root: {
-          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: `${ROJO}B3` },
-          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: ROJO, borderWidth: 2 },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: `${marcaViva.rojo}B3` },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: marcaViva.rojo, borderWidth: 2 },
         },
       },
     },
@@ -194,12 +195,12 @@ const theme = createTheme({
     // midiendo el color ya renderizado, no leyendo el tema.
     MuiFormLabel: {
       styleOverrides: {
-        root: { color: ROJO_OSCURO, '&.Mui-focused': { color: ROJO_OSCURO } },
+        root: { color: marcaViva.rojoOscuro, '&.Mui-focused': { color: marcaViva.rojoOscuro } },
       },
     },
     MuiInputLabel: {
       styleOverrides: {
-        root: { color: ROJO_OSCURO, '&.Mui-focused': { color: ROJO_OSCURO } },
+        root: { color: marcaViva.rojoOscuro, '&.Mui-focused': { color: marcaViva.rojoOscuro } },
       },
     },
     // NÚMEROS TABULARES en toda la app. Sin esto, en Inter el «1» es más estrecho que
@@ -228,14 +229,14 @@ const theme = createTheme({
         // error va en rojo pleno y con borde, el informativo se queda en el tinte suave —
         // pero si algún día se ve que la gente ignora los errores, este es el sitio.
         standardInfo: {
-          backgroundColor: ROJO_TENUE,
-          color: ROJO_OSCURO,
-          '& .MuiAlert-icon': { color: ROJO },
+          backgroundColor: marcaViva.rojoTenue,
+          color: marcaViva.rojoOscuro,
+          '& .MuiAlert-icon': { color: marcaViva.rojo },
         },
         outlinedInfo: {
-          borderColor: ROJO,
-          color: ROJO_OSCURO,
-          '& .MuiAlert-icon': { color: ROJO },
+          borderColor: marcaViva.rojo,
+          color: marcaViva.rojoOscuro,
+          '& .MuiAlert-icon': { color: marcaViva.rojo },
         },
       },
     },

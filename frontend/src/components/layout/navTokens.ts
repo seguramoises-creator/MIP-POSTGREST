@@ -25,7 +25,8 @@
  * mejor se lee al sol: el brillo de la pantalla compite con la luz ambiente en
  * vez de sumarse a ella.
  */
-import { ROJO, TAUPE, TAUPE_MEDIO, TAUPE_PROFUNDO } from '../../theme/marca';
+import { ROJO, TAUPE } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 
 /**
  * Fondo de ambas barras: degradado del taupe Mallén, de profundo a corporativo.
@@ -38,14 +39,16 @@ import { ROJO, TAUPE, TAUPE_MEDIO, TAUPE_PROFUNDO } from '../../theme/marca';
  * hay que medir. Da 6.11:1 — cómodamente sobre el 4.5:1 de AA para texto pequeño,
  * y bastante mejor que el 4.11:1 al que llegaba el degradado azul anterior.
  */
-export const NAV_FONDO = `linear-gradient(130deg, ${TAUPE_PROFUNDO} 0%, ${TAUPE_MEDIO} 55%, ${TAUPE} 100%)`;
+// Se lee de la paleta VIVA, no de la de fábrica: así el degradado sigue al color
+// que el administrador fije desde Identidad visual.
+export const NAV_FONDO = marcaViva.degradadoBarra;
 
 /** Taupe Mallén plano — bordes, iconos y acentos sobre superficie clara. */
-export const NAV_TAUPE = TAUPE;
+export const NAV_TAUPE = marcaViva.taupe;
 /** Rojo Mallén — acción y acento sobre superficie CLARA (nunca sobre las barras). */
-export const NAV_ROJO = ROJO;
+export const NAV_ROJO = marcaViva.rojo;
 /** Tramo más claro del degradado: el peor caso para medir contraste. */
-export const NAV_FONDO_CLARO = TAUPE;
+export const NAV_FONDO_CLARO = marcaViva.taupe;
 /** Activo sobre las barras: blanco puro (6.1:1 en el peor tramo, 12.3:1 en el mejor). */
 export const NAV_ACTIVO = '#FFFFFF';
 /**
