@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { useMemo, useState, useEffect } from 'react';
 import { api } from '../../services/api';
+import { BORDE_FUERTE, ERROR, EXITO, TAUPE_MEDIO } from '../../theme/marca';
 
 export default function Comercial() {
   const [tab, setTab] = useState(0);
@@ -159,8 +160,8 @@ export default function Comercial() {
                         <YAxis />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="ventas" fill="#584F46" name="Ventas Reales" />
-                        <Bar dataKey="cuota" fill="#D8D2CB" name="Cuota" />
+                        <Bar dataKey="ventas" fill={TAUPE_MEDIO} name="Ventas Reales" />
+                        <Bar dataKey="cuota" fill={BORDE_FUERTE} name="Cuota" />
                       </BarChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -178,7 +179,7 @@ export default function Comercial() {
                         <Tooltip formatter={(v: number) => [`${v.toFixed(1)}%`, 'Crecimiento']} />
                         <Bar dataKey="crecimiento" radius={[4, 4, 0, 0]}>
                           {chartCrecimiento.map((entry, i) => (
-                            <Cell key={i} fill={entry.crecimiento >= 0 ? '#2e7d32' : '#c62828'} />
+                            <Cell key={i} fill={entry.crecimiento >= 0 ? EXITO : ERROR} />
                           ))}
                         </Bar>
                       </BarChart>
@@ -234,7 +235,7 @@ export default function Comercial() {
                     <Tooltip formatter={(v: number) => [`${v.toFixed(1)}%`, 'Evolución']} />
                     <Bar dataKey="evolucion" radius={[4, 4, 0, 0]}>
                       {chartEvoIR.map((entry, i) => (
-                        <Cell key={i} fill={entry.evolucion >= 0 ? '#2e7d32' : '#c62828'} />
+                        <Cell key={i} fill={entry.evolucion >= 0 ? EXITO : ERROR} />
                       ))}
                     </Bar>
                   </BarChart>

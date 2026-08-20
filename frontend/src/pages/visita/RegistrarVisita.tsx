@@ -15,10 +15,11 @@ import {
   listarPanelFarmacias, registrarVisitaFarmacia, subirFotoVisitaFarmacia,
   type FarmaciaPanelItem,
 } from '../../services/farmacias.service';
+import { BORDE, EXITO, NEUTRO_300, SUPERFICIE_2, SUPERFICIE_4, TAUPE, TAUPE_MEDIO, TAUPE_NEGRO } from '../../theme/marca';
 
 // ── Paleta profesional (médica / farmacéutica) ───────────────────────────────
-const NAVY = '#2A2622';       // azul corporativo profundo
-const AZUL_VISTA = '#686158'; // azul de VISTA (primary.main) — titulo y borde de tarjeta
+const NAVY = TAUPE_NEGRO;       // azul corporativo profundo
+const AZUL_VISTA = TAUPE; // azul de VISTA (primary.main) — titulo y borde de tarjeta
 const TEAL = '#0f9b8e';       // acento clínico (teal-verde)
 const INK = '#1e293b';        // texto principal
 const SOFT_SHADOW = '0 1px 3px rgba(16,24,40,0.06), 0 6px 20px rgba(16,24,40,0.05)';
@@ -441,7 +442,7 @@ export default function RegistrarVisita() {
                     );
                     return (
                       <>
-                        <Stack direction="row" spacing={0.5} divider={<Divider orientation="vertical" flexItem sx={{ borderColor: '#E0DAD3' }} />}>
+                        <Stack direction="row" spacing={0.5} divider={<Divider orientation="vertical" flexItem sx={{ borderColor: BORDE }} />}>
                           {stat('Tipo', tipo === 'R' ? 'Revisita' : 'Vista', NAVY)}
                           {stat('Productos', String(nProd), TEAL)}
                           {stat('Muestras', String(nMuestras), TEAL)}
@@ -475,7 +476,7 @@ export default function RegistrarVisita() {
                 {productos.length === 0 ? (
                   <Typography variant="caption" color="text.secondary">No hay parrilla de productos para esta línea.</Typography>
                 ) : (
-                  <Box sx={{ border: '1px solid #EFEBE6', borderRadius: 2, bgcolor: '#F9F8F6', px: 1, py: 0.25 }}>
+                  <Box sx={{ border: '1px solid #EFEBE6', borderRadius: 2, bgcolor: SUPERFICIE_2, px: 1, py: 0.25 }}>
                     <Stack divider={<Divider sx={{ borderColor: '#f0f3f8' }} />}>
                       {productos.map((p, idx) => {
                         const det = detallados[p.producto];
@@ -489,7 +490,7 @@ export default function RegistrarVisita() {
                                        flex: { xs: '1 1 100%', sm: '1 1 40%' } }}>
                               <Checkbox size="small" checked={on} onChange={() => toggleProd(p, idx)} sx={{ p: 0.5 }} />
                               <Avatar sx={{ width: 22, height: 22, fontSize: 11, fontWeight: 800, flexShrink: 0,
-                                            bgcolor: p.prioridad === 1 ? '#686158' : p.prioridad === 2 ? '#584F46' : '#90a4ae' }}>
+                                            bgcolor: p.prioridad === 1 ? TAUPE : p.prioridad === 2 ? TAUPE_MEDIO : NEUTRO_300 }}>
                                 {p.prioridad}
                               </Avatar>
                               <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -967,7 +968,7 @@ export default function RegistrarVisita() {
           <CardContent sx={{ py: 1.5 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
               <Box sx={{ width: 30, height: 30, borderRadius: 1.5, bgcolor: '#e8f5ee', display: 'grid', placeItems: 'center' }}>
-                <CheckCircle sx={{ fontSize: 17, color: '#2e7d32' }} />
+                <CheckCircle sx={{ fontSize: 17, color: EXITO }} />
               </Box>
               <Typography variant="subtitle1" fontWeight={800} sx={{ color: INK }}>Registradas hoy</Typography>
               <Box sx={{ flex: 1 }} />
@@ -1014,7 +1015,7 @@ export default function RegistrarVisita() {
           <CardContent sx={{ py: 1.5 }}>
             <Stack direction="row" alignItems="center" spacing={1}
                    onClick={() => setVerHistorial((v) => !v)} sx={{ cursor: 'pointer' }}>
-              <Box sx={{ width: 30, height: 30, borderRadius: 1.5, bgcolor: '#EFEBE6', display: 'grid', placeItems: 'center' }}>
+              <Box sx={{ width: 30, height: 30, borderRadius: 1.5, bgcolor: SUPERFICIE_4, display: 'grid', placeItems: 'center' }}>
                 <History sx={{ fontSize: 17, color: '#64748b' }} />
               </Box>
               <Typography variant="subtitle1" fontWeight={800} sx={{ color: INK }}>Visitas anteriores</Typography>

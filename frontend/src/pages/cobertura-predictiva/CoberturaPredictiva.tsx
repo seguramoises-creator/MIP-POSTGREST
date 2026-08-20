@@ -27,16 +27,17 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
+import { AVISO, AVISO_MEDIO, AVISO_TENUE, BORDE_FUERTE, ERROR, EXITO, SUPERFICIE_3, TAUPE_MEDIO } from '../../theme/marca';
 
 // ── Colores de semáforo ───────────────────────────────────────────────────────
 const SEM: Record<string, string> = {
-  Verde: '#2e7d32',
-  Amarillo: '#f57c00',
-  Rojo: '#c62828',
+  Verde: EXITO,
+  Amarillo: AVISO_MEDIO,
+  Rojo: ERROR,
 };
 const SEM_BG: Record<string, string> = {
   Verde: '#e8f5e9',
-  Amarillo: '#fff3e0',
+  Amarillo: AVISO_TENUE,
   Rojo: '#ffebee',
 };
 
@@ -127,8 +128,8 @@ interface CoberturaCategoria {
 // ── Panel: Cobertura por categoría de médico ──────────────────────────────────
 const COLORES_CAT: Record<string, { main: string; bg: string; text: string }> = {
   A: { main: '#1b5e20', bg: '#e8f5e9', text: '#1b5e20' },
-  B: { main: '#584F46', bg: '#F4F1EE', text: '#584F46' },
-  C: { main: '#e65100', bg: '#fff3e0', text: '#e65100' },
+  B: { main: TAUPE_MEDIO, bg: SUPERFICIE_3, text: TAUPE_MEDIO },
+  C: { main: AVISO, bg: AVISO_TENUE, text: AVISO },
   D: { main: '#b71c1c', bg: '#ffebee', text: '#b71c1c' },
 };
 const ETIQUETAS_CAT: Record<string, string> = {
@@ -154,9 +155,9 @@ const CoberturaPorCategoriaPanel = ({ data }: { data: CoberturaCategoria[] }) =>
       {/* Resumen global */}
       <Box display="flex" gap={2} mb={2} flexWrap="wrap">
         {[
-          { label: 'Total programados', value: total_prog, color: '#584F46' },
-          { label: 'Visitados', value: total_vis, color: '#2e7d32' },
-          { label: 'Pendientes', value: total_pend, color: '#c62828' },
+          { label: 'Total programados', value: total_prog, color: TAUPE_MEDIO },
+          { label: 'Visitados', value: total_vis, color: EXITO },
+          { label: 'Pendientes', value: total_pend, color: ERROR },
           { label: '% Cobertura global', value: `${total_prog > 0 ? ((total_vis / total_prog) * 100).toFixed(1) : 0}%`, color: '#6a1b9a' },
         ].map(item => (
           <Box key={item.label} sx={{ flex: '1 1 110px', textAlign: 'center', p: 1, borderRadius: 2, bgcolor: '#f8f9fa', border: '1px solid #e0e0e0' }}>
@@ -267,10 +268,10 @@ const KpiCard = ({
   color?: string; icon?: React.ReactNode; xs?: number; sm?: number;
 }) => (
   <Grid item xs={xs} sm={sm}>
-    <Card elevation={2} sx={{ borderRadius: 2, height: '100%', borderTop: `4px solid ${color ?? '#584F46'}` }}>
+    <Card elevation={2} sx={{ borderRadius: 2, height: '100%', borderTop: `4px solid ${color ?? TAUPE_MEDIO}` }}>
       <CardContent sx={{ py: 1.5, px: 2 }}>
         <Box display="flex" alignItems="center" gap={1} mb={0.5}>
-          {icon && <Box sx={{ color: color ?? '#584F46', display: 'flex' }}>{icon}</Box>}
+          {icon && <Box sx={{ color: color ?? TAUPE_MEDIO, display: 'flex' }}>{icon}</Box>}
           <Typography variant="caption" color="text.secondary" fontWeight={600} textTransform="uppercase">
             {title}
           </Typography>
@@ -286,7 +287,7 @@ const KpiCard = ({
 
 // ── Barra de progreso con meta ────────────────────────────────────────────────
 const BarraMeta = ({ actual, esperada, meta }: { actual: number; esperada: number; meta: number }) => {
-  const color = actual >= meta ? '#2e7d32' : actual >= esperada * 0.95 ? '#f57c00' : '#c62828';
+  const color = actual >= meta ? EXITO : actual >= esperada * 0.95 ? AVISO_MEDIO : ERROR;
   return (
     <Box sx={{ width: '100%' }}>
       <Box display="flex" justifyContent="space-between" mb={0.3}>
@@ -295,10 +296,10 @@ const BarraMeta = ({ actual, esperada, meta }: { actual: number; esperada: numbe
       </Box>
       <Box sx={{ position: 'relative', height: 10, bgcolor: '#f0f0f0', borderRadius: 5, overflow: 'hidden' }}>
         <Box sx={{ position: 'absolute', height: '100%', width: `${Math.min(actual, 100)}%`, bgcolor: color, borderRadius: 5, transition: 'width 0.4s' }} />
-        <Box sx={{ position: 'absolute', top: 0, bottom: 0, left: `${Math.min(esperada, 100)}%`, width: 2, bgcolor: '#f57c00', opacity: 0.8 }} />
-        <Box sx={{ position: 'absolute', top: 0, bottom: 0, left: `${Math.min(meta, 100)}%`, width: 2, bgcolor: '#584F46' }} />
+        <Box sx={{ position: 'absolute', top: 0, bottom: 0, left: `${Math.min(esperada, 100)}%`, width: 2, bgcolor: AVISO_MEDIO, opacity: 0.8 }} />
+        <Box sx={{ position: 'absolute', top: 0, bottom: 0, left: `${Math.min(meta, 100)}%`, width: 2, bgcolor: TAUPE_MEDIO }} />
       </Box>
-      <Typography variant="caption" color="#f57c00">Esperado: {esperada.toFixed(1)}%</Typography>
+      <Typography variant="caption" color={AVISO_MEDIO}>Esperado: {esperada.toFixed(1)}%</Typography>
     </Box>
   );
 };
@@ -407,14 +408,14 @@ const DashboardTab = ({
   return (
     <Box>
       {/* Progreso del ciclo */}
-      <Paper sx={{ p: 2, mb: 2, borderRadius: 2, bgcolor: '#F4F1EE' }}>
+      <Paper sx={{ p: 2, mb: 2, borderRadius: 2, bgcolor: SUPERFICIE_3 }}>
         <Box display="flex" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
           <Box display="flex" alignItems="center" gap={1}>
-            <CalendarToday sx={{ color: '#584F46' }} />
-            <Typography fontWeight={700} color="#584F46">
+            <CalendarToday sx={{ color: TAUPE_MEDIO }} />
+            <Typography fontWeight={700} color={TAUPE_MEDIO}>
               Ciclo {data.ciclo?.codigo} · Corte: {data.fecha_corte}
             </Typography>
-            {data.fuente && <Chip label={data.fuente} size="small" sx={{ bgcolor: '#D8D2CB', color: '#584F46', fontWeight: 600 }} />}
+            {data.fuente && <Chip label={data.fuente} size="small" sx={{ bgcolor: BORDE_FUERTE, color: TAUPE_MEDIO, fontWeight: 600 }} />}
           </Box>
           <Box display="flex" alignItems="center" gap={2}>
             <Typography variant="body2" color="text.secondary">
@@ -426,9 +427,9 @@ const DashboardTab = ({
           <LinearProgress
             variant="determinate"
             value={progresoCiclo}
-            sx={{ height: 12, borderRadius: 6, bgcolor: '#D8D2CB', '& .MuiLinearProgress-bar': { bgcolor: '#584F46' } }}
+            sx={{ height: 12, borderRadius: 6, bgcolor: BORDE_FUERTE, '& .MuiLinearProgress-bar': { bgcolor: TAUPE_MEDIO } }}
           />
-          <Typography variant="caption" color="#584F46" fontWeight={600}>
+          <Typography variant="caption" color={TAUPE_MEDIO} fontWeight={600}>
             {progresoCiclo}% del ciclo transcurrido
           </Typography>
         </Box>
@@ -440,21 +441,21 @@ const DashboardTab = ({
           title="Cobertura actual promedio"
           value={`${resumen.cobertura_actual_promedio_pct.toFixed(1)}%`}
           subtitle={`Meta: ${data.meta_cobertura_pct?.toFixed(0) ?? 90}%`}
-          color={resumen.cobertura_actual_promedio_pct >= (data.meta_cobertura_pct ?? 90) ? '#2e7d32' : '#c62828'}
+          color={resumen.cobertura_actual_promedio_pct >= (data.meta_cobertura_pct ?? 90) ? EXITO : ERROR}
           icon={<People />}
         />
         <KpiCard
           title="Cobertura proyectada"
           value={`${resumen.cobertura_proyectada_promedio_pct.toFixed(1)}%`}
           subtitle="Run-rate al fin de ciclo"
-          color={resumen.cobertura_proyectada_promedio_pct >= (data.meta_cobertura_pct ?? 90) ? '#2e7d32' : '#f57c00'}
+          color={resumen.cobertura_proyectada_promedio_pct >= (data.meta_cobertura_pct ?? 90) ? EXITO : AVISO_MEDIO}
           icon={<TrendingUp />}
         />
         <KpiCard
           title="Médicos visitados / Prog."
           value={`${resumen.medicos_unicos_visitados_total} / ${resumen.medicos_programados_total}`}
           subtitle="Médicos únicos"
-          color="#584F46"
+          color={TAUPE_MEDIO}
           icon={<FlagOutlined />}
         />
         <KpiCard
@@ -464,20 +465,20 @@ const DashboardTab = ({
           color="#6a1b9a"
           icon={<SpeedOutlined />}
         />
-        <KpiCard title="RMs en Verde" value={resumen.rms_en_verde} subtitle={`de ${resumen.total_rms}`} color="#2e7d32" icon={<CheckCircle />} xs={6} sm={2} />
-        <KpiCard title="RMs en Amarillo" value={resumen.rms_en_amarillo} subtitle="Seguimiento" color="#f57c00" icon={<Warning />} xs={6} sm={2} />
-        <KpiCard title="RMs en Rojo" value={resumen.rms_en_rojo} subtitle="Acción inmediata" color="#c62828" icon={<Cancel />} xs={6} sm={2} />
-        <KpiCard title="Méd. diarios req. (máx)" value={resumen.medicos_diarios_requeridos_max} subtitle="VM más atrasado" color="#c62828" icon={<ArrowUpward />} xs={6} sm={2} />
+        <KpiCard title="RMs en Verde" value={resumen.rms_en_verde} subtitle={`de ${resumen.total_rms}`} color={EXITO} icon={<CheckCircle />} xs={6} sm={2} />
+        <KpiCard title="RMs en Amarillo" value={resumen.rms_en_amarillo} subtitle="Seguimiento" color={AVISO_MEDIO} icon={<Warning />} xs={6} sm={2} />
+        <KpiCard title="RMs en Rojo" value={resumen.rms_en_rojo} subtitle="Acción inmediata" color={ERROR} icon={<Cancel />} xs={6} sm={2} />
+        <KpiCard title="Méd. diarios req. (máx)" value={resumen.medicos_diarios_requeridos_max} subtitle="VM más atrasado" color={ERROR} icon={<ArrowUpward />} xs={6} sm={2} />
       </Grid>
 
       {/* Cobertura por categoría de médico */}
       <Paper sx={{ p: 2, mb: 2, borderRadius: 2, border: '1px solid #e0e0e0' }}>
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={1.5}>
           <Box display="flex" alignItems="center" gap={1}>
-            <Typography variant="subtitle1" fontWeight={800} color="#584F46">
+            <Typography variant="subtitle1" fontWeight={800} color={TAUPE_MEDIO}>
               🎯 Cobertura por Categoría de Médico
             </Typography>
-            <Chip size="small" label="A/B/C/D" sx={{ bgcolor: '#F4F1EE', color: '#584F46', fontWeight: 700 }} />
+            <Chip size="small" label="A/B/C/D" sx={{ bgcolor: SUPERFICIE_3, color: TAUPE_MEDIO, fontWeight: 700 }} />
           </Box>
           {catLoading && <CircularProgress size={16} />}
         </Box>
@@ -499,11 +500,11 @@ const DashboardTab = ({
                 <YAxis domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} tick={{ fontSize: 10 }} />
                 <RechartTooltip formatter={(v: number) => `${v}%`} />
                 <Legend verticalAlign="bottom" wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
-                <ReferenceLine y={90} stroke="#584F46" strokeDasharray="4 2" label={{ value: 'Meta', fill: '#584F46', fontSize: 10 }} />
+                <ReferenceLine y={90} stroke={TAUPE_MEDIO} strokeDasharray="4 2" label={{ value: 'Meta', fill: TAUPE_MEDIO, fontSize: 10 }} />
                 <Bar dataKey="actual" name="Actual" radius={[3, 3, 0, 0]}>
                   {chartCobertura.map((e, i) => <Cell key={i} fill={e.fill} />)}
                 </Bar>
-                <Bar dataKey="proyectada" name="Proyectada" fill="#D8D2CB" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="proyectada" name="Proyectada" fill={BORDE_FUERTE} radius={[3, 3, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </Paper>
@@ -515,7 +516,7 @@ const DashboardTab = ({
             </Typography>
             {ritmoSinDias ? (
               <Box sx={{ height: 280, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', color: 'text.secondary', px: 2 }}>
-                <Warning sx={{ fontSize: 40, color: '#f57c00', mb: 1 }} />
+                <Warning sx={{ fontSize: 40, color: AVISO_MEDIO, mb: 1 }} />
                 <Typography variant="body2" fontWeight={700}>Sin días hábiles restantes en el ciclo</Typography>
                 <Typography variant="caption">
                   {data.dias_habiles_transcurridos}/{data.dias_habiles_totales} días transcurridos · 0 restantes.
@@ -554,7 +555,7 @@ const DashboardTab = ({
         <TableContainer>
           <Table size="small" stickyHeader>
             <TableHead>
-              <TableRow sx={{ '& th': { bgcolor: '#F4F1EE', fontWeight: 700, fontSize: 11 } }}>
+              <TableRow sx={{ '& th': { bgcolor: SUPERFICIE_3, fontWeight: 700, fontSize: 11 } }}>
                 <TableCell>VM</TableCell>
                 <TableCell>Línea / GD</TableCell>
                 <TableCell align="center" sx={{ cursor: 'pointer' }} onClick={() => handleSort('estado_cobertura')}>
@@ -592,7 +593,7 @@ const DashboardTab = ({
                       </Typography>
                     </TableCell>
                     <TableCell align="center">
-                      <Typography variant="body2" fontWeight={700} sx={{ color: rm.medicos_diarios_requeridos > 5 ? '#c62828' : rm.medicos_diarios_requeridos > 3 ? '#f57c00' : '#2e7d32' }}>
+                      <Typography variant="body2" fontWeight={700} sx={{ color: rm.medicos_diarios_requeridos > 5 ? ERROR : rm.medicos_diarios_requeridos > 3 ? AVISO_MEDIO : EXITO }}>
                         {rm.medicos_diarios_requeridos}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">{rm.medicos_pendientes_meta} pend.</Typography>
@@ -610,7 +611,7 @@ const DashboardTab = ({
                         <Box sx={{ bgcolor: '#f8f9fa', px: 3, py: 1.5, borderBottom: '1px solid #e0e0e0' }}>
                           <Grid container spacing={2}>
                             <Grid item xs={12} md={8}>
-                              <Typography variant="caption" fontWeight={700} color="#584F46" display="block" mb={0.5}>
+                              <Typography variant="caption" fontWeight={700} color={TAUPE_MEDIO} display="block" mb={0.5}>
                                 📋 Lectura accionable
                               </Typography>
                               <Typography variant="body2">{rm.lectura_accionable ?? 'Sin lectura disponible.'}</Typography>
@@ -738,9 +739,9 @@ export default function CoberturaPredictiva() {
   return (
     <Box sx={{ p: { xs: 1, md: 2 } }}>
       <Box display="flex" alignItems="center" gap={1} mb={2}>
-        <TrendingUp sx={{ color: '#584F46', fontSize: 28 }} />
+        <TrendingUp sx={{ color: TAUPE_MEDIO, fontSize: 28 }} />
         <Box>
-          <Typography variant="h5" fontWeight={800} color="#584F46">Cobertura Predictiva y Ritmo de Ejecución</Typography>
+          <Typography variant="h5" fontWeight={800} color={TAUPE_MEDIO}>Cobertura Predictiva y Ritmo de Ejecución</Typography>
           <Typography variant="body2" color="text.secondary">
             Metodología 4DX · Lead measures: médicos únicos visitados y cadencia diaria requerida
           </Typography>

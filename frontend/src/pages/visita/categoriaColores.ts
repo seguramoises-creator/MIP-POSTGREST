@@ -1,3 +1,4 @@
+import { BORDE_SUAVE, NEUTRO_600 } from '../../theme/marca';
 // Requerimiento Mallén (Item 6): esquema de color por categoría médica, único para toda la
 // suite de Visita. A=Verde · B=Azul · C=Amarillo · D=Rojo.
 export const CAT_AV: Record<string, { bg: string; fg: string }> = {
@@ -9,6 +10,6 @@ export const CAT_AV: Record<string, { bg: string; fg: string }> = {
 
 // `sx` listo para un <Chip>/<Avatar> con la categoría (fallback gris si viene vacía/desconocida).
 export const catChipSx = (categoria?: string | null) => {
-  const c = CAT_AV[(categoria || '').toUpperCase()] ?? { bg: '#EDE9E4', fg: '#546E7A' };
+  const c = CAT_AV[(categoria || '').toUpperCase()] ?? { bg: BORDE_SUAVE, fg: NEUTRO_600 };
   return { bgcolor: c.bg, color: c.fg, fontWeight: 700 };
 };

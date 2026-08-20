@@ -22,17 +22,18 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 import { api } from '../../services/api';
+import { AVISO, AVISO_MEDIO, AVISO_OSCURO, AVISO_TENUE, BORDE, BORDE_SUAVE, EXITO_MEDIO, EXITO_OSCURO, EXITO_TENUE, FONDO, NEUTRO_300, NEUTRO_400, NEUTRO_600, NEUTRO_700, NEUTRO_900, SUPERFICIE_3, SUPERFICIE_4, TAUPE, TAUPE_MEDIO, TAUPE_PROFUNDO } from '../../theme/marca';
 
 // ── Paleta profesional A/B/C/D ───────────────────────────────────────────────
 // A = Teal esmeralda  B = Azul zafiro  C = Ámbar dorado  D = Gris acero
 const CAT_PAL: Record<string, { dark: string; mid: string; light: string; glow: string; text: string }> = {
-  A: { dark: '#00695c', mid: '#00897b', light: '#e0f2f1', glow: '#00897b60', text: '#fff' },
-  B: { dark: '#686158', mid: '#4A433C', light: '#EFEBE6', glow: '#584F4660', text: '#fff' },
-  C: { dark: '#e65100', mid: '#ef6c00', light: '#fff3e0', glow: '#f57c0060', text: '#fff' },
-  D: { dark: '#37474f', mid: '#455a64', light: '#EDE9E4', glow: '#546e7a60', text: '#fff' },
+  A: { dark: EXITO_OSCURO, mid: EXITO_MEDIO, light: EXITO_TENUE, glow: '#00897b60', text: '#fff' },
+  B: { dark: TAUPE, mid: TAUPE_PROFUNDO, light: SUPERFICIE_4, glow: '#584F4660', text: '#fff' },
+  C: { dark: AVISO, mid: AVISO_OSCURO, light: AVISO_TENUE, glow: '#f57c0060', text: '#fff' },
+  D: { dark: NEUTRO_900, mid: NEUTRO_700, light: BORDE_SUAVE, glow: '#546e7a60', text: '#fff' },
   '?': { dark: '#424242', mid: '#757575', light: '#f5f5f5', glow: '#9e9e9e40', text: '#fff' },
 };
-const CAT_COLORS = ['#00897b', '#4A433C', '#ef6c00', '#455a64', '#9e9e9e'];
+const CAT_COLORS = [EXITO_MEDIO, TAUPE_PROFUNDO, AVISO_OSCURO, NEUTRO_700, '#9e9e9e'];
 const CAT_LABEL: Record<string, string> = {
   A: 'Alto potencial',
   B: 'Potencial medio',
@@ -100,10 +101,10 @@ function CatChip({ cat }: { cat: string }) {
 
 function ScoreBar({ value }: { value: number }) {
   const pct = Math.min(100, Math.max(0, value));
-  const color = pct >= 70 ? '#00695c' : pct >= 50 ? '#4A433C' : pct >= 30 ? '#ef6c00' : '#455a64';
+  const color = pct >= 70 ? EXITO_OSCURO : pct >= 50 ? TAUPE_PROFUNDO : pct >= 30 ? AVISO_OSCURO : NEUTRO_700;
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-      <Box sx={{ flex: 1, height: 6, bgcolor: '#e0e0e0', borderRadius: 3, overflow: 'hidden' }}>
+      <Box sx={{ flex: 1, height: 6, bgcolor: BORDE, borderRadius: 3, overflow: 'hidden' }}>
         <Box sx={{ height: '100%', width: `${pct}%`, bgcolor: color, borderRadius: 3, transition: 'width .4s' }} />
       </Box>
       <Typography sx={{ fontSize: '0.78rem', fontWeight: 700, color, minWidth: 38, textAlign: 'right' }}>
@@ -129,7 +130,7 @@ function ComponenteRow({ key_ }: { key_: number }) {
       <Grid container spacing={1}>
         {comps.map((c) => {
           const pct = Math.min(100, Math.max(0, c.PuntajePct));
-          const color = pct >= 70 ? '#00695c' : pct >= 40 ? '#4A433C' : '#ef6c00';
+          const color = pct >= 70 ? EXITO_OSCURO : pct >= 40 ? TAUPE_PROFUNDO : AVISO_OSCURO;
           const val = c.ValorEntradaTexto || (c.ValorEntradaNumero != null ? String(c.ValorEntradaNumero) : '—');
           return (
             <Grid item xs={12} sm={6} md={4} lg={2.4} key={c.CodigoComponente}>
@@ -138,7 +139,7 @@ function ComponenteRow({ key_ }: { key_: number }) {
                   {c.NombreComponente}
                 </Typography>
                 <Typography sx={{ fontSize: '0.82rem', fontWeight: 700, mt: 0.3, mb: 0.5 }}>{val}</Typography>
-                <Box sx={{ height: 5, bgcolor: '#e0e0e0', borderRadius: 3, overflow: 'hidden' }}>
+                <Box sx={{ height: 5, bgcolor: BORDE, borderRadius: 3, overflow: 'hidden' }}>
                   <Box sx={{ height: '100%', width: `${pct}%`, bgcolor: color, borderRadius: 3 }} />
                 </Box>
                 <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color, mt: 0.3 }}>{pct.toFixed(1)} pts</Typography>
@@ -320,7 +321,7 @@ export default function DetalleMedicos() {
         </Grid>
         {/* ── Filtro por categoría ── */}
         <Box mt={2} display="flex" gap={1} flexWrap="wrap" alignItems="center">
-          <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: '#90a4ae', mr: 0.5, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+          <Typography sx={{ fontSize: '0.7rem', fontWeight: 700, color: NEUTRO_300, mr: 0.5, textTransform: 'uppercase', letterSpacing: 0.8 }}>
             Categoría:
           </Typography>
 
@@ -338,8 +339,8 @@ export default function DetalleMedicos() {
                 border: '2px solid transparent',
                 boxShadow: '0 4px 14px #584F4650',
               } : {
-                background: '#F6F4F2',
-                color: '#78909c',
+                background: FONDO,
+                color: NEUTRO_400,
                 border: '2px solid #e0e4ea',
                 boxShadow: 'none',
                 '&:hover': {
@@ -355,8 +356,8 @@ export default function DetalleMedicos() {
               width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '0.62rem', fontWeight: 900,
-              bgcolor: categoria === '' ? 'rgba(255,255,255,0.22)' : '#EFEBE6',
-              color: categoria === '' ? '#fff' : '#584F46',
+              bgcolor: categoria === '' ? 'rgba(255,255,255,0.22)' : SUPERFICIE_4,
+              color: categoria === '' ? '#fff' : TAUPE_MEDIO,
             }}>✦</Box>
             <Typography sx={{ fontSize: '0.77rem', fontWeight: 700, color: 'inherit', lineHeight: 1 }}>
               Todas
@@ -383,8 +384,8 @@ export default function DetalleMedicos() {
                     boxShadow: `0 4px 16px ${pal.glow}`,
                   } : {
                     // ── INACTIVO — gris neutro, nunca parece seleccionado ──
-                    background: '#F6F4F2',
-                    color: '#78909c',
+                    background: FONDO,
+                    color: NEUTRO_400,
                     border: '2px solid #e0e4ea',
                     boxShadow: 'none',
                     '&:hover': {
@@ -403,7 +404,7 @@ export default function DetalleMedicos() {
                   fontWeight: 900, fontSize: '0.73rem',
                   transition: 'all 0.2s ease',
                   bgcolor: sel ? 'rgba(255,255,255,0.22)' : '#e0e4ea',
-                  color: sel ? '#fff' : '#546e7a',
+                  color: sel ? '#fff' : NEUTRO_600,
                   border: sel ? '1.5px solid rgba(255,255,255,0.35)' : '1.5px solid #cfd8dc',
                 }}>
                   {cat}
@@ -431,13 +432,13 @@ export default function DetalleMedicos() {
           <Grid item>
             <Box sx={{
               px: 2.5, py: 1.2, borderRadius: 2,
-              bgcolor: '#F4F1EE', border: '1px solid #D8D2CB',
+              bgcolor: SUPERFICIE_3, border: '1px solid #D8D2CB',
               minWidth: 110, textAlign: 'center',
             }}>
-              <Typography sx={{ fontSize: '1.25rem', fontWeight: 800, color: '#584F46', lineHeight: 1.2 }}>
+              <Typography sx={{ fontSize: '1.25rem', fontWeight: 800, color: TAUPE_MEDIO, lineHeight: 1.2 }}>
                 {statsGlobales.total_medicos.toLocaleString()}
               </Typography>
-              <Typography sx={{ fontSize: '0.68rem', color: '#78909c', fontWeight: 600 }}>Total médicos</Typography>
+              <Typography sx={{ fontSize: '0.68rem', color: NEUTRO_400, fontWeight: 600 }}>Total médicos</Typography>
             </Box>
           </Grid>
           {(['A','B','C','D'] as const).map(cat => {
@@ -589,7 +590,7 @@ export default function DetalleMedicos() {
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small">
             <TableHead>
-              <TableRow sx={{ bgcolor: '#686158' }}>
+              <TableRow sx={{ bgcolor: TAUPE }}>
                 <TableCell sx={{ color: '#fff', fontWeight: 700, fontSize: '0.73rem', py: 0.8, minWidth: 30 }}></TableCell>
                 <TableCell sx={{ color: '#fff', fontWeight: 700, fontSize: '0.73rem', minWidth: 180 }}>MÉDICO</TableCell>
                 <TableCell sx={{ color: '#fff', fontWeight: 700, fontSize: '0.73rem', minWidth: 130 }}>ESPECIALIDAD</TableCell>
@@ -605,7 +606,7 @@ export default function DetalleMedicos() {
               {items.length === 0 && !isLoading && (
                 <TableRow>
                   <TableCell colSpan={9} align="center" sx={{ py: 6, color: 'text.secondary' }}>
-                    <SearchIcon sx={{ fontSize: 48, color: '#e0e0e0', display: 'block', mx: 'auto', mb: 1 }} />
+                    <SearchIcon sx={{ fontSize: 48, color: BORDE, display: 'block', mx: 'auto', mb: 1 }} />
                     {detalleError
                       ? <Typography color="error" variant="body2" sx={{ fontFamily: 'monospace', maxWidth: 600, mx: 'auto' }}>
                           Error del servidor: {(detalleError as {message?: string})?.message ?? String(detalleError)}
@@ -668,7 +669,7 @@ export default function DetalleMedicos() {
                         <CatChip cat={row.CategoriaCalculada} />
                         {row.CategoriaExcel && row.CategoriaExcel !== '—' && row.CategoriaExcel !== row.CategoriaCalculada && (
                           <Tooltip title={`Categoría Excel: ${row.CategoriaExcel}`}>
-                            <Typography sx={{ fontSize: '0.64rem', color: '#f57c00', mt: 0.3, cursor: 'help' }}>
+                            <Typography sx={{ fontSize: '0.64rem', color: AVISO_MEDIO, mt: 0.3, cursor: 'help' }}>
                               ⚠ Excel: {row.CategoriaExcel}
                             </Typography>
                           </Tooltip>
@@ -680,7 +681,7 @@ export default function DetalleMedicos() {
                     </TableRow>
                     {isExp && (
                       <TableRow key={`exp-${row.MedicoCategoriaKey}`}>
-                        <TableCell colSpan={9} sx={{ p: 0, bgcolor: '#F4F1EE' }}>
+                        <TableCell colSpan={9} sx={{ p: 0, bgcolor: SUPERFICIE_3 }}>
                           <Collapse in={isExp} unmountOnExit>
                             <Box sx={{ px: 2, py: 1 }}>
                               <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: pal.mid, mb: 1, textTransform: 'uppercase', letterSpacing: 0.5 }}>

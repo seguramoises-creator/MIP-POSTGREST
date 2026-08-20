@@ -16,6 +16,7 @@ import { EmojiEvents, TrendingUp, TrendingDown, Remove } from '@mui/icons-materi
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
+import { ERROR, EXITO, NEUTRO_400 } from '../../theme/marca';
 
 type MiPosicion = {
   sin_datos: boolean; motivo?: string;
@@ -112,11 +113,11 @@ export default function MiRanking() {
                 ) : (
                   <>
                     <Stack direction="row" alignItems="center" spacing={0.5}>
-                      {data.variacion > 0 ? <TrendingUp sx={{ color: '#2e7d32' }} />
-                        : data.variacion < 0 ? <TrendingDown sx={{ color: '#c62828' }} />
-                        : <Remove sx={{ color: '#78909c' }} />}
+                      {data.variacion > 0 ? <TrendingUp sx={{ color: EXITO }} />
+                        : data.variacion < 0 ? <TrendingDown sx={{ color: ERROR }} />
+                        : <Remove sx={{ color: NEUTRO_400 }} />}
                       <Typography variant="h4" fontWeight={800}
-                        sx={{ color: data.variacion > 0 ? '#2e7d32' : data.variacion < 0 ? '#c62828' : '#78909c' }}>
+                        sx={{ color: data.variacion > 0 ? EXITO : data.variacion < 0 ? ERROR : NEUTRO_400 }}>
                         {data.variacion > 0 ? `+${data.variacion}` : data.variacion}
                       </Typography>
                     </Stack>

@@ -11,8 +11,9 @@ import {
   coberturaResumen, coberturaRanking, listarVMs, listarGerentesVisita, listarLineasVisita,
   type CoberturaResumen, type RankingVM, type Catalogo,
 } from '../../services/visita.service';
+import { AVISO, BORDE_SUAVE, ERROR, EXITO_MEDIO, TAUPE, TAUPE_MEDIO } from '../../theme/marca';
 
-const CAT_COLOR: Record<string, string> = { A: '#1b5e20', B: '#584F46', C: '#e65100' };
+const CAT_COLOR: Record<string, string> = { A: '#1b5e20', B: TAUPE_MEDIO, C: AVISO };
 
 // M1: con un panel entero marcado TOP, concatenar todos los nombres vuelve la
 // alerta una cadena de miles de caracteres. Se capa igual que las listas
@@ -75,7 +76,7 @@ function Gauge({ pct, color, label, metrica, titulo, sub, paisCodigo }: { pct: n
       <CardContent sx={{ textAlign: 'center' }}>
         <Box sx={{ position: 'relative', width: 130, height: 130, mx: 'auto' }}>
           <svg viewBox="0 0 130 130" width={130} height={130} style={{ transform: 'rotate(-90deg)' }}>
-            <circle cx={65} cy={65} r={r} fill="none" stroke="#EDE9E4" strokeWidth={11} />
+            <circle cx={65} cy={65} r={r} fill="none" stroke={BORDE_SUAVE} strokeWidth={11} />
             <circle cx={65} cy={65} r={r} fill="none" stroke={color} strokeWidth={11} strokeLinecap="round"
                     strokeDasharray={circ} strokeDashoffset={off} />
           </svg>
@@ -148,14 +149,14 @@ export default function CoberturaDashboard() {
           <Grid item xs={12} sm={4}>
             <Card variant="outlined"><CardContent sx={{ py: 1.5 }}>
               <Typography variant="caption" color="text.secondary" fontWeight={700}>SIN VISITAR · MI PROGRAMACIÓN</Typography>
-              <Typography variant="h4" fontWeight={800} color="#c62828">{data.sin_visitar}</Typography>
+              <Typography variant="h4" fontWeight={800} color={ERROR}>{data.sin_visitar}</Typography>
               <Typography variant="caption" color="text.secondary">de {data.panel} médicos de mi panel</Typography>
             </CardContent></Card>
           </Grid>
           <Grid item xs={12} sm={4}>
             <Card variant="outlined"><CardContent sx={{ py: 1.5 }}>
               <Typography variant="caption" color="text.secondary" fontWeight={700}>MI COBERTURA</Typography>
-              <Typography variant="h4" fontWeight={800} color="#00897b">{data.pct_cobertura}%</Typography>
+              <Typography variant="h4" fontWeight={800} color={EXITO_MEDIO}>{data.pct_cobertura}%</Typography>
               <LinearProgress variant="determinate" value={Math.min(100, data.pct_cobertura)}
                 sx={{ height: 6, borderRadius: 3, mt: 0.75 }} />
             </CardContent></Card>
@@ -166,7 +167,7 @@ export default function CoberturaDashboard() {
                 <Typography variant="caption" color="text.secondary" fontWeight={700}>
                   MI LÍNEA · {data.linea_total.linea_nombre.toUpperCase()}
                 </Typography>
-                <Typography variant="h4" fontWeight={800} color="#686158">{data.linea_total.pct_cobertura}%</Typography>
+                <Typography variant="h4" fontWeight={800} color={TAUPE}>{data.linea_total.pct_cobertura}%</Typography>
                 <Typography variant="caption" color="text.secondary">
                   {data.linea_total.visitados}/{data.linea_total.panel} médicos · {data.linea_total.sin_visitar} sin visitar
                 </Typography>
@@ -180,12 +181,12 @@ export default function CoberturaDashboard() {
 
       {/* Filtros (solo ADMIN/GERENTE) */}
       {!esVM && (
-        <Card variant="outlined" sx={{ mb: 2, bgcolor: '#fff', borderColor: '#686158',
+        <Card variant="outlined" sx={{ mb: 2, bgcolor: '#fff', borderColor: TAUPE,
                                    borderWidth: 1.5, borderRadius: 3 }}>
           <Box sx={{ p: 1.5 }}>
             <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }} flexWrap="wrap" useFlexGap>
               <Stack direction="row" spacing={0.75} alignItems="center"
-                     sx={{ color: '#686158', width: { xs: '100%', md: 'auto' },
+                     sx={{ color: TAUPE, width: { xs: '100%', md: 'auto' },
                            pb: { xs: 1, md: 0 }, mb: { xs: 0.5, md: 0 },
                            borderBottom: { xs: '1px solid #EDE9E4', md: 'none' } }}>
                 <FilterList fontSize="small" />
@@ -217,9 +218,9 @@ export default function CoberturaDashboard() {
 
       {/* Gauges */}
       <Grid container spacing={2} sx={{ mb: 1 }}>
-        <Grid item xs={12} md={4}><Gauge pct={data.pct_cobertura} color="#00897b" label="Cobertura" metrica="cobertura" titulo="Cobertura Total" sub="Médicos con al menos 1 visita" paisCodigo={paisCodigo} /></Grid>
-        <Grid item xs={12} md={4}><Gauge pct={data.pct_completa} color="#686158" label="V+R" metrica="completa" titulo="Vista + Revisita" sub="Médicos con ciclo completo (V+R)" paisCodigo={paisCodigo} /></Grid>
-        <Grid item xs={12} md={4}><Gauge pct={data.pct_gap} color="#c62828" label="Gap" metrica="sin_visitar" titulo="Gap de Cobertura" sub="Sin ninguna visita en el ciclo" paisCodigo={paisCodigo} /></Grid>
+        <Grid item xs={12} md={4}><Gauge pct={data.pct_cobertura} color={EXITO_MEDIO} label="Cobertura" metrica="cobertura" titulo="Cobertura Total" sub="Médicos con al menos 1 visita" paisCodigo={paisCodigo} /></Grid>
+        <Grid item xs={12} md={4}><Gauge pct={data.pct_completa} color={TAUPE} label="V+R" metrica="completa" titulo="Vista + Revisita" sub="Médicos con ciclo completo (V+R)" paisCodigo={paisCodigo} /></Grid>
+        <Grid item xs={12} md={4}><Gauge pct={data.pct_gap} color={ERROR} label="Gap" metrica="sin_visitar" titulo="Gap de Cobertura" sub="Sin ninguna visita en el ciclo" paisCodigo={paisCodigo} /></Grid>
       </Grid>
 
       {/* Categorías A/B/C */}
@@ -235,11 +236,11 @@ export default function CoberturaDashboard() {
                   <Typography fontWeight={700} sx={{ color: CAT_COLOR[c], mb: 1 }}>Categoría {c}</Typography>
                   <Box sx={{ mb: 1 }}>
                     <Stack direction="row" justifyContent="space-between"><Typography variant="caption">Cobertura Total</Typography><Typography variant="caption" fontWeight={700}>{pctT}%</Typography></Stack>
-                    <LinearProgress variant="determinate" value={pctT} sx={{ height: 7, borderRadius: 4, '& .MuiLinearProgress-bar': { bgcolor: '#00897b' } }} />
+                    <LinearProgress variant="determinate" value={pctT} sx={{ height: 7, borderRadius: 4, '& .MuiLinearProgress-bar': { bgcolor: EXITO_MEDIO } }} />
                   </Box>
                   <Box>
                     <Stack direction="row" justifyContent="space-between"><Typography variant="caption">Vista + Revisita</Typography><Typography variant="caption" fontWeight={700}>{pctC}%</Typography></Stack>
-                    <LinearProgress variant="determinate" value={pctC} sx={{ height: 7, borderRadius: 4, '& .MuiLinearProgress-bar': { bgcolor: '#686158' } }} />
+                    <LinearProgress variant="determinate" value={pctC} sx={{ height: 7, borderRadius: 4, '& .MuiLinearProgress-bar': { bgcolor: TAUPE } }} />
                   </Box>
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                     {cat.visitados} de {cat.total} médicos visitados

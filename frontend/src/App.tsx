@@ -14,6 +14,10 @@ import Setup from './pages/setup/Setup';
 const DashboardEjecutivo = lazyWithReload(() => import('./pages/dashboard/DashboardEjecutivo'));
 import { NAV_ITEMS } from './components/layout/Sidebar';
 import { Rol } from './types';
+import { BORDE, FONDO, ROJO, ROJO_OSCURO, ROJO_TENUE, SUPERFICIE, SUPERFICIE_3, TAUPE, TAUPE_CLARO, TAUPE_PROFUNDO, TEXTO, TEXTO_TENUE } from './theme/marca';
+// El tema BEBE de los tokens: es la pieza que reparte color a todos los componentes
+// de MUI, así que si repitiera los hexadecimales el resto de la centralización
+// quedaría a medias.
 
 // Página de inicio según el rol = primer ítem del menú al que tiene acceso.
 // Evita aterrizar a roles sin dashboard (Asesor de Capacitación, RM, etc.) en el
@@ -70,14 +74,14 @@ const theme = createTheme({
   // `dark` es el rojo oscurecido: es el único que pasa AA como TEXTO sobre blanco (5.71:1),
   // así que los enlaces y el texto rojo deben tirar de él, no del rojo puro.
   palette: {
-    primary:    { main: '#F63440', dark: '#C81E2A', contrastText: '#FFFFFF' },
-    secondary:  { main: '#686158', dark: '#3A342F', contrastText: '#FFFFFF' },
+    primary:    { main: ROJO, dark: ROJO_OSCURO, contrastText: '#FFFFFF' },
+    secondary:  { main: TAUPE, dark: TAUPE_PROFUNDO, contrastText: '#FFFFFF' },
     // `info` se redefine porque MUI lo usa en TODO componente con color="info"
     // (Chip, Button, Badge…), no solo en Alert: sin esto seguían saliendo azules
     // sueltos por la app aunque el tema fuera de Mallén.
-    info:       { main: '#686158', dark: '#3A342F', light: '#8A8177', contrastText: '#FFFFFF' },
-    background: { default: '#F6F4F2' },
-    text:       { primary: '#2E2A26', secondary: '#57504A' },
+    info:       { main: TAUPE, dark: TAUPE_PROFUNDO, light: '#8A8177', contrastText: '#FFFFFF' },
+    background: { default: FONDO },
+    text:       { primary: TEXTO, secondary: TEXTO_TENUE },
   },
   /**
    * Sistema tipográfico de Mallén — dos familias con papeles separados.
@@ -150,12 +154,37 @@ const theme = createTheme({
     //
     // La etiqueta usa el rojo OSCURO (#C81E2A, 5.71:1 sobre blanco): el rojo de marca
     // como texto pequeño da 3.83:1 y no llega al mínimo accesible.
+    // EL AMARILLO DEL RELLENO AUTOMÁTICO. No es CSS nuestro: cuando el navegador
+    // autocompleta usuario y contraseña pinta el campo de amarillo, y ese color no
+    // se puede cambiar con `background-color` — el navegador lo aplica por encima.
+    //
+    // El único recurso es una SOMBRA INTERIOR que cubra el campo entero: se dibuja
+    // sobre el relleno del navegador y gana. `-webkit-text-fill-color` hace lo
+    // propio con el texto, que por el mismo motivo tampoco responde a `color`.
+    // La transición larga evita el destello amarillo del primer instante.
+    MuiInputBase: {
+      styleOverrides: {
+        input: {
+          // Números tabulares: en Inter el «1» es más estrecho que el resto de
+          // dígitos y una columna de cifras queda desalineada.
+          fontVariantNumeric: 'tabular-nums lining-nums',
+          // El marcador NO va en cursiva (petición explícita: «Seleccione un país»).
+          '&::placeholder': { fontStyle: 'normal', opacity: 0.7 },
+          '&:-webkit-autofill, &:-webkit-autofill:hover, &:-webkit-autofill:focus': {
+            WebkitBoxShadow: `0 0 0 100px ${SUPERFICIE} inset`,
+            WebkitTextFillColor: TEXTO,
+            caretColor: TEXTO,
+            transition: 'background-color 9999s ease-in-out 0s',
+          },
+        },
+      },
+    },
     MuiOutlinedInput: {
       styleOverrides: {
-        notchedOutline: { borderColor: 'rgba(246,52,64,0.45)' },
+        notchedOutline: { borderColor: `${ROJO}73` },
         root: {
-          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(246,52,64,0.7)' },
-          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#F63440', borderWidth: 2 },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: `${ROJO}B3` },
+          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: ROJO, borderWidth: 2 },
         },
       },
     },
@@ -165,12 +194,12 @@ const theme = createTheme({
     // midiendo el color ya renderizado, no leyendo el tema.
     MuiFormLabel: {
       styleOverrides: {
-        root: { color: '#C81E2A', '&.Mui-focused': { color: '#C81E2A' } },
+        root: { color: ROJO_OSCURO, '&.Mui-focused': { color: ROJO_OSCURO } },
       },
     },
     MuiInputLabel: {
       styleOverrides: {
-        root: { color: '#C81E2A', '&.Mui-focused': { color: '#C81E2A' } },
+        root: { color: ROJO_OSCURO, '&.Mui-focused': { color: ROJO_OSCURO } },
       },
     },
     // NÚMEROS TABULARES en toda la app. Sin esto, en Inter el «1» es más estrecho que
@@ -188,12 +217,6 @@ const theme = createTheme({
     // El marcador de un campo NO va en cursiva (petición explícita: «Seleccione un país»).
     // MUI no lo pone en cursiva, pero algunos navegadores sí inclinan el `::placeholder`
     // heredado; se fija de forma explícita para que no dependa del navegador.
-    MuiInputBase: {
-      styleOverrides: {
-        input: { fontVariantNumeric: 'tabular-nums lining-nums',
-                 '&::placeholder': { fontStyle: 'normal', opacity: 0.7 } },
-      },
-    },
     MuiAlert: {
       styleOverrides: {
         // Avisos en el rojo de Mallén (decisión del cliente, reiterada). Fondo rosa muy
@@ -205,14 +228,14 @@ const theme = createTheme({
         // error va en rojo pleno y con borde, el informativo se queda en el tinte suave —
         // pero si algún día se ve que la gente ignora los errores, este es el sitio.
         standardInfo: {
-          backgroundColor: '#FDEBEC',
-          color: '#8E1219',
-          '& .MuiAlert-icon': { color: '#F63440' },
+          backgroundColor: ROJO_TENUE,
+          color: ROJO_OSCURO,
+          '& .MuiAlert-icon': { color: ROJO },
         },
         outlinedInfo: {
-          borderColor: '#F63440',
-          color: '#8E1219',
-          '& .MuiAlert-icon': { color: '#F63440' },
+          borderColor: ROJO,
+          color: ROJO_OSCURO,
+          '& .MuiAlert-icon': { color: ROJO },
         },
       },
     },
@@ -245,7 +268,7 @@ const theme = createTheme({
                 borderWidth: 1.5,
                 boxShadow: '0 2px 10px rgba(104,97,88,0.06)',
                 transition: 'box-shadow .2s ease, border-color .2s ease',
-                '&:hover': { borderColor: '#686158', boxShadow: '0 4px 16px rgba(104,97,88,0.12)' },
+                '&:hover': { borderColor: TAUPE, boxShadow: '0 4px 16px rgba(104,97,88,0.12)' },
               }
             : {},
       },

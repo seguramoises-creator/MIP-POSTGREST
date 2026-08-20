@@ -22,6 +22,7 @@ import {
 } from '@mui/icons-material';
 import { api } from '../../services/api';
 import type { ReceptividadDimensionAdmin, ReceptividadOpcionAdmin, ConfiguracionLsii } from '../../types';
+import { BORDE_SUAVE, ERROR_TENUE, NEUTRO_300, SUPERFICIE_2, SUPERFICIE_3, TAUPE_MEDIO } from '../../theme/marca';
 
 // ── helpers ──────────────────────────────────────────────────────────────
 let tempIdSeq = -1;
@@ -190,7 +191,7 @@ export default function LsiiAdmin() {
       <Card elevation={0} sx={{ mb: 3, border: '1px solid #e0e7ef', borderRadius: 2 }}>
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-            <Lock fontSize="small" sx={{ color: '#584F46' }} />
+            <Lock fontSize="small" sx={{ color: TAUPE_MEDIO }} />
             <Typography variant="subtitle1" fontWeight={700}>Umbral de Corte de Cuadrantes</Typography>
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -277,12 +278,12 @@ export default function LsiiAdmin() {
               <AccordionSummary expandIcon={<ExpandMore />}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, width: '100%', flexWrap: 'wrap' }}>
                   <Typography fontWeight={700} fontSize="0.9rem">
-                    {d.dimension_nombre || <span style={{ color: '#90a4ae' }}>(nueva dimensión sin nombre)</span>}
+                    {d.dimension_nombre || <span style={{ color: NEUTRO_300 }}>(nueva dimensión sin nombre)</span>}
                   </Typography>
                   <Chip label={d.dimension_codigo || 'SIN CÓDIGO'} size="small" variant="outlined" />
-                  <Chip label={`Peso ${(d.peso_dimension * 100).toFixed(0)}%`} size="small" sx={{ bgcolor: '#F4F1EE', color: '#584F46', fontWeight: 700 }} />
+                  <Chip label={`Peso ${(d.peso_dimension * 100).toFixed(0)}%`} size="small" sx={{ bgcolor: SUPERFICIE_3, color: TAUPE_MEDIO, fontWeight: 700 }} />
                   <Chip label={`${activeOptions} opción(es) activa(s)`} size="small" variant="outlined" />
-                  {!d.activo && <Chip label="Desactivada" size="small" color="default" sx={{ bgcolor: '#EDE9E4' }} />}
+                  {!d.activo && <Chip label="Desactivada" size="small" color="default" sx={{ bgcolor: BORDE_SUAVE }} />}
                 </Box>
               </AccordionSummary>
               <AccordionDetails>
@@ -327,14 +328,14 @@ export default function LsiiAdmin() {
                 <Divider sx={{ mb: 2 }} />
 
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <VisibilityOff fontSize="small" sx={{ color: '#90a4ae' }} />
+                  <VisibilityOff fontSize="small" sx={{ color: NEUTRO_300 }} />
                   <Typography variant="caption" color="text.secondary">
                     El texto se muestra al evaluador. El puntaje oculto (1-10) y el peso de la dimensión nunca se exponen al GD ni al RM.
                   </Typography>
                 </Box>
 
                 {d.opciones.map((o, opIdx) => (
-                  <Box key={o.id ?? opIdx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, p: 1, borderRadius: 1.5, bgcolor: o.activo ? '#F9F8F6' : '#fbeaea' }}>
+                  <Box key={o.id ?? opIdx} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, p: 1, borderRadius: 1.5, bgcolor: o.activo ? SUPERFICIE_2 : ERROR_TENUE }}>
                     <TextField size="small" type="number" label="Orden" sx={{ width: 80 }}
                       value={o.orden_opcion}
                       onChange={e => actualizarOpcion(idx, opIdx, { orden_opcion: Number(e.target.value) })}

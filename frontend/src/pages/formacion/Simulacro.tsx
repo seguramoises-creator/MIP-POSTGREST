@@ -17,10 +17,11 @@ import {
   misSesionesSimulacro, resumenSimulacro, detalleSimulacro,
   type SimulacroIniciado, type RondaSimulacro, type ResultadoSimulacro,
 } from '../../services/formacion.service';
+import { AVISO, BORDE_SUAVE, ERROR, EXITO, TAUPE_MEDIO } from '../../theme/marca';
 
 const DPAE: Record<number, { label: string; color: string }> = {
-  4: { label: 'Excelente (E)', color: '#2e7d32' }, 3: { label: 'Adecuado (A)', color: '#584F46' },
-  2: { label: 'En proceso (P)', color: '#e65100' }, 1: { label: 'Deficiente (D)', color: '#c62828' },
+  4: { label: 'Excelente (E)', color: EXITO }, 3: { label: 'Adecuado (A)', color: TAUPE_MEDIO },
+  2: { label: 'En proceso (P)', color: AVISO }, 1: { label: 'Deficiente (D)', color: ERROR },
 };
 
 function hablarNavegador(texto: string) {
@@ -230,7 +231,7 @@ function PantallaInicio({ iniciar, abrir }: {
                   border: '1px solid #e0e7ef', borderRadius: 2, mb: 1,
                   cursor: abrir.isPending ? 'default' : 'pointer',
                   opacity: abrir.isPending && !abriendoEsta ? 0.6 : 1,
-                  '&:hover': { borderColor: abrir.isPending ? '#e0e7ef' : '#90a4c4' },
+                  '&:hover': { borderColor: abrir.isPending ? BORDE_SUAVE : '#90a4c4' },
                 }}>
                 <CardContent sx={{ py: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span>{s.medico} · {s.estilo}</span>

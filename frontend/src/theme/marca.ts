@@ -1,21 +1,31 @@
 /**
- * Identidad de marca — Laboratorios Mallén.
+ * FUENTE ÚNICA DE COLOR — Laboratorios Mallén.
  *
- * Los dos colores corporativos NO están escritos a ojo: se extrajeron del propio
- * archivo vectorial del logo (`LABORATORIOS MALLEN.pdf`), así que son exactamente
- * los que imprime la marca, no una aproximación de la carta Pantone.
+ * Todo color de la aplicación sale de aquí. Cambiar un valor en este archivo lo
+ * cambia en TODAS las pantallas a la vez: no hay que recorrerlas una por una.
+ *
+ * POR QUÉ EXISTE. Hasta ago-2026 había 972 colores escritos a mano repartidos en
+ * 55 archivos. El rebrand a Mallén se pudo hacer solo porque se sustituyeron con
+ * un guion, literal por literal — y ese método falló dos veces: los colores en
+ * `rgba()` no los veía la búsqueda de hexadecimales, y un emoji azul no era CSS
+ * en absoluto. Un valor centralizado no tiene ese problema porque no hay nada
+ * que buscar.
+ *
+ * REGLA: ningún archivo de `pages/` o `components/` debe declarar un `#rrggbb`.
+ * Si hace falta un color nuevo se añade aquí, con nombre, y se importa.
+ *
+ * Los dos colores corporativos NO se eligieron a ojo: se extrajeron del propio
+ * archivo vectorial del logotipo, así que son exactamente los que imprime la marca.
  *
  *   Pantone 405 C      → #686158   (taupe: el cuerpo del logotipo)
  *   Pantone Red 032 CP → #F63440   (rojo: el acento sobre la «E»)
  *
- * JERARQUÍA — el rojo es el principal, y eso significa algo concreto: manda en
- * las ACCIONES (botones, estado activo, acentos, lo que el usuario puede tocar).
- * El taupe ESTRUCTURA (barras, superficies, texto). Es la misma proporción que
- * usa el logo, donde el rojo es un solo trazo sobre un logotipo entero en taupe.
- * Invertirla —bañar la app de rojo— convertiría el color de marca en ruido y le
- * quitaría el único trabajo que hace bien: señalar dónde actuar.
+ * JERARQUÍA — el rojo manda en las ACCIONES (botones, estado activo, acentos); el
+ * taupe ESTRUCTURA (barras, superficies, texto). Es la proporción del propio logo,
+ * donde el rojo es un solo trazo sobre un logotipo entero en taupe. Invertirla
+ * convertiría el color de marca en ruido y le quitaría su único trabajo: señalar
+ * dónde actuar.
  */
-
 /** Rojo Mallén (Pantone Red 032 CP). Acción, estado activo, acento de marca. */
 export const ROJO = '#F63440';
 /** Rojo oscurecido para hover/pulsado y para texto rojo sobre blanco (5.1:1). */
@@ -26,6 +36,66 @@ export const TAUPE = '#686158';
 export const TAUPE_PROFUNDO = '#3A342F';
 /** Taupe intermedio — tramo central del degradado. */
 export const TAUPE_MEDIO = '#584F46';
+
+/** Rojo muy tenue: fondo de avisos y realces suaves. */
+export const ROJO_TENUE = '#FDEBEC';
+/** Taupe casi negro — fondo de la pantalla de entrada. */
+export const TAUPE_NEGRO = '#2A2622';
+/** Taupe aclarado — tramo final de degradados y bordes sobre oscuro. */
+export const TAUPE_CLARO = '#7A7166';
+
+/* ── SUPERFICIES Y TEXTO ───────────────────────────────────────────────────
+ * Neutros CÁLIDOS, no grises puros: junto al taupe de Mallén un gris neutro se
+ * percibe azulado por contraste simultáneo y delata que no es de la familia.
+ */
+export const FONDO = '#F6F4F2';        // área de contenido
+export const SUPERFICIE = '#FFFFFF';   // tarjetas, tablas, diálogos
+export const SUPERFICIE_2 = '#F9F8F6'; // superficie alterna (filas, paneles)
+export const SUPERFICIE_3 = '#F4F1EE'; // realce tenue
+export const SUPERFICIE_4 = '#EFEBE6'; // realce algo más marcado
+export const BORDE = '#E4DED7';
+export const BORDE_SUAVE = '#EDE9E4';
+export const BORDE_FUERTE = '#D8D2CB';
+export const TEXTO = '#2E2A26';
+export const TEXTO_TENUE = '#57504A';
+
+/* ── ESCALA NEUTRA CÁLIDA ──────────────────────────────────────────────────
+ * Sustituye a la escala «blue grey» de Material (#37474F … #90A4AE), que seguía
+ * siendo azulada. Se conservan CINCO pasos porque varias pantallas los usan para
+ * distinguir categorías: colapsarlos perdería información, no solo matiz.
+ */
+export const NEUTRO_900 = '#3D3833';
+export const NEUTRO_700 = '#4C4640';
+export const NEUTRO_600 = '#5E574F';
+export const NEUTRO_400 = '#8A8177';
+export const NEUTRO_300 = '#A69C91';
+export const NEUTRO_200 = '#C9C1B8';
+
+/* ── ESTADO ────────────────────────────────────────────────────────────────
+ * NO son colores de marca, y por eso NO se tiñen de rojo ni de taupe: el verde,
+ * el ámbar y el rojo de error significan algo por convención universal. Si el
+ * aviso compartiera el color de la marca, el usuario dejaría de distinguir
+ * «atención» de «decoración» — que es justo lo que estos existen para evitar.
+ */
+export const EXITO = '#2E7D32';
+export const EXITO_OSCURO = '#00695C';
+export const EXITO_MEDIO = '#00897B';
+export const EXITO_TENUE = '#E0F2F1';
+export const AVISO = '#E65100';
+export const AVISO_MEDIO = '#F57C00';
+export const AVISO_OSCURO = '#EF6C00';
+export const AVISO_TENUE = '#FFF3E0';
+export const ERROR = '#C62828';
+export const ERROR_TENUE = '#FBEAEA';
+
+/* ── DEGRADADOS DE MARCA ───────────────────────────────────────────────────
+ * Aquí y no en `navTokens` para que tengan un solo origen: los usan la barra
+ * superior, la inferior y la pantalla de entrada.
+ */
+export const DEGRADADO_BARRA =
+  `linear-gradient(130deg, ${TAUPE_PROFUNDO} 0%, ${TAUPE_MEDIO} 55%, ${TAUPE} 100%)`;
+export const DEGRADADO_ENTRADA =
+  `linear-gradient(135deg, ${TAUPE_NEGRO} 0%, ${TAUPE_PROFUNDO} 40%, ${TAUPE_MEDIO} 75%, ${TAUPE} 100%)`;
 
 /**
  * Color por SECCIÓN funcional del menú.

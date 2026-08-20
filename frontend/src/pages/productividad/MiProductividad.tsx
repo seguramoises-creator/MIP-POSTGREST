@@ -19,6 +19,7 @@ import { TrendingUp, TrendingDown, Insights } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
+import { AVISO_MEDIO, ERROR, EXITO } from '../../theme/marca';
 
 type MiLinea = {
   rm: { nombre: string; codigo: string | null; linea: string | null;
@@ -29,7 +30,7 @@ type MiLinea = {
 };
 type Indicador = { codigo: string; nombre: string; valor: number; cumplimiento_pct: number; puntaje: number };
 
-const color = (p: number) => (p >= 90 ? '#2e7d32' : p >= 70 ? '#0057A8' : p >= 50 ? '#f57c00' : '#c62828');
+const color = (p: number) => (p >= 90 ? EXITO : p >= 70 ? '#0057A8' : p >= 50 ? AVISO_MEDIO : ERROR);
 
 function Tarjeta({ titulo, valor, sub, col }:
   { titulo: string; valor: string; sub?: string; col?: string }) {
@@ -102,14 +103,14 @@ export default function MiProductividad() {
         <Grid item xs={12} sm={4}>
           {dif != null ? (
             <Card variant="outlined" sx={{ height: '100%',
-                  borderColor: dif >= 0 ? '#2e7d32' : '#c62828', borderWidth: 2 }}>
+                  borderColor: dif >= 0 ? EXITO : ERROR, borderWidth: 2 }}>
               <CardContent sx={{ py: 1.75 }}>
                 <Typography variant="caption" color="text.secondary" fontWeight={700}>
                   TU DIFERENCIA
                 </Typography>
                 <Stack direction="row" alignItems="center" spacing={0.5}>
-                  {dif >= 0 ? <TrendingUp sx={{ color: '#2e7d32' }} /> : <TrendingDown sx={{ color: '#c62828' }} />}
-                  <Typography variant="h4" fontWeight={800} sx={{ color: dif >= 0 ? '#2e7d32' : '#c62828' }}>
+                  {dif >= 0 ? <TrendingUp sx={{ color: EXITO }} /> : <TrendingDown sx={{ color: ERROR }} />}
+                  <Typography variant="h4" fontWeight={800} sx={{ color: dif >= 0 ? EXITO : ERROR }}>
                     {dif > 0 ? '+' : ''}{dif}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">pts %</Typography>

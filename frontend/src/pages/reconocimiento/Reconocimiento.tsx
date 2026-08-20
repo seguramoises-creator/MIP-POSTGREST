@@ -9,6 +9,7 @@ import { AutoAwesome, Download } from '@mui/icons-material';
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
+import { AVISO, BORDE_FUERTE, ERROR, EXITO, FONDO, NEUTRO_300, NEUTRO_700, SUPERFICIE_3, TAUPE } from '../../theme/marca';
 
 /* ── utilidades ───────────────────────────────────────────── */
 function FilterLabel({ children }: { children: React.ReactNode }) {
@@ -21,9 +22,9 @@ function FilterLabel({ children }: { children: React.ReactNode }) {
 }
 
 function flagColor(v: number): string {
-  if (v >= 90) return '#2e7d32';
+  if (v >= 90) return EXITO;
   if (v >= 80) return '#f57f17';
-  return '#c62828';
+  return ERROR;
 }
 
 function Flag({ value }: { value: number }) {
@@ -44,8 +45,8 @@ function Flag({ value }: { value: number }) {
 
 /* ── pódium ───────────────────────────────────────────────── */
 const PODIUM_CFG = [
-  { pos: 1, icon: '🏆', label: 'Oro',    color: '#e65100', border: '#f9a825', bg: 'linear-gradient(160deg,#fffde7,#fff8e1)', shadow: '#f9a82566', large: true },
-  { pos: 2, icon: '🥈', label: 'Plata',  color: '#455a64', border: '#90a4ae', bg: 'linear-gradient(160deg,#EDE9E4,#f5f5f5)', shadow: '#90a4ae44' },
+  { pos: 1, icon: '🏆', label: 'Oro',    color: AVISO, border: '#f9a825', bg: 'linear-gradient(160deg,#fffde7,#fff8e1)', shadow: '#f9a82566', large: true },
+  { pos: 2, icon: '🥈', label: 'Plata',  color: NEUTRO_700, border: NEUTRO_300, bg: 'linear-gradient(160deg,#EDE9E4,#f5f5f5)', shadow: '#90a4ae44' },
   { pos: 3, icon: '🥉', label: 'Bronce', color: '#bf360c', border: '#ff7043', bg: 'linear-gradient(160deg,#fff3e0,#fbe9e7)', shadow: '#ff704344' },
 ];
 
@@ -217,7 +218,7 @@ export default function Reconocimiento() {
             {cicloNombre && (
               <Box sx={{ ml: 'auto' }}>
                 <Chip label={'Mostrando: ' + cicloNombre}
-                  sx={{ bgcolor: '#686158', color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
+                  sx={{ bgcolor: TAUPE, color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
               </Box>
             )}
           </Box>
@@ -225,7 +226,7 @@ export default function Reconocimiento() {
       </Card>
 
       {mensaje && (
-        <Card elevation={0} sx={{ mb: 2, borderRadius: 2, bgcolor: '#F4F1EE', border: '1px solid #D8D2CB' }}>
+        <Card elevation={0} sx={{ mb: 2, borderRadius: 2, bgcolor: SUPERFICIE_3, border: '1px solid #D8D2CB' }}>
           <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
             <Typography variant="body2">{mensaje}</Typography>
           </CardContent>
@@ -248,18 +249,18 @@ export default function Reconocimiento() {
           {/* ── MIP TABLE ────────────────────────────────────── */}
           <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden', mb: 4 }}>
             {/* Título granate */}
-            <Box sx={{ bgcolor: '#686158', py: 1.8, textAlign: 'center' }}>
+            <Box sx={{ bgcolor: TAUPE, py: 1.8, textAlign: 'center' }}>
               <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 16, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
                 Mapa Integral de Productividad
               </Typography>
-              <Typography sx={{ color: '#D8D2CB', fontWeight: 700, fontSize: 16, letterSpacing: '1px', textTransform: 'uppercase', mt: 0.3 }}>
+              <Typography sx={{ color: BORDE_FUERTE, fontWeight: 700, fontSize: 16, letterSpacing: '1px', textTransform: 'uppercase', mt: 0.3 }}>
                 Resultados Acumulados{cicloNum ? ` Ciclo ${cicloNum} ${cicloAnio}` : ''}
               </Typography>
             </Box>
 
             {/* Leyenda de banderines */}
             <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 4, px: 3, py: 1.6, bgcolor: '#fafafa', borderBottom: '1px solid #e0e0e0' }}>
-              {[{ color: '#2e7d32', label: '> 90' }, { color: '#f57f17', label: 'Entre 80 y 89' }, { color: '#c62828', label: '< 79' }]
+              {[{ color: EXITO, label: '> 90' }, { color: '#f57f17', label: 'Entre 80 y 89' }, { color: ERROR, label: '< 79' }]
                 .map(({ color, label }) => (
                   <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 1.4 }}>
                     <svg width="20" height="22" viewBox="0 0 14 16">
@@ -275,7 +276,7 @@ export default function Reconocimiento() {
             <TableContainer>
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ bgcolor: '#F6F4F2' }}>
+                  <TableRow sx={{ bgcolor: FONDO }}>
                     {[
                       { label: 'Rk Ciclo', align: 'center' as const, w: 80 },
                       { label: 'Linea',    align: 'left'   as const },
@@ -284,7 +285,7 @@ export default function Reconocimiento() {
                       { label: 'Puntos Acum',  align: 'center' as const },
                     ].map(({ label, align, w }) => (
                       <TableCell key={label} align={align}
-                        sx={{ fontWeight: 800, fontSize: 13, color: '#686158',
+                        sx={{ fontWeight: 800, fontSize: 13, color: TAUPE,
                               borderBottom: '2px solid #686158', py: 1.2,
                               ...(w ? { width: w } : {}) }}>
                         {label}
@@ -306,7 +307,7 @@ export default function Reconocimiento() {
                     const rowBg     = pos === 1 ? '#fffde7' : pos % 2 === 0 ? '#f9f9f9' : '#fff';
                     return (
                       <TableRow key={row.rm_id} sx={{ bgcolor: rowBg }}>
-                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: 14, color: '#686158', py: 1.4 }}>
+                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: 14, color: TAUPE, py: 1.4 }}>
                           {pos}
                         </TableCell>
                         <TableCell sx={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase', py: 1.4 }}>
@@ -338,7 +339,7 @@ export default function Reconocimiento() {
               {loadingRec ? <CircularProgress /> : (
                 <TableContainer component={Paper} elevation={2} sx={{ borderRadius: 2 }}>
                   <Table size="small">
-                    <TableHead sx={{ bgcolor: '#686158' }}>
+                    <TableHead sx={{ bgcolor: TAUPE }}>
                       <TableRow>
                         {['RM', 'Premio', 'Score (%)', 'Posición', 'Fecha', 'Certificado'].map(h => (
                           <TableCell key={h} sx={{ color: 'white', fontWeight: 700, fontSize: 13 }}>{h}</TableCell>

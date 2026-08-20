@@ -14,6 +14,7 @@ import { KPI_ORDEN, kpiNombre } from '../../constants/kpi';
 import { useCicloStore } from '../../store/ciclo.store';
 import { useAuthStore } from '../../store/auth.store';
 import MiProductividad from './MiProductividad';
+import { AVISO, BORDE, BORDE_FUERTE, BORDE_SUAVE, ERROR, EXITO, NEUTRO_600, NEUTRO_900, SUPERFICIE_4, TAUPE, TAUPE_MEDIO } from '../../theme/marca';
 
 function FilterLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -25,9 +26,9 @@ function FilterLabel({ children }: { children: React.ReactNode }) {
 }
 
 function pctColor(v: number) {
-  if (v >= 90) return '#2e7d32';
+  if (v >= 90) return EXITO;
   if (v >= 80) return '#f57f17';
-  return '#c62828';
+  return ERROR;
 }
 
 const TH_BASE = {
@@ -36,9 +37,9 @@ const TH_BASE = {
   textAlign: 'center' as const, lineHeight: 1.1, py: 0.5, px: 0.4,
 };
 const TH_META = {
-  fontSize: 10, fontWeight: 600, color: '#37474f',
+  fontSize: 10, fontWeight: 600, color: NEUTRO_900,
   borderRight: '1px solid #e0e0e0', py: 0.3, px: 0.4,
-  textAlign: 'center' as const, bgcolor: '#EDE9E4',
+  textAlign: 'center' as const, bgcolor: BORDE_SUAVE,
 };
 const TD = {
   fontSize: 11, borderRight: '1px solid #e8e8e8', py: 0.4, px: 0.4,
@@ -46,8 +47,8 @@ const TD = {
 };
 
 const CICLO_COLORS = [
-  '#584F46','#2e7d32','#6a1b9a','#e65100','#00838f',
-  '#c62828','#f9a825','#37474f','#ad1457','#558b2f','#004d40',
+  TAUPE_MEDIO,EXITO,'#6a1b9a',AVISO,'#00838f',
+  ERROR,'#f9a825',NEUTRO_900,'#ad1457','#558b2f','#004d40',
 ];
 
 // KPI_ORDEN y kpiNombre importados desde ../../constants/kpi
@@ -305,7 +306,7 @@ function ProductividadGerencia() {
             {cicloNombre && (
               <Box sx={{ ml:'auto' }}>
                 <Chip label={'Mostrando: ' + cicloNombre}
-                  sx={{ bgcolor:'#686158', color:'#fff', fontWeight:700, fontSize:13, height:32, px:1 }} />
+                  sx={{ bgcolor:TAUPE, color:'#fff', fontWeight:700, fontSize:13, height:32, px:1 }} />
               </Box>
             )}
           </Box>
@@ -315,7 +316,7 @@ function ProductividadGerencia() {
       {/* ── Gráfico: indicadores × ciclos ─────────────────────── */}
       {grafData.length > 0 && (
         <Card elevation={2} sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
-          <Box sx={{ bgcolor: '#686158', px: 3, py: 1.2 }}>
+          <Box sx={{ bgcolor: TAUPE, px: 3, py: 1.2 }}>
             <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: 14,
               textTransform: 'uppercase', letterSpacing: '0.8px' }}>
               Comparativo por Indicador y Ciclo — % Cumplimiento Promedio
@@ -325,7 +326,7 @@ function ProductividadGerencia() {
             <ResponsiveContainer width="100%" height={420}>
               <BarChart data={grafData} margin={{ top: 8, right: 20, bottom: 80, left: 0 }} barCategoryGap="18%">
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="ind" tick={{ fontSize: 10, fontWeight: 600, fill: '#37474f' }}
+                <XAxis dataKey="ind" tick={{ fontSize: 10, fontWeight: 600, fill: NEUTRO_900 }}
                   angle={-55} textAnchor="end" interval={0} height={55} />
                 <YAxis domain={[0, 100]} tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
                 <RTooltip formatter={(val: number, name: string) => [`${val.toFixed(1)}%`, name]}
@@ -351,11 +352,11 @@ function ProductividadGerencia() {
       ) : (
         <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
           {/* Barra azul MIP */}
-          <Box sx={{ bgcolor: '#686158', py: 1.5, textAlign: 'center' }}>
+          <Box sx={{ bgcolor: TAUPE, py: 1.5, textAlign: 'center' }}>
             <Typography sx={{ color:'#fff', fontWeight:800, fontSize:15, letterSpacing:'1.5px', textTransform:'uppercase' }}>
               Mapa Integral de Productividad
             </Typography>
-            <Typography sx={{ color:'#D8D2CB', fontWeight:700, fontSize:15, letterSpacing:'1px', textTransform:'uppercase', mt:0.3 }}>
+            <Typography sx={{ color:BORDE_FUERTE, fontWeight:700, fontSize:15, letterSpacing:'1px', textTransform:'uppercase', mt:0.3 }}>
               Resultados{cicloNum ? ` Ciclo ${cicloNum} ${cicloAnio}` : ''}
             </Typography>
           </Box>
@@ -364,13 +365,13 @@ function ProductividadGerencia() {
             <Table size="small" sx={{ minWidth: 600, borderCollapse: 'collapse' }}>
               <TableHead>
                 {/* ── Fila 1: grupos ─────────────────────── */}
-                <TableRow sx={{ bgcolor: '#2e7d32' }}>
+                <TableRow sx={{ bgcolor: EXITO }}>
                   {/* RK ACUM */}
-                  <TableCell rowSpan={3} sx={{ ...TH_BASE, minWidth: 38, whiteSpace:'pre-line', bgcolor:'#584F46' }}>
+                  <TableCell rowSpan={3} sx={{ ...TH_BASE, minWidth: 38, whiteSpace:'pre-line', bgcolor:TAUPE_MEDIO }}>
                     {'RK\nACUM'}
                   </TableCell>
                   {/* RK CICLO */}
-                  <TableCell rowSpan={3} sx={{ ...TH_BASE, minWidth: 38, whiteSpace:'pre-line', bgcolor:'#584F46' }}>
+                  <TableCell rowSpan={3} sx={{ ...TH_BASE, minWidth: 38, whiteSpace:'pre-line', bgcolor:TAUPE_MEDIO }}>
                     {'RK\nCICLO'}
                   </TableCell>
                   {[
@@ -384,7 +385,7 @@ function ProductividadGerencia() {
                   ))}
                   {/* "CICLO N" spanning indicator columns + TOTAL */}
                   <TableCell colSpan={numIndCols + 1}
-                    sx={{ ...TH_BASE, bgcolor: '#584F46', fontSize: 11, letterSpacing: '1px' }}>
+                    sx={{ ...TH_BASE, bgcolor: TAUPE_MEDIO, fontSize: 11, letterSpacing: '1px' }}>
                     {cicloNum ? `CICLO ${cicloNum}` : 'CICLO ACTUAL'}
                   </TableCell>
                   {/* TOTAL ACUM — columna fija fuera del span de ciclo */}
@@ -395,28 +396,28 @@ function ProductividadGerencia() {
                 </TableRow>
 
                 {/* ── Fila 2: nombres indicadores ────────── */}
-                <TableRow sx={{ bgcolor: '#584F46' }}>
+                <TableRow sx={{ bgcolor: TAUPE_MEDIO }}>
                   {indicadores.map(ind => {
                     const cfg = cfgByCode[ind];
                     const nombre = kpiNombre(ind, cfg?.nombre);
                     return (
                       <TableCell key={ind} colSpan={2}
-                        sx={{ ...TH_BASE, bgcolor: '#584F46', minWidth: 76, textTransform:'uppercase', fontSize: 9 }}>
+                        sx={{ ...TH_BASE, bgcolor: TAUPE_MEDIO, minWidth: 76, textTransform:'uppercase', fontSize: 9 }}>
                         {nombre}
                       </TableCell>
                     );
                   })}
                   <TableCell rowSpan={2}
-                    sx={{ ...TH_BASE, bgcolor: '#584F46', minWidth: 36, fontSize: 10 }}>
+                    sx={{ ...TH_BASE, bgcolor: TAUPE_MEDIO, minWidth: 36, fontSize: 10 }}>
                     TOTAL
                   </TableCell>
                 </TableRow>
 
                 {/* ── Fila 3: Resul / Ptos ───────────────── */}
-                <TableRow sx={{ bgcolor: '#686158' }}>
+                <TableRow sx={{ bgcolor: TAUPE }}>
                   {indicadores.map(ind => (
                     [['Resul', ind+'-r'], ['Ptos', ind+'-p']].map(([label, key]) => (
-                      <TableCell key={key} sx={{ ...TH_BASE, bgcolor: '#686158', fontSize: 11 }}>
+                      <TableCell key={key} sx={{ ...TH_BASE, bgcolor: TAUPE, fontSize: 11 }}>
                         {label}
                       </TableCell>
                     ))
@@ -425,7 +426,7 @@ function ProductividadGerencia() {
 
                 {/* ── Fila meta: Puntos máx ──────────────── */}
                 <TableRow>
-                  <TableCell colSpan={5} sx={{ ...TH_META, textAlign:'right', fontStyle:'italic', color:'#546e7a' }}>
+                  <TableCell colSpan={5} sx={{ ...TH_META, textAlign:'right', fontStyle:'italic', color:NEUTRO_600 }}>
                     Puntos
                   </TableCell>
                   {indicadores.map(ind => {
@@ -438,12 +439,12 @@ function ProductividadGerencia() {
                   <TableCell sx={{ ...TH_META, bgcolor: '#c8e6c9', fontWeight: 800, color:'#1b5e20' }}>
                     {indicadores.reduce((s, ind) => s + (Number(cfgByCode[ind]?.ponderacion_pct) || 0), 0).toFixed(0) || '—'}
                   </TableCell>
-                  <TableCell sx={{ ...TH_META, bgcolor: '#E9E4DD' }} />
+                  <TableCell sx={{ ...TH_META, bgcolor: SUPERFICIE_4 }} />
                 </TableRow>
 
                 {/* ── Fila meta: Máximo % ────────────────── */}
                 <TableRow>
-                  <TableCell colSpan={5} sx={{ ...TH_META, textAlign:'right', fontStyle:'italic', color:'#546e7a' }}>
+                  <TableCell colSpan={5} sx={{ ...TH_META, textAlign:'right', fontStyle:'italic', color:NEUTRO_600 }}>
                     Máximo (%)
                   </TableCell>
                   {indicadores.map(ind => {
@@ -452,12 +453,12 @@ function ProductividadGerencia() {
                     return <TableCell key={ind+'-mx'} colSpan={2} sx={{ ...TH_META }}>{v}</TableCell>;
                   })}
                   <TableCell sx={{ ...TH_META }} />
-                  <TableCell sx={{ ...TH_META, bgcolor: '#E9E4DD' }} />
+                  <TableCell sx={{ ...TH_META, bgcolor: SUPERFICIE_4 }} />
                 </TableRow>
 
                 {/* ── Fila meta: Mínimo % ────────────────── */}
                 <TableRow>
-                  <TableCell colSpan={5} sx={{ ...TH_META, textAlign:'right', fontStyle:'italic', color:'#546e7a' }}>
+                  <TableCell colSpan={5} sx={{ ...TH_META, textAlign:'right', fontStyle:'italic', color:NEUTRO_600 }}>
                     Mínimo (%)
                   </TableCell>
                   {indicadores.map(ind => {
@@ -466,7 +467,7 @@ function ProductividadGerencia() {
                     return <TableCell key={ind+'-mn'} colSpan={2} sx={{ ...TH_META }}>{v}</TableCell>;
                   })}
                   <TableCell sx={{ ...TH_META }} />
-                  <TableCell sx={{ ...TH_META, bgcolor: '#E9E4DD' }} />
+                  <TableCell sx={{ ...TH_META, bgcolor: SUPERFICIE_4 }} />
                 </TableRow>
               </TableHead>
 
@@ -485,9 +486,9 @@ function ProductividadGerencia() {
                   const rowBg   = i % 2 === 0 ? '#f9f9f9' : '#fff';
 
                   // Shading for cycle rank top 3 (no medals)
-                  const top3Bg: Record<number, string>     = { 1: '#FFF59D', 2: '#E0E0E0', 3: '#FFCCBC' };
+                  const top3Bg: Record<number, string>     = { 1: '#FFF59D', 2: BORDE, 3: '#FFCCBC' };
                   const top3Border: Record<number, string> = { 1: '#F9A825', 2: '#9E9E9E', 3: '#E64A19' };
-                  const top3Color: Record<number, string>  = { 1: '#E65100', 2: '#424242', 3: '#BF360C' };
+                  const top3Color: Record<number, string>  = { 1: AVISO, 2: '#424242', 3: '#BF360C' };
                   const mesNum = typeof rkMes === 'number' ? rkMes : 0;
                   const isMedal = mesNum >= 1 && mesNum <= 3;
 
@@ -497,7 +498,7 @@ function ProductividadGerencia() {
                       <TableCell sx={{ ...TD, p: 0.5 }}>
                         <Box sx={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          bgcolor: '#686158', color: '#fff', borderRadius: '50%',
+                          bgcolor: TAUPE, color: '#fff', borderRadius: '50%',
                           width: 28, height: 28, fontWeight: 900, fontSize: 13,
                         }}>
                           {rkAcum}
@@ -509,7 +510,7 @@ function ProductividadGerencia() {
                         bgcolor: isMedal ? top3Bg[mesNum] : undefined,
                         borderLeft: isMedal ? `3px solid ${top3Border[mesNum]}` : undefined,
                       }}>
-                        <Typography sx={{ fontSize: 11, fontWeight: isMedal ? 800 : 700, color: isMedal ? top3Color[mesNum] : '#37474f' }}>
+                        <Typography sx={{ fontSize: 11, fontWeight: isMedal ? 800 : 700, color: isMedal ? top3Color[mesNum] : NEUTRO_900 }}>
                           {rkMes}
                         </Typography>
                       </TableCell>
@@ -544,13 +545,13 @@ function ProductividadGerencia() {
                         ];
                       })}
                       {/* TOTAL ciclo */}
-                      <TableCell sx={{ ...TD, bgcolor: '#EFEBE6' }}>
+                      <TableCell sx={{ ...TD, bgcolor: SUPERFICIE_4 }}>
                         {row.total != null
-                          ? <Typography sx={{ fontSize:12, fontWeight:800, color:'#686158' }}>{Number(row.total).toFixed(1)}</Typography>
+                          ? <Typography sx={{ fontSize:12, fontWeight:800, color:TAUPE }}>{Number(row.total).toFixed(1)}</Typography>
                           : <Typography sx={{ color:'text.disabled', fontSize:12 }}>—</Typography>}
                       </TableCell>
                       {/* TOTAL ACUM — suma de todos los ciclos */}
-                      <TableCell sx={{ ...TD, bgcolor: '#E9E4DD' }}>
+                      <TableCell sx={{ ...TD, bgcolor: SUPERFICIE_4 }}>
                         {accumByRm[row.rm_id] != null && accumByRm[row.rm_id] > 0
                           ? <Typography sx={{ fontSize:12, fontWeight:800, color:'#4a148c' }}>{Number(accumByRm[row.rm_id]).toFixed(1)}</Typography>
                           : <Typography sx={{ color:'text.disabled', fontSize:12 }}>—</Typography>}

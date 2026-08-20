@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 import { useCicloStore } from '../store/ciclo.store';
+import { SUPERFICIE_3, TAUPE_NEGRO } from '../theme/marca';
 
 /** Barra superior: informativa (píldora compacta de una sola línea). Muestra el
  *  país y el CICLO ABIERTO. No permite seleccionar — el cambio vive en CicloPaisHeader.
@@ -20,9 +21,9 @@ export default function CicloPaisBadge() {
   return (
     <Box sx={{
       display: 'flex', alignItems: 'center', gap: 0.75, whiteSpace: 'nowrap',
-      px: 1, py: 0.4, borderRadius: 5, bgcolor: '#F4F1EE', border: '1px solid #E0DAD3',
+      px: 1, py: 0.4, borderRadius: 5, bgcolor: SUPERFICIE_3, border: '1px solid #E0DAD3',
     }}>
-      <Typography variant="caption" sx={{ fontWeight: 800, color: '#2A2622', lineHeight: 1 }}>{paisCodigo}</Typography>
+      <Typography variant="caption" sx={{ fontWeight: 800, color: TAUPE_NEGRO, lineHeight: 1 }}>{paisCodigo}</Typography>
 
       {/* Nombre del ciclo — oculto en móvil para no saturar */}
       <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1, display: { xs: 'none', sm: 'inline' } }}>

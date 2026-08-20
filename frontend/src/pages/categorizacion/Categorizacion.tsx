@@ -26,14 +26,15 @@ import PanelRM from './PanelRM';
 import { CAT_PAL, CATS } from './paleta';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
+import { AVISO_OSCURO, BORDE, BORDE_FUERTE, EXITO_MEDIO, EXITO_OSCURO, EXITO_TENUE, NEUTRO_300, NEUTRO_400, NEUTRO_600, NEUTRO_700, NEUTRO_900, SUPERFICIE_4, TAUPE, TAUPE_MEDIO, TAUPE_PROFUNDO } from '../../theme/marca';
 
 // ── Paleta profesional A/B/C/D (sincronizada con DetalleMedicos.tsx) ─────────
 // A = Teal esmeralda  B = Azul zafiro  C = Ámbar dorado  D = Gris acero
 const COL_COLORS = {
-  A: { bg: '#00695c', light: '#e0f2f1' },
-  B: '#4A433C',
-  C: '#ef6c00',
-  D: '#455a64',
+  A: { bg: EXITO_OSCURO, light: EXITO_TENUE },
+  B: TAUPE_PROFUNDO,
+  C: AVISO_OSCURO,
+  D: NEUTRO_700,
 } as const;
 
 // La paleta vive en ./paleta para compartirla con PanelRM sin importación circular.
@@ -52,8 +53,8 @@ function NumCell({ v, cat, max }: { v: number; cat?: typeof CATS[number]; max?: 
           {v.toLocaleString()}
         </Typography>
         {max && max > 0 && (
-          <Box sx={{ height: 3, bgcolor: '#e0e0e0', borderRadius: 4, mt: 0.3, overflow: 'hidden' }}>
-            <Box sx={{ height: '100%', width: `${pct}%`, bgcolor: pal?.mid ?? '#90a4ae', borderRadius: 4 }} />
+          <Box sx={{ height: 3, bgcolor: BORDE, borderRadius: 4, mt: 0.3, overflow: 'hidden' }}>
+            <Box sx={{ height: '100%', width: `${pct}%`, bgcolor: pal?.mid ?? NEUTRO_300, borderRadius: 4 }} />
           </Box>
         )}
       </Box>
@@ -110,14 +111,14 @@ interface FilaEspecialidad {
 
 // ── Colores de categoría (sincronizados con DetalleMedicos.tsx) ───────────────
 const CAT_COLORS: Record<string, string> = {
-  A: '#00897b',   // Teal esmeralda (un tono más claro)
-  B: '#4A433C',   // Azul zafiro
-  C: '#ef6c00',   // Ámbar dorado
-  D: '#455a64',   // Gris acero
-  '?': '#78909c',
+  A: EXITO_MEDIO,   // Teal esmeralda (un tono más claro)
+  B: TAUPE_PROFUNDO,   // Azul zafiro
+  C: AVISO_OSCURO,   // Ámbar dorado
+  D: NEUTRO_700,   // Gris acero
+  '?': NEUTRO_400,
 };
 
-const PIE_COLORS = ['#00897b', '#4A433C', '#ef6c00', '#455a64', '#9e9e9e'];
+const PIE_COLORS = [EXITO_MEDIO, TAUPE_PROFUNDO, AVISO_OSCURO, NEUTRO_700, '#9e9e9e'];
 
 // Degradados por categoría (para gradiente en chip)
 const CAT_GRAD: Record<string, string> = {
@@ -135,7 +136,7 @@ function CatChip({ cat }: { cat: string | null }) {
       display: 'inline-flex', alignItems: 'center', gap: 0.5,
       px: 1.1, py: 0.3, borderRadius: '16px',
       background: CAT_GRAD[c] || CAT_GRAD['?'],
-      boxShadow: `0 2px 6px ${CAT_COLORS[c] || '#78909c'}50`,
+      boxShadow: `0 2px 6px ${CAT_COLORS[c] || NEUTRO_400}50`,
     }}>
       <Box sx={{
         width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
@@ -292,22 +293,22 @@ function CategorizacionMotor() {
           sx={{
             borderBottom: '3px solid #584F46',
             '& .MuiTab-root': {
-              bgcolor: '#D8D2CB',
+              bgcolor: BORDE_FUERTE,
               borderTopLeftRadius: 8,
               borderTopRightRadius: 8,
               mr: 0.5,
-              color: '#584F46',
+              color: TAUPE_MEDIO,
               fontWeight: 600,
               minHeight: 40,
               fontSize: 13,
               textTransform: 'none',
               '&.Mui-selected': {
-                bgcolor: '#584F46',
+                bgcolor: TAUPE_MEDIO,
                 color: '#fff',
                 fontWeight: 700,
               },
               '&:hover:not(.Mui-selected)': {
-                bgcolor: '#D8D2CB',
+                bgcolor: BORDE_FUERTE,
               },
             },
             '& .MuiTabs-indicator': { display: 'none' },
@@ -515,7 +516,7 @@ function CategorizacionMotor() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ bgcolor: '#37474f', color: '#fff', fontWeight: 700, fontSize: '0.78rem', pl: 2, minWidth: 180 }}>
+                    <TableCell sx={{ bgcolor: NEUTRO_900, color: '#fff', fontWeight: 700, fontSize: '0.78rem', pl: 2, minWidth: 180 }}>
                       Equipo / Representante
                     </TableCell>
                     {CATS.map(c => (
@@ -535,8 +536,8 @@ function CategorizacionMotor() {
                     const reps = porRep.filter(r => r.equipo === eq);
                     return [
                       /* fila de equipo */
-                      <TableRow key={`eq-${eq}`} sx={{ bgcolor: eqIdx % 2 === 0 ? '#EFEBE6' : '#E9E4DD' }}>
-                        <TableCell sx={{ pl: 2, fontWeight: 800, fontSize: '0.82rem', color: '#686158',
+                      <TableRow key={`eq-${eq}`} sx={{ bgcolor: eqIdx % 2 === 0 ? SUPERFICIE_4 : SUPERFICIE_4 }}>
+                        <TableCell sx={{ pl: 2, fontWeight: 800, fontSize: '0.82rem', color: TAUPE,
                           borderLeft: '4px solid #3f51b5', letterSpacing: 0.3 }}>
                           ▸ {eq}
                         </TableCell>
@@ -550,7 +551,7 @@ function CategorizacionMotor() {
                             </TableCell>
                           );
                         })}
-                        <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.84rem', color: '#37474f' }}>
+                        <TableCell align="center" sx={{ fontWeight: 800, fontSize: '0.84rem', color: NEUTRO_900 }}>
                           {sub.total.toLocaleString()}
                         </TableCell>
                       </TableRow>,
@@ -558,14 +559,14 @@ function CategorizacionMotor() {
                       ...reps.map(r => (
                         <TableRow key={`${eq}-${r.representante}`} hover
                           sx={{ '&:hover': { bgcolor: '#f3f4fe' }, borderLeft: '4px solid transparent' }}>
-                          <TableCell sx={{ pl: 5, fontSize: '0.78rem', color: '#546e7a' }}>
+                          <TableCell sx={{ pl: 5, fontSize: '0.78rem', color: NEUTRO_600 }}>
                             {r.representante}
                           </TableCell>
                           <NumCell v={r.a} cat="A" max={sub.a || 1} />
                           <NumCell v={r.b} cat="B" max={sub.b || 1} />
                           <NumCell v={r.c} cat="C" max={sub.c || 1} />
                           <NumCell v={r.d} cat="D" max={sub.d || 1} />
-                          <TableCell align="center" sx={{ fontWeight: 600, fontSize: '0.8rem', color: '#455a64' }}>
+                          <TableCell align="center" sx={{ fontWeight: 600, fontSize: '0.8rem', color: NEUTRO_700 }}>
                             {r.total.toLocaleString()}
                           </TableCell>
                         </TableRow>
@@ -573,7 +574,7 @@ function CategorizacionMotor() {
                     ];
                   })}
                   {/* Total general */}
-                  <TableRow sx={{ bgcolor: '#686158' }}>
+                  <TableRow sx={{ bgcolor: TAUPE }}>
                     <TableCell sx={{ color: '#fff', fontWeight: 800, fontSize: '0.84rem', pl: 2, letterSpacing: 0.5 }}>
                       TOTAL GENERAL
                     </TableCell>
@@ -613,7 +614,7 @@ function CategorizacionMotor() {
               <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ bgcolor: '#37474f', color: '#fff', fontWeight: 700, fontSize: '0.78rem', pl: 2, minWidth: 170 }}>
+                    <TableCell sx={{ bgcolor: NEUTRO_900, color: '#fff', fontWeight: 700, fontSize: '0.78rem', pl: 2, minWidth: 170 }}>
                       Especialidad
                     </TableCell>
                     {CATS.map(c => (
@@ -633,17 +634,17 @@ function CategorizacionMotor() {
                     return (
                       <TableRow key={r.especialidad} hover sx={{
                         bgcolor: i % 2 === 0 ? '#fff' : '#f1f8f6',
-                        '&:hover': { bgcolor: '#e0f2f1' },
+                        '&:hover': { bgcolor: EXITO_TENUE },
                       }}>
                         <TableCell sx={{ pl: 2, fontWeight: 600, fontSize: '0.78rem', color: '#004d40',
-                          borderLeft: `3px solid ${i % 2 === 0 ? '#00897b' : '#26a69a'}` }}>
+                          borderLeft: `3px solid ${i % 2 === 0 ? EXITO_MEDIO : '#26a69a'}` }}>
                           {r.especialidad}
                         </TableCell>
                         <NumCell v={r.a} cat="A" max={maxVal} />
                         <NumCell v={r.b} cat="B" max={maxVal} />
                         <NumCell v={r.c} cat="C" max={maxVal} />
                         <NumCell v={r.d} cat="D" max={maxVal} />
-                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.82rem', color: '#00695c' }}>
+                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.82rem', color: EXITO_OSCURO }}>
                           {r.total.toLocaleString()}
                         </TableCell>
                       </TableRow>

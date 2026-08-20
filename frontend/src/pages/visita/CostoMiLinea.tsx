@@ -19,9 +19,10 @@ import { Inventory2, Warning } from '@mui/icons-material';
 import { useQuery } from '@tanstack/react-query';
 import { costoMiLinea, costoHojas } from '../../services/visita.service';
 import { useCicloStore } from '../../store/ciclo.store';
+import { AVISO_MEDIO, ERROR, EXITO } from '../../theme/marca';
 
 const nf = (n: number) => n.toLocaleString('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const cumplColor = (p: number) => (p >= 100 ? '#2e7d32' : p >= 80 ? '#f57c00' : '#c62828');
+const cumplColor = (p: number) => (p >= 100 ? EXITO : p >= 80 ? AVISO_MEDIO : ERROR);
 
 /**
  * @param observador  Rol de solo lectura (CONSULTA/Analista/Dirección): en vez de su propia
@@ -155,15 +156,15 @@ export default function CostoMiLinea({ observador = false }: { observador?: bool
           <Grid item xs={12} sm={4}>
             <Card variant="outlined"><CardContent sx={{ py: 1.5 }}>
               <Typography variant="caption" color="text.secondary" fontWeight={700}>MÉDICOS SIN VISITAR</Typography>
-              <Typography variant="h4" fontWeight={800} color="#c62828">
+              <Typography variant="h4" fontWeight={800} color={ERROR}>
                 {data.impacto_cobertura.total_medicos_sin_visitar.toLocaleString('es-DO')}
               </Typography>
             </CardContent></Card>
           </Grid>
           <Grid item xs={12} sm={4}>
-            <Card variant="outlined" sx={{ borderColor: '#c62828', borderWidth: 2 }}><CardContent sx={{ py: 1.5 }}>
+            <Card variant="outlined" sx={{ borderColor: ERROR, borderWidth: 2 }}><CardContent sx={{ py: 1.5 }}>
               <Typography variant="caption" color="text.secondary" fontWeight={700}>VENTA EN RIESGO</Typography>
-              <Typography variant="h5" fontWeight={800} color="#c62828">
+              <Typography variant="h5" fontWeight={800} color={ERROR}>
                 {mon} {nf(data.impacto_cobertura.venta_riesgo_bajo)}
               </Typography>
               <Typography variant="caption" color="text.secondary">

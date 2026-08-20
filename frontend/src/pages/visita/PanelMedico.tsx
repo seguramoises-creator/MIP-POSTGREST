@@ -16,6 +16,7 @@ import {
   type Provincia, type Municipio, type MiGerente, type CriterioPlantilla, type ClasificacionCrear,
 } from '../../services/visita.service';
 import { useCicloStore } from '../../store/ciclo.store';
+import { EXITO } from '../../theme/marca';
 
 // Tipos de consultorio válidos en RD (sin "Hospital privado", que no aplica).
 const TIPOS = ['Clínica privada', 'Hospital público', 'Consultorio independiente'];
@@ -66,7 +67,7 @@ const APROB: Record<string, { label: string; color: 'warning' | 'info' | 'defaul
 
 // Estado de visita del ciclo → etiqueta + color de punto.
 const ESTADO: Record<string, { label: string; color: string }> = {
-  vr:  { label: 'Vista + Revisita', color: '#2E7D32' },
+  vr:  { label: 'Vista + Revisita', color: EXITO },
   v:   { label: 'Vista realizada',  color: '#ED6C02' },
   sin: { label: 'Sin visitar',      color: '#D32F2F' },
 };

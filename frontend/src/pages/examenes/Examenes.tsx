@@ -17,6 +17,7 @@ import {
   type Examen, type OpcionCrear, type EvaluadoRef, type ResultadosExamen,
   type AnalisisPregunta, type PreguntaConOpciones, type RespuestaAbierta,
 } from '../../services/examenes.service';
+import { AVISO } from '../../theme/marca';
 
 type EvalOpt = { tipo: 'RM' | 'GERENTE'; id: number; nombre: string; grupo: string };
 
@@ -26,7 +27,7 @@ type EvalOpt = { tipo: 'RM' | 'GERENTE'; id: number; nombre: string; grupo: stri
 //  nota 9–10 → factor 0.9–1.0  → verde (excelente)
 function colorPorNota(score: number): string {
   if (score >= 90) return '#1b5e20'; // verde
-  if (score >= 80) return '#e65100'; // ámbar/naranja
+  if (score >= 80) return AVISO; // ámbar/naranja
   return '#b71c1c';                  // rojo
 }
 
@@ -657,7 +658,7 @@ export default function Examenes() {
                     <Stack direction="row" spacing={1.5} sx={{ mt: 1, flexWrap: 'wrap', alignItems: 'center' }}>
                       <Typography variant="caption" color="text.secondary">Escala (EVAL_CONOCIMIENTOS):</Typography>
                       <Chip size="small" sx={{ bgcolor: '#1b5e20', color: '#fff', height: 18 }} label="≥ 90% excelente" />
-                      <Chip size="small" sx={{ bgcolor: '#e65100', color: '#fff', height: 18 }} label="80–89% aprobado" />
+                      <Chip size="small" sx={{ bgcolor: AVISO, color: '#fff', height: 18 }} label="80–89% aprobado" />
                       <Chip size="small" sx={{ bgcolor: '#b71c1c', color: '#fff', height: 18 }} label="< 80% no aporta" />
                     </Stack>
                     <Divider sx={{ my: 2 }} />

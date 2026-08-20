@@ -21,6 +21,7 @@ import {
   type CeldaCalendario, type GenerarCalendarioResp,
 } from '../../services/formacion.service';
 import { api } from '../../services/api';
+import { AVISO, ERROR, EXITO, TAUPE_MEDIO } from '../../theme/marca';
 
 const DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
 const ROLES_ESCRITURA = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO'];
@@ -29,7 +30,7 @@ const ROLES_ESCRITURA = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO'];
 // solo consultarlas (GET, RequireLectura).
 const ROLES_CONFIG = ['ADMIN', 'GERENTE_PRODUCTIVIDAD'];
 const CUAD_COLOR: Record<string, string> = {
-  D1: '#c62828', D2: '#e65100', D3: '#584F46', D4: '#2e7d32',
+  D1: ERROR, D2: AVISO, D3: TAUPE_MEDIO, D4: EXITO,
 };
 
 export default function CalendarioCoaching() {

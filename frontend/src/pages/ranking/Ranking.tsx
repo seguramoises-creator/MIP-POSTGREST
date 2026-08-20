@@ -13,11 +13,12 @@ import { useCicloStore } from '../../store/ciclo.store';
 import { useAuthStore } from '../../store/auth.store';
 import MiRanking from './MiRanking';
 import type { RankingItem } from '../../types';
+import { BORDE_FUERTE, EXITO_MEDIO, FONDO, NEUTRO_900, TAUPE, TAUPE_MEDIO } from '../../theme/marca';
 
 /* ── utilidades ───────────────────────────────────────────── */
 function flagColor(v: number): string {
   const r = Math.round(v * 10) / 10;  // mismo redondeo que toFixed(1)
-  if (r >= 90) return '#00897b';   // verde   ≥ 90
+  if (r >= 90) return EXITO_MEDIO;   // verde   ≥ 90
   if (r >= 80) return '#f9a825';   // ámbar   80–89
   return '#e53935';                // rojo    < 80
 }
@@ -229,11 +230,11 @@ function RankingGerencia() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           {total > 0 && (
             <Chip label={total + ' RMs'} variant="outlined"
-              sx={{ fontWeight: 700, fontSize: 13, color: '#584F46', borderColor: '#584F46' }} />
+              sx={{ fontWeight: 700, fontSize: 13, color: TAUPE_MEDIO, borderColor: TAUPE_MEDIO }} />
           )}
           {elegibles > 0 && (
             <Chip label={elegibles + ' elegibles'} variant="outlined"
-              sx={{ fontWeight: 700, fontSize: 13, color: '#00897b', borderColor: '#00897b' }} />
+              sx={{ fontWeight: 700, fontSize: 13, color: EXITO_MEDIO, borderColor: EXITO_MEDIO }} />
           )}
           <Button variant="outlined" size="small" startIcon={<Download />}
             onClick={handleExportar} disabled={exportando}>
@@ -302,7 +303,7 @@ function RankingGerencia() {
                 {cicloNombre && (
                   <Box sx={{ ml: 'auto' }}>
                     <Chip label={'Mostrando: ' + cicloNombre}
-                      sx={{ bgcolor: '#686158', color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
+                      sx={{ bgcolor: TAUPE, color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
                   </Box>
                 )}
               </>
@@ -319,12 +320,12 @@ function RankingGerencia() {
         /* ── TABLA MIP ─────────────────────────────────────────── */
         <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
           {/* Barra granate */}
-          <Box sx={{ bgcolor: '#686158', py: 1.8, textAlign: 'center' }}>
+          <Box sx={{ bgcolor: TAUPE, py: 1.8, textAlign: 'center' }}>
             <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 16,
               letterSpacing: '1.5px', textTransform: 'uppercase' }}>
               Mapa Integral de Productividad
             </Typography>
-            <Typography sx={{ color: '#D8D2CB', fontWeight: 700, fontSize: 16,
+            <Typography sx={{ color: BORDE_FUERTE, fontWeight: 700, fontSize: 16,
               letterSpacing: '1px', textTransform: 'uppercase', mt: 0.3 }}>
               Resultados Acumulados{cicloNum ? ` Ciclo ${cicloNum} ${cicloAnio}` : ''}
             </Typography>
@@ -333,7 +334,7 @@ function RankingGerencia() {
           {/* Leyenda */}
           <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 3,
             px: 3, py: 1.4, bgcolor: '#fafafa', borderBottom: '1px solid #e0e0e0' }}>
-            {[{ color: '#00897b', label: '≥ 90' },
+            {[{ color: EXITO_MEDIO, label: '≥ 90' },
               { color: '#f9a825', label: '80 – 89' },
               { color: '#e53935', label: '< 80'   }].map(({ color, label }) => (
               <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.8 }}>
@@ -349,7 +350,7 @@ function RankingGerencia() {
           <TableContainer>
             <Table size="small" sx={{ '& .MuiTableCell-root': { py: '2px', px: '6px' } }}>
               <TableHead>
-                <TableRow sx={{ bgcolor: '#F6F4F2' }}>
+                <TableRow sx={{ bgcolor: FONDO }}>
                   {[
                     { label: 'Rk',    align: 'center' as const, w: 36 },
                     { label: 'Linea', align: 'left'   as const        },
@@ -361,7 +362,7 @@ function RankingGerencia() {
                     { label: 'Acum',  align: 'left'   as const        },
                   ].map(({ label, align, w }) => (
                     <TableCell key={label} align={align}
-                      sx={{ fontWeight: 800, fontSize: 11, color: '#686158',
+                      sx={{ fontWeight: 800, fontSize: 11, color: TAUPE,
                             borderBottom: '2px solid #686158',
                             ...(w ? { width: w, minWidth: w } : {}) }}>
                       {label}
@@ -384,7 +385,7 @@ function RankingGerencia() {
                   return (
                     <TableRow key={String(row.rm_id) + '-' + i} sx={{ bgcolor: rowBg }}>
                       <TableCell align="center"
-                        sx={{ fontWeight: 700, fontSize: 11, color: '#686158' }}>{pos}</TableCell>
+                        sx={{ fontWeight: 700, fontSize: 11, color: TAUPE }}>{pos}</TableCell>
                       <TableCell sx={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
                         {row.linea_nombre && row.linea_nombre !== '—' ? row.linea_nombre : 'GENERAL'}
                       </TableCell>
@@ -415,13 +416,13 @@ function RankingGerencia() {
               {/* ── Fila de promedios ───────────────────────── */}
               {promedios && (
                 <TableFooter>
-                  <TableRow sx={{ bgcolor: '#D8D2CB', borderTop: '4px solid #686158' }}>
+                  <TableRow sx={{ bgcolor: BORDE_FUERTE, borderTop: '4px solid #686158' }}>
                     <TableCell align="center"
-                      sx={{ fontWeight: 900, fontSize: 10, color: '#686158', lineHeight: 1.1 }}>
+                      sx={{ fontWeight: 900, fontSize: 10, color: TAUPE, lineHeight: 1.1 }}>
                       Ø
                     </TableCell>
                     <TableCell colSpan={2}
-                      sx={{ fontWeight: 800, fontSize: 10, color: '#686158', whiteSpace: 'nowrap' }}>
+                      sx={{ fontWeight: 800, fontSize: 10, color: TAUPE, whiteSpace: 'nowrap' }}>
                       PROMEDIO · {itemsFiltrados.length} RMs
                     </TableCell>
                     {ciclosNums.length > 0
@@ -464,12 +465,12 @@ function RankingGerencia() {
         /* ── TABLA SIMPLE (Regional / Anual) ───────────────────── */
         <TableContainer component={Paper} elevation={2} sx={{ borderRadius: 2 }}>
           <Table size="small">
-            <TableHead sx={{ bgcolor: '#F6F4F2' }}>
+            <TableHead sx={{ bgcolor: FONDO }}>
               <TableRow>
                 {['#', 'Linea', 'RM', ...(tab === 1 ? ['País'] : []), 'Score'].map(h => (
                   <TableCell key={h}
                     align={h === '#' || h === 'Score' ? 'center' : 'left'}
-                    sx={{ fontWeight: 800, fontSize: 13, color: '#37474f',
+                    sx={{ fontWeight: 800, fontSize: 13, color: NEUTRO_900,
                           borderBottom: '2px solid #b0bec5', py: 1.4, textTransform: 'uppercase' }}>
                     {h}
                   </TableCell>

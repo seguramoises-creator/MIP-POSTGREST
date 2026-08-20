@@ -10,6 +10,7 @@ import {
   type Asignacion, type IntentoIniciado, type ReporteIntento,
 } from '../../services/examenes.service';
 import { useAuthStore } from '../../store/auth.store';
+import { AVISO, AVISO_TENUE } from '../../theme/marca';
 
 const FEEDBACK_HORAS = 48;
 /** Horas que quedan para ver el detalle (desde fecha_fin + 48h). null = sin fecha. */
@@ -251,8 +252,8 @@ export default function MisExamenes() {
           <CardContent>
             {preguntaActual.escenario && (
               preguntaActual.tipo === 'objecion' ? (
-                <Box sx={{ p: 1.5, mb: 2, bgcolor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 1 }}>
-                  <Typography variant="subtitle2" sx={{ color: '#e65100', fontWeight: 700 }}>
+                <Box sx={{ p: 1.5, mb: 2, bgcolor: AVISO_TENUE, border: '1px solid #ffb74d', borderRadius: 1 }}>
+                  <Typography variant="subtitle2" sx={{ color: AVISO, fontWeight: 700 }}>
                     Objeción del Médico sobre el Producto
                   </Typography>
                   <Typography variant="body2">{preguntaActual.escenario}</Typography>
@@ -381,8 +382,8 @@ export default function MisExamenes() {
                 <Card key={i} variant="outlined" sx={{ position: 'relative', zIndex: 0 }}>
                   <CardContent>
                     {r.tipo === 'objecion' && r.escenario && (
-                      <Box sx={{ p: 1.25, mb: 1, bgcolor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 1 }}>
-                        <Typography variant="caption" sx={{ color: '#e65100', fontWeight: 700, display: 'block' }}>
+                      <Box sx={{ p: 1.25, mb: 1, bgcolor: AVISO_TENUE, border: '1px solid #ffb74d', borderRadius: 1 }}>
+                        <Typography variant="caption" sx={{ color: AVISO, fontWeight: 700, display: 'block' }}>
                           Objeción del Médico sobre el Producto
                         </Typography>
                         <Typography variant="body2">{r.escenario}</Typography>

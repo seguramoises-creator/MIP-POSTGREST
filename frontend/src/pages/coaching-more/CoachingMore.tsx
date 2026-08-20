@@ -12,6 +12,7 @@ import {
   type CatalogoItem, type VMItem, type HojaResumen, type HojaDetalle, type CoachingKpi, type ItemCalif,
   type AcompanadasHoy,
 } from '../../services/coachingMore.service';
+import { BORDE_FUERTE, SUPERFICIE_2 } from '../../theme/marca';
 
 const ESCALA = [
   { v: 1, l: 'D', label: 'Desarrollar', color: '#e53935' },
@@ -135,7 +136,7 @@ function DetalleHoja({ id, onClose }: { id: number; onClose: () => void }) {
               </CardContent></Card>
             ))}
 
-            <Card variant="outlined" sx={{ bgcolor: '#F7F5F2' }}><CardContent sx={{ py: 1.5 }}>
+            <Card variant="outlined" sx={{ bgcolor: SUPERFICIE_2 }}><CardContent sx={{ py: 1.5 }}>
               <Row k="Evaluación promedio general" v={d.evaluacion_promedio.toFixed(2)} bold />
             </CardContent></Card>
 
@@ -333,7 +334,7 @@ export default function CoachingMore() {
       )}
 
       {puedeConsolidar && (
-        <Card variant="outlined" sx={{ mb: 2, bgcolor: '#F7F5F2', borderColor: '#D8D2CB' }}><CardContent sx={{ py: 1.5 }}>
+        <Card variant="outlined" sx={{ mb: 2, bgcolor: SUPERFICIE_2, borderColor: BORDE_FUERTE }}><CardContent sx={{ py: 1.5 }}>
           <Typography variant="subtitle2" fontWeight={700}>Consolidar al KPI Coaching del Score</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
             Vuelca los promedios MORE del <b>ciclo abierto</b> hacia el flujo que alimenta el Score Integral

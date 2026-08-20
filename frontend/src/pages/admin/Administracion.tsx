@@ -12,10 +12,11 @@ import PasswordPolicyTab from './PasswordPolicyTab';
 import CorreoAdmin from './CorreoAdmin';
 import MedicosTopConfigTab from './MedicosTopConfigTab';
 import CatalogoErrores from './CatalogoErrores';
+import { ROJO } from '../../theme/marca';
 
 // Antes era el naranja de Material (#ed6c02): el subrayado y la pestaña activa
 // de esta pantalla no seguían la marca. Ahora es el rojo de Mallén.
-const NARANJA = '#F63440';
+const NARANJA = ROJO;
 
 export default function Administracion() {
   const [tab, setTab] = useState(0);

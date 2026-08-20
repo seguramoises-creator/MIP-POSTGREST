@@ -13,6 +13,7 @@ import {
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useCicloStore } from '../store/ciclo.store';
+import { AVISO_MEDIO, ERROR, EXITO, EXITO_MEDIO, TAUPE } from '../theme/marca';
 
 type Salud = {
   nombre: string; estado: string; vencido: boolean;
@@ -40,7 +41,7 @@ function Metrica({ icon, label, valor, sub, color = 'text.primary', pct }:
       {typeof pct === 'number' && (
         <LinearProgress variant="determinate" value={Math.min(100, pct)}
           sx={{ height: 6, borderRadius: 3, my: 0.5,
-            '& .MuiLinearProgress-bar': { bgcolor: pct >= 80 ? '#2e7d32' : pct >= 50 ? '#f57c00' : '#c62828' } }} />
+            '& .MuiLinearProgress-bar': { bgcolor: pct >= 80 ? EXITO : pct >= 50 ? AVISO_MEDIO : ERROR } }} />
       )}
       {sub && <Typography variant="caption" color="text.secondary">{sub}</Typography>}
     </Box>
@@ -99,13 +100,13 @@ export default function SaludCiclo() {
         <Grid item xs={6} sm={4} md={2.4}>
           <Metrica icon={<EventAvailable sx={{ fontSize: 16 }} />} label="DÍAS HÁBILES"
             valor={`${data.dias_transcurridos}/${data.dias_totales}`} pct={data.progreso_pct}
-            sub={`${data.dias_restantes} restantes`} color="#686158" />
+            sub={`${data.dias_restantes} restantes`} color={TAUPE} />
         </Grid>
         <Grid item xs={6} sm={4} md={2.4}>
           <Metrica icon={<FactCheck sx={{ fontSize: 16 }} />} label="PLANEACIÓN VM"
             valor={`${data.pct_planeacion}%`} pct={data.pct_planeacion}
             sub={`${data.vm_con_planeacion}/${data.vm_total} representantes`}
-            color={data.pct_planeacion >= 80 ? '#2e7d32' : '#f57c00'} />
+            color={data.pct_planeacion >= 80 ? EXITO : AVISO_MEDIO} />
         </Grid>
         <Grid item xs={6} sm={4} md={2.4}>
           <Metrica icon={<TrackChanges sx={{ fontSize: 16 }} />} label="COBERTURA PANEL"
@@ -113,11 +114,11 @@ export default function SaludCiclo() {
             sub={data.medicos_fuera_de_ciclo > 0
               ? `${data.medicos_visitados}/${data.medicos_panel} vigentes (de ${data.medicos_registrados} cargados)`
               : `${data.medicos_visitados}/${data.medicos_panel} médicos`}
-            color={data.medicos_panel === 0 ? '#c62828' : '#00897b'} />
+            color={data.medicos_panel === 0 ? ERROR : EXITO_MEDIO} />
         </Grid>
         <Grid item xs={6} sm={4} md={2.4}>
           <Metrica icon={<Warning sx={{ fontSize: 16 }} />} label="SIN VISITAR"
-            valor={data.medicos_sin_visitar.toLocaleString()} sub="médicos pendientes" color="#c62828" />
+            valor={data.medicos_sin_visitar.toLocaleString()} sub="médicos pendientes" color={ERROR} />
         </Grid>
         <Grid item xs={12} sm={4} md={2.4}>
           <Box sx={{ p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 2, height: '100%' }}>
