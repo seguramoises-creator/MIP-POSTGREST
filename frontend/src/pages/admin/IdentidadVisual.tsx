@@ -153,6 +153,46 @@ export default function IdentidadVisual() {
           </Stack>
         )}
 
+
+        <Divider sx={{ my: 3 }} />
+
+        {/* La tipografía se MUESTRA, no se edita. Las dos familias viajan dentro del
+            paquete de la aplicación —no se descargan de internet, para que funcione
+            sin conexión en la calle—, así que cambiarlas exige subir archivos de
+            fuente, no elegir de una lista. Aquí queda documentado qué usa cada una:
+            es lo que un administrador necesita saber para pedir un cambio, y evita
+            que alguien busque un desplegable que no existe. */}
+        <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+          Dos tipos de letra para mantener una presentación uniforme
+        </Typography>
+        <Typography variant="body2" sx={{ color: TEXTO_TENUE, mb: 2 }}>
+          Vienen incluidas en la aplicación y se ven igual en cualquier equipo, con o sin
+          conexión.
+        </Typography>
+
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+          {([
+            ['Manrope', 'Títulos y elementos destacados',
+             'Para títulos de páginas, secciones, tarjetas, cifras e indicadores.'],
+            ['Inter', 'Textos y elementos de navegación',
+             'Para menús, botones, formularios, tablas, mensajes y textos.'],
+          ] as const).map(([familia, papel, detalle]) => (
+            <Box key={familia} sx={{ flex: 1, p: 2.2, borderRadius: 2,
+                                     border: '1px solid', borderColor: 'divider',
+                                     bgcolor: 'background.default' }}>
+              {/* Cada nombre se pinta CON su propia fuente: es la única forma de que
+                  el administrador vea la diferencia en vez de leer sobre ella. */}
+              <Typography sx={{ fontFamily: `"${familia}", sans-serif`,
+                                fontWeight: familia === 'Manrope' ? 800 : 500,
+                                fontSize: 30, letterSpacing: '-0.02em', lineHeight: 1.15 }}>
+                {familia}
+              </Typography>
+              <Typography sx={{ fontWeight: 600, fontSize: 13.5, mt: 0.8 }}>{papel}</Typography>
+              <Typography variant="body2" sx={{ color: TEXTO_TENUE, mt: 0.3 }}>{detalle}</Typography>
+            </Box>
+          ))}
+        </Stack>
+
         <Stack direction="row" spacing={1.5} sx={{ mt: 3 }}>
           <Button variant="contained" startIcon={<Save />} disabled={!valido || guardando}
                   onClick={guardar}>
