@@ -46,3 +46,22 @@ class IntegracionHallazgo(Base):
     severidad: Mapped[str] = mapped_column(String(10), nullable=False)
     detectado_en: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+
+
+class IntegracionAvisoLote(Base):
+    """Memoria del aviso por correo de un lote recibido.
+
+    Sin ella, el trabajo programado reenviaría el mismo correo en cada ejecución:
+    el lote sigue en RECIBIDO hasta que alguien lo valida, así que «hay un lote
+    pendiente» es cierto una y otra vez. La fila marca que ya se avisó.
+
+    A diferencia de `IntegracionHallazgo`, NO lleva clave foránea hacia
+    `ext.controlcarga`: no queremos que `Audit` dependa del esquema del tercero,
+    ni que una reconstrucción de su tabla se lleve por delante el historial.
+    """
+    __tablename__ = "IntegracionAvisoLote"
+    __table_args__ = {"schema": "Audit"}
+
+    lote_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    enviado_en: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    destinatarios: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

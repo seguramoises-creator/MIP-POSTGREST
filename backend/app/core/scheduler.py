@@ -59,6 +59,25 @@ def programar_correcciones(examen_id: int, fecha_limite: datetime) -> None:
         logger.error(f"No se pudo programar correcciones examen {examen_id}: {e}")
 
 
+def _job_avisar_lotes() -> None:
+    """Avisa de los lotes de Mallén en RECIBIDO, con su propia sesión de BD.
+
+    Como todos los trabajos programados: sesión propia y cerrada en `finally`, y
+    la excepción se registra sin propagarse — un fallo aquí (SMTP caído, `ext`
+    inaccesible) no debe tumbar el scheduler y llevarse con él el job de médicos
+    TOP, que no tiene nada que ver.
+    """
+    from app.db.database import SessionLocal
+    from app.services import notification_service
+    db = SessionLocal()
+    try:
+        notification_service.notificar_lotes_recibidos(db)
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Job de aviso de lotes de Mallén falló: {e}")
+    finally:
+        db.close()
+
+
 def _job_medicos_top() -> None:
     """Ejecuta los avisos de médicos TOP con su propia sesión de BD."""
     from app.db.database import SessionLocal
@@ -87,3 +106,16 @@ def programar_medicos_top() -> None:
         logger.info("Job diario de médicos TOP programado (07:00 UTC)")
     except Exception as e:  # noqa: BLE001
         logger.error(f"No se pudo programar el job de médicos TOP: {e}")
+
+    # Aviso de lotes de Mallén pendientes de validar. Cada 30 min y no cada 5: el
+    # circuito es de días, no de minutos —Mallén sube un lote y alguien lo valida
+    # esa jornada—, así que consultar más seguido no adelanta nada y solo añade
+    # trabajo. Y no cada 6 horas, porque entonces un lote de la mañana podría
+    # avisarse por la tarde, que es justo la demora que este aviso viene a quitar.
+    try:
+        get_scheduler().add_job(
+            _job_avisar_lotes, "interval", minutes=30,
+            id="aviso-lotes-mallen", replace_existing=True, misfire_grace_time=1800)
+        logger.info("Job de aviso de lotes de Mallén programado (cada 30 min)")
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"No se pudo programar el job de aviso de lotes: {e}")

@@ -21,11 +21,13 @@ llamador — los errores se registran con `logger` y se continúa.
 import re
 import smtplib
 from email.mime.multipart import MIMEMultipart
+from datetime import datetime, timezone
 from email.mime.text import MIMEText
 from email.utils import formataddr
 from html import unescape
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from loguru import logger
 
@@ -685,3 +687,74 @@ def notificar_codigo_recuperacion(destinatario: str, nombre: str, codigo: str, m
   <hr><p style="color:#aaa;font-size:12px;">VISTA — Inteligencia Comercial</p>
 </body></html>"""
     return _enviar(destinatario, "Código de recuperación de contraseña", cuerpo)
+
+
+def notificar_lotes_recibidos(db: Session) -> int:
+    """Avisa a TI (ADMIN + GERENTE_PRODUCTIVIDAD) de los lotes que Mallén dejó en
+    RECIBIDO y nadie ha validado todavía.
+
+    Cubre el punto ciego del circuito: Mallén escribe en `ext` y el lote se queda
+    esperando; el sistema no integra solo NI avisa, así que un lote subido un
+    viernes por la noche espera hasta que alguien abre la pantalla. Los datos
+    están a salvo —nada entra a la base real sin validar— pero VISTA muestra
+    información vieja sin dar ninguna señal.
+
+    Un lote se avisa UNA vez (`Audit.IntegracionAvisoLote`). Sin esa memoria el
+    correo se repetiría en cada ejecución del trabajo programado, porque el lote
+    sigue en RECIBIDO hasta que alguien lo valida: «hay algo pendiente» seguiría
+    siendo cierto indefinidamente, y un aviso que llega cada quince minutos se
+    convierte en ruido que se filtra a la papelera — justo el aviso que queríamos
+    que se leyera.
+
+    Best-effort, como el resto del módulo: devuelve cuántos correos salieron y no
+    lanza. Que falle el SMTP no debe tumbar el trabajo programado.
+    """
+    if not _habilitado():
+        return 0
+    from app.models.integracion_ext import ExtControlCarga
+    from app.models.integracion_hallazgo import IntegracionAvisoLote
+    from app.models.usuario import Rol, Usuario
+
+    avisados = {r[0] for r in db.query(IntegracionAvisoLote.lote_id).all()}
+    pendientes = [l for l in db.query(ExtControlCarga)
+                  .filter(func.upper(func.trim(ExtControlCarga.estado)) == "RECIBIDO")
+                  .order_by(ExtControlCarga.lote_id).all()
+                  if l.lote_id not in avisados]
+    if not pendientes:
+        return 0
+
+    destinatarios = (db.query(Usuario)
+                     .filter(Usuario.rol.in_([Rol.ADMIN, Rol.GERENTE_PRODUCTIVIDAD]),
+                             Usuario.activo == True,  # noqa: E712
+                             Usuario.email.isnot(None))
+                     .all())
+    if not destinatarios:
+        # Sin a quién avisar NO se marcan como avisados: en cuanto exista un
+        # destinatario, el siguiente pase mandará el correo. Marcarlos aquí
+        # dejaría esos lotes silenciados para siempre.
+        return 0
+
+    filas = "".join(
+        f"<li><b>Lote {l.lote_id}</b> — {l.modulo or '—'} · {l.pais_codigo}"
+        f"{' · ciclo ' + l.ciclo_codigo if l.ciclo_codigo else ''}"
+        f"{' · ' + l.periodo if l.periodo else ''}</li>"
+        for l in pendientes)
+    cuerpo = (
+        f"<h2>Datos nuevos de Mallén esperando validación</h2>"
+        f"<p>Hay {len(pendientes)} lote(s) en estado RECIBIDO. No se integran solos: "
+        f"hay que validarlos desde <b>Sistema → Lotes de Mallén</b>.</p>"
+        f"<ul>{filas}</ul>"
+        f"<p>Mientras sigan sin validar, VISTA muestra la información anterior.</p>")
+
+    enviados = 0
+    for u in destinatarios:
+        if _enviar(u.email, f"VISTA — {len(pendientes)} lote(s) de Mallén por validar", cuerpo):
+            enviados += 1
+
+    ahora = datetime.now(timezone.utc).replace(tzinfo=None)
+    for l in pendientes:
+        db.add(IntegracionAvisoLote(lote_id=l.lote_id, enviado_en=ahora,
+                                    destinatarios=enviados))
+    db.commit()
+    logger.info(f"[integracion] avisados {len(pendientes)} lote(s) a {enviados} destinatario(s)")
+    return enviados
