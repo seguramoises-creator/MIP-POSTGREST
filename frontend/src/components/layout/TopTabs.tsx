@@ -55,6 +55,10 @@ export default function TopTabs({ items, seccion }: { items: NavItem[]; seccion?
         // La barra de scroll horizontal en escritorio ensucia y ocupa alto; el
         // desplazamiento sigue disponible con rueda, gesto y teclado.
         scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' },
+        // El desvanecido va con `mask`, no con un degradado encima: así funciona sobre el
+        // degradado taupe de la barra sin tener que replicar su color exacto en cada punto.
+        maskImage: 'linear-gradient(to right, #000 calc(100% - 22px), transparent 100%)',
+        WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 22px), transparent 100%)',
       }}
     >
       {items.map((item) => {
@@ -67,21 +71,22 @@ export default function TopTabs({ items, seccion }: { items: NavItem[]; seccion?
             onClick={() => navigate(item.path)}
             aria-current={activa ? 'page' : undefined}
             sx={{
-              flex: '0 0 auto', px: 1.5, py: 0.5,
+              flex: '0 0 auto', px: { xs: 0.75, sm: 1.5 }, py: 0.5,
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.25,
               color: activa ? NAV_ACTIVO : NAV_INACTIVO,
               '&:focus-visible': { outline: `2px solid ${NAV_ACTIVO}`, outlineOffset: -2 },
               // Los ítems de una misma sección comparten su tinte: la fila entera se lee
               // como un bloque y refuerza en qué sección estás, sin repetir la etiqueta.
               // La activa vuelve a blanco, que es el máximo contraste disponible.
-              '& .MuiSvgIcon-root': { fontSize: 24, color: activa ? 'inherit' : tinteDeSeccion(seccion) },
+              '& .MuiSvgIcon-root': { fontSize: { xs: 20, sm: 24 },
+                                      color: activa ? 'inherit' : tinteDeSeccion(seccion) },
             }}
           >
             {item.icon}
             <Typography
               component="span"
               noWrap
-              sx={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.1px' }}
+              sx={{ fontSize: { xs: 10.5, sm: 12 }, fontWeight: 600, letterSpacing: '0.1px' }}
             >
               {item.label}
             </Typography>

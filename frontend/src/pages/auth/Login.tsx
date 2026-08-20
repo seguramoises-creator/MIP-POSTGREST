@@ -116,12 +116,14 @@ export default function Login() {
             por tanto una superficie clara y aire alrededor: a sangre, como iba el logo
             anterior —que traía su propio fondo oscuro incrustado—, las contraformas se
             confundirían con el borde de la tarjeta. */}
-        <Box sx={{ bgcolor: '#FFFFFF', px: 5, py: 4, lineHeight: 0 }}>
-          <img
-            src={logoImg}
-            alt="Laboratorios Mallén"
-            style={{ width: '100%', height: 'auto', display: 'block' }}
-          />
+        <Box sx={{ bgcolor: '#FFFFFF', px: { xs: 3, sm: 5 }, py: { xs: 2, sm: 4 },
+                   lineHeight: 0, display: 'flex', justifyContent: 'center' }}>
+          {/* `maxWidth` en vez de `width: 100%`: a ancho completo el logo se llevaba 239px
+              de una tarjeta de 621 en un iPhone —un 38% solo para la marca— y empujaba el
+              botón de entrar cerca del borde inferior. Acotado, la marca sigue siendo lo
+              primero que se ve y el formulario cabe holgado. */}
+          <Box component="img" src={logoImg} alt="Laboratorios Mallén"
+               sx={{ width: '100%', maxWidth: { xs: 190, sm: 300 }, height: 'auto', display: 'block' }} />
         </Box>
 
         <CardContent sx={{ p: 4, pt: 3 }}>
