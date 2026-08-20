@@ -360,7 +360,7 @@ export default function Examenes() {
                   <TextField label="Casos clínicos" type="number" size="small" inputProps={{ min: 0 }}
                              InputProps={{ endAdornment: <InputAdornment position="end">preg.</InputAdornment> }}
                              value={ia.n_casos} onChange={(e) => setIa({ ...ia, n_casos: Number(e.target.value) })} />
-                  <TextField label="🛡️ Objeción de Producto" type="number" size="small" inputProps={{ min: 0 }}
+                  <TextField label="Objeción de Producto" type="number" size="small" inputProps={{ min: 0 }}
                              InputProps={{ endAdornment: <InputAdornment position="end">preg.</InputAdornment> }}
                              value={ia.n_objeciones} onChange={(e) => setIa({ ...ia, n_objeciones: Number(e.target.value) })} />
                 </Stack>
@@ -448,12 +448,12 @@ export default function Examenes() {
                         <MenuItem value="abierta">Abierta (respuesta libre)</MenuItem>
                         <MenuItem value="caso">Caso — consigna de opción múltiple</MenuItem>
                         <MenuItem value="caso_abierto">Caso — consigna abierta</MenuItem>
-                        <MenuItem value="objecion">🛡️ Objeción de Producto</MenuItem>
+                        <MenuItem value="objecion">Objeción de Producto</MenuItem>
                       </TextField>
                       <Tooltip title="Evalúa cómo el visitador responde cuando el médico objeta una característica, efecto adverso o limitación del producto. Se muestra en un banner naranja destacado antes de las opciones.">
                         <Button variant="outlined" color="warning" size="small"
                                 onClick={() => setPreg({ ...preg, tipo: 'objecion' })}>
-                          🛡️ + Objeción de Producto
+                          + Objeción de Producto
                         </Button>
                       </Tooltip>
                     </Stack>
@@ -623,7 +623,7 @@ export default function Examenes() {
                         Exportar a Excel
                       </Button>
                     </Box>
-                    <Table size="small" sx={{ '& thead th': { fontWeight: 700, color: 'primary.main', bgcolor: 'rgba(26,35,126,0.04)' } }}>
+                    <Table size="small" sx={{ '& thead th': { fontWeight: 700, color: 'primary.main', bgcolor: 'rgba(104,97,88,0.04)' } }}>
                       <TableHead><TableRow>
                         <TableCell>Evaluado</TableCell><TableCell>Tipo</TableCell>
                         <TableCell>Fecha del examen</TableCell><TableCell align="center">Score</TableCell><TableCell>Estado</TableCell>
@@ -694,7 +694,7 @@ export default function Examenes() {
                         </Stack>
                       );
                     })()}
-                    <Table size="small" sx={{ '& thead th': { fontWeight: 700, color: 'primary.main', bgcolor: 'rgba(26,35,126,0.04)' } }}>
+                    <Table size="small" sx={{ '& thead th': { fontWeight: 700, color: 'primary.main', bgcolor: 'rgba(104,97,88,0.04)' } }}>
                       <TableHead><TableRow>
                         <TableCell>#</TableCell><TableCell>Pregunta</TableCell>
                         <TableCell align="center" sx={{ width: 90 }}>% Acierto</TableCell>

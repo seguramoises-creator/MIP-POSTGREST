@@ -175,11 +175,11 @@ const theme = createTheme({
         root: ({ ownerState }: { ownerState: { variant?: string } }) =>
           ownerState.variant === 'outlined'
             ? {
-                borderColor: 'rgba(26,35,126,0.45)',
+                borderColor: 'rgba(104,97,88,0.45)',
                 borderWidth: 1.5,
-                boxShadow: '0 2px 10px rgba(26,35,126,0.06)',
+                boxShadow: '0 2px 10px rgba(104,97,88,0.06)',
                 transition: 'box-shadow .2s ease, border-color .2s ease',
-                '&:hover': { borderColor: '#686158', boxShadow: '0 4px 16px rgba(26,35,126,0.12)' },
+                '&:hover': { borderColor: '#686158', boxShadow: '0 4px 16px rgba(104,97,88,0.12)' },
               }
             : {},
       },

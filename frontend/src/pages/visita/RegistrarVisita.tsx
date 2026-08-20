@@ -823,7 +823,7 @@ export default function RegistrarVisita() {
               menos y deja el acento azul donde se necesita, no de fondo. */}
           <Box sx={{
             width: 44, height: 44, borderRadius: 2, flexShrink: 0,
-            bgcolor: 'rgba(26,35,126,0.08)', display: 'grid', placeItems: 'center',
+            bgcolor: 'rgba(104,97,88,0.08)', display: 'grid', placeItems: 'center',
           }}>
             <Assignment sx={{ color: AZUL_VISTA, fontSize: 24 }} />
           </Box>
@@ -841,7 +841,7 @@ export default function RegistrarVisita() {
             <Chip size="small" variant="outlined"
                   icon={<SupervisorAccount sx={{ color: `${AZUL_VISTA} !important` }} />}
                   label={`GD: ${gd.gerente}${gd.linea ? ` · ${gd.linea}` : ''}`}
-                  sx={{ color: AZUL_VISTA, borderColor: 'rgba(26,35,126,0.35)', fontWeight: 600, maxWidth: '100%' }} />
+                  sx={{ color: AZUL_VISTA, borderColor: 'rgba(104,97,88,0.35)', fontWeight: 600, maxWidth: '100%' }} />
           )}
         </Stack>
 
