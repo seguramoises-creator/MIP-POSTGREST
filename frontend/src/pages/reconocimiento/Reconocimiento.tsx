@@ -210,7 +210,7 @@ export default function Reconocimiento() {
               <Select size="small" fullWidth value={cicloId}
                 onChange={(e) => setCicloId(e.target.value as number | '')}
                 displayEmpty disabled={!paisId}>
-                <MenuItem value=""><em>{paisId ? 'Último ciclo con datos' : 'Seleccione un país'}</em></MenuItem>
+                <MenuItem value=""><span style={{ opacity: 0.7 }}>{paisId ? 'Último ciclo con datos' : 'Seleccione un país'}</span></MenuItem>
                 {ciclos.map((c: any) => <MenuItem key={c.id} value={c.id}>{c.nombre_canonico || c.nombre}</MenuItem>)}
               </Select>
             </Box>

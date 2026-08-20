@@ -558,7 +558,7 @@ function CategorizacionMotor() {
                       ...reps.map(r => (
                         <TableRow key={`${eq}-${r.representante}`} hover
                           sx={{ '&:hover': { bgcolor: '#f3f4fe' }, borderLeft: '4px solid transparent' }}>
-                          <TableCell sx={{ pl: 5, fontSize: '0.78rem', color: '#546e7a', fontStyle: 'italic' }}>
+                          <TableCell sx={{ pl: 5, fontSize: '0.78rem', color: '#546e7a' }}>
                             {r.representante}
                           </TableCell>
                           <NumCell v={r.a} cat="A" max={sub.a || 1} />

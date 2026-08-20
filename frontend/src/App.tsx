@@ -79,7 +79,35 @@ const theme = createTheme({
     background: { default: '#F6F4F2' },
     text:       { primary: '#2E2A26', secondary: '#57504A' },
   },
-  typography: { fontFamily: '"Inter","Roboto","Helvetica","Arial",sans-serif' },
+  /**
+   * Sistema tipográfico de Mallén — dos familias con papeles separados.
+   *
+   *   MANROPE  presencia visual: títulos, cifras destacadas, categorías (ORO/PLATA/BRONCE).
+   *   INTER    interfaz y lectura: menús, botones, formularios, tablas, textos, estados.
+   *
+   * `fontFamily` global = Inter, porque es lo que cubre la mayoría de la pantalla; Manrope
+   * se aplica SOLO en las variantes de título (h1-h6). Al revés —Manrope global con Inter
+   * por excepción— cada componente nuevo nacería con la fuente equivocada.
+   */
+  typography: {
+    fontFamily: '"Inter","Helvetica","Arial",sans-serif',
+    // Los h1-h6 de MUI son las variantes que usan los títulos de página, sección y tarjeta.
+    // `letterSpacing` ligeramente negativo: Manrope en tamaños grandes abre demasiado, y el
+    // encargo pide explícitamente evitar la separación exagerada entre letras.
+    h1: { fontFamily: '"Manrope",sans-serif', fontWeight: 800, letterSpacing: '-0.02em' },
+    h2: { fontFamily: '"Manrope",sans-serif', fontWeight: 800, letterSpacing: '-0.02em' },
+    h3: { fontFamily: '"Manrope",sans-serif', fontWeight: 700, letterSpacing: '-0.015em' },
+    h4: { fontFamily: '"Manrope",sans-serif', fontWeight: 700, letterSpacing: '-0.015em' },
+    h5: { fontFamily: '"Manrope",sans-serif', fontWeight: 700, letterSpacing: '-0.01em' },
+    h6: { fontFamily: '"Manrope",sans-serif', fontWeight: 600, letterSpacing: '-0.01em' },
+    // Navegación y botones en seminegrita (600): el encargo lo pide, y sobre las barras
+    // oscuras el texto sólido además aguanta mejor el reflejo del sol (ver navTokens.ts).
+    button: { fontWeight: 600, letterSpacing: 0, textTransform: 'none' as const },
+    // `overline` es la variante de las etiquetas cortas en mayúsculas (CICLO, PAÍS). Se le
+    // recorta el `letterSpacing` de MUI (0.08em), que es justo la separación exagerada que
+    // el encargo manda evitar.
+    overline: { fontWeight: 600, letterSpacing: '0.02em' },
+  },
   shape: { borderRadius: 8 },
   components: {
     // El rojo de marca como TEXTO sobre blanco da 3.83:1 — por debajo del 4.5:1 de AA.
@@ -126,6 +154,27 @@ const theme = createTheme({
     MuiInputLabel: {
       styleOverrides: {
         root: { color: '#C81E2A', '&.Mui-focused': { color: '#C81E2A' } },
+      },
+    },
+    // NÚMEROS TABULARES en toda la app. Sin esto, en Inter el «1» es más estrecho que
+    // el resto de dígitos, así que una columna de cifras o un ranking quedan desalineados
+    // y cuesta compararlos de un vistazo — que es exactamente para lo que se miran.
+    // `lining-nums` fuerza además la altura uniforme que pide el encargo.
+    MuiTableCell: {
+      styleOverrides: {
+        root: { fontVariantNumeric: 'tabular-nums lining-nums' },
+        // Encabezados de tabla en seminegrita, con Inter (no Manrope): son etiquetas
+        // funcionales de lectura frecuente, no títulos.
+        head: { fontWeight: 600 },
+      },
+    },
+    // El marcador de un campo NO va en cursiva (petición explícita: «Seleccione un país»).
+    // MUI no lo pone en cursiva, pero algunos navegadores sí inclinan el `::placeholder`
+    // heredado; se fija de forma explícita para que no dependa del navegador.
+    MuiInputBase: {
+      styleOverrides: {
+        input: { fontVariantNumeric: 'tabular-nums lining-nums',
+                 '&::placeholder': { fontStyle: 'normal', opacity: 0.7 } },
       },
     },
     MuiAlert: {

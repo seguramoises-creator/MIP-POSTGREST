@@ -235,7 +235,7 @@ export default function ParrillaVisita() {
                         <TextField select size="small" fullWidth
                                    value={it.producto_id ?? (it.producto || '')}
                                    onChange={(e) => elegirProducto(i, e.target.value)}>
-                          <MenuItem value=""><em>— Producto —</em></MenuItem>
+                          <MenuItem value=""><span style={{ opacity: 0.7 }}>— Producto —</span></MenuItem>
                           {productosDim.map((p) => <MenuItem key={p.id} value={p.id}>{(p.codigo || '').trim()} · {p.nombre}</MenuItem>)}
                           {it.producto_id == null && it.producto && !productosDim.some((p) => (p.codigo || '').trim() === (it.producto || '').trim()) && (
                             <MenuItem value={it.producto}>{it.producto}</MenuItem>

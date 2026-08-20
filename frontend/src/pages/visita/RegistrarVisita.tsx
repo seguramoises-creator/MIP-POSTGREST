@@ -855,7 +855,7 @@ export default function RegistrarVisita() {
             <TextField select fullWidth size="small" label="Visitador (VM)" value={vmId}
                        helperText="Elige el visitador para ver su agenda del día"
                        onChange={(e) => setVmId(e.target.value === '' ? '' : Number(e.target.value))}>
-              <MenuItem value=""><em>— Selecciona un visitador —</em></MenuItem>
+              <MenuItem value=""><span style={{ opacity: 0.7 }}>— Selecciona un visitador —</span></MenuItem>
               {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
             </TextField>
           </Box>

@@ -266,7 +266,7 @@ export default function MaestroMedicos() {
             <Grid item xs={12} sm={3}><TextField fullWidth size="small" label="Exequátur" value={form.exequatur || ''} onChange={(e) => setF('exequatur', e.target.value)} /></Grid>
             <Grid item xs={12} sm={5}>
               <TextField fullWidth size="small" select label="Especialidad" value={form.especialidad_id ?? ''} onChange={(e) => setF('especialidad_id', e.target.value || null)}>
-                <MenuItem value=""><em>— Sin especialidad —</em></MenuItem>
+                <MenuItem value=""><span style={{ opacity: 0.7 }}>— Sin especialidad —</span></MenuItem>
                 {especialidades.map((x) => <MenuItem key={x.id} value={x.id}>{x.nombre}</MenuItem>)}
               </TextField>
             </Grid>
@@ -274,19 +274,19 @@ export default function MaestroMedicos() {
             <Grid item xs={12} sm={6}><TextField fullWidth size="small" label="Email" value={form.email || ''} onChange={(e) => setF('email', e.target.value)} /></Grid>
             <Grid item xs={12} sm={6}>
               <TextField fullWidth size="small" select label="Centro médico" value={form.centro_medico_id ?? ''} onChange={(e) => setF('centro_medico_id', e.target.value || null)}>
-                <MenuItem value=""><em>— Sin centro —</em></MenuItem>
+                <MenuItem value=""><span style={{ opacity: 0.7 }}>— Sin centro —</span></MenuItem>
                 {centros.map((x) => <MenuItem key={x.id} value={x.id}>{x.nombre}</MenuItem>)}
               </TextField>
             </Grid>
             <Grid item xs={12} sm={4}>
               <TextField fullWidth size="small" select label="Provincia" value={form.provincia_id ?? ''} onChange={(e) => setF('provincia_id', e.target.value || null)}>
-                <MenuItem value=""><em>— Sin provincia —</em></MenuItem>
+                <MenuItem value=""><span style={{ opacity: 0.7 }}>— Sin provincia —</span></MenuItem>
                 {provincias.map((x) => <MenuItem key={x.id} value={x.id}>{x.nombre}</MenuItem>)}
               </TextField>
             </Grid>
             <Grid item xs={12} sm={4}>
               <TextField fullWidth size="small" select label="Municipio" value={form.municipio_id ?? ''} onChange={(e) => setF('municipio_id', e.target.value || null)} disabled={!form.provincia_id}>
-                <MenuItem value=""><em>— Sin municipio —</em></MenuItem>
+                <MenuItem value=""><span style={{ opacity: 0.7 }}>— Sin municipio —</span></MenuItem>
                 {municipios.map((x) => <MenuItem key={x.id} value={x.id}>{x.nombre}</MenuItem>)}
               </TextField>
             </Grid>

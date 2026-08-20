@@ -272,7 +272,7 @@ function ProductividadGerencia() {
               <FilterLabel>País</FilterLabel>
               <Select size="small" fullWidth value={paisId}
                 onChange={(e) => handlePaisChange(e.target.value as string | '')} displayEmpty>
-                <MenuItem value=""><em>Todos los países</em></MenuItem>
+                <MenuItem value=""><span style={{ opacity: 0.7 }}>Todos los países</span></MenuItem>
                 {paises.map((p: any) => <MenuItem key={p.id} value={p.codigo}>{p.nombre}</MenuItem>)}
               </Select>
             </Box>
@@ -281,7 +281,7 @@ function ProductividadGerencia() {
               <Select size="small" fullWidth value={cicloId}
                 onChange={(e) => { const v = e.target.value; if (v !== '') setCicloVer(Number(v)); }}
                 displayEmpty disabled={!paisId}>
-                <MenuItem value=""><em>{paisId ? 'Último ciclo con datos' : 'Seleccione un país'}</em></MenuItem>
+                <MenuItem value=""><span style={{ opacity: 0.7 }}>{paisId ? 'Último ciclo con datos' : 'Seleccione un país'}</span></MenuItem>
                 {ciclos.map((c: any) => <MenuItem key={c.id} value={c.id}>{c.nombre_canonico || c.nombre}</MenuItem>)}
               </Select>
             </Box>
@@ -290,7 +290,7 @@ function ProductividadGerencia() {
               <Select size="small" fullWidth value={lineaId}
                 onChange={(e) => setLineaId(e.target.value as number | '')}
                 displayEmpty disabled={!paisId}>
-                <MenuItem value=""><em>Todas las líneas</em></MenuItem>
+                <MenuItem value=""><span style={{ opacity: 0.7 }}>Todas las líneas</span></MenuItem>
                 {(lineas||[]).map((l: any) => <MenuItem key={l.id} value={l.id}>{l.nombre}</MenuItem>)}
               </Select>
             </Box>

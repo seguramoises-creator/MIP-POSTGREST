@@ -304,7 +304,7 @@ export default function PlaneacionVisita() {
                 ) : (
                   <TextField select variant="standard" label="Visitador (VM)" value={vmId} sx={{ minWidth: 240 }}
                              onChange={(e) => setVmId(e.target.value === '' ? '' : Number(e.target.value))}>
-                    <MenuItem value=""><em>— Selecciona un visitador —</em></MenuItem>
+                    <MenuItem value=""><span style={{ opacity: 0.7 }}>— Selecciona un visitador —</span></MenuItem>
                     {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
                   </TextField>
                 )}
@@ -441,7 +441,7 @@ export default function PlaneacionVisita() {
                     <TableCell align="center">
                       <FormControl size="small" sx={{ minWidth: 92 }}>
                         <Select value={f.vSemana} disabled={bloqueado} onChange={(e) => setVSemana(m.id, Number(e.target.value))}>
-                          <MenuItem value={0}><em>—</em></MenuItem>
+                          <MenuItem value={0}><span style={{ opacity: 0.7 }}>—</span></MenuItem>
                           {SEMANAS.map((s) => <MenuItem key={s} value={s}>Sem {s}</MenuItem>)}
                         </Select>
                       </FormControl>
@@ -451,7 +451,7 @@ export default function PlaneacionVisita() {
                       <FormControl size="small" sx={{ minWidth: 110 }}>
                         <Select value={f.vDia} displayEmpty disabled={bloqueado || f.vSemana === 0}
                                 onChange={(e) => setVDia(m.id, String(e.target.value))}>
-                          <MenuItem value=""><em>— día —</em></MenuItem>
+                          <MenuItem value=""><span style={{ opacity: 0.7 }}>— día —</span></MenuItem>
                           {DIAS.map((d) => <MenuItem key={d} value={d}>{d}</MenuItem>)}
                         </Select>
                       </FormControl>
@@ -474,7 +474,7 @@ export default function PlaneacionVisita() {
                       <FormControl size="small" sx={{ minWidth: 92 }}>
                         <Select value={f.revisita ? f.rSemana : 0} disabled={bloqueado || !f.revisita}
                                 onChange={(e) => setRSemana(m.id, Number(e.target.value))}>
-                          <MenuItem value={0}><em>—</em></MenuItem>
+                          <MenuItem value={0}><span style={{ opacity: 0.7 }}>—</span></MenuItem>
                           {SEMANAS.filter((s) => s > f.vSemana).map((s) => (
                             <MenuItem key={s} value={s}>Sem {s}</MenuItem>
                           ))}

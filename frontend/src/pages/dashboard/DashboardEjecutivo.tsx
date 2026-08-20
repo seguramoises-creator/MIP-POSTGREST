@@ -505,7 +505,7 @@ export default function DashboardEjecutivo() {
                   displayEmpty
                   disabled={f.disabled}
                 >
-                  <MenuItem value=""><em>{f.placeholder}</em></MenuItem>
+                  <MenuItem value=""><span style={{ opacity: 0.7 }}>{f.placeholder}</span></MenuItem>
                   {f.options.map((o) => <MenuItem key={o.id} value={o.id}>{o.nombre}</MenuItem>)}
                 </Select>
               </Box>

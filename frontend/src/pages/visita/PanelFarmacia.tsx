@@ -299,7 +299,7 @@ export default function PanelFarmacia() {
                 ) : (
                   <TextField select variant="standard" label="Representante médico (VM)" value={vmFiltro} sx={{ minWidth: 240 }}
                              onChange={(e) => setVmFiltro(e.target.value === '' ? '' : Number(e.target.value))}>
-                    <MenuItem value=""><em>— Selecciona un visitador —</em></MenuItem>
+                    <MenuItem value=""><span style={{ opacity: 0.7 }}>— Selecciona un visitador —</span></MenuItem>
                     {vms.map((v) => <MenuItem key={v.id} value={v.id}>{v.nombre}</MenuItem>)}
                   </TextField>
                 )}

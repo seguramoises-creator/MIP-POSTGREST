@@ -117,7 +117,7 @@ export default function Usuarios() {
       <Select label={`País${form.rol === 'REPRESENTANTE_MEDICO' ? ' *' : ''}`}
               value={form.pais_codigo ?? ''}
               onChange={(e) => setForm({ ...form, pais_codigo: e.target.value })}>
-        <MenuItem value=""><em>— Sin país —</em></MenuItem>
+        <MenuItem value=""><span style={{ opacity: 0.7 }}>— Sin país —</span></MenuItem>
         {(Array.isArray(paises) ? paises : []).map((p: any) => (
           <MenuItem key={p.codigo} value={p.codigo}>{p.codigo} — {p.nombre}</MenuItem>
         ))}
@@ -156,7 +156,7 @@ export default function Usuarios() {
           <InputLabel>{label}</InputLabel>
           <Select label={label} value={form.gerente_id ?? ''}
                   onChange={(e) => setForm({ ...form, gerente_id: e.target.value, rm_id: null })}>
-            <MenuItem value=""><em>— Sin vincular —</em></MenuItem>
+            <MenuItem value=""><span style={{ opacity: 0.7 }}>— Sin vincular —</span></MenuItem>
             {opts.map((g: any) => (
               <MenuItem key={g.id} value={g.id}>{g.codigo} — {g.nombre}</MenuItem>
             ))}

@@ -222,7 +222,7 @@ export default function MaestroFarmacias() {
                   // Guarda el NOMBRE (contrato del modelo) y limpia el municipio al cambiar de provincia.
                   setForm((f) => ({ ...f, provincia: p ? p.nombre : '', municipio: '' }));
                 }}>
-                <MenuItem value=""><em>— Selecciona —</em></MenuItem>
+                <MenuItem value=""><span style={{ opacity: 0.7 }}>— Selecciona —</span></MenuItem>
                 {provincias.map((p) => <MenuItem key={p.id} value={p.id}>{p.nombre}</MenuItem>)}
               </TextField>
             </Grid>
@@ -231,7 +231,7 @@ export default function MaestroFarmacias() {
                 disabled={provinciaId === ''}
                 helperText={provinciaId === '' ? 'Elige primero la provincia' : ' '}
                 onChange={(e) => setF('municipio', e.target.value)}>
-                <MenuItem value=""><em>— Selecciona —</em></MenuItem>
+                <MenuItem value=""><span style={{ opacity: 0.7 }}>— Selecciona —</span></MenuItem>
                 {municipios.map((m) => <MenuItem key={m.id} value={m.nombre}>{m.nombre}</MenuItem>)}
               </TextField>
             </Grid>
