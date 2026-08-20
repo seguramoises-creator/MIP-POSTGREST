@@ -35,13 +35,19 @@ export default function TopTabs({ items, seccion }: { items: NavItem[]; seccion?
       sx={{
         // Sin fondo propio: hereda el degradado del AppBar. Si se pintara aparte,
         // el degradado se reiniciaría aquí y se vería un corte a media barra.
-        // Centradas: la fila suele tener 4-8 ítems y alineada a la izquierda dejaba un
-        // vacío grande a la derecha en escritorio. `justifyContent: center` con
-        // `margin: auto` en el contenido permite centrar y seguir pudiendo desplazar
-        // cuando no caben — un `center` a secas recorta el primer ítem al desbordar.
+        // Centradas con MÁRGENES AUTOMÁTICOS, no con `justifyContent: center`.
+        //
+        // `center` sobre un contenedor que desborda RECORTA POR EL INICIO: el navegador
+        // reparte el sobrante a ambos lados y el desplazamiento no puede recuperar lo que
+        // quedó en coordenada negativa. Medido en móvil (375px): la primera pestaña caía
+        // en x=-80 y era inalcanzable. En escritorio no se notaba porque las 5 cabían.
+        //
+        // Con `margin:auto` en el primero y el último se centra cuando sobra sitio y se
+        // alinea al inicio cuando falta, que es el comportamiento correcto en ambos casos.
         display: 'flex', gap: 0.5, overflowX: 'auto', bgcolor: 'transparent',
-        justifyContent: 'center',
         '& > *': { flexShrink: 0 },
+        '& > *:first-of-type': { marginLeft: 'auto' },
+        '& > *:last-of-type': { marginRight: 'auto' },
         // `flex: 1` la hace ocupar el hueco entre el logo y las píldoras de la derecha,
         // dentro de la MISMA fila. Ya no lleva reserva a la izquierda: el logo es ahora
         // un hermano en el flex, no algo que se le monte encima.

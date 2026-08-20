@@ -94,12 +94,29 @@ const theme = createTheme({
     // Los h1-h6 de MUI son las variantes que usan los títulos de página, sección y tarjeta.
     // `letterSpacing` ligeramente negativo: Manrope en tamaños grandes abre demasiado, y el
     // encargo pide explícitamente evitar la separación exagerada entre letras.
-    h1: { fontFamily: '"Manrope",sans-serif', fontWeight: 800, letterSpacing: '-0.02em' },
-    h2: { fontFamily: '"Manrope",sans-serif', fontWeight: 800, letterSpacing: '-0.02em' },
-    h3: { fontFamily: '"Manrope",sans-serif', fontWeight: 700, letterSpacing: '-0.015em' },
-    h4: { fontFamily: '"Manrope",sans-serif', fontWeight: 700, letterSpacing: '-0.015em' },
-    h5: { fontFamily: '"Manrope",sans-serif', fontWeight: 700, letterSpacing: '-0.01em' },
-    h6: { fontFamily: '"Manrope",sans-serif', fontWeight: 600, letterSpacing: '-0.01em' },
+    //
+    // TAMAÑOS RESPONSIVOS: los de MUI están pensados para escritorio y en un móvil de
+    // 375px un `h4` (2.125rem) se come dos líneas y parte los títulos largos —
+    // «Cobertura Predictiva», «Reconocimiento»— justo donde peor se leen. Cada variante
+    // arranca menor en `xs` y sube en `sm`; el ESCALÓN entre niveles se conserva, que es
+    // lo que sostiene la jerarquía.
+    h1: { fontFamily: '"Manrope",sans-serif', fontWeight: 800, letterSpacing: '-0.02em',
+          fontSize: '2rem',    '@media (min-width:600px)': { fontSize: '3rem' } },
+    h2: { fontFamily: '"Manrope",sans-serif', fontWeight: 800, letterSpacing: '-0.02em',
+          fontSize: '1.75rem', '@media (min-width:600px)': { fontSize: '2.25rem' } },
+    h3: { fontFamily: '"Manrope",sans-serif', fontWeight: 700, letterSpacing: '-0.015em',
+          fontSize: '1.5rem',  '@media (min-width:600px)': { fontSize: '1.9rem' } },
+    h4: { fontFamily: '"Manrope",sans-serif', fontWeight: 700, letterSpacing: '-0.015em',
+          fontSize: '1.35rem', '@media (min-width:600px)': { fontSize: '1.7rem' } },
+    h5: { fontFamily: '"Manrope",sans-serif', fontWeight: 700, letterSpacing: '-0.01em',
+          fontSize: '1.15rem', '@media (min-width:600px)': { fontSize: '1.4rem' } },
+    h6: { fontFamily: '"Manrope",sans-serif', fontWeight: 600, letterSpacing: '-0.01em',
+          fontSize: '1.02rem', '@media (min-width:600px)': { fontSize: '1.15rem' } },
+    // El cuerpo NO baja en móvil: 16px es el mínimo cómodo de lectura, y por debajo de
+    // ese tamaño Safari iOS hace zoom automático al enfocar un campo — la pantalla salta
+    // y el usuario pierde el sitio. Es un ajuste de accesibilidad, no estético.
+    body1: { fontSize: '1rem' },
+    body2: { fontSize: '0.9rem' },
     // Navegación y botones en seminegrita (600): el encargo lo pide, y sobre las barras
     // oscuras el texto sólido además aguanta mejor el reflejo del sol (ver navTokens.ts).
     button: { fontWeight: 600, letterSpacing: 0, textTransform: 'none' as const },

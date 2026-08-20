@@ -139,7 +139,7 @@ export default function MainLayout() {
         >
           {/* Cabecera reducida a lo que informa: dónde estoy y sobre qué ciclo/país
               trabajo. La cuenta y la salida bajaron a la ranura Perfil. */}
-          <Toolbar variant="dense" sx={{ gap: 1, minHeight: 72, alignItems: 'center' }}>
+          <Toolbar variant="dense" sx={{ gap: 1, minHeight: { xs: 56, sm: 72 }, alignItems: 'center', px: { xs: 1, sm: 2 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
               {/* El logo vivía en el menú lateral y se fue con él al rediseñar la
                   navegación. Vuelve aquí, que es donde se ve en todas las pantallas.
@@ -150,7 +150,7 @@ export default function MainLayout() {
                   sección, el logo pasa a ser el único elemento de la izquierda y puede
                   ocupar ese espacio sin apretar nada. */}
               <Box component="img" src={logoImg} alt="Laboratorios Mallén"
-                   sx={{ height: 60, width: 'auto', display: 'block', flexShrink: 0,
+                   sx={{ height: { xs: 44, sm: 60 }, width: 'auto', display: 'block', flexShrink: 0,
                          // Sin márgenes negativos: la versión anterior hacía que el logo
                          // desbordara hacia la fila de pestañas, y en las secciones de un
                          // solo ítem esa fila NO se renderiza — el logo quedaba cortado por
