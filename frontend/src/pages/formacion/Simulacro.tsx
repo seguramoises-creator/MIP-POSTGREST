@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { RecordVoiceOver, VolumeUp } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
+import { detalleError } from '../../utils/errores';
 import {
   iniciarSimulacro, responderRonda, finalizarSimulacro, vozRonda,
   misSesionesSimulacro, resumenSimulacro, detalleSimulacro,
@@ -181,7 +182,9 @@ export default function Simulacro() {
 // Pantalla de arranque: botón "Nueva práctica" + historial (RM) o resumen (roles
 // gerenciales). Reutiliza los endpoints /mis-sesiones y /resumen ya existentes.
 function PantallaInicio({ iniciar, abrir }: {
-  iniciar: { isPending: boolean; isError: boolean; mutate: () => void };
+  // `error` viaja además de `isError` para poder mostrar el motivo que dio el
+  // servidor en vez de una causa supuesta (ver el Alert más abajo).
+  iniciar: { isPending: boolean; isError: boolean; error: unknown; mutate: () => void };
   abrir: { isPending: boolean; isError: boolean; variables?: number; mutate: (id: number) => void; reset: () => void };
 }) {
   const rol = useAuthStore((s) => s.rol);
@@ -196,9 +199,17 @@ function PantallaInicio({ iniciar, abrir }: {
         <Typography color="text.secondary" mb={3}>
           Practica el manejo de objeciones contra un médico simulado por IA, con el modelo MORE.
         </Typography>
+        {/* El motivo lo dice el SERVIDOR, no esta pantalla. Antes aquí había un
+            texto fijo culpando a la conexión de IA, y se mostraba igual ante un
+            403, un token vencido o un 500: quien lo leía se iba a revisar
+            Conexiones de IA aunque el problema fuera otro. La falta de conexión
+            queda como respaldo, que es lo que suele ser cuando el servidor no
+            alcanzó a responder. */}
         {iniciar.isError && (
           <Alert severity="warning" sx={{ mb: 2 }}>
-            No se pudo iniciar. Verifica que haya una conexión de IA de texto activa en Conexiones de IA.
+            No se pudo iniciar: {detalleError(
+              iniciar.error,
+              'verifica que haya una conexión de IA de texto activa en Conexiones de IA.')}
           </Alert>
         )}
         <Button variant="contained" size="large" startIcon={<RecordVoiceOver />}

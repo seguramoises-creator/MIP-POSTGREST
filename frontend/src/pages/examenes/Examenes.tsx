@@ -18,6 +18,7 @@ import {
   type AnalisisPregunta, type PreguntaConOpciones, type RespuestaAbierta,
 } from '../../services/examenes.service';
 import { AVISO } from '../../theme/marca';
+import { detalleError } from '../../utils/errores';
 
 type EvalOpt = { tipo: 'RM' | 'GERENTE'; id: number; nombre: string; grupo: string };
 
@@ -36,16 +37,40 @@ const opcionesVacias = (): OpcionCrear[] =>
   [0, 1, 2, 3, 4].map(() => ({ texto_opcion: '', es_correcta: false }));
 const LETRAS = ['a', 'b', 'c', 'd', 'e'];
 
-// Motivo real de un error de axios: 422 de FastAPI (detail = [{loc,msg}]) o detail string.
-// Sin esto los catch mostraban un texto genérico y el usuario no sabía por qué falló.
-function detalleError(e: unknown, fallback: string): string {
-  const d = (e as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
-  if (typeof d === 'string' && d.trim()) return d;
-  if (Array.isArray(d) && d[0]) {
-    const m = (d[0] as { msg?: string }).msg;
-    if (m) return m.replace('Value error, ', '');
-  }
-  return fallback;
+/* ── ETIQUETA Y COLOR DEL TIPO DE PREGUNTA ────────────────────────────────
+ * Un MAPA, no una cadena de ternarios, y la diferencia importa.
+ *
+ * Antes esto era `p.tipo === 'vf' ? … : p.tipo === 'abierta' ? … : 'Opción
+ * múltiple'`, o sea que CUALQUIER tipo no contemplado se anunciaba como opción
+ * múltiple. Con `objecion` pasó exactamente eso (informe de QA, 21-ago-2026):
+ * el servidor guardaba bien `tipo: "objecion"` y el escenario completo, y la
+ * pantalla decía otra cosa. Un `?? p.tipo` no miente: un tipo desconocido se ve
+ * como desconocido, que es un fallo visible en vez de uno plausible.
+ *
+ * Los tipos que el backend guarda son cinco (`exam.DimPregunta.tipo`, String(10)):
+ * multi, vf, abierta, caso y objecion. `caso_abierto` es solo del formulario —
+ * se traduce a `caso` antes de enviarse, y aquí se distingue por no traer
+ * opciones.
+ */
+const ETIQUETA_TIPO: Record<string, string> = {
+  multi: 'Opción múltiple',
+  vf: 'Verdadero/Falso',
+  abierta: 'Abierta',
+  objecion: 'Objeción de Producto',
+};
+const COLOR_TIPO: Record<string, 'primary' | 'secondary' | 'info' | 'warning'> = {
+  multi: 'primary',
+  vf: 'secondary',
+  abierta: 'info',
+  caso: 'warning',
+  // Naranja igual que el banner que ve el representante al presentar el examen
+  // (`MisExamenes.tsx`): la misma pregunta se reconoce por el mismo color en las
+  // dos pantallas.
+  objecion: 'warning',
+};
+function etiquetaTipo(p: { tipo: string; opciones: unknown[] }): string {
+  if (p.tipo === 'caso') return p.opciones.length === 0 ? 'Caso abierto' : 'Caso';
+  return ETIQUETA_TIPO[p.tipo] ?? p.tipo;
 }
 
 // Detección para advertencias de redacción (sección 5.3 del spec).
@@ -518,15 +543,14 @@ export default function Examenes() {
                       <Card key={p.id} variant="outlined">
                         <CardContent sx={{ py: 1.25 }}>
                           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                            <Typography variant="body2" fontWeight={600} sx={{ flex: 1 }}>
+                            {/* `component="div"`: por defecto Typography pinta un <p>, y los
+                                Chip de abajo son <div> — HTML inválido, y React lo avisaba en
+                                consola en cada render de esta lista. */}
+                            <Typography component="div" variant="body2" fontWeight={600} sx={{ flex: 1 }}>
                               {i + 1}. {p.texto}
                               <Chip size="small" variant="outlined" sx={{ ml: 1 }}
-                                    color={p.tipo === 'vf' ? 'secondary' : p.tipo === 'caso' ? 'warning' : p.tipo === 'abierta' ? 'info' : 'primary'}
-                                    label={
-                                      p.tipo === 'vf' ? 'Verdadero/Falso'
-                                      : p.tipo === 'abierta' ? 'Abierta'
-                                      : p.tipo === 'caso' ? (p.opciones.length === 0 ? 'Caso abierto' : 'Caso')
-                                      : 'Opción múltiple'} />
+                                    color={COLOR_TIPO[p.tipo] ?? 'default'}
+                                    label={etiquetaTipo(p)} />
                               <Chip size="small" variant="outlined" sx={{ ml: 0.5 }}
                                     label={p.peso != null ? `peso ${p.peso}` : 'peso auto'} />
                             </Typography>
