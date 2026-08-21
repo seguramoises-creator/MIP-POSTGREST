@@ -14,12 +14,17 @@ necesita. No escribe nada.
 
 Uso (dentro del contenedor):
   docker compose exec -e PYTHONPATH=/app backend python scripts/diagnostico_integracion_listo.py
+
+Antes del PRIMER lote la base no tiene países todavía (los crea el propio envío),
+así que se le pasan los códigos que Mallén va a enviar y los revisa igual:
+  ... scripts/diagnostico_integracion_listo.py DO GT HN
 """
 from __future__ import annotations
 
+import sys
+
 from sqlalchemy import text
 
-from app.core.config import settings
 from app.db.database import SessionLocal
 from app.services.integracion_indicadores_service import CODIGOS
 
@@ -29,7 +34,12 @@ OK, MAL, AVISO = "  [OK]   ", "  [FALTA]", "  [aviso]"
 def _paises(db) -> list[str]:
     """Los países a revisar: los que ya existen en VISTA MÁS los que Mallén
     anunció en `ext`. La unión importa — un país que solo está en `ext` todavía
-    no tiene configuración, y es justo el que hay que preparar."""
+    no tiene configuración, y es justo el que hay que preparar.
+
+    Puede devolver LISTA VACÍA, y es el caso normal antes del primer lote: VISTA
+    no tiene países porque los crea el propio envío. `main` lo trata aparte —
+    un checklist sin nada que revisar tiene que decirlo, porque si se calla la
+    ausencia de fallos se lee como que no falta nada."""
     filas = db.execute(text('''
         SELECT codigo FROM "Config"."DIM_Pais"
         UNION
@@ -135,21 +145,49 @@ def _permisos_ext(db) -> None:
 
 def _correo() -> None:
     """El aviso de lote recibido es la única forma de enterarse sin mirar. Sin
-    servidor de correo la integración funciona igual, pero en silencio."""
-    if settings.MAIL_SERVER:
-        print(f"{OK} correo configurado ({settings.MAIL_SERVER}): "
+    servidor de correo la integración funciona igual, pero en silencio.
+
+    Se pregunta a `mail_config()`, NO a `settings.MAIL_SERVER`: la config que
+    vale es la que el ADMIN guarda desde la pantalla de Administración (vive en
+    la BD), y el `.env` es solo su respaldo. Leer el `.env` daría «sin correo»
+    en cualquier servidor configurado por la interfaz — que son casi todos."""
+    from app.services.notification_service import mail_config
+    cfg = mail_config()
+    if cfg["server"]:
+        print(f"{OK} correo configurado ({cfg['server']}): "
               f"llegará el aviso de lote recibido")
     else:
         print(f"{AVISO} sin servidor de correo: no habrá aviso cuando llegue un lote")
 
 
 def main() -> None:
+    # Los códigos se pueden pasar por argumento para revisar países que TODAVÍA
+    # NO EXISTEN en la base. Es lo que hace falta antes del primer lote: los
+    # países los crea el envío de Mallén, pero los indicadores hay que darlos de
+    # alta antes, y para eso hay que saber qué códigos van a llegar.
+    pedidos = [a.strip().upper() for a in sys.argv[1:] if a.strip()]
+
     db = SessionLocal()
     try:
         print("\n=== GENERAL ===")
         _permisos_ext(db)
         _correo()
-        for pais in _paises(db):
+
+        paises = pedidos or _paises(db)
+        if not paises:
+            print("\n=== SIN PAÍSES QUE REVISAR ===")
+            print("  VISTA no tiene ningún país y `ext` tampoco trae ninguno, así que")
+            print("  NO SE REVISÓ NADA por país — que es donde está casi todo el")
+            print("  checklist. Esto es lo normal antes del primer lote: los países los")
+            print("  crea el propio envío de Mallén.")
+            print("\n  Para revisar de todos modos, pasa los códigos que va a enviar:")
+            print("    ... python - DO GT HN < backend/scripts/diagnostico_integracion_listo.py")
+            print()
+            return
+
+        if pedidos:
+            print(f"\n(revisando los países indicados: {', '.join(pedidos)})")
+        for pais in paises:
             print(f"\n=== {pais} ===")
             _indicadores(db, pais)
             _categorizacion(db, pais)
