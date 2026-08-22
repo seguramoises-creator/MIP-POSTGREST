@@ -16,7 +16,7 @@ import {
 import { useAuthStore } from '../../store/auth.store';
 import { usePuede } from '../../store/permisos.store';
 import { Rol } from '../../types';
-import logoImg from '../../assets/mallen-logo-blanco.svg';
+import { marcaViva } from '../../theme/marcaViva';
 
 const DRAWER_WIDTH = 264;
 const DRAWER_WIDTH_COLLAPSED = 72;
@@ -263,7 +263,7 @@ export default function Sidebar({ mobileOpen = false, onMobileClose }:
         width: '100%', overflow: 'hidden', borderRadius: '0 0 16px 16px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.30)', lineHeight: 0, flexShrink: 0,
       }}>
-        <img src={logoImg} alt="Laboratorios Mallén"
+        <img src={marcaViva.logo.logoBlanco} alt={marcaViva.logo.nombre}
              style={{ width: '100%', height: 'auto', display: 'block', objectFit: 'cover' }} />
       </Box>
 

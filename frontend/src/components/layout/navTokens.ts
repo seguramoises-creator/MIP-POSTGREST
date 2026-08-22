@@ -39,16 +39,26 @@ import { marcaViva } from '../../theme/marcaViva';
  * hay que medir. Da 6.11:1 — cómodamente sobre el 4.5:1 de AA para texto pequeño,
  * y bastante mejor que el 4.11:1 al que llegaba el degradado azul anterior.
  */
-// Se lee de la paleta VIVA, no de la de fábrica: así el degradado sigue al color
-// que el administrador fije desde Identidad visual.
-export const NAV_FONDO = marcaViva.degradadoBarra;
-
-/** Taupe Mallén plano — bordes, iconos y acentos sobre superficie clara. */
-export const NAV_TAUPE = marcaViva.taupe;
-/** Rojo Mallén — acción y acento sobre superficie CLARA (nunca sobre las barras). */
-export const NAV_ROJO = marcaViva.rojo;
+/* ── POR QUÉ ESTOS SON FUNCIONES Y NO CONSTANTES ───────────────────────────
+ * Antes eran `export const NAV_FONDO = marcaViva.degradadoBarra;`, y eso NO
+ * funcionaba: copiaba el valor al cargar el módulo, que ocurre ANTES de que
+ * `cargarMarca()` lea la configuración del servidor. La constante se quedaba con
+ * la paleta de fábrica para siempre, así que el color elegido desde Identidad
+ * visual nunca llegaba a las barras — el resto de la aplicación sí cambiaba, y
+ * las barras no, sin que nada avisara.
+ *
+ * `marcaViva` es un objeto mutable justamente para que sus lectores vean el
+ * cambio; copiar una propiedad a una constante anula ese mecanismo. Como
+ * funciones, se evalúan al pintar, que es cuando el valor ya es el correcto.
+ */
+/** Fondo de ambas barras: degradado del color de estructura vigente. */
+export const navFondo = () => marcaViva.degradadoBarra;
+/** Color de estructura plano — bordes, iconos y acentos sobre superficie clara. */
+export const navTaupe = () => marcaViva.taupe;
+/** Color de acción — sobre superficie CLARA (nunca sobre las barras). */
+export const navRojo = () => marcaViva.rojo;
 /** Tramo más claro del degradado: el peor caso para medir contraste. */
-export const NAV_FONDO_CLARO = marcaViva.taupe;
+export const navFondoClaro = () => marcaViva.taupe;
 /** Activo sobre las barras: blanco puro (6.1:1 en el peor tramo, 12.3:1 en el mejor). */
 export const NAV_ACTIVO = '#FFFFFF';
 /**

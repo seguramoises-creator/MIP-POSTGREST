@@ -14,6 +14,7 @@
  * quedaría descuadrada y nadie sabría cuál de los ocho campos la rompió.
  */
 import * as fabrica from './marca';
+import { IDENTIDAD_FABRICA, identidad, type Identidad } from './identidades';
 
 /** Aclara u oscurece un `#rrggbb`. `f` negativo oscurece, positivo aclara. */
 function mezclar(hex: string, f: number): string {
@@ -61,21 +62,35 @@ export interface Marca {
   taupe: string; taupeMedio: string; taupeProfundo: string;
   taupeNegro: string; taupeClaro: string;
   degradadoBarra: string; degradadoEntrada: string;
+  /** Juego de logotipos vigente (ver `identidades.ts`). */
+  logo: Identidad;
 }
 
-/** Construye la paleta completa a partir de los dos colores editables. */
-export function derivar(rojo: string, taupe: string): Marca {
-  const taupeMedio = mezclar(taupe, -0.16);
-  const taupeProfundo = mezclar(taupe, -0.44);
-  const taupeNegro = mezclar(taupe, -0.6);
+/**
+ * Construye la paleta completa a partir de los dos colores editables.
+ *
+ * `nombreLogo` va aparte de los colores porque son decisiones independientes:
+ * una instalación puede querer el logotipo de VISTA con colores propios.
+ */
+export function derivar(rojo: string, taupe: string, nombreLogo?: string | null): Marca {
+  const ident = identidad(nombreLogo);
+  // Si los colores son LOS DE LA IDENTIDAD (nadie los cambió) y esa identidad
+  // trae tonos afinados a mano, se usan tal cual. En cuanto hay un color propio
+  // el cálculo vuelve a mandar: no tendría sentido mezclar el taupe elegido por
+  // el cliente con los oscuros de otra marca.
+  const propios = rojo === ident.rojo && taupe === ident.taupe ? ident.exactos : undefined;
+  const taupeMedio = propios?.taupeMedio ?? mezclar(taupe, -0.16);
+  const taupeProfundo = propios?.taupeProfundo ?? mezclar(taupe, -0.44);
+  const taupeNegro = propios?.taupeNegro ?? mezclar(taupe, -0.6);
   return {
     rojo,
-    rojoOscuro: versionLegible(rojo),
-    rojoTenue: mezclar(rojo, 0.9),
+    rojoOscuro: propios?.rojoOscuro ?? versionLegible(rojo),
+    rojoTenue: propios?.rojoTenue ?? mezclar(rojo, 0.9),
     taupe, taupeMedio, taupeProfundo, taupeNegro,
-    taupeClaro: mezclar(taupe, 0.14),
+    taupeClaro: propios?.taupeClaro ?? mezclar(taupe, 0.14),
     degradadoBarra: `linear-gradient(130deg, ${taupeProfundo} 0%, ${taupeMedio} 55%, ${taupe} 100%)`,
     degradadoEntrada: `linear-gradient(135deg, ${taupeNegro} 0%, ${taupeProfundo} 40%, ${taupeMedio} 75%, ${taupe} 100%)`,
+    logo: identidad(nombreLogo),
   };
 }
 
@@ -86,6 +101,7 @@ export const MARCA_FABRICA: Marca = {
   taupeProfundo: fabrica.TAUPE_PROFUNDO, taupeNegro: fabrica.TAUPE_NEGRO,
   taupeClaro: fabrica.TAUPE_CLARO,
   degradadoBarra: fabrica.DEGRADADO_BARRA, degradadoEntrada: fabrica.DEGRADADO_ENTRADA,
+  logo: identidad(IDENTIDAD_FABRICA),
 };
 
 /**
@@ -109,12 +125,18 @@ export async function cargarMarca(): Promise<void> {
     const base = (import.meta as any).env?.VITE_API_URL || '/api/v1';
     const r = await fetch(`${base}/admin/config/marca`);
     if (!r.ok) return;
-    const { rojo, taupe } = await r.json();
+    const { rojo, taupe, logo } = await r.json();
     const hex = /^#[0-9A-Fa-f]{6}$/;
-    if (!hex.test(rojo || '') && !hex.test(taupe || '')) return;
+    // Elegir una identidad trae SU paleta, no solo su logotipo: una instalación
+    // que pide el logotipo de VISTA y se queda con los colores de Mallén se ve
+    // rota, y nadie relacionaría eso con haber elegido solo el logotipo. Los
+    // colores guardados, si los hay, mandan sobre esa base — así se puede tener
+    // el logotipo de una marca con los colores de otra, a propósito.
+    const elegida = identidad(logo);
     Object.assign(marcaViva, derivar(
-      hex.test(rojo || '') ? rojo.toUpperCase() : fabrica.ROJO,
-      hex.test(taupe || '') ? taupe.toUpperCase() : fabrica.TAUPE,
+      hex.test(rojo || '') ? rojo.toUpperCase() : elegida.rojo,
+      hex.test(taupe || '') ? taupe.toUpperCase() : elegida.taupe,
+      logo,
     ));
   } catch {
     /* sin conexión: se queda la de fábrica */

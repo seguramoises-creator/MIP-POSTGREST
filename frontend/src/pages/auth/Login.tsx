@@ -9,7 +9,7 @@ import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { authService } from '../../services/auth.service';
 import { Rol } from '../../types';
-import logoImg from '../../assets/mallen-logo.svg';
+import { marcaViva } from '../../theme/marcaViva';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -107,7 +107,7 @@ export default function Login() {
         justifyContent: 'center',
         // Degradado del taupe Mallén. El rojo de marca NO entra aquí: como fondo a pantalla
         // completa competiría con el botón de acción, que es lo único que debe pedir el clic.
-        background: 'linear-gradient(135deg, #2A2622 0%, #3A342F 40%, #584F46 75%, #686158 100%)',
+        background: marcaViva.degradadoEntrada,
       }}
     >
       <Card sx={{ width: 440, mx: 2, borderRadius: 3, boxShadow: 24, overflow: 'hidden' }}>
@@ -122,7 +122,7 @@ export default function Login() {
               de una tarjeta de 621 en un iPhone —un 38% solo para la marca— y empujaba el
               botón de entrar cerca del borde inferior. Acotado, la marca sigue siendo lo
               primero que se ve y el formulario cabe holgado. */}
-          <Box component="img" src={logoImg} alt="Laboratorios Mallén"
+          <Box component="img" src={marcaViva.logo.logoColor} alt={marcaViva.logo.nombre}
                sx={{ width: '100%', maxWidth: { xs: 190, sm: 300 }, height: 'auto', display: 'block' }} />
         </Box>
 

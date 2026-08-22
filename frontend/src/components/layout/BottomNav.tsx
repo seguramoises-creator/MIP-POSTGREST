@@ -19,7 +19,7 @@ import { MoreHoriz } from '@mui/icons-material';
 
 import { useAuthStore } from '../../store/auth.store';
 import { useNavSecciones, type Destino } from './useNavSecciones';
-import { NAV_ACTIVO, NAV_TAUPE, NAV_BORDE, NAV_FONDO, NAV_INACTIVO, TEXTO_TENUE, BOTTOM_NAV_H } from './navTokens';
+import { NAV_ACTIVO, navTaupe, NAV_BORDE, navFondo, NAV_INACTIVO, TEXTO_TENUE, BOTTOM_NAV_H } from './navTokens';
 import { colorDeSeccion, tinteDeSeccion } from '../../theme/marca';
 
 /**
@@ -119,7 +119,7 @@ export default function BottomNav({ activa, onPerfil }: Props) {
         aria-label="Navegación principal"
         sx={{
           position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: (t) => t.zIndex.appBar + 1,
-          background: NAV_FONDO,                    // degradado azul de VISTA (ver navTokens)
+          background: navFondo(),                    // degradado de la identidad vigente (ver navTokens)
           borderTop: `1px solid ${NAV_BORDE}`,
           display: 'flex',
           // Área segura de iOS: sin esto la barra queda debajo del indicador de inicio.
@@ -135,7 +135,7 @@ export default function BottomNav({ activa, onPerfil }: Props) {
 
         {ranura(
           'perfil',
-          <Avatar sx={{ width: 24, height: 24, fontSize: 12, bgcolor: NAV_ACTIVO, color: NAV_TAUPE, fontWeight: 700 }}>
+          <Avatar sx={{ width: 24, height: 24, fontSize: 12, bgcolor: NAV_ACTIVO, color: navTaupe(), fontWeight: 700 }}>
             {nombreCompleto?.[0]?.toUpperCase() || 'U'}
           </Avatar>,
           'Perfil', false, onPerfil,

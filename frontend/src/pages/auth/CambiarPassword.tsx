@@ -8,6 +8,7 @@ import { CheckCircle, RadioButtonUnchecked, LockReset, Logout } from '@mui/icons
 import { api } from '../../services/api';
 import { useAuthStore } from '../../store/auth.store';
 import { authService } from '../../services/auth.service';
+import { marcaViva } from '../../theme/marcaViva';
 
 // Carácter especial = cualquiera que no sea letra, número ni espacio. Debe coincidir con
 // `password_policy_service.es_especial` del backend. La lista fija anterior dejaba fuera
@@ -94,7 +95,7 @@ export default function CambiarPassword() {
   return (
     <Box sx={{
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'linear-gradient(135deg, #2A2622 0%, #686158 40%, #584F46 75%, #686158 100%)',
+      background: marcaViva.degradadoEntrada,
     }}>
       <Card sx={{ width: 460, mx: 2, borderRadius: 3, boxShadow: 24 }}>
         <CardContent sx={{ p: 4 }}>

@@ -18,13 +18,16 @@ import {
 import { Palette, RestartAlt, Save } from '@mui/icons-material';
 import { api } from '../../services/api';
 import { MARCA_FABRICA, contraste, derivar } from '../../theme/marcaViva';
+import { IDENTIDADES, IDENTIDAD_FABRICA, identidad } from '../../theme/identidades';
 import { TEXTO_TENUE } from '../../components/layout/navTokens';
+import { detalleError } from '../../utils/errores';
 
 const HEX = /^#[0-9A-Fa-f]{6}$/;
 
 export default function IdentidadVisual() {
   const [rojo, setRojo] = useState(MARCA_FABRICA.rojo);
   const [taupe, setTaupe] = useState(MARCA_FABRICA.taupe);
+  const [logo, setLogo] = useState(IDENTIDAD_FABRICA);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [msg, setMsg] = useState('');
@@ -33,8 +36,14 @@ export default function IdentidadVisual() {
   useEffect(() => {
     api.get('/admin/config/marca')
       .then(({ data }) => {
-        if (HEX.test(data.rojo || '')) setRojo(data.rojo.toUpperCase());
-        if (HEX.test(data.taupe || '')) setTaupe(data.taupe.toUpperCase());
+        const ident = identidad(data.logo);
+        if (data.logo && IDENTIDADES[data.logo]) setLogo(data.logo);
+        // Sin color guardado se muestran los de la identidad elegida, no los de
+        // fábrica: es lo mismo que hace la aplicación al arrancar, y si esta
+        // pantalla mostrara otra cosa el administrador vería una vista previa
+        // que no corresponde a lo que hay en pantalla.
+        setRojo(HEX.test(data.rojo || '') ? data.rojo.toUpperCase() : ident.rojo);
+        setTaupe(HEX.test(data.taupe || '') ? data.taupe.toUpperCase() : ident.taupe);
       })
       .catch(() => { /* sin guardar: quedan los de fábrica */ })
       .finally(() => setCargando(false));
@@ -44,22 +53,26 @@ export default function IdentidadVisual() {
   // La vista previa se calcula con la MISMA función que usa la aplicación al
   // arrancar. Si fuera un cálculo aparte, lo que se ve aquí y lo que se ve al
   // recargar podrían separarse sin que nadie lo notara.
-  const previa = valido ? derivar(rojo, taupe) : MARCA_FABRICA;
+  const previa = valido ? derivar(rojo, taupe, logo) : MARCA_FABRICA;
   const contrasteBarra = valido ? contraste('#FFFFFF', previa.taupe) : 0;
   const contrasteEnlace = valido ? contraste(previa.rojoOscuro, '#FFFFFF') : 0;
 
   const guardar = async () => {
     setGuardando(true); setMsg(''); setErr('');
     try {
-      const { data } = await api.put('/admin/config/marca', { rojo, taupe });
+      const { data } = await api.put('/admin/config/marca', { rojo, taupe, logo });
       setMsg(data.message || 'Guardado.');
     } catch (e: any) {
-      setErr(e.response?.data?.detail || 'No se pudo guardar.');
+      setErr(detalleError(e, 'No se pudo guardar.'));
     } finally { setGuardando(false); }
   };
 
+  // Vuelve a la paleta de la IDENTIDAD ELEGIDA, no a la de Mallén: si el
+  // administrador está trabajando con la identidad de VISTA, "restablecer" tiene
+  // que devolverlo a los colores de VISTA.
   const restablecer = () => {
-    setRojo(MARCA_FABRICA.rojo); setTaupe(MARCA_FABRICA.taupe);
+    const ident = identidad(logo);
+    setRojo(ident.rojo); setTaupe(ident.taupe);
     setMsg(''); setErr('');
   };
 
@@ -81,6 +94,40 @@ export default function IdentidadVisual() {
         {msg && <Alert severity="success" sx={{ mb: 2 }}>{msg}</Alert>}
         {err && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
 
+        {/* El logotipo va PRIMERO porque elegirlo también cambia los colores: es la
+            decisión de la que dependen las otras dos, y ponerlo después haría que
+            el administrador viera cambiar unos campos que acaba de ajustar. */}
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>Logotipo</Typography>
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 3 }}>
+          {Object.entries(IDENTIDADES).map(([clave, ident]) => (
+            <Box key={clave} onClick={() => {
+                   setLogo(clave);
+                   // Al cambiar de identidad se traen SUS colores. Conservar los
+                   // anteriores dejaría, por ejemplo, el logotipo de VISTA sobre
+                   // las barras de Mallén — un estado que nadie pidió y que se
+                   // ve como un error de la aplicación.
+                   setRojo(ident.rojo); setTaupe(ident.taupe); setMsg('');
+                 }}
+                 sx={{ flex: 1, p: 2, borderRadius: 2, cursor: 'pointer',
+                       border: '2px solid', borderColor: logo === clave ? previa.rojo : 'divider',
+                       bgcolor: logo === clave ? 'action.hover' : 'transparent',
+                       display: 'flex', alignItems: 'center', gap: 2 }}>
+              {/* Sobre fondo claro va la versión a color; la blanca sería invisible. */}
+              <Box component="img" src={ident.logoColor} alt={ident.nombre}
+                   sx={{ height: 34, width: 'auto', flexShrink: 0 }} />
+              <Box>
+                <Typography sx={{ fontWeight: 600, fontSize: 14 }}>{ident.nombre}</Typography>
+                <Stack direction="row" spacing={0.5} sx={{ mt: 0.5 }}>
+                  {[ident.taupe, ident.rojo].map((c) => (
+                    <Box key={c} sx={{ width: 22, height: 12, borderRadius: 0.5, bgcolor: c }} />
+                  ))}
+                </Stack>
+              </Box>
+            </Box>
+          ))}
+        </Stack>
+
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>Colores</Typography>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2.5} sx={{ mb: 3 }}>
           {([['Color de acción', rojo, setRojo, 'Botones, estado activo y acentos.'],
              ['Color de estructura', taupe, setTaupe, 'Barras, superficies y texto fuerte.'],

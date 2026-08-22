@@ -10,7 +10,7 @@ import { useState, useEffect, useMemo } from 'react';
 import BottomNav from './BottomNav';
 import TopTabs from './TopTabs';
 import { useNavSecciones } from './useNavSecciones';
-import { APP_FONDO, BOTTOM_NAV_H, NAV_ACTIVO, NAV_TAUPE, NAV_FONDO, TEXTO_TENUE } from './navTokens';
+import { APP_FONDO, BOTTOM_NAV_H, NAV_ACTIVO, navTaupe, navFondo, TEXTO_TENUE } from './navTokens';
 import InstalarAppDialog from '../InstalarAppDialog';
 import AvisoErrorGlobal from '../AvisoErrorGlobal';
 import { useAuthStore } from '../../store/auth.store';
@@ -18,10 +18,10 @@ import { usePermisosStore } from '../../store/permisos.store';
 import { authService } from '../../services/auth.service';
 import { api } from '../../services/api';
 import { miGerente, type MiGerente } from '../../services/visita.service';
-import logoImg from '../../assets/mallen-logo-blanco.svg';
 import CicloPaisBadge from '../CicloPaisBadge';
 import CicloPaisHeader from '../CicloPaisHeader';
 import { useCicloStore } from '../../store/ciclo.store';
+import { marcaViva } from '../../theme/marcaViva';
 
 export default function MainLayout() {
   const navigate = useNavigate();
@@ -132,7 +132,7 @@ export default function MainLayout() {
           position="sticky"
           elevation={0}
           sx={{
-            background: NAV_FONDO,
+            background: navFondo(),
             borderBottom: 'none',
             color: NAV_ACTIVO,
           }}
@@ -149,7 +149,7 @@ export default function MainLayout() {
                   tamaños intermedios seguían leyéndose pequeños. Al quitar el título de
                   sección, el logo pasa a ser el único elemento de la izquierda y puede
                   ocupar ese espacio sin apretar nada. */}
-              <Box component="img" src={logoImg} alt="Laboratorios Mallén"
+              <Box component="img" src={marcaViva.logo.logoBlanco} alt={marcaViva.logo.nombre}
                    sx={{ height: { xs: 44, sm: 60 }, width: 'auto', display: 'block', flexShrink: 0,
                          // Sin márgenes negativos: la versión anterior hacía que el logo
                          // desbordara hacia la fila de pestañas, y en las secciones de un
@@ -184,7 +184,7 @@ export default function MainLayout() {
           PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, pb: 'env(safe-area-inset-bottom, 0px)' } }}
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, pt: 2, pb: 1.5 }}>
-            <Avatar sx={{ width: 44, height: 44, bgcolor: NAV_TAUPE, fontWeight: 700 }}>
+            <Avatar sx={{ width: 44, height: 44, bgcolor: navTaupe(), fontWeight: 700 }}>
               {nombreCompleto?.[0]?.toUpperCase() || 'U'}
             </Avatar>
             <Box sx={{ minWidth: 0 }}>

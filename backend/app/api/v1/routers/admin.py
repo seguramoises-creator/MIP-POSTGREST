@@ -1168,9 +1168,19 @@ class MarcaConfig(BaseModel):
     nadie sabría cuál de los ocho campos la descuadró."""
     rojo: str = Field("", max_length=7, description="Color de acción, #rrggbb")
     taupe: str = Field("", max_length=7, description="Color de estructura, #rrggbb")
+    # El LOGO también es identidad, y dejarlo fijo en el código convertía la
+    # centralización en media verdad: los colores se podían cambiar por instalación
+    # y el logotipo no, así que dos servidores con distinta configuración de color
+    # seguían mostrando el mismo logotipo. Se guarda el NOMBRE del juego de
+    # logotipos, no el archivo: los SVG viajan en el paquete del frontend (pesan
+    # poco y así funcionan sin conexión), y subir imágenes al servidor abriría un
+    # problema aparte —validación, tamaño, almacenamiento— para un catálogo que hoy
+    # tiene dos entradas.
+    logo: str = Field("", max_length=20, description="Juego de logotipos: vista | mallen")
 
 
 _RE_HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
+_LOGOS = ("vista", "mallen")
 
 
 @router.get("/config/marca", summary="Colores de marca vigentes")
@@ -1180,7 +1190,8 @@ def get_config_marca(db: Session = Depends(get_db)):
     y sin este endpoint abierto el login se pintaría con la marca por defecto y
     saltaría a la del cliente justo al entrar."""
     return {"rojo": _cfg.obtener(db, "MARCA_ROJO") or "",
-            "taupe": _cfg.obtener(db, "MARCA_TAUPE") or ""}
+            "taupe": _cfg.obtener(db, "MARCA_TAUPE") or "",
+            "logo": _cfg.obtener(db, "MARCA_LOGO") or ""}
 
 
 @router.put("/config/marca", response_model=Msg, summary="Guardar colores de marca")
@@ -1192,7 +1203,12 @@ def put_config_marca(data: MarcaConfig, db: Session = Depends(get_db), _=AdminOn
         if v and not _RE_HEX.match(v):
             raise HTTPException(422, f"«{v}» no es un color válido. Usa el formato #RRGGBB.")
         _cfg.fijar(db, clave, v.upper())
-    return Msg(message="Colores de marca guardados. Recarga la página para verlos.")
+    logo = (data.logo or "").strip().lower()
+    if logo and logo not in _LOGOS:
+        raise HTTPException(422, f"«{logo}» no es un juego de logotipos válido. "
+                                 f"Opciones: {', '.join(_LOGOS)}.")
+    _cfg.fijar(db, "MARCA_LOGO", logo)
+    return Msg(message="Identidad visual guardada. Recarga la página para verla.")
 
 
 @router.put("/config/correo", response_model=Msg, summary="Guardar configuración SMTP")
