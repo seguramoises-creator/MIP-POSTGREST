@@ -1183,6 +1183,41 @@ _RE_HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _LOGOS = ("vista", "mallen")
 
 
+# ── Modo de ingesta de datos ───────────────────────────────────────────────
+# De dónde entran los KPIs y las visitas en ESTA instalación:
+#   excel        → carga manual de FACT_KPI_RM (pantalla Carga Excel — ETL)
+#   integracion  → el cliente escribe en el esquema `ext` desde su propio SFA y
+#                  los datos entran por Lotes de Mallén
+# No se DETECTA mirando si ya llegaron lotes, aunque sería tentador: antes del
+# primer envío no habría ninguno, y la instalación mostraría la carga por Excel
+# justo mientras se prepara para no usarla nunca. Es una decisión de montaje, no
+# un estado observable.
+_MODOS_INGESTA = ("excel", "integracion")
+
+
+class AppConfig(BaseModel):
+    modo_ingesta: str = Field("", max_length=20,
+                              description="excel | integracion")
+
+
+@router.get("/config/app", summary="Configuración de la instalación")
+def get_config_app(db: Session = Depends(get_db)):
+    """Sin autenticación, por el mismo motivo que los colores: el frontend la lee
+    antes de pintar para decidir qué menús existen, y ahí todavía no hay sesión.
+    No revela nada — solo dice por qué puerta entran los datos."""
+    return {"modo_ingesta": _cfg.obtener(db, "MODO_INGESTA") or "excel"}
+
+
+@router.put("/config/app", response_model=Msg, summary="Guardar configuración de la instalación")
+def put_config_app(data: AppConfig, db: Session = Depends(get_db), _=AdminOnly):
+    modo = (data.modo_ingesta or "").strip().lower()
+    if modo and modo not in _MODOS_INGESTA:
+        raise HTTPException(422, f"«{modo}» no es un modo válido. "
+                                 f"Opciones: {', '.join(_MODOS_INGESTA)}.")
+    _cfg.fijar(db, "MODO_INGESTA", modo or "excel")
+    return Msg(message="Configuración guardada. Recarga la página para verla.")
+
+
 @router.get("/config/marca", summary="Colores de marca vigentes")
 def get_config_marca(db: Session = Depends(get_db)):
     """SIN autenticación a propósito: la pantalla de ENTRADA necesita estos colores

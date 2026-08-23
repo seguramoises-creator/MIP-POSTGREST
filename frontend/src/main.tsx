@@ -28,12 +28,16 @@ import '@fontsource/manrope/700.css'
 import '@fontsource/manrope/800.css'
 
 import { cargarMarca } from './theme/marcaViva'
+import { cargarInstalacion } from './config/instalacion'
 
 // Se espera a la marca ANTES de pintar. Si se renderizara primero, la pantalla
 // arrancaría con los colores de fábrica y saltaría a los del cliente medio segundo
 // después — un parpadeo que se lee como un fallo. `cargarMarca` nunca lanza: sin
 // conexión sigue con los de fábrica en vez de dejar la pantalla en blanco.
-cargarMarca().finally(() =>
+// Las dos en PARALELO, no una tras otra: son independientes y encadenarlas
+// duplicaría la espera antes del primer píxel. `allSettled` porque ninguna debe
+// impedir arrancar — las dos tienen su propio valor de fábrica.
+Promise.allSettled([cargarMarca(), cargarInstalacion()]).finally(() =>
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

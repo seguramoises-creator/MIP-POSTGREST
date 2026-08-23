@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { esIntegrada } from './config/instalacion';
 import { useEffect, useState, Suspense } from 'react';
 import axios from 'axios';
 import { lazyWithReload, ErrorBoundary } from './components/common/resilience';
@@ -350,7 +351,14 @@ function AppRoutes() {
         <Route path="visita/ruptura" element={<ProtectedRoute recurso="cobertura.diaria" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><RupturaVisita /></ProtectedRoute>} />
         <Route path="visita/parrilla" element={<ProtectedRoute recurso="parrilla.consulta" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><ParrillaVisita /></ProtectedRoute>} />
         <Route path="visita/costo-roi" element={<ProtectedRoute recurso="costoroi.ver" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><CostoRoiVisita /></ProtectedRoute>} />
-        <Route path="etl" element={<ProtectedRoute recurso="etl.cargar"><ETL /></ProtectedRoute>} />
+        {/* En una instalación integrada la carga por Excel no existe: quitarla del
+            menú no basta, porque un enlace guardado la seguiría abriendo y esa
+            pantalla escribe los mismos datos que llegan por `ext`. Se manda a
+            Lotes de Mallén, que es la puerta buena, en vez de a un 404 que no
+            explica nada. */}
+        <Route path="etl" element={esIntegrada()
+          ? <Navigate to="/integracion/lotes" replace />
+          : <ProtectedRoute recurso="etl.cargar"><ETL /></ProtectedRoute>} />
         <Route path="admin" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><Admin /></ProtectedRoute>} />
         <Route path="usuarios" element={<ProtectedRoute recurso="config.usuarios" allowedRoles={['ADMIN']}><Administracion /></ProtectedRoute>} />
         <Route path="reportes" element={<ProtectedRoute recurso="exportacion" accion="export" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','CONSULTA']}><Reportes /></ProtectedRoute>} />

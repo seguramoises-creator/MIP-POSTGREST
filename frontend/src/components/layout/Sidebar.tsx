@@ -37,6 +37,16 @@ export interface NavItem {
   roles: Rol[];          // fallback mientras cargan los permisos (y para módulos fuera de la matriz)
   recurso?: string;      // recurso de la matriz RBAC; si existe, la visibilidad la decide /authz/me/permisos
   accion?: string;       // acción a evaluar sobre el recurso (default 'read')
+  /**
+   * Oculta el ítem cuando la instalación recibe los datos por integración.
+   *
+   * No es un permiso —el ADMIN sigue teniendo derecho a cargar un Excel—, es que
+   * en un montaje integrado esa pantalla ofrece una SEGUNDA puerta para los
+   * mismos datos: usarla duplicaría lo que llega por `ext` o lo pisaría. Va
+   * aparte de `roles`/`recurso` justamente porque no habla de quién eres sino de
+   * cómo está montada la instalación.
+   */
+  soloSinIntegracion?: boolean;
 }
 
 export interface NavSection {
@@ -85,6 +95,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Matriz LSII',           path: '/lsii',                 icon: <ScatterPlot />,  recurso: 'lsii.evaluar', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA', 'CONSULTA'] },
       { label: 'Cobertura Predictiva',  path: '/cobertura-predictiva', icon: <TrackChanges />, recurso: 'cobertura.predictiva', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA'] },
       { label: 'Costo & ROI',           path: '/visita/costo-roi',     icon: <Paid />,         recurso: 'costoroi.ver', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Reportes',              path: '/reportes',             icon: <Assessment />,   recurso: 'exportacion', accion: 'export', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },
     ],
   },
   {
@@ -102,10 +113,15 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    // «Datos» quedó con un solo ítem, y desaparece entera en una instalación
+    // integrada: `useNavSecciones` descarta las secciones sin nada visible.
+    // Reportes se fue a «Desempeño y análisis», que es lo que exporta (ranking y
+    // reconocimientos); estaba aquí por ser un archivo que se descarga, no por
+    // el trabajo al que pertenece.
     title: 'Datos',
     items: [
-      { label: 'Carga Excel (ETL)', path: '/etl',      icon: <CloudUpload />, recurso: 'etl.cargar', roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
-      { label: 'Reportes',          path: '/reportes', icon: <Assessment />,  recurso: 'exportacion', accion: 'export', roles: ['ADMIN', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_PRODUCTIVIDAD', 'CONSULTA'] },
+      { label: 'Carga Excel (ETL)', path: '/etl', icon: <CloudUpload />, recurso: 'etl.cargar',
+        roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'], soloSinIntegracion: true },
     ],
   },
   {
