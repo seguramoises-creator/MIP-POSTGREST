@@ -92,6 +92,22 @@ export default function BottomNav({ activa, onPerfil }: Props) {
         flex: 1, minWidth: 0, height: BOTTOM_NAV_H,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         gap: 0.25, color: activo ? NAV_ACTIVO : NAV_INACTIVO,
+        position: 'relative',
+        // INDICADOR DE SECCIÓN ACTIVA. Antes lo único que distinguía a la activa era
+        // blanco al 100% frente a blanco al 92% — una diferencia que no se ve, y menos
+        // al sol, que es donde se usa esta barra. Las pestañas de arriba sí llevaban
+        // subrayado; aquí no había nada.
+        //
+        // Barra superior + fondo tenue, los dos en blanco: no dependen del matiz, así
+        // que siguen funcionando con cualquier identidad y para quien no distingue
+        // bien los colores.
+        ...(activo && {
+          bgcolor: 'rgba(255,255,255,0.14)',
+          '&::before': {
+            content: '""', position: 'absolute', top: 0, left: '18%', right: '18%',
+            height: 3, borderRadius: '0 0 3px 3px', bgcolor: NAV_ACTIVO,
+          },
+        }),
         // El foco visible NO se hereda de MUI en ButtonBase: se declara para que
         // la navegación por teclado siga siendo utilizable.
         '&:focus-visible': { outline: `2px solid ${NAV_ACTIVO}`, outlineOffset: -2 },

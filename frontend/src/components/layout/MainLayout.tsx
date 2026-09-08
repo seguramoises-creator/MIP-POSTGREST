@@ -130,6 +130,12 @@ export default function MainLayout() {
 
   const avisoVencimiento = passwordMotivo === 'por_expirar' && passwordExpiraEnDias != null;
 
+  // ¿Habrá pestañas ocupando el centro de la barra? `TopTabs` no se renderiza en la
+  // disposición lateral ni cuando la sección tiene un solo ítem (una fila de una
+  // pestaña sería un adorno que roba alto). Esta condición replica la suya para
+  // saber si hace falta un separador que empuje las acciones a la derecha.
+  const hayPestanas = !lateral && (seccionActiva?.items.length ?? 0) > 1;
+
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       {/* Las dos disposiciones conviven en el mismo código y cada instalación
@@ -148,7 +154,7 @@ export default function MainLayout() {
         >
           {/* Cabecera reducida a lo que informa: dónde estoy y sobre qué ciclo/país
               trabajo. La cuenta y la salida bajaron a la ranura Perfil. */}
-          <Toolbar variant="dense" sx={{ gap: 1, minHeight: { xs: 56, sm: 72 }, alignItems: 'center', px: { xs: 1, sm: 2 } }}>
+          <Toolbar variant="dense" sx={{ gap: 1, minHeight: { xs: 64, sm: 92 }, alignItems: 'center', px: { xs: 1, sm: 2 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
               {/* El logo vivía en el menú lateral y se fue con él al rediseñar la
                   navegación. Vuelve aquí, que es donde se ve en todas las pantallas.
@@ -162,7 +168,7 @@ export default function MainLayout() {
                   izquierda: repetirlo aquí lo mostraba dos veces en la misma
                   pantalla, uno al lado del otro. Se omite. */}
               {!lateral && <Box component="img" src={marcaViva.logo.logoBlanco} alt={marcaViva.logo.nombre}
-                   sx={{ height: { xs: 44, sm: 60 }, width: 'auto', display: 'block', flexShrink: 0,
+                   sx={{ height: { xs: 52, sm: 76 }, width: 'auto', display: 'block', flexShrink: 0,
                          // Sin márgenes negativos: la versión anterior hacía que el logo
                          // desbordara hacia la fila de pestañas, y en las secciones de un
                          // solo ítem esa fila NO se renderiza — el logo quedaba cortado por
@@ -173,7 +179,11 @@ export default function MainLayout() {
                 En `pestanas` no debe existir: `TopTabs` ya ocupa el hueco central y se
                 centra con márgenes automáticos, así que un separador aquí le robaba el
                 espacio libre y las pestañas quedaban desplazadas a la derecha. */}
-            {lateral && <Box sx={{ flexGrow: 1 }} />}
+            {/* Empuja las acciones al extremo derecho cuando NADA ocupa el centro:
+                en la disposición lateral, y también en las secciones de un solo ítem
+                —el Panel, por ejemplo—, donde `TopTabs` no se renderiza. Sin esto la
+                píldora de País+Ciclo se pegaba al logotipo, a la izquierda. */}
+            {!hayPestanas && <Box sx={{ flexGrow: 1 }} />}
             {!lateral && <TopTabs items={seccionActiva?.items ?? []} seccion={seccionActiva?.titulo ?? 'Inicio'} />}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
               {gd?.gerente && (
