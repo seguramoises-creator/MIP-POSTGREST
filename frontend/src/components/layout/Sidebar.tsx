@@ -9,7 +9,7 @@ import {
   CloudUpload, Settings, AdminPanelSettings, Assessment,
   SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn, Groups,
   MedicalServices, EditNote, EventNote, ReportProblem, Campaign, Paid,
-  ChevronLeft, ChevronRight, Add, Remove, RateReview, LocalPharmacy, Storefront,
+  ChevronLeft, ChevronRight, Add, Remove, RateReview, LocalPharmacy, Storefront, Rule, RecordVoiceOver, Psychology, School, MilitaryTech
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { usePuede } from '../../store/permisos.store';
@@ -91,6 +91,12 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Exámenes',          path: '/examenes',        icon: <Quiz />,               recurso: 'examen.configurar', accion: 'configure', roles: ['ADMIN', 'CAPACITACION'] },
       { label: 'Mis Exámenes',      path: '/mis-examenes',    icon: <AssignmentTurnedIn />, roles: ['GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
       { label: 'Exámenes — Equipo', path: '/examenes-equipo', icon: <Groups />,             roles: ['GERENTE_DISTRITO'] },
+      { label: 'Plan de Brechas',       path: '/formacion/brechas',    icon: <Rule />,        roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'PRESIDENCIA', ] },
+      { label: 'Calendario de Coaching', path: '/formacion/calendario', icon: <EventNote />,   roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'PRESIDENCIA',  'CAPACITACION'] },
+      { label: 'Simulacro de Venta',     path: '/formacion/simulacro',  icon: <RecordVoiceOver />, roles: ['ADMIN', 'REPRESENTANTE_MEDICO', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'GERENTE_DISTRITO', 'PRESIDENCIA', ] },
+      { label: 'Refuerzo de Memoria',    path: '/formacion/refuerzo',   icon: <Psychology />,  roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'PRESIDENCIA',  'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Formación inicial',      path: '/formacion/onboarding', icon: <School />,      roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION',  'PRESIDENCIA', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
+      { label: 'Ranking de Formación',   path: '/formacion/ranking',    icon: <MilitaryTech />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION', 'PRESIDENCIA',  'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
     ],
   },
   {

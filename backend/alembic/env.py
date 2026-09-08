@@ -32,6 +32,8 @@ from app.models import exam_models  # noqa: F401,E402  ← esquema exam (Módulo
 from app.models import visita  # noqa: F401,E402  ← esquema Visita (Módulo de Visita Médica)
 from app.models import coaching_more_models  # noqa: F401,E402  ← esquema coaching (Coaching MORE)
 from app.models import seguridad_rbac  # noqa: F401,E402  ← RBAC Fase 1 (DIM_Recurso/FACT_RolPermiso/AuditoriaSeguridad)
+from app.models import ia_conexion  # noqa: F401,E402  ← Security.DIM_IAConexion (Conexiones de IA)
+from app.models import formacion  # noqa: F401,E402  ← esquema formacion (Ampliación del Módulo de Formación)
 
 target_metadata = Base.metadata
 
@@ -39,7 +41,7 @@ target_metadata = Base.metadata
 def include_object(object, name, type_, reflected, compare_to):
     """Ignora objetos fuera de los esquemas de la app (p.ej. del sistema)."""
     if type_ == "table" and object.schema not in (
-        "Config", "Security", "DW", "Audit", "ETL", "exam", "dbo", None
+        "Config", "Security", "DW", "Audit", "ETL", "exam", "ext", "formacion", "dbo", None
     ):
         return False
     return True

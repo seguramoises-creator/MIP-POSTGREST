@@ -50,6 +50,12 @@ const PlaneacionVisita = lazyWithReload(() => import('./pages/visita/PlaneacionV
 const RupturaVisita = lazyWithReload(() => import('./pages/visita/RupturaVisita'));
 const ParrillaVisita = lazyWithReload(() => import('./pages/visita/ParrillaVisita'));
 const CostoRoiVisita = lazyWithReload(() => import('./pages/visita/CostoRoiVisita'));
+const PlanBrechas = lazyWithReload(() => import('./pages/formacion/PlanBrechas'));
+const CalendarioCoaching = lazyWithReload(() => import('./pages/formacion/CalendarioCoaching'));
+const Simulacro = lazyWithReload(() => import('./pages/formacion/Simulacro'));
+const Refuerzo = lazyWithReload(() => import('./pages/formacion/Refuerzo'));
+const Onboarding = lazyWithReload(() => import('./pages/formacion/Onboarding'));
+const RankingFormacion = lazyWithReload(() => import('./pages/formacion/RankingFormacion'));
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
 
@@ -152,6 +158,13 @@ function AppRoutes() {
             un GD/Gerente de Productividad recibía 403 y solo veía errores. */}
         <Route path="examenes" element={<ProtectedRoute recurso="examen.configurar" accion="configure" allowedRoles={['ADMIN','CAPACITACION']}><Examenes /></ProtectedRoute>} />
         <Route path="examenes-equipo" element={<ProtectedRoute allowedRoles={['GERENTE_DISTRITO']}><EquipoExamenes /></ProtectedRoute>} />
+        {/* ── Módulo de Formación (trasplantado desde la rama principal) ── */}
+        <Route path="formacion/brechas" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','CAPACITACION','PRESIDENCIA']}><PlanBrechas /></ProtectedRoute>} />
+        <Route path="formacion/calendario" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','PRESIDENCIA','CAPACITACION']}><CalendarioCoaching /></ProtectedRoute>} />
+        <Route path="formacion/simulacro" element={<ProtectedRoute allowedRoles={['ADMIN','REPRESENTANTE_MEDICO','GERENTE_PRODUCTIVIDAD','CAPACITACION','GERENTE_DISTRITO','PRESIDENCIA']}><Simulacro /></ProtectedRoute>} />
+        <Route path="formacion/refuerzo" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','CAPACITACION','PRESIDENCIA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><Refuerzo /></ProtectedRoute>} />
+        <Route path="formacion/onboarding" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','CAPACITACION','PRESIDENCIA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><Onboarding /></ProtectedRoute>} />
+        <Route path="formacion/ranking" element={<ProtectedRoute allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD','CAPACITACION','PRESIDENCIA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO']}><RankingFormacion /></ProtectedRoute>} />
         <Route path="visita/panel-medico" element={<ProtectedRoute recurso="medico.panel" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><PanelMedico /></ProtectedRoute>} />
         <Route path="visita/panel-farmacia" element={<ProtectedRoute recurso="farmacia.panel" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><PanelFarmacia /></ProtectedRoute>} />
         <Route path="farmacias/maestro" element={<ProtectedRoute recurso="farmacia.maestro" accion="configure" allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><MaestroFarmacias /></ProtectedRoute>} />

@@ -24,6 +24,12 @@ from app.api.v1.routers.coaching_more import router as coaching_more_router
 from app.api.v1.routers.maestro_medicos import router as maestro_medicos_router
 from app.api.v1.routers.authz         import router as authz_router
 from app.api.v1.routers.farmacias     import router as farmacias_router
+from app.api.v1.routers.formacion     import router as formacion_router
+from app.api.v1.routers.formacion_refuerzo import router as formacion_refuerzo_router
+from app.api.v1.routers.formacion_ranking import router as formacion_ranking_router
+from app.api.v1.routers.formacion_brechas import router as formacion_brechas_router
+from app.api.v1.routers.formacion_calendario import router as formacion_calendario_router
+from app.api.v1.routers.formacion_simulacro import router as formacion_simulacro_router
 
 api_router = APIRouter()
 
@@ -48,3 +54,11 @@ api_router.include_router(coaching_more_router)  # Coaching MORE (esquema coachi
 api_router.include_router(maestro_medicos_router)  # Maestro de Médicos (Config.DIM_Medico)
 api_router.include_router(authz_router)  # RBAC Fase 1: contrato de autorizacion (/authz/me/permisos)
 api_router.include_router(farmacias_router)  # Módulo de Farmacias (Config.DIM_Farmacia / Visita.*)
+
+# ── Módulo de Formación (trasplantado desde master a esta instalación) ──────
+api_router.include_router(formacion_router)
+api_router.include_router(formacion_refuerzo_router)   # Refuerzo de Memoria + KPI
+api_router.include_router(formacion_ranking_router)    # Ranking de Formación — no toca el Score Integral
+api_router.include_router(formacion_brechas_router)    # Plan de Cierre de Brechas
+api_router.include_router(formacion_calendario_router) # Calendario de Coaching — consume el cuadrante LSII
+api_router.include_router(formacion_simulacro_router)  # Simulacro de Venta con IA
