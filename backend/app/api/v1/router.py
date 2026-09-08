@@ -33,6 +33,7 @@ from app.api.v1.routers.authz         import router as authz_router
 from app.api.v1.routers.farmacias     import router as farmacias_router
 from app.api.v1.routers.integracion import router as integracion_router
 from app.api.v1.routers.conocimientos import router as conocimientos_router
+from app.api.v1.routers.visita_dia import router as visita_dia_router
 
 api_router = APIRouter()
 
@@ -66,3 +67,4 @@ api_router.include_router(ia_conexiones_router)  # Conexiones de IA configurable
 api_router.include_router(farmacias_router)  # Módulo de Farmacias (Config.DIM_Farmacia / Visita.*)
 api_router.include_router(integracion_router)  # Integracion Mallen: recepcion y validacion de lotes
 api_router.include_router(conocimientos_router)  # Fuente unica de EVAL_CONOCIMIENTOS + captura manual
+api_router.include_router(visita_dia_router)  # Monitor del dia (fuerza de ventas)

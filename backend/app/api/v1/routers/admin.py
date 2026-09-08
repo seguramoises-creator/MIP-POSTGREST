@@ -1214,6 +1214,11 @@ class AppConfig(BaseModel):
                               description="excel | integracion")
     layout: str = Field("", max_length=20,
                         description="pestanas | lateral")
+    # El Monitor del día se activa por instalación: es una pantalla de seguimiento
+    # operativo que solo tiene sentido donde la fuerza de ventas registra su
+    # actividad en VISTA. Donde los datos llegan de un SFA externo, la jornada se
+    # sigue en ese sistema y esta pantalla mostraría medias verdades.
+    monitor_dia: bool = Field(False, description="Mostrar el Monitor del día")
 
 
 @router.get("/config/app", summary="Configuración de la instalación")
@@ -1222,7 +1227,8 @@ def get_config_app(db: Session = Depends(get_db)):
     antes de pintar para decidir qué menús existen, y ahí todavía no hay sesión.
     No revela nada — solo dice por qué puerta entran los datos."""
     return {"modo_ingesta": _cfg.obtener(db, "MODO_INGESTA") or "excel",
-            "layout": _cfg.obtener(db, "LAYOUT") or "pestanas"}
+            "layout": _cfg.obtener(db, "LAYOUT") or "pestanas",
+            "monitor_dia": _cfg.obtener_bool(db, "MONITOR_DIA", False)}
 
 
 @router.put("/config/app", response_model=Msg, summary="Guardar configuración de la instalación")
@@ -1237,6 +1243,7 @@ def put_config_app(data: AppConfig, db: Session = Depends(get_db), _=AdminOnly):
         raise HTTPException(422, f"«{layout}» no es una disposición válida. "
                                  f"Opciones: {', '.join(_LAYOUTS)}.")
     _cfg.fijar(db, "LAYOUT", layout or "pestanas")
+    _cfg.fijar(db, "MONITOR_DIA", "true" if data.monitor_dia else "false")
     return Msg(message="Configuración guardada. Recarga la página para verla.")
 
 

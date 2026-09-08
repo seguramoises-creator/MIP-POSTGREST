@@ -65,6 +65,7 @@ const RankingFormacion = lazyWithReload(() => import('./pages/formacion/RankingF
 const ConexionesIA = lazyWithReload(() => import('./pages/sistema/ConexionesIA'));
 const LotesIntegracion = lazyWithReload(() => import('./pages/integracion/LotesIntegracion'));
 const Conocimientos = lazyWithReload(() => import('./pages/conocimientos/Conocimientos'));
+const ResumenDia = lazyWithReload(() => import('./pages/visita/ResumenDia'));
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
 
@@ -367,6 +368,8 @@ function AppRoutes() {
         <Route path="farmacias/maestro" element={<ProtectedRoute recurso="farmacia.maestro" accion="configure" allowedRoles={['ADMIN','GERENTE_PRODUCTIVIDAD']}><MaestroFarmacias /></ProtectedRoute>} />
         <Route path="visita/cobertura" element={<ProtectedRoute recurso="cobertura.diaria" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><CoberturaDashboard /></ProtectedRoute>} />
         <Route path="visita/registrar" element={<ProtectedRoute recurso="visita.registrar" accion="register" allowedRoles={['ADMIN','REPRESENTANTE_MEDICO']}><RegistrarVisita /></ProtectedRoute>} />
+        {/* Monitor del día — seguimiento de la jornada de la fuerza de ventas. */}
+        <Route path="visita/dia" element={<ProtectedRoute recurso="medico.panel"><ResumenDia /></ProtectedRoute>} />
         <Route path="visita/planeacion" element={<ProtectedRoute recurso="planeacion.ciclo" allowedRoles={['ADMIN','REPRESENTANTE_MEDICO']}><PlaneacionVisita /></ProtectedRoute>} />
         <Route path="visita/ruptura" element={<ProtectedRoute recurso="cobertura.diaria" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><RupturaVisita /></ProtectedRoute>} />
         <Route path="visita/parrilla" element={<ProtectedRoute recurso="parrilla.consulta" allowedRoles={['ADMIN','GERENTE_DISTRITO','GERENTE_PRODUCTIVIDAD','REPRESENTANTE_MEDICO']}><ParrillaVisita /></ProtectedRoute>} />

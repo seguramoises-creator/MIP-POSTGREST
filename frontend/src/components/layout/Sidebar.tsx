@@ -11,7 +11,7 @@ import {
   MedicalServices, EditNote, EventNote, ReportProblem, Campaign, Paid,
   ChevronLeft, ChevronRight, Add, Remove, RateReview, LocalPharmacy, Storefront,
   Insights, CalendarMonth, RecordVoiceOver, Hub, Psychology, School, CloudSync,
-  Grading,
+  Grading, MonitorHeart
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { usePuede } from '../../store/permisos.store';
@@ -47,6 +47,15 @@ export interface NavItem {
    * cómo está montada la instalación.
    */
   soloSinIntegracion?: boolean;
+  /**
+   * Muestra el ítem solo donde el Monitor del día está activado.
+   *
+   * Misma naturaleza que `soloSinIntegracion`: no habla de quién eres sino de
+   * cómo está montada la instalación. La pantalla solo tiene sentido donde la
+   * fuerza de ventas registra su actividad EN VISTA; donde llega de un SFA
+   * externo, la jornada se sigue en ese sistema.
+   */
+  soloConMonitorDia?: boolean;
 }
 
 export interface NavSection {
@@ -65,6 +74,7 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     title: 'Operación diaria',
     items: [
+      { label: 'Resumen del día', path: '/visita/dia', icon: <MonitorHeart />, recurso: 'medico.panel', soloConMonitorDia: true, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'PRESIDENCIA', 'DIR_COMERCIAL', 'GERENTE_MARCA', 'REPRESENTANTE_MEDICO'] },
       { label: 'Registrar Visita',    path: '/visita/registrar', icon: <EditNote />,      recurso: 'visita.registrar', roles: ['ADMIN', 'REPRESENTANTE_MEDICO'] },
       { label: 'Cobertura Visita',    path: '/visita/cobertura', icon: <TrackChanges />,  recurso: 'cobertura.diaria', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
       { label: 'Ruptura / Cierre',    path: '/visita/ruptura',   icon: <ReportProblem />, recurso: 'cobertura.diaria', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },

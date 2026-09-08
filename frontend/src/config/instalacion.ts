@@ -35,16 +35,21 @@ export interface Instalacion {
    * el trasplante a mano.
    */
   layout: 'pestanas' | 'lateral';
+  /** ¿Se muestra el Monitor del día? Solo donde la fuerza de ventas registra en VISTA. */
+  monitorDia: boolean;
 }
 
 /** Fábrica. Ninguna instalación existente cambia sin que alguien lo decida. */
-export const instalacion: Instalacion = { modoIngesta: 'excel', layout: 'pestanas' };
+export const instalacion: Instalacion = { modoIngesta: 'excel', layout: 'pestanas', monitorDia: false };
 
 /** ¿Los datos entran por integración con el sistema del cliente? */
 export const esIntegrada = () => instalacion.modoIngesta === 'integracion';
 
 /** ¿Esta instalación usa el menú lateral en vez de las barras? */
 export const esLayoutLateral = () => instalacion.layout === 'lateral';
+
+/** ¿Esta instalación muestra el Monitor del día? */
+export const hayMonitorDia = () => instalacion.monitorDia;
 
 /**
  * Lee la configuración y la aplica. Nunca lanza: sin conexión se queda en
@@ -56,13 +61,14 @@ export async function cargarInstalacion(): Promise<void> {
     const base = (import.meta as any).env?.VITE_API_URL || '/api/v1';
     const r = await fetch(`${base}/admin/config/app`);
     if (!r.ok) return;
-    const { modo_ingesta, layout } = await r.json();
+    const { modo_ingesta, layout, monitor_dia } = await r.json();
     if (modo_ingesta === 'integracion' || modo_ingesta === 'excel') {
       instalacion.modoIngesta = modo_ingesta;
     }
     if (layout === 'lateral' || layout === 'pestanas') {
       instalacion.layout = layout;
     }
+    instalacion.monitorDia = monitor_dia === true;
   } catch {
     /* sin conexión: se queda en `excel` */
   }
