@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { marcaViva } from '../../theme/marcaViva';
 import {
   Box, Card, CardContent, TextField, Button, Typography,
   Alert, CircularProgress, InputAdornment, IconButton, Stepper, Step, StepLabel,
@@ -62,7 +63,7 @@ export default function Setup() {
   return (
     <Box sx={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #686158 0%, #584F46 100%)',
+      background: `linear-gradient(135deg, ${marcaViva.taupe} 0%, ${marcaViva.taupeMedio} 100%)`,
       display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2,
     }}>
       <Card sx={{ maxWidth: 480, width: '100%', borderRadius: 3, boxShadow: 8 }}>

@@ -17,7 +17,7 @@ import * as fabrica from './marca';
 import { IDENTIDAD_FABRICA, identidad, type Identidad } from './identidades';
 
 /** Aclara u oscurece un `#rrggbb`. `f` negativo oscurece, positivo aclara. */
-function mezclar(hex: string, f: number): string {
+export function mezclar(hex: string, f: number): string {
   const n = parseInt(hex.slice(1), 16);
   const canal = (desp: number) => {
     const v = (n >> desp) & 0xff;
@@ -54,6 +54,19 @@ export function contraste(a: string, b: string): number {
 export function versionLegible(hex: string): string {
   let c = hex;
   for (let i = 0; i < 24 && contraste(c, '#FFFFFF') < 4.5; i++) c = mezclar(c, -0.08);
+  return c;
+}
+
+/**
+ * Aclara `hex` hasta que sirva como ELEMENTO GRÁFICO sobre `fondo` (3:1, WCAG
+ * 1.4.11). Es la versión «hacia arriba» de `versionLegible`, y existe por el mismo
+ * motivo: los iconos de las barras oscuras necesitan un tinte claro de la marca, y
+ * escribirlo a mano lo ata a una identidad concreta — el rosado `#FFB3B8` que
+ * había aquí era el rojo de Mallén aclarado, y sobre un azul se veía prestado.
+ */
+export function tinteSobre(hex: string, fondo: string, ratio = 3): string {
+  let c = hex;
+  for (let i = 0; i < 24 && contraste(c, fondo) < ratio; i++) c = mezclar(c, 0.12);
   return c;
 }
 

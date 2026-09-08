@@ -20,7 +20,7 @@ import { MoreHoriz } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useNavSecciones, type Destino } from './useNavSecciones';
 import { NAV_ACTIVO, navTaupe, NAV_BORDE, navFondo, NAV_INACTIVO, TEXTO_TENUE, BOTTOM_NAV_H } from './navTokens';
-import { colorDeSeccion, tinteDeSeccion } from '../../theme/marca';
+import { colorDeSeccion, tinteDeSeccion } from '../../theme/secciones';
 
 /**
  * Ancho mínimo de una ranura para que su etiqueta se lea entera ("Desempeño" es

@@ -23,19 +23,21 @@ import {
 import { api } from '../../services/api';
 import DetalleMedicos from './DetalleMedicos';
 import PanelRM from './PanelRM';
-import { CAT_PAL, CATS } from './paleta';
+import { catPal, CATS } from './paleta';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
-import { AVISO_OSCURO, BORDE, BORDE_FUERTE, EXITO_MEDIO, EXITO_OSCURO, EXITO_TENUE, NEUTRO_300, NEUTRO_400, NEUTRO_600, NEUTRO_700, NEUTRO_900, SUPERFICIE_4, TAUPE, TAUPE_MEDIO, TAUPE_PROFUNDO } from '../../theme/marca';
-
+import { AVISO_OSCURO, BORDE, BORDE_FUERTE, EXITO_MEDIO, EXITO_OSCURO, EXITO_TENUE, NEUTRO_300, NEUTRO_400, NEUTRO_600, NEUTRO_700, NEUTRO_900, SUPERFICIE_4 } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 // ── Paleta profesional A/B/C/D (sincronizada con DetalleMedicos.tsx) ─────────
 // A = Teal esmeralda  B = Azul zafiro  C = Ámbar dorado  D = Gris acero
-const COL_COLORS = {
+// Función y no constante: en ámbito de módulo el color se copiaría antes de que
+// `cargarMarca()` traiga la identidad, y quedaría congelado en el de fábrica.
+const colColores = () => ({
   A: { bg: EXITO_OSCURO, light: EXITO_TENUE },
-  B: TAUPE_PROFUNDO,
+  B: marcaViva.taupeProfundo,
   C: AVISO_OSCURO,
   D: NEUTRO_700,
-} as const;
+} as const);
 
 // La paleta vive en ./paleta para compartirla con PanelRM sin importación circular.
 
@@ -44,7 +46,7 @@ function NumCell({ v, cat, max }: { v: number; cat?: typeof CATS[number]; max?: 
   if (!v) return (
     <TableCell align="center" sx={{ bgcolor: '#f5f5f5', color: '#bdbdbd', fontSize: '0.78rem', px: 1 }}>—</TableCell>
   );
-  const pal = cat ? CAT_PAL[cat] : null;
+  const pal = cat ? catPal()[cat] : null;
   const pct = max && max > 0 ? Math.round((v / max) * 100) : 0;
   return (
     <TableCell align="center" sx={{ px: 1, py: 0.5 }}>
@@ -110,24 +112,31 @@ interface FilaEspecialidad {
 }
 
 // ── Colores de categoría (sincronizados con DetalleMedicos.tsx) ───────────────
-const CAT_COLORS: Record<string, string> = {
+// Función y no constante: en ámbito de módulo el color se copiaría antes de que
+// `cargarMarca()` traiga la identidad, y quedaría congelado en el de fábrica.
+const catColores = (): Record<string, string> => ({
   A: EXITO_MEDIO,   // Teal esmeralda (un tono más claro)
-  B: TAUPE_PROFUNDO,   // Azul zafiro
+  B: marcaViva.taupeProfundo,   // Azul zafiro
   C: AVISO_OSCURO,   // Ámbar dorado
   D: NEUTRO_700,   // Gris acero
   '?': NEUTRO_400,
-};
+});
 
-const PIE_COLORS = [EXITO_MEDIO, TAUPE_PROFUNDO, AVISO_OSCURO, NEUTRO_700, '#9e9e9e'];
+// Función y no constante: en ámbito de módulo se evaluaría antes de que
+// `cargarMarca()` traiga la identidad, y el color quedaría en el de fábrica.
+const pieColores = () =>
+  [EXITO_MEDIO, marcaViva.taupeProfundo, AVISO_OSCURO, NEUTRO_700, '#9e9e9e'];
 
-// Degradados por categoría (para gradiente en chip)
-const CAT_GRAD: Record<string, string> = {
+// Degradados por categoría (para gradiente en chip).
+// Función y no constante: el degradado de la B lleva el color de estructura, y en
+// ámbito de módulo se copiaría antes de que `cargarMarca()` traiga la identidad.
+const catGrad = (): Record<string, string> => ({
   A: 'linear-gradient(135deg, #00695c 0%, #00897b 100%)',
-  B: 'linear-gradient(135deg, #686158 0%, #4A433C 100%)',
+  B: `linear-gradient(135deg, ${marcaViva.taupe} 0%, ${marcaViva.taupeProfundo} 100%)`,
   C: 'linear-gradient(135deg, #e65100 0%, #ef6c00 100%)',
   D: 'linear-gradient(135deg, #37474f 0%, #455a64 100%)',
   '?': 'linear-gradient(135deg, #546e7a 0%, #78909c 100%)',
-};
+});
 
 function CatChip({ cat }: { cat: string | null }) {
   const c = cat || '?';
@@ -135,8 +144,8 @@ function CatChip({ cat }: { cat: string | null }) {
     <Box sx={{
       display: 'inline-flex', alignItems: 'center', gap: 0.5,
       px: 1.1, py: 0.3, borderRadius: '16px',
-      background: CAT_GRAD[c] || CAT_GRAD['?'],
-      boxShadow: `0 2px 6px ${CAT_COLORS[c] || NEUTRO_400}50`,
+      background: catGrad()[c] || catGrad()['?'],
+      boxShadow: `0 2px 6px ${catColores()[c] || NEUTRO_400}50`,
     }}>
       <Box sx={{
         width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
@@ -291,19 +300,19 @@ function CategorizacionMotor() {
           variant="scrollable"
           scrollButtons="auto"
           sx={{
-            borderBottom: '3px solid #584F46',
+            borderBottom: `3px solid ${marcaViva.taupeMedio}`,
             '& .MuiTab-root': {
               bgcolor: BORDE_FUERTE,
               borderTopLeftRadius: 8,
               borderTopRightRadius: 8,
               mr: 0.5,
-              color: TAUPE_MEDIO,
+              color: marcaViva.taupeMedio,
               fontWeight: 600,
               minHeight: 40,
               fontSize: 13,
               textTransform: 'none',
               '&.Mui-selected': {
-                bgcolor: TAUPE_MEDIO,
+                bgcolor: marcaViva.taupeMedio,
                 color: '#fff',
                 fontWeight: 700,
               },
@@ -336,10 +345,10 @@ function CategorizacionMotor() {
       <Grid container spacing={2.5} mb={3}>
         {[
           { label: 'Total médicos', value: resumen?.total_medicos ?? 0, color: 'primary.main' },
-          { label: 'Categoría A', value: resumen?.categoria_a ?? 0, color: CAT_COLORS.A },
-          { label: 'Categoría B', value: resumen?.categoria_b ?? 0, color: CAT_COLORS.B },
-          { label: 'Categoría C', value: resumen?.categoria_c ?? 0, color: CAT_COLORS.C },
-          { label: 'Categoría D', value: resumen?.categoria_d ?? 0, color: CAT_COLORS.D },
+          { label: 'Categoría A', value: resumen?.categoria_a ?? 0, color: catColores().A },
+          { label: 'Categoría B', value: resumen?.categoria_b ?? 0, color: catColores().B },
+          { label: 'Categoría C', value: resumen?.categoria_c ?? 0, color: catColores().C },
+          { label: 'Categoría D', value: resumen?.categoria_d ?? 0, color: catColores().D },
           { label: 'Puntaje promedio', value: `${resumen?.puntaje_promedio ?? 0}%`, color: 'text.primary' },
         ].map((k) => (
           <Grid item xs={6} sm={4} md={2} key={k.label}>
@@ -364,7 +373,7 @@ function CategorizacionMotor() {
               <ResponsiveContainer width="100%" height={220}>
                 <PieChart>
                   <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                    {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                    {pieData.map((_, i) => <Cell key={i} fill={pieColores()[i % pieColores().length]} />)}
                   </Pie>
                   <ReTooltip />
                   <Legend />
@@ -500,7 +509,7 @@ function CategorizacionMotor() {
         <Grid item xs={12} xl={6}>
           <Paper elevation={3} sx={{ display: 'flex', flexDirection: 'column', height: 560, overflow: 'hidden', borderRadius: 2, border: '1px solid #e0e0e0' }}>
             {/* Encabezado */}
-            <Box sx={{ background: 'linear-gradient(135deg,#686158 0%,#4A433C 100%)', px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
+            <Box sx={{ background: `linear-gradient(135deg,${marcaViva.taupe} 0%,${marcaViva.taupeProfundo} 100%)`, px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
               <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.92rem', letterSpacing: 1, flexGrow: 1 }}>
                 CATEGORIZACIÓN POR REPRESENTANTE
               </Typography>
@@ -521,7 +530,7 @@ function CategorizacionMotor() {
                     </TableCell>
                     {CATS.map(c => (
                       <TableCell key={c} align="center"
-                        sx={{ bgcolor: CAT_PAL[c].dark, color: '#fff', fontWeight: 800, fontSize: '0.9rem', width: 88, py: 1 }}>
+                        sx={{ bgcolor: catPal()[c].dark, color: '#fff', fontWeight: 800, fontSize: '0.9rem', width: 88, py: 1 }}>
                         {c}
                       </TableCell>
                     ))}
@@ -537,7 +546,7 @@ function CategorizacionMotor() {
                     return [
                       /* fila de equipo */
                       <TableRow key={`eq-${eq}`} sx={{ bgcolor: eqIdx % 2 === 0 ? SUPERFICIE_4 : SUPERFICIE_4 }}>
-                        <TableCell sx={{ pl: 2, fontWeight: 800, fontSize: '0.82rem', color: TAUPE,
+                        <TableCell sx={{ pl: 2, fontWeight: 800, fontSize: '0.82rem', color: marcaViva.taupe,
                           borderLeft: '4px solid #3f51b5', letterSpacing: 0.3 }}>
                           ▸ {eq}
                         </TableCell>
@@ -545,8 +554,8 @@ function CategorizacionMotor() {
                           const v = sub[c.toLowerCase() as 'a'|'b'|'c'|'d'];
                           return (
                             <TableCell key={c} align="center"
-                              sx={{ fontWeight: 700, fontSize: '0.82rem', color: CAT_PAL[c].mid,
-                                bgcolor: `${CAT_PAL[c].light}88` }}>
+                              sx={{ fontWeight: 700, fontSize: '0.82rem', color: catPal()[c].mid,
+                                bgcolor: `${catPal()[c].light}88` }}>
                               {v ? v.toLocaleString() : '—'}
                             </TableCell>
                           );
@@ -574,13 +583,13 @@ function CategorizacionMotor() {
                     ];
                   })}
                   {/* Total general */}
-                  <TableRow sx={{ bgcolor: TAUPE }}>
+                  <TableRow sx={{ bgcolor: marcaViva.taupe }}>
                     <TableCell sx={{ color: '#fff', fontWeight: 800, fontSize: '0.84rem', pl: 2, letterSpacing: 0.5 }}>
                       TOTAL GENERAL
                     </TableCell>
                     {CATS.map(c => (
                       <TableCell key={c} align="center"
-                        sx={{ bgcolor: CAT_PAL[c].mid, color: '#fff', fontWeight: 800, fontSize: '0.88rem', py: 1.2 }}>
+                        sx={{ bgcolor: catPal()[c].mid, color: '#fff', fontWeight: 800, fontSize: '0.88rem', py: 1.2 }}>
                         {grandTotal[c.toLowerCase() as 'a'|'b'|'c'|'d'].toLocaleString()}
                       </TableCell>
                     ))}
@@ -619,7 +628,7 @@ function CategorizacionMotor() {
                     </TableCell>
                     {CATS.map(c => (
                       <TableCell key={c} align="center"
-                        sx={{ bgcolor: CAT_PAL[c].dark, color: '#fff', fontWeight: 800, fontSize: '0.9rem', width: 84, py: 1 }}>
+                        sx={{ bgcolor: catPal()[c].dark, color: '#fff', fontWeight: 800, fontSize: '0.9rem', width: 84, py: 1 }}>
                         {c}
                       </TableCell>
                     ))}
@@ -656,7 +665,7 @@ function CategorizacionMotor() {
                     </TableCell>
                     {CATS.map(c => (
                       <TableCell key={c} align="center"
-                        sx={{ bgcolor: CAT_PAL[c].mid, color: '#fff', fontWeight: 800, fontSize: '0.88rem', py: 1.2 }}>
+                        sx={{ bgcolor: catPal()[c].mid, color: '#fff', fontWeight: 800, fontSize: '0.88rem', py: 1.2 }}>
                         {grandTotalEsp[c.toLowerCase() as 'a'|'b'|'c'|'d'].toLocaleString()}
                       </TableCell>
                     ))}

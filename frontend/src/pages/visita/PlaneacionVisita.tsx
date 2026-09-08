@@ -17,8 +17,7 @@ import {
   type MedicoVisita, type PlaneacionItem, type PlaneacionResumen, type Catalogo, type MiGerente,
   type PlaneacionEstado,
 } from '../../services/visita.service';
-import { TAUPE } from '../../theme/marca';
-
+import { marcaViva } from '../../theme/marcaViva';
 function msgError(e: unknown, fallback: string): string {
   const d = (e as { response?: { data?: { detalle?: { msg?: string }[]; detail?: string } } })?.response?.data;
   if (Array.isArray(d?.detalle) && d.detalle[0]?.msg) return d.detalle[0].msg.replace('Value error, ', '');
@@ -354,12 +353,12 @@ export default function PlaneacionVisita() {
       )}
 
       {/* Filtros (solo afectan lo mostrado; el guardado persiste TODO el panel) */}
-      <Card variant="outlined" sx={{ mb: 2, bgcolor: '#fff', borderColor: TAUPE,
+      <Card variant="outlined" sx={{ mb: 2, bgcolor: '#fff', borderColor: marcaViva.taupe,
                                    borderWidth: 1.5, borderRadius: 3 }}>
         <Box sx={{ p: 1.5 }}>
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }}>
           <Stack direction="row" spacing={0.75} alignItems="center"
-                 sx={{ color: TAUPE, width: { xs: '100%', md: 'auto' },
+                 sx={{ color: marcaViva.taupe, width: { xs: '100%', md: 'auto' },
                        pb: { xs: 1, md: 0 }, mb: { xs: 0.5, md: 0 },
                        borderBottom: { xs: '1px solid #EDE9E4', md: 'none' } }}>
             <FilterList fontSize="small" />

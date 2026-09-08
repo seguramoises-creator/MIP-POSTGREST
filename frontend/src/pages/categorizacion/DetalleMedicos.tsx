@@ -22,18 +22,23 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from 'recharts';
 import { api } from '../../services/api';
-import { AVISO, AVISO_MEDIO, AVISO_OSCURO, AVISO_TENUE, BORDE, BORDE_SUAVE, EXITO_MEDIO, EXITO_OSCURO, EXITO_TENUE, FONDO, NEUTRO_300, NEUTRO_400, NEUTRO_600, NEUTRO_700, NEUTRO_900, SUPERFICIE_3, SUPERFICIE_4, TAUPE, TAUPE_MEDIO, TAUPE_PROFUNDO } from '../../theme/marca';
-
+import { AVISO, AVISO_MEDIO, AVISO_OSCURO, AVISO_TENUE, BORDE, BORDE_SUAVE, EXITO_MEDIO, EXITO_OSCURO, EXITO_TENUE, FONDO, NEUTRO_300, NEUTRO_400, NEUTRO_600, NEUTRO_700, NEUTRO_900, SUPERFICIE_3, SUPERFICIE_4 } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 // ── Paleta profesional A/B/C/D ───────────────────────────────────────────────
 // A = Teal esmeralda  B = Azul zafiro  C = Ámbar dorado  D = Gris acero
-const CAT_PAL: Record<string, { dark: string; mid: string; light: string; glow: string; text: string }> = {
+// Función y no constante: en ámbito de módulo el color se copiaría antes de que
+// `cargarMarca()` traiga la identidad, y quedaría congelado en el de fábrica.
+const catPal = (): Record<string, { dark: string; mid: string; light: string; glow: string; text: string }> => ({
   A: { dark: EXITO_OSCURO, mid: EXITO_MEDIO, light: EXITO_TENUE, glow: '#00897b60', text: '#fff' },
-  B: { dark: TAUPE, mid: TAUPE_PROFUNDO, light: SUPERFICIE_4, glow: '#584F4660', text: '#fff' },
+  B: { dark: marcaViva.taupe, mid: marcaViva.taupeProfundo, light: SUPERFICIE_4, glow: `${marcaViva.taupeMedio}60`, text: '#fff' },
   C: { dark: AVISO, mid: AVISO_OSCURO, light: AVISO_TENUE, glow: '#f57c0060', text: '#fff' },
   D: { dark: NEUTRO_900, mid: NEUTRO_700, light: BORDE_SUAVE, glow: '#546e7a60', text: '#fff' },
   '?': { dark: '#424242', mid: '#757575', light: '#f5f5f5', glow: '#9e9e9e40', text: '#fff' },
-};
-const CAT_COLORS = [EXITO_MEDIO, TAUPE_PROFUNDO, AVISO_OSCURO, NEUTRO_700, '#9e9e9e'];
+});
+// Función y no constante: en ámbito de módulo se evaluaría antes de que
+// `cargarMarca()` traiga la identidad, y el color quedaría en el de fábrica.
+const catColores = () =>
+  [EXITO_MEDIO, marcaViva.taupeProfundo, AVISO_OSCURO, NEUTRO_700, '#9e9e9e'];
 const CAT_LABEL: Record<string, string> = {
   A: 'Alto potencial',
   B: 'Potencial medio',
@@ -75,7 +80,7 @@ interface Componente {
 // ── Sub-componentes ───────────────────────────────────────────────────────────
 function CatChip({ cat }: { cat: string }) {
   const c = cat || '?';
-  const pal = CAT_PAL[c] ?? CAT_PAL['?'];
+  const pal = catPal()[c] ?? catPal()['?'];
   return (
     <Box
       sx={{
@@ -101,7 +106,7 @@ function CatChip({ cat }: { cat: string }) {
 
 function ScoreBar({ value }: { value: number }) {
   const pct = Math.min(100, Math.max(0, value));
-  const color = pct >= 70 ? EXITO_OSCURO : pct >= 50 ? TAUPE_PROFUNDO : pct >= 30 ? AVISO_OSCURO : NEUTRO_700;
+  const color = pct >= 70 ? EXITO_OSCURO : pct >= 50 ? marcaViva.taupeProfundo : pct >= 30 ? AVISO_OSCURO : NEUTRO_700;
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <Box sx={{ flex: 1, height: 6, bgcolor: BORDE, borderRadius: 3, overflow: 'hidden' }}>
@@ -130,7 +135,7 @@ function ComponenteRow({ key_ }: { key_: number }) {
       <Grid container spacing={1}>
         {comps.map((c) => {
           const pct = Math.min(100, Math.max(0, c.PuntajePct));
-          const color = pct >= 70 ? EXITO_OSCURO : pct >= 40 ? TAUPE_PROFUNDO : AVISO_OSCURO;
+          const color = pct >= 70 ? EXITO_OSCURO : pct >= 40 ? marcaViva.taupeProfundo : AVISO_OSCURO;
           const val = c.ValorEntradaTexto || (c.ValorEntradaNumero != null ? String(c.ValorEntradaNumero) : '—');
           return (
             <Grid item xs={12} sm={6} md={4} lg={2.4} key={c.CodigoComponente}>
@@ -334,20 +339,20 @@ export default function DetalleMedicos() {
               transition: 'all 0.2s ease',
               // ACTIVO cuando no hay categoría seleccionada
               ...(categoria === '' ? {
-                background: 'linear-gradient(135deg, #686158 0%, #4A433C 50%, #584F46 100%)',
+                background: `linear-gradient(135deg, ${marcaViva.taupe} 0%, ${marcaViva.taupeProfundo} 50%, ${marcaViva.taupeMedio} 100%)`,
                 color: '#fff',
                 border: '2px solid transparent',
-                boxShadow: '0 4px 14px #584F4650',
+                boxShadow: `0 4px 14px ${marcaViva.taupeMedio}50`,
               } : {
                 background: FONDO,
                 color: NEUTRO_400,
                 border: '2px solid #e0e4ea',
                 boxShadow: 'none',
                 '&:hover': {
-                  background: 'linear-gradient(135deg, #686158 0%, #584F46 100%)',
+                  background: `linear-gradient(135deg, ${marcaViva.taupe} 0%, ${marcaViva.taupeMedio} 100%)`,
                   color: '#fff',
                   borderColor: 'transparent',
-                  boxShadow: '0 4px 14px #584F4650',
+                  boxShadow: `0 4px 14px ${marcaViva.taupeMedio}50`,
                 },
               }),
             }}
@@ -357,7 +362,7 @@ export default function DetalleMedicos() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '0.62rem', fontWeight: 900,
               bgcolor: categoria === '' ? 'rgba(255,255,255,0.22)' : SUPERFICIE_4,
-              color: categoria === '' ? '#fff' : TAUPE_MEDIO,
+              color: categoria === '' ? '#fff' : marcaViva.taupeMedio,
             }}>✦</Box>
             <Typography sx={{ fontSize: '0.77rem', fontWeight: 700, color: 'inherit', lineHeight: 1 }}>
               Todas
@@ -366,7 +371,7 @@ export default function DetalleMedicos() {
 
           {/* ── Chips A / B / C / D ── */}
           {(['A','B','C','D'] as const).map(cat => {
-            const pal = CAT_PAL[cat];
+            const pal = catPal()[cat];
             const sel = categoria === cat;
             return (
               <Box
@@ -435,7 +440,7 @@ export default function DetalleMedicos() {
               bgcolor: SUPERFICIE_3, border: '1px solid #D8D2CB',
               minWidth: 110, textAlign: 'center',
             }}>
-              <Typography sx={{ fontSize: '1.25rem', fontWeight: 800, color: TAUPE_MEDIO, lineHeight: 1.2 }}>
+              <Typography sx={{ fontSize: '1.25rem', fontWeight: 800, color: marcaViva.taupeMedio, lineHeight: 1.2 }}>
                 {statsGlobales.total_medicos.toLocaleString()}
               </Typography>
               <Typography sx={{ fontSize: '0.68rem', color: NEUTRO_400, fontWeight: 600 }}>Total médicos</Typography>
@@ -443,7 +448,7 @@ export default function DetalleMedicos() {
           </Grid>
           {(['A','B','C','D'] as const).map(cat => {
             const key = `categoria_${cat.toLowerCase()}` as 'categoria_a'|'categoria_b'|'categoria_c'|'categoria_d';
-            const pal = CAT_PAL[cat];
+            const pal = catPal()[cat];
             const n = statsGlobales[key] ?? 0;
             const pct = statsGlobales.total_medicos > 0
               ? Math.round((n / statsGlobales.total_medicos) * 100)
@@ -492,7 +497,7 @@ export default function DetalleMedicos() {
                     label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   >
                     {catCountsGlobal.map((entry) => (
-                      <Cell key={entry.cat} fill={CAT_COLORS[['A','B','C','D'].indexOf(entry.cat)]} />
+                      <Cell key={entry.cat} fill={catColores()[['A','B','C','D'].indexOf(entry.cat)]} />
                     ))}
                   </Pie>
                   <ReTooltip formatter={(v: number, name: string) => [`${v} médicos`, name]} />
@@ -528,7 +533,7 @@ export default function DetalleMedicos() {
                   ]} />
                   <Bar dataKey="cantidad" radius={[6,6,0,0]}>
                     {catCountsGlobal.map((entry) => (
-                      <Cell key={entry.cat} fill={CAT_COLORS[['A','B','C','D'].indexOf(entry.cat)]} />
+                      <Cell key={entry.cat} fill={catColores()[['A','B','C','D'].indexOf(entry.cat)]} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -543,7 +548,7 @@ export default function DetalleMedicos() {
         {/* Header degradado */}
         <Box
           sx={{
-            background: 'linear-gradient(135deg, #584F46 0%, #584F46 40%, #686158 100%)',
+            background: `linear-gradient(135deg, ${marcaViva.taupeMedio} 0%, ${marcaViva.taupeMedio} 40%, ${marcaViva.taupe} 100%)`,
             px: 3, py: 1.5,
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}
@@ -561,7 +566,7 @@ export default function DetalleMedicos() {
             {(['A','B','C','D'] as const).map(cat => {
               const n = items.filter(i => i.CategoriaCalculada === cat).length;
               if (!n) return null;
-              const pal = CAT_PAL[cat];
+              const pal = catPal()[cat];
               return (
                 <Box key={cat} sx={{
                   display: 'inline-flex', alignItems: 'center', gap: 0.5,
@@ -590,7 +595,7 @@ export default function DetalleMedicos() {
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small">
             <TableHead>
-              <TableRow sx={{ bgcolor: TAUPE }}>
+              <TableRow sx={{ bgcolor: marcaViva.taupe }}>
                 <TableCell sx={{ color: '#fff', fontWeight: 700, fontSize: '0.73rem', py: 0.8, minWidth: 30 }}></TableCell>
                 <TableCell sx={{ color: '#fff', fontWeight: 700, fontSize: '0.73rem', minWidth: 180 }}>MÉDICO</TableCell>
                 <TableCell sx={{ color: '#fff', fontWeight: 700, fontSize: '0.73rem', minWidth: 130 }}>ESPECIALIDAD</TableCell>
@@ -619,7 +624,7 @@ export default function DetalleMedicos() {
               )}
               {items.map((row, idx) => {
                 const isExp = expanded === row.MedicoCategoriaKey;
-                const pal = CAT_PAL[row.CategoriaCalculada] ?? CAT_PAL['?'];
+                const pal = catPal()[row.CategoriaCalculada] ?? catPal()['?'];
                 return (
                   <>
                     <TableRow

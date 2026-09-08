@@ -9,8 +9,8 @@ import { AutoAwesome, Download } from '@mui/icons-material';
 import { useEffect, useState } from 'react';
 import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
-import { AVISO, BORDE_FUERTE, ERROR, EXITO, FONDO, NEUTRO_300, NEUTRO_700, SUPERFICIE_3, TAUPE } from '../../theme/marca';
-
+import { AVISO, BORDE_FUERTE, ERROR, EXITO, FONDO, NEUTRO_300, NEUTRO_700, SUPERFICIE_3 } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 /* ── utilidades ───────────────────────────────────────────── */
 function FilterLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -218,7 +218,7 @@ export default function Reconocimiento() {
             {cicloNombre && (
               <Box sx={{ ml: 'auto' }}>
                 <Chip label={'Mostrando: ' + cicloNombre}
-                  sx={{ bgcolor: TAUPE, color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
+                  sx={{ bgcolor: marcaViva.taupe, color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
               </Box>
             )}
           </Box>
@@ -249,7 +249,7 @@ export default function Reconocimiento() {
           {/* ── MIP TABLE ────────────────────────────────────── */}
           <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden', mb: 4 }}>
             {/* Título granate */}
-            <Box sx={{ bgcolor: TAUPE, py: 1.8, textAlign: 'center' }}>
+            <Box sx={{ bgcolor: marcaViva.taupe, py: 1.8, textAlign: 'center' }}>
               <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 16, letterSpacing: '1.5px', textTransform: 'uppercase' }}>
                 Mapa Integral de Productividad
               </Typography>
@@ -285,8 +285,8 @@ export default function Reconocimiento() {
                       { label: 'Puntos Acum',  align: 'center' as const },
                     ].map(({ label, align, w }) => (
                       <TableCell key={label} align={align}
-                        sx={{ fontWeight: 800, fontSize: 13, color: TAUPE,
-                              borderBottom: '2px solid #686158', py: 1.2,
+                        sx={{ fontWeight: 800, fontSize: 13, color: marcaViva.taupe,
+                              borderBottom: `2px solid ${marcaViva.taupe}`, py: 1.2,
                               ...(w ? { width: w } : {}) }}>
                         {label}
                       </TableCell>
@@ -307,7 +307,7 @@ export default function Reconocimiento() {
                     const rowBg     = pos === 1 ? '#fffde7' : pos % 2 === 0 ? '#f9f9f9' : '#fff';
                     return (
                       <TableRow key={row.rm_id} sx={{ bgcolor: rowBg }}>
-                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: 14, color: TAUPE, py: 1.4 }}>
+                        <TableCell align="center" sx={{ fontWeight: 700, fontSize: 14, color: marcaViva.taupe, py: 1.4 }}>
                           {pos}
                         </TableCell>
                         <TableCell sx={{ fontSize: 13, fontWeight: 600, textTransform: 'uppercase', py: 1.4 }}>
@@ -339,7 +339,7 @@ export default function Reconocimiento() {
               {loadingRec ? <CircularProgress /> : (
                 <TableContainer component={Paper} elevation={2} sx={{ borderRadius: 2 }}>
                   <Table size="small">
-                    <TableHead sx={{ bgcolor: TAUPE }}>
+                    <TableHead sx={{ bgcolor: marcaViva.taupe }}>
                       <TableRow>
                         {['RM', 'Premio', 'Score (%)', 'Posición', 'Fecha', 'Certificado'].map(h => (
                           <TableCell key={h} sx={{ color: 'white', fontWeight: 700, fontSize: 13 }}>{h}</TableCell>

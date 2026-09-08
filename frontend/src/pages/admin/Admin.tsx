@@ -30,8 +30,8 @@ import ImportDims from './ImportDims';
 import LsiiAdmin from './LsiiAdmin';
 import CoberturaPredictivaAdmin from './CoberturaPredictivaAdmin';
 import CategorizacionAdmin, { TabGeo } from './CategorizacionAdmin';
-import { BORDE_FUERTE, EXITO, ROJO, ROJO_OSCURO, SUPERFICIE_2, SUPERFICIE_3, TAUPE } from '../../theme/marca';
-
+import { BORDE_FUERTE, EXITO, SUPERFICIE_2, SUPERFICIE_3 } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 // ── Hook: carga la lista de países y la reutiliza en toda la página ──
 function usePaises() {
   return useQuery({
@@ -1845,21 +1845,21 @@ export default function Admin() {
             scrollButtons="auto"
             sx={{
               mb: 0,
-              borderBottom: '3px solid #686158',
+              borderBottom: `3px solid ${marcaViva.taupe}`,
               '& .MuiTab-root': {
                 bgcolor: BORDE_FUERTE,
                 borderTopLeftRadius: 8,
                 borderTopRightRadius: 8,
                 mr: 0.5,
                 mb: 0,
-                color: TAUPE,
+                color: marcaViva.taupe,
                 fontWeight: 600,
                 minHeight: 40,
                 fontSize: 13,
                 lineHeight: 1.2,
                 textTransform: 'none',
                 '&.Mui-selected': {
-                  bgcolor: TAUPE,
+                  bgcolor: marcaViva.taupe,
                   color: 'white',
                   fontWeight: 700,
                   // El icono lleva su color de función, que sobre el taupe de la pestaña
@@ -1878,9 +1878,9 @@ export default function Admin() {
             {TABS_DIM.map((t) => <Tab key={t.label} label={t.label} />)}
             <Tab label="Rangos de Puntuación" icon={<TableChart fontSize="small" sx={{ color: '#B4661E' }} />} iconPosition="start" />
             <Tab label="Importar DIMs" icon={<Upload fontSize="small" sx={{ color: '#7A5C8E' }} />} iconPosition="start" />
-            <Tab label="Mantenimiento" icon={<Delete fontSize="small" sx={{ color: ROJO_OSCURO }} />} iconPosition="start" />
+            <Tab label="Mantenimiento" icon={<Delete fontSize="small" sx={{ color: marcaViva.rojoOscuro }} />} iconPosition="start" />
             <Tab label="Matriz LSII" icon={<Psychology fontSize="small" sx={{ color: '#4E6E8E' }} />} iconPosition="start" />
-            <Tab label="Cobertura Predictiva" icon={<TrendingUp fontSize="small" sx={{ color: ROJO }} />} iconPosition="start" />
+            <Tab label="Cobertura Predictiva" icon={<TrendingUp fontSize="small" sx={{ color: marcaViva.rojo }} />} iconPosition="start" />
             <Tab label="Categorización Médica" icon={<LocalHospital fontSize="small" sx={{ color: '#2F7D6E' }} />} iconPosition="start" />
             <Tab label="Especialidades y Centros" icon={<LocalHospital fontSize="small" sx={{ color: '#2F7D6E' }} />} iconPosition="start" />
             <Tab label="Provincias y Municipios" icon={<LocalHospital fontSize="small" sx={{ color: '#2F7D6E' }} />} iconPosition="start" />

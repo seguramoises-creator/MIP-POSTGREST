@@ -13,8 +13,8 @@ import { useCicloStore } from '../../store/ciclo.store';
 import { useAuthStore } from '../../store/auth.store';
 import MiRanking from './MiRanking';
 import type { RankingItem } from '../../types';
-import { BORDE_FUERTE, EXITO_MEDIO, FONDO, NEUTRO_900, TAUPE, TAUPE_MEDIO } from '../../theme/marca';
-
+import { BORDE_FUERTE, EXITO_MEDIO, FONDO, NEUTRO_900 } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 /* ── utilidades ───────────────────────────────────────────── */
 function flagColor(v: number): string {
   const r = Math.round(v * 10) / 10;  // mismo redondeo que toFixed(1)
@@ -230,7 +230,7 @@ function RankingGerencia() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           {total > 0 && (
             <Chip label={total + ' RMs'} variant="outlined"
-              sx={{ fontWeight: 700, fontSize: 13, color: TAUPE_MEDIO, borderColor: TAUPE_MEDIO }} />
+              sx={{ fontWeight: 700, fontSize: 13, color: marcaViva.taupeMedio, borderColor: marcaViva.taupeMedio }} />
           )}
           {elegibles > 0 && (
             <Chip label={elegibles + ' elegibles'} variant="outlined"
@@ -303,7 +303,7 @@ function RankingGerencia() {
                 {cicloNombre && (
                   <Box sx={{ ml: 'auto' }}>
                     <Chip label={'Mostrando: ' + cicloNombre}
-                      sx={{ bgcolor: TAUPE, color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
+                      sx={{ bgcolor: marcaViva.taupe, color: '#fff', fontWeight: 700, fontSize: 13, height: 32, px: 1 }} />
                   </Box>
                 )}
               </>
@@ -320,7 +320,7 @@ function RankingGerencia() {
         /* ── TABLA MIP ─────────────────────────────────────────── */
         <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
           {/* Barra granate */}
-          <Box sx={{ bgcolor: TAUPE, py: 1.8, textAlign: 'center' }}>
+          <Box sx={{ bgcolor: marcaViva.taupe, py: 1.8, textAlign: 'center' }}>
             <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: 16,
               letterSpacing: '1.5px', textTransform: 'uppercase' }}>
               Mapa Integral de Productividad
@@ -362,8 +362,8 @@ function RankingGerencia() {
                     { label: 'Acum',  align: 'left'   as const        },
                   ].map(({ label, align, w }) => (
                     <TableCell key={label} align={align}
-                      sx={{ fontWeight: 800, fontSize: 11, color: TAUPE,
-                            borderBottom: '2px solid #686158',
+                      sx={{ fontWeight: 800, fontSize: 11, color: marcaViva.taupe,
+                            borderBottom: `2px solid ${marcaViva.taupe}`,
                             ...(w ? { width: w, minWidth: w } : {}) }}>
                       {label}
                     </TableCell>
@@ -385,7 +385,7 @@ function RankingGerencia() {
                   return (
                     <TableRow key={String(row.rm_id) + '-' + i} sx={{ bgcolor: rowBg }}>
                       <TableCell align="center"
-                        sx={{ fontWeight: 700, fontSize: 11, color: TAUPE }}>{pos}</TableCell>
+                        sx={{ fontWeight: 700, fontSize: 11, color: marcaViva.taupe }}>{pos}</TableCell>
                       <TableCell sx={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase' }}>
                         {row.linea_nombre && row.linea_nombre !== '—' ? row.linea_nombre : 'GENERAL'}
                       </TableCell>
@@ -416,13 +416,13 @@ function RankingGerencia() {
               {/* ── Fila de promedios ───────────────────────── */}
               {promedios && (
                 <TableFooter>
-                  <TableRow sx={{ bgcolor: BORDE_FUERTE, borderTop: '4px solid #686158' }}>
+                  <TableRow sx={{ bgcolor: BORDE_FUERTE, borderTop: `4px solid ${marcaViva.taupe}` }}>
                     <TableCell align="center"
-                      sx={{ fontWeight: 900, fontSize: 10, color: TAUPE, lineHeight: 1.1 }}>
+                      sx={{ fontWeight: 900, fontSize: 10, color: marcaViva.taupe, lineHeight: 1.1 }}>
                       Ø
                     </TableCell>
                     <TableCell colSpan={2}
-                      sx={{ fontWeight: 800, fontSize: 10, color: TAUPE, whiteSpace: 'nowrap' }}>
+                      sx={{ fontWeight: 800, fontSize: 10, color: marcaViva.taupe, whiteSpace: 'nowrap' }}>
                       PROMEDIO · {itemsFiltrados.length} RMs
                     </TableCell>
                     {ciclosNums.length > 0

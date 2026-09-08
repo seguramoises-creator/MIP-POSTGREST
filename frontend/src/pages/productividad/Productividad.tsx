@@ -14,8 +14,8 @@ import { KPI_ORDEN, kpiNombre } from '../../constants/kpi';
 import { useCicloStore } from '../../store/ciclo.store';
 import { useAuthStore } from '../../store/auth.store';
 import MiProductividad from './MiProductividad';
-import { AVISO, BORDE, BORDE_FUERTE, BORDE_SUAVE, ERROR, EXITO, NEUTRO_600, NEUTRO_900, SUPERFICIE_4, TAUPE, TAUPE_MEDIO } from '../../theme/marca';
-
+import { AVISO, BORDE, BORDE_FUERTE, BORDE_SUAVE, ERROR, EXITO, NEUTRO_600, NEUTRO_900, SUPERFICIE_4 } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 function FilterLabel({ children }: { children: React.ReactNode }) {
   return (
     <Typography sx={{ fontSize: 11, fontWeight: 700, color: 'text.secondary',
@@ -46,8 +46,10 @@ const TD = {
   textAlign: 'center' as const,
 };
 
-const CICLO_COLORS = [
-  TAUPE_MEDIO,EXITO,'#6a1b9a',AVISO,'#00838f',
+// Función y no constante: en ámbito de módulo el color se copiaría antes de que
+// `cargarMarca()` traiga la identidad, y quedaría congelado en el de fábrica.
+const cicloColores = () => [
+  marcaViva.taupeMedio,EXITO,'#6a1b9a',AVISO,'#00838f',
   ERROR,'#f9a825',NEUTRO_900,'#ad1457','#558b2f','#004d40',
 ];
 
@@ -306,7 +308,7 @@ function ProductividadGerencia() {
             {cicloNombre && (
               <Box sx={{ ml:'auto' }}>
                 <Chip label={'Mostrando: ' + cicloNombre}
-                  sx={{ bgcolor:TAUPE, color:'#fff', fontWeight:700, fontSize:13, height:32, px:1 }} />
+                  sx={{ bgcolor:marcaViva.taupe, color:'#fff', fontWeight:700, fontSize:13, height:32, px:1 }} />
               </Box>
             )}
           </Box>
@@ -316,7 +318,7 @@ function ProductividadGerencia() {
       {/* ── Gráfico: indicadores × ciclos ─────────────────────── */}
       {grafData.length > 0 && (
         <Card elevation={2} sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
-          <Box sx={{ bgcolor: TAUPE, px: 3, py: 1.2 }}>
+          <Box sx={{ bgcolor: marcaViva.taupe, px: 3, py: 1.2 }}>
             <Typography sx={{ color: '#fff', fontWeight: 700, fontSize: 14,
               textTransform: 'uppercase', letterSpacing: '0.8px' }}>
               Comparativo por Indicador y Ciclo — % Cumplimiento Promedio
@@ -335,7 +337,7 @@ function ProductividadGerencia() {
                   wrapperStyle={{ fontSize: 12, position: 'relative', marginTop: 28 }} />
                 {cicloKeys.map((ck, i) => (
                   <Bar key={ck} dataKey={ck} name={ck}
-                    fill={CICLO_COLORS[i % CICLO_COLORS.length]}
+                    fill={cicloColores()[i % cicloColores().length]}
                     radius={[3,3,0,0]} maxBarSize={36} />
                 ))}
               </BarChart>
@@ -352,7 +354,7 @@ function ProductividadGerencia() {
       ) : (
         <Paper elevation={3} sx={{ borderRadius: 2, overflow: 'hidden' }}>
           {/* Barra azul MIP */}
-          <Box sx={{ bgcolor: TAUPE, py: 1.5, textAlign: 'center' }}>
+          <Box sx={{ bgcolor: marcaViva.taupe, py: 1.5, textAlign: 'center' }}>
             <Typography sx={{ color:'#fff', fontWeight:800, fontSize:15, letterSpacing:'1.5px', textTransform:'uppercase' }}>
               Mapa Integral de Productividad
             </Typography>
@@ -367,11 +369,11 @@ function ProductividadGerencia() {
                 {/* ── Fila 1: grupos ─────────────────────── */}
                 <TableRow sx={{ bgcolor: EXITO }}>
                   {/* RK ACUM */}
-                  <TableCell rowSpan={3} sx={{ ...TH_BASE, minWidth: 38, whiteSpace:'pre-line', bgcolor:TAUPE_MEDIO }}>
+                  <TableCell rowSpan={3} sx={{ ...TH_BASE, minWidth: 38, whiteSpace:'pre-line', bgcolor:marcaViva.taupeMedio }}>
                     {'RK\nACUM'}
                   </TableCell>
                   {/* RK CICLO */}
-                  <TableCell rowSpan={3} sx={{ ...TH_BASE, minWidth: 38, whiteSpace:'pre-line', bgcolor:TAUPE_MEDIO }}>
+                  <TableCell rowSpan={3} sx={{ ...TH_BASE, minWidth: 38, whiteSpace:'pre-line', bgcolor:marcaViva.taupeMedio }}>
                     {'RK\nCICLO'}
                   </TableCell>
                   {[
@@ -385,7 +387,7 @@ function ProductividadGerencia() {
                   ))}
                   {/* "CICLO N" spanning indicator columns + TOTAL */}
                   <TableCell colSpan={numIndCols + 1}
-                    sx={{ ...TH_BASE, bgcolor: TAUPE_MEDIO, fontSize: 11, letterSpacing: '1px' }}>
+                    sx={{ ...TH_BASE, bgcolor: marcaViva.taupeMedio, fontSize: 11, letterSpacing: '1px' }}>
                     {cicloNum ? `CICLO ${cicloNum}` : 'CICLO ACTUAL'}
                   </TableCell>
                   {/* TOTAL ACUM — columna fija fuera del span de ciclo */}
@@ -396,28 +398,28 @@ function ProductividadGerencia() {
                 </TableRow>
 
                 {/* ── Fila 2: nombres indicadores ────────── */}
-                <TableRow sx={{ bgcolor: TAUPE_MEDIO }}>
+                <TableRow sx={{ bgcolor: marcaViva.taupeMedio }}>
                   {indicadores.map(ind => {
                     const cfg = cfgByCode[ind];
                     const nombre = kpiNombre(ind, cfg?.nombre);
                     return (
                       <TableCell key={ind} colSpan={2}
-                        sx={{ ...TH_BASE, bgcolor: TAUPE_MEDIO, minWidth: 76, textTransform:'uppercase', fontSize: 9 }}>
+                        sx={{ ...TH_BASE, bgcolor: marcaViva.taupeMedio, minWidth: 76, textTransform:'uppercase', fontSize: 9 }}>
                         {nombre}
                       </TableCell>
                     );
                   })}
                   <TableCell rowSpan={2}
-                    sx={{ ...TH_BASE, bgcolor: TAUPE_MEDIO, minWidth: 36, fontSize: 10 }}>
+                    sx={{ ...TH_BASE, bgcolor: marcaViva.taupeMedio, minWidth: 36, fontSize: 10 }}>
                     TOTAL
                   </TableCell>
                 </TableRow>
 
                 {/* ── Fila 3: Resul / Ptos ───────────────── */}
-                <TableRow sx={{ bgcolor: TAUPE }}>
+                <TableRow sx={{ bgcolor: marcaViva.taupe }}>
                   {indicadores.map(ind => (
                     [['Resul', ind+'-r'], ['Ptos', ind+'-p']].map(([label, key]) => (
-                      <TableCell key={key} sx={{ ...TH_BASE, bgcolor: TAUPE, fontSize: 11 }}>
+                      <TableCell key={key} sx={{ ...TH_BASE, bgcolor: marcaViva.taupe, fontSize: 11 }}>
                         {label}
                       </TableCell>
                     ))
@@ -498,7 +500,7 @@ function ProductividadGerencia() {
                       <TableCell sx={{ ...TD, p: 0.5 }}>
                         <Box sx={{
                           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                          bgcolor: TAUPE, color: '#fff', borderRadius: '50%',
+                          bgcolor: marcaViva.taupe, color: '#fff', borderRadius: '50%',
                           width: 28, height: 28, fontWeight: 900, fontSize: 13,
                         }}>
                           {rkAcum}
@@ -547,7 +549,7 @@ function ProductividadGerencia() {
                       {/* TOTAL ciclo */}
                       <TableCell sx={{ ...TD, bgcolor: SUPERFICIE_4 }}>
                         {row.total != null
-                          ? <Typography sx={{ fontSize:12, fontWeight:800, color:TAUPE }}>{Number(row.total).toFixed(1)}</Typography>
+                          ? <Typography sx={{ fontSize:12, fontWeight:800, color:marcaViva.taupe }}>{Number(row.total).toFixed(1)}</Typography>
                           : <Typography sx={{ color:'text.disabled', fontSize:12 }}>—</Typography>}
                       </TableCell>
                       {/* TOTAL ACUM — suma de todos los ciclos */}

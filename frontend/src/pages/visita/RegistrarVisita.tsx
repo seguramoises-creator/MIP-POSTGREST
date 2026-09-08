@@ -15,11 +15,13 @@ import {
   listarPanelFarmacias, registrarVisitaFarmacia, subirFotoVisitaFarmacia,
   type FarmaciaPanelItem,
 } from '../../services/farmacias.service';
-import { BORDE, EXITO, NEUTRO_300, SUPERFICIE_2, SUPERFICIE_4, TAUPE, TAUPE_MEDIO, TAUPE_NEGRO } from '../../theme/marca';
-
+import { BORDE, EXITO, NEUTRO_300, SUPERFICIE_2, SUPERFICIE_4 } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 // ── Paleta profesional (médica / farmacéutica) ───────────────────────────────
-const NAVY = TAUPE_NEGRO;       // azul corporativo profundo
-const AZUL_VISTA = TAUPE; // azul de VISTA (primary.main) — titulo y borde de tarjeta
+// Función y no constante: en ámbito de módulo se evaluaría antes de que
+// `cargarMarca()` traiga la identidad, y el color quedaría en el de fábrica.
+const navy = () => marcaViva.taupeNegro;       // azul corporativo profundo
+const azulVista = () => marcaViva.taupe; // color de estructura — titulo y borde de tarjeta
 const TEAL = '#0f9b8e';       // acento clínico (teal-verde)
 const INK = '#1e293b';        // texto principal
 const SOFT_SHADOW = '0 1px 3px rgba(16,24,40,0.06), 0 6px 20px rgba(16,24,40,0.05)';
@@ -387,7 +389,7 @@ export default function RegistrarVisita() {
   const formulario = sel ? (
     <div ref={formRef}>
       <Card elevation={0} sx={{ ...cardSx, mb: 1 }}>
-        <Box sx={{ background: `linear-gradient(120deg, ${NAVY}0d 0%, ${TEAL}0d 100%)`,
+        <Box sx={{ background: `linear-gradient(120deg, ${navy()}0d 0%, ${TEAL}0d 100%)`,
                    borderBottom: '1px solid #EFEBE6', px: 2, py: 1.5, display: 'flex', alignItems: 'center',
                    gap: 1.5, flexWrap: 'wrap', rowGap: 1 }}>
           {avatar(sel.nombre, sel.categoria, sel.medico_id, 42)}
@@ -403,7 +405,7 @@ export default function RegistrarVisita() {
           </Box>
           <ToggleButtonGroup exclusive size="small" value={tipo} onChange={(_, v) => v && setTipo(v)}
                              sx={{ bgcolor: '#fff', borderRadius: 2, '& .MuiToggleButton-root': { border: '1px solid #E0DAD3', fontWeight: 700, px: 1.5,
-                                   '&.Mui-selected': { bgcolor: NAVY, color: '#fff', '&:hover': { bgcolor: NAVY } } } }}>
+                                   '&.Mui-selected': { bgcolor: navy(), color: '#fff', '&:hover': { bgcolor: navy() } } } }}>
             <ToggleButton value="V" disabled={sel?.tipo_visita === 'R'}
                           title={sel?.tipo_visita === 'R' ? 'La Vista de este médico ya fue registrada' : ''}>Vista</ToggleButton>
             <ToggleButton value="R" disabled={sel?.tipo_visita !== 'R'}
@@ -426,7 +428,7 @@ export default function RegistrarVisita() {
                   </Typography>
                 </Box>
                 <Box sx={{ flex: 1, borderRadius: 2, p: 1.25,
-                           background: `linear-gradient(135deg, ${NAVY}0a 0%, ${TEAL}0f 100%)`,
+                           background: `linear-gradient(135deg, ${navy()}0a 0%, ${TEAL}0f 100%)`,
                            border: '1px solid #EFEBE6' }}>
                   <Typography variant="caption" sx={{ ...secHeadSx, display: 'block', mb: 0.75 }}>
                     Resumen de la visita
@@ -443,7 +445,7 @@ export default function RegistrarVisita() {
                     return (
                       <>
                         <Stack direction="row" spacing={0.5} divider={<Divider orientation="vertical" flexItem sx={{ borderColor: BORDE }} />}>
-                          {stat('Tipo', tipo === 'R' ? 'Revisita' : 'Vista', NAVY)}
+                          {stat('Tipo', tipo === 'R' ? 'Revisita' : 'Vista', navy())}
                           {stat('Productos', String(nProd), TEAL)}
                           {stat('Muestras', String(nMuestras), TEAL)}
                         </Stack>
@@ -490,7 +492,7 @@ export default function RegistrarVisita() {
                                        flex: { xs: '1 1 100%', sm: '1 1 40%' } }}>
                               <Checkbox size="small" checked={on} onChange={() => toggleProd(p, idx)} sx={{ p: 0.5 }} />
                               <Avatar sx={{ width: 22, height: 22, fontSize: 11, fontWeight: 800, flexShrink: 0,
-                                            bgcolor: p.prioridad === 1 ? TAUPE : p.prioridad === 2 ? TAUPE_MEDIO : NEUTRO_300 }}>
+                                            bgcolor: p.prioridad === 1 ? marcaViva.taupe : p.prioridad === 2 ? marcaViva.taupeMedio : NEUTRO_300 }}>
                                 {p.prioridad}
                               </Avatar>
                               <Box sx={{ minWidth: 0, flex: 1 }}>
@@ -666,7 +668,7 @@ export default function RegistrarVisita() {
   const formularioFarmacia = selFarmacia ? (
     <div ref={formRefFarmacia}>
       <Card elevation={0} sx={{ ...cardSx, mb: 1 }}>
-        <Box sx={{ background: `linear-gradient(120deg, ${NAVY}0d 0%, ${TEAL}0d 100%)`,
+        <Box sx={{ background: `linear-gradient(120deg, ${navy()}0d 0%, ${TEAL}0d 100%)`,
                    borderBottom: '1px solid #EFEBE6', px: 2, py: 1.5 }}>
           <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" rowGap={0.3}>
             <Typography fontWeight={800} sx={{ color: INK, fontSize: 'clamp(0.82rem, 3.2vw, 1.05rem)' }}>
@@ -817,19 +819,19 @@ export default function RegistrarVisita() {
         bgcolor: '#fff', borderRadius: 3, p: { xs: 2, sm: 2.5 }, mb: 2.5,
         // Borde en el azul de VISTA — es lo que ata la tarjeta al marco de la app
         // ahora que ya no lleva el degradado dentro.
-        border: `1.5px solid ${AZUL_VISTA}`, boxShadow: '0 1px 2px rgba(16,20,58,0.04)',
+        border: `1.5px solid ${azulVista()}`, boxShadow: '0 1px 2px rgba(16,20,58,0.04)',
       }}>
         <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" rowGap={1}>
           {/* Cuadrado con tinte de marca en vez de círculo sobre degradado: pesa
               menos y deja el acento azul donde se necesita, no de fondo. */}
           <Box sx={{
             width: 44, height: 44, borderRadius: 2, flexShrink: 0,
-            bgcolor: 'rgba(104,97,88,0.08)', display: 'grid', placeItems: 'center',
+            bgcolor: `${marcaViva.taupe}14`, display: 'grid', placeItems: 'center',
           }}>
-            <Assignment sx={{ color: AZUL_VISTA, fontSize: 24 }} />
+            <Assignment sx={{ color: azulVista(), fontSize: 24 }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 170 }}>
-            <Typography sx={{ fontWeight: 700, color: AZUL_VISTA, letterSpacing: '-0.02em',
+            <Typography sx={{ fontWeight: 700, color: azulVista(), letterSpacing: '-0.02em',
                               lineHeight: 1.2, fontSize: { xs: '1.15rem', sm: '1.35rem' } }}>
               Registrar Visita
             </Typography>
@@ -840,9 +842,9 @@ export default function RegistrarVisita() {
           </Box>
           {gd?.gerente && (
             <Chip size="small" variant="outlined"
-                  icon={<SupervisorAccount sx={{ color: `${AZUL_VISTA} !important` }} />}
+                  icon={<SupervisorAccount sx={{ color: `${azulVista()} !important` }} />}
                   label={`GD: ${gd.gerente}${gd.linea ? ` · ${gd.linea}` : ''}`}
-                  sx={{ color: AZUL_VISTA, borderColor: 'rgba(104,97,88,0.35)', fontWeight: 600, maxWidth: '100%' }} />
+                  sx={{ color: azulVista(), borderColor: `${marcaViva.taupe}59`, fontWeight: 600, maxWidth: '100%' }} />
           )}
         </Stack>
 
@@ -874,7 +876,7 @@ export default function RegistrarVisita() {
                            onChange={(_, v) => { if (v) { setTipoEntidad(v); setMsg(null); } }}
                            sx={{ mb: 2, bgcolor: '#fff', borderRadius: 2, boxShadow: SOFT_SHADOW,
                                  '& .MuiToggleButton-root': { border: '1px solid #E0DAD3', fontWeight: 700, px: 2, textTransform: 'none',
-                                       '&.Mui-selected': { bgcolor: NAVY, color: '#fff', '&:hover': { bgcolor: NAVY } } } }}>
+                                       '&.Mui-selected': { bgcolor: navy(), color: '#fff', '&:hover': { bgcolor: navy() } } } }}>
           <ToggleButton value="medico"><MedicalServices sx={{ fontSize: 18, mr: 0.75 }} />Médico</ToggleButton>
           <ToggleButton value="farmacia"><LocalPharmacy sx={{ fontSize: 18, mr: 0.75 }} />Farmacia</ToggleButton>
         </ToggleButtonGroup>
@@ -887,8 +889,8 @@ export default function RegistrarVisita() {
         <Card elevation={0} sx={{ ...cardSx, mb: 2 }}>
           <CardContent sx={{ py: 1.5 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <Box sx={{ width: 30, height: 30, borderRadius: 1.5, bgcolor: `${NAVY}0f`, display: 'grid', placeItems: 'center' }}>
-                <LocalPharmacy sx={{ fontSize: 17, color: NAVY }} />
+              <Box sx={{ width: 30, height: 30, borderRadius: 1.5, bgcolor: `${navy()}0f`, display: 'grid', placeItems: 'center' }}>
+                <LocalPharmacy sx={{ fontSize: 17, color: navy() }} />
               </Box>
               <Typography variant="subtitle1" fontWeight={800} sx={{ color: INK }}>Mis farmacias</Typography>
               <Box sx={{ flex: 1 }} />
@@ -915,8 +917,8 @@ export default function RegistrarVisita() {
         <Card elevation={0} sx={{ ...cardSx, mb: 2 }}>
           <CardContent sx={{ py: 1.5 }}>
             <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <Box sx={{ width: 30, height: 30, borderRadius: 1.5, bgcolor: `${NAVY}0f`, display: 'grid', placeItems: 'center' }}>
-                <Assignment sx={{ fontSize: 17, color: NAVY }} />
+              <Box sx={{ width: 30, height: 30, borderRadius: 1.5, bgcolor: `${navy()}0f`, display: 'grid', placeItems: 'center' }}>
+                <Assignment sx={{ fontSize: 17, color: navy() }} />
               </Box>
               <Typography variant="subtitle1" fontWeight={800} sx={{ color: INK }}>Médicos de hoy</Typography>
               <Box sx={{ flex: 1 }} />

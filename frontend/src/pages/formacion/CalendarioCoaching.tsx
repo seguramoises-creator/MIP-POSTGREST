@@ -21,17 +21,19 @@ import {
   type CeldaCalendario, type GenerarCalendarioResp,
 } from '../../services/formacion.service';
 import { api } from '../../services/api';
-import { AVISO, ERROR, EXITO, TAUPE_MEDIO } from '../../theme/marca';
-
+import { AVISO, ERROR, EXITO } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 const DIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
 const ROLES_ESCRITURA = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO'];
 // PUT /formacion/calendario-coaching/frecuencias está gateado en backend a
 // ADMIN y GERENTE_PRODUCTIVIDAD (RequireConfig) — el GD NO puede fijar frecuencias,
 // solo consultarlas (GET, RequireLectura).
 const ROLES_CONFIG = ['ADMIN', 'GERENTE_PRODUCTIVIDAD'];
-const CUAD_COLOR: Record<string, string> = {
-  D1: ERROR, D2: AVISO, D3: TAUPE_MEDIO, D4: EXITO,
-};
+// Función y no constante: en ámbito de módulo el color se copiaría antes de que
+// `cargarMarca()` traiga la identidad, y quedaría congelado en el de fábrica.
+const cuadColor = (): Record<string, string> => ({
+  D1: ERROR, D2: AVISO, D3: marcaViva.taupeMedio, D4: EXITO,
+});
 
 export default function CalendarioCoaching() {
   const paisCodigo = useCicloStore((s) => s.paisCodigo);
@@ -167,7 +169,7 @@ export default function CalendarioCoaching() {
                       <TableCell>
                         <Stack direction="row" spacing={1} alignItems="center">
                           <Chip size="small" label={cuad}
-                            sx={{ bgcolor: CUAD_COLOR[cuad] || '#777', color: '#fff', fontWeight: 700 }} />
+                            sx={{ bgcolor: cuadColor()[cuad] || '#777', color: '#fff', fontWeight: 700 }} />
                           <span>RM #{rmId}</span>
                         </Stack>
                       </TableCell>

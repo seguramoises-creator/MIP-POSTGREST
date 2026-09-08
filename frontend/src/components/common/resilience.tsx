@@ -8,8 +8,7 @@
  * de "Recargar" en lugar de un árbol React desmontado (pantalla oscura congelada).
  */
 import { Component, lazy, type ComponentType, type ReactNode } from 'react';
-import { TAUPE } from '../../theme/marca';
-
+import { marcaViva } from '../../theme/marcaViva';
 const RELOAD_KEY = 'vista-chunk-reload';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -54,7 +53,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { error: b
           onClick={() => { try { sessionStorage.clear(); } catch { /* noop */ } window.location.reload(); }}
           style={{
             marginTop: 8, padding: '10px 22px', fontSize: 16, borderRadius: 8,
-            border: 'none', background: TAUPE, color: '#fff', fontWeight: 700, cursor: 'pointer',
+            border: 'none', background: marcaViva.taupe, color: '#fff', fontWeight: 700, cursor: 'pointer',
           }}
         >
           Recargar

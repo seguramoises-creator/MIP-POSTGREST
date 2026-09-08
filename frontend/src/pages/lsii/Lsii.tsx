@@ -37,8 +37,8 @@ import { useAuthStore } from '../../store/auth.store';
 import type {
   ReceptividadDimension, SeleccionReceptividad, MatrizLsiiItem, NivelLsii,
 } from '../../types';
-import { AVISO, AVISO_OSCURO, AVISO_TENUE, BORDE_FUERTE, BORDE_SUAVE, EXITO, EXITO_OSCURO, EXITO_TENUE, FONDO, NEUTRO_300, NEUTRO_400, NEUTRO_600, NEUTRO_900, SUPERFICIE_2, SUPERFICIE_3, SUPERFICIE_4, TAUPE_MEDIO } from '../../theme/marca';
-
+import { AVISO, AVISO_OSCURO, AVISO_TENUE, BORDE_FUERTE, BORDE_SUAVE, EXITO, EXITO_OSCURO, EXITO_TENUE, FONDO, NEUTRO_300, NEUTRO_400, NEUTRO_600, NEUTRO_900, SUPERFICIE_2, SUPERFICIE_3, SUPERFICIE_4 } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 // ── roles evaluadores ─────────────────────────────────────────────────────────
 const ROLES_EVALUADOR = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'GERENTE_MARCA'];
 
@@ -149,7 +149,7 @@ const MatrizTooltip = ({ active, payload }: { active?: boolean; payload?: { payl
         </Box>
         <Box>
           <Typography fontSize="0.66rem" color="text.secondary">Receptividad</Typography>
-          <Typography fontWeight={800} fontSize="0.88rem" color={TAUPE_MEDIO}>{Number(d.score_receptividad).toFixed(1)}</Typography>
+          <Typography fontWeight={800} fontSize="0.88rem" color={marcaViva.taupeMedio}>{Number(d.score_receptividad).toFixed(1)}</Typography>
         </Box>
       </Box>
       <Chip label={pal.label} size="small" sx={{ bgcolor: pal.light, color: pal.color, fontWeight: 800, fontSize: '0.7rem', height: 22, mb: 0.5 }} />
@@ -347,7 +347,7 @@ export default function Lsii() {
   return (
     <Box>
       {/* Encabezado */}
-      <Box sx={{ background: 'linear-gradient(135deg,#686158 0%,#584F46 60%,#686158 100%)', borderRadius: 3, p: { xs: 2, md: 2.5 }, mb: 3, color: '#fff', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+      <Box sx={{ background: `linear-gradient(135deg,${marcaViva.taupe} 0%,${marcaViva.taupeMedio} 60%,${marcaViva.taupe} 100%)`, borderRadius: 3, p: { xs: 2, md: 2.5 }, mb: 3, color: '#fff', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Box sx={{ width: 48, height: 48, borderRadius: '50%', bgcolor: 'rgba(255,255,255,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <Groups sx={{ fontSize: 28, color: '#fff' }} />
         </Box>
@@ -432,7 +432,7 @@ export default function Lsii() {
       {/* Tabs */}
       <Box mb={3}>
         <Tabs value={tab} onChange={(_, v) => setTab(v as number)} variant="scrollable" scrollButtons="auto"
-          sx={{ borderBottom: '3px solid #584F46', '& .MuiTab-root': { bgcolor: BORDE_FUERTE, borderTopLeftRadius: 8, borderTopRightRadius: 8, mr: 0.5, color: TAUPE_MEDIO, fontWeight: 600, minHeight: 40, fontSize: 13, textTransform: 'none', '&.Mui-selected': { bgcolor: TAUPE_MEDIO, color: '#fff', fontWeight: 700 }, '&:hover:not(.Mui-selected)': { bgcolor: BORDE_FUERTE } }, '& .MuiTabs-indicator': { display: 'none' } }}>
+          sx={{ borderBottom: `3px solid ${marcaViva.taupeMedio}`, '& .MuiTab-root': { bgcolor: BORDE_FUERTE, borderTopLeftRadius: 8, borderTopRightRadius: 8, mr: 0.5, color: marcaViva.taupeMedio, fontWeight: 600, minHeight: 40, fontSize: 13, textTransform: 'none', '&.Mui-selected': { bgcolor: marcaViva.taupeMedio, color: '#fff', fontWeight: 700 }, '&:hover:not(.Mui-selected)': { bgcolor: BORDE_FUERTE } }, '& .MuiTabs-indicator': { display: 'none' } }}>
           <Tab label="Matriz de Desarrollo" />
           {puedeEvaluar && <Tab label="Nueva Evaluacion" />}
         </Tabs>
@@ -454,11 +454,11 @@ export default function Lsii() {
                 <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, height: '100%' }}>
                   <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 1.5, py: 1.5, '&:last-child': { pb: 1.5 } }}>
                     <Box sx={{ width: 48, height: 48, borderRadius: '50%', bgcolor: SUPERFICIE_3, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <Groups sx={{ color: TAUPE_MEDIO, fontSize: 24 }} />
+                      <Groups sx={{ color: marcaViva.taupeMedio, fontSize: 24 }} />
                     </Box>
                     <Box>
                       <Typography variant="caption" sx={{ fontWeight: 700, textTransform: 'uppercase', fontSize: '0.58rem', color: 'text.secondary', display: 'block', letterSpacing: 0.5 }}>Colaboradores</Typography>
-                      <Typography fontWeight={900} fontSize="1.7rem" color={TAUPE_MEDIO} sx={{ lineHeight: 1.1 }}>{resumen?.total}</Typography>
+                      <Typography fontWeight={900} fontSize="1.7rem" color={marcaViva.taupeMedio} sx={{ lineHeight: 1.1 }}>{resumen?.total}</Typography>
                       <Typography variant="caption" color="text.secondary">Evaluados</Typography>
                     </Box>
                   </CardContent>
@@ -468,7 +468,7 @@ export default function Lsii() {
                 <KpiRing value={resumen!.promedioDesempeno} color={EXITO_OSCURO} label="Desempeno Promedio" caption="Promedio del equipo" />
               </Grid>
               <Grid item xs={6} sm={3}>
-                <KpiRing value={resumen!.promedioReceptividad} color={TAUPE_MEDIO} label="Receptividad Promedio" caption="Promedio del equipo" />
+                <KpiRing value={resumen!.promedioReceptividad} color={marcaViva.taupeMedio} label="Receptividad Promedio" caption="Promedio del equipo" />
               </Grid>
               <Grid item xs={6} sm={3}>
                 <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, height: '100%' }}>
@@ -492,7 +492,7 @@ export default function Lsii() {
             <Grid container spacing={3} mb={3} alignItems="stretch">
               <Grid item xs={12} md={8}>
                 <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  <Box sx={{ background: 'linear-gradient(135deg,#686158,#584F46)', px: 2.5, py: 1.5, borderTopLeftRadius: 8, borderTopRightRadius: 8, display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
+                  <Box sx={{ background: `linear-gradient(135deg,${marcaViva.taupe},${marcaViva.taupeMedio})`, px: 2.5, py: 1.5, borderTopLeftRadius: 8, borderTopRightRadius: 8, display: 'flex', alignItems: 'center', gap: 1.5, flexShrink: 0 }}>
                     <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.92rem', letterSpacing: 0.5, flexGrow: 1 }}>MATRIZ LSII - DESEMPENO x RECEPTIVIDAD</Typography>
                     <Chip label={`${resumen?.total} VMs`} size="small" sx={{ bgcolor: 'rgba(255,255,255,0.18)', color: '#fff', fontWeight: 700, fontSize: '0.72rem' }} />
                   </Box>
@@ -590,7 +590,7 @@ export default function Lsii() {
                             <Typography fontSize="0.72rem" sx={{ color: EXITO_OSCURO, fontWeight: 800 }}>
                               D {Number(m.score_desempeno).toFixed(1)}
                             </Typography>
-                            <Typography fontSize="0.72rem" sx={{ color: TAUPE_MEDIO, fontWeight: 800 }}>
+                            <Typography fontSize="0.72rem" sx={{ color: marcaViva.taupeMedio, fontWeight: 800 }}>
                               R {Number(m.score_receptividad).toFixed(1)}
                             </Typography>
                           </Box>
@@ -645,7 +645,7 @@ export default function Lsii() {
               <Grid item xs={12} md={4}>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, height: '100%' }}>
                   <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, flex: 1 }}>
-                    <Box sx={{ background: 'linear-gradient(135deg,#686158,#4A433C)', px: 2.5, py: 1.2, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}>
+                    <Box sx={{ background: `linear-gradient(135deg,${marcaViva.taupe},${marcaViva.taupeProfundo})`, px: 2.5, py: 1.2, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}>
                       <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.85rem', letterSpacing: 0.5 }}>DISTRIBUCION POR NIVEL</Typography>
                     </Box>
                     <Box sx={{ minHeight: 210, p: 1 }}>
@@ -694,7 +694,7 @@ export default function Lsii() {
 
               <Grid item xs={12} md={8}>
                 <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  <Box sx={{ background: 'linear-gradient(135deg,#686158,#584F46)', px: 2.5, py: 1.5, borderTopLeftRadius: 8, borderTopRightRadius: 8, flexShrink: 0 }}>
+                  <Box sx={{ background: `linear-gradient(135deg,${marcaViva.taupe},${marcaViva.taupeMedio})`, px: 2.5, py: 1.5, borderTopLeftRadius: 8, borderTopRightRadius: 8, flexShrink: 0 }}>
                     <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.92rem', letterSpacing: 0.5 }}>DETALLE POR COLABORADOR</Typography>
                   </Box>
                   <TableContainer sx={{ flex: 1 }}>
@@ -732,9 +732,9 @@ export default function Lsii() {
                               </TableCell>
                               <TableCell sx={{ py: 0.8 }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.8, minWidth: 90 }}>
-                                  <Typography fontWeight={700} fontSize="0.76rem" sx={{ minWidth: 32, color: TAUPE_MEDIO }}>{Number(r.score_receptividad).toFixed(1)}</Typography>
+                                  <Typography fontWeight={700} fontSize="0.76rem" sx={{ minWidth: 32, color: marcaViva.taupeMedio }}>{Number(r.score_receptividad).toFixed(1)}</Typography>
                                   <LinearProgress variant="determinate" value={Math.min(100, Number(r.score_receptividad))}
-                                    sx={{ flex: 1, height: 5, borderRadius: 3, bgcolor: SUPERFICIE_3, '& .MuiLinearProgress-bar': { bgcolor: TAUPE_MEDIO, borderRadius: 3 } }} />
+                                    sx={{ flex: 1, height: 5, borderRadius: 3, bgcolor: SUPERFICIE_3, '& .MuiLinearProgress-bar': { bgcolor: marcaViva.taupeMedio, borderRadius: 3 } }} />
                                 </Box>
                               </TableCell>
                               <TableCell align="center" sx={{ py: 0.8 }}>
@@ -768,7 +768,7 @@ export default function Lsii() {
         <Grid container spacing={3}>
           <Grid item xs={12} md={8}>
             <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2 }}>
-              <Box sx={{ background: 'linear-gradient(135deg,#686158,#584F46)', px: 2.5, py: 1.5, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}>
+              <Box sx={{ background: `linear-gradient(135deg,${marcaViva.taupe},${marcaViva.taupeMedio})`, px: 2.5, py: 1.5, borderTopLeftRadius: 8, borderTopRightRadius: 8 }}>
                 <Typography sx={{ color: '#fff', fontWeight: 800, fontSize: '0.92rem', letterSpacing: 0.5 }}>EVALUACION DE RECEPTIVIDAD / COMPROMISO</Typography>
                 <Typography sx={{ color: 'rgba(255,255,255,0.82)', fontSize: '0.78rem', mt: 0.3 }}>Seleccione el comportamiento que mejor describe al colaborador en cada dimension</Typography>
               </Box>
@@ -797,10 +797,10 @@ export default function Lsii() {
                   <Box mb={2.5} sx={{ p: 1.5, bgcolor: SUPERFICIE_2, borderRadius: 2, border: '1px solid #e0e7ef' }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                       <Typography variant="caption" fontWeight={700} color="text.secondary">Progreso de evaluacion</Typography>
-                      <Typography variant="caption" fontWeight={800} color={completadas === dimensiones.length ? EXITO_OSCURO : TAUPE_MEDIO}>{completadas} / {dimensiones.length}</Typography>
+                      <Typography variant="caption" fontWeight={800} color={completadas === dimensiones.length ? EXITO_OSCURO : marcaViva.taupeMedio}>{completadas} / {dimensiones.length}</Typography>
                     </Box>
                     <LinearProgress variant="determinate" value={(completadas / dimensiones.length) * 100}
-                      sx={{ height: 8, borderRadius: 4, bgcolor: SUPERFICIE_3, '& .MuiLinearProgress-bar': { bgcolor: completadas === dimensiones.length ? EXITO_OSCURO : TAUPE_MEDIO, borderRadius: 4 } }} />
+                      sx={{ height: 8, borderRadius: 4, bgcolor: SUPERFICIE_3, '& .MuiLinearProgress-bar': { bgcolor: completadas === dimensiones.length ? EXITO_OSCURO : marcaViva.taupeMedio, borderRadius: 4 } }} />
                   </Box>
                 )}
 
@@ -811,10 +811,10 @@ export default function Lsii() {
                     const sel = selecciones[dim.dimension_codigo] != null;
                     const selectedOpId = selecciones[dim.dimension_codigo];
                     return (
-                      <Box key={dim.dimension_codigo} sx={{ mb: 2, borderRadius: 2, border: `1.5px solid ${sel ? '#584F4640' : BORDE_SUAVE}`, overflow: 'hidden', transition: 'border-color 0.2s' }}>
+                      <Box key={dim.dimension_codigo} sx={{ mb: 2, borderRadius: 2, border: `1.5px solid ${sel ? `${marcaViva.taupeMedio}40` : BORDE_SUAVE}`, overflow: 'hidden', transition: 'border-color 0.2s' }}>
                         {/* Cabecera de dimensión */}
                         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, px: 2, py: 1.2, bgcolor: sel ? SUPERFICIE_3 : SUPERFICIE_2, borderBottom: '1px solid #EFEBE6' }}>
-                          <Box sx={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, mt: 0.1, bgcolor: sel ? TAUPE_MEDIO : BORDE_SUAVE, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Box sx={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0, mt: 0.1, bgcolor: sel ? marcaViva.taupeMedio : BORDE_SUAVE, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                             <Typography sx={{ color: sel ? '#fff' : NEUTRO_600, fontWeight: 900, fontSize: '0.65rem' }}>{idx + 1}</Typography>
                           </Box>
                           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -823,7 +823,7 @@ export default function Lsii() {
                               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.35, mt: 0.2 }}>{dim.dimension_descripcion}</Typography>
                             )}
                           </Box>
-                          {sel && <CheckCircle sx={{ color: TAUPE_MEDIO, fontSize: 18, flexShrink: 0, mt: 0.1 }} />}
+                          {sel && <CheckCircle sx={{ color: marcaViva.taupeMedio, fontSize: 18, flexShrink: 0, mt: 0.1 }} />}
                         </Box>
                         {/* Opciones como filas */}
                         {dim.opciones.map((op, oi) => {
@@ -835,7 +835,7 @@ export default function Lsii() {
                                 display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 0.9,
                                 cursor: 'pointer',
                                 bgcolor: isSelected ? '#ddeeff' : 'transparent',
-                                borderLeft: `3px solid ${isSelected ? TAUPE_MEDIO : 'transparent'}`,
+                                borderLeft: `3px solid ${isSelected ? marcaViva.taupeMedio : 'transparent'}`,
                                 borderBottom: oi < dim.opciones.length - 1 ? '1px solid #f0f2f5' : 'none',
                                 transition: 'background 0.15s, border-color 0.15s',
                                 '&:hover': { bgcolor: isSelected ? '#cce4f7' : FONDO },
@@ -843,14 +843,14 @@ export default function Lsii() {
                               {/* Dot radio personalizado */}
                               <Box sx={{
                                 width: 16, height: 16, borderRadius: '50%', flexShrink: 0,
-                                border: `2px solid ${isSelected ? TAUPE_MEDIO : '#b0bec5'}`,
-                                bgcolor: isSelected ? TAUPE_MEDIO : 'transparent',
+                                border: `2px solid ${isSelected ? marcaViva.taupeMedio : '#b0bec5'}`,
+                                bgcolor: isSelected ? marcaViva.taupeMedio : 'transparent',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 transition: 'all 0.15s',
                               }}>
                                 {isSelected && <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#fff' }} />}
                               </Box>
-                              <Typography fontSize="0.82rem" sx={{ lineHeight: 1.4, color: isSelected ? TAUPE_MEDIO : NEUTRO_600, fontWeight: isSelected ? 600 : 400 }}>
+                              <Typography fontSize="0.82rem" sx={{ lineHeight: 1.4, color: isSelected ? marcaViva.taupeMedio : NEUTRO_600, fontWeight: isSelected ? 600 : 400 }}>
                                 {op.texto_comportamiento}
                               </Typography>
                             </Box>
@@ -872,7 +872,7 @@ export default function Lsii() {
 
                 <Button variant="contained" disabled={!formListo || mutEvaluar.isPending || esSoloLectura} size="large" fullWidth
                   onClick={() => mutEvaluar.mutate()}
-                  sx={{ borderRadius: 2, fontWeight: 700, py: 1.2, background: formListo ? 'linear-gradient(135deg,#686158,#584F46)' : undefined }}>
+                  sx={{ borderRadius: 2, fontWeight: 700, py: 1.2, background: formListo ? `linear-gradient(135deg,${marcaViva.taupe},${marcaViva.taupeMedio})` : undefined }}>
                   {mutEvaluar.isPending ? 'Registrando...' : 'Registrar Evaluacion LSII'}
                 </Button>
               </CardContent>
@@ -936,7 +936,7 @@ export default function Lsii() {
                         <Grid item xs={6}>
                           <Box sx={{ p: 1, bgcolor: SUPERFICIE_3, borderRadius: 1.5, textAlign: 'center' }}>
                             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem', display: 'block' }}>Receptividad</Typography>
-                            <Typography fontWeight={800} color={TAUPE_MEDIO} fontSize="1rem">{Number(resultado.score_receptividad).toFixed(1)}</Typography>
+                            <Typography fontWeight={800} color={marcaViva.taupeMedio} fontSize="1rem">{Number(resultado.score_receptividad).toFixed(1)}</Typography>
                           </Box>
                         </Grid>
                       </Grid>

@@ -25,7 +25,6 @@
  * mejor se lee al sol: el brillo de la pantalla compite con la luz ambiente en
  * vez de sumarse a ella.
  */
-import { ROJO, TAUPE } from '../../theme/marca';
 import { marcaViva } from '../../theme/marcaViva';
 
 /**

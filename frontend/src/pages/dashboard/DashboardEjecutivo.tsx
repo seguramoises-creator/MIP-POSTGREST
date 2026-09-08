@@ -18,8 +18,8 @@ import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
 
 import { KPI_ORDEN, kpiNombre, kpiNombreCard } from '../../constants/kpi';
-import { BORDE, ERROR, EXITO, TAUPE, TAUPE_MEDIO } from '../../theme/marca';
-
+import { BORDE, ERROR, EXITO } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 // ── Constante de estilo para títulos de sección (alineación uniforme) ────────
 const SECTION_TITLE: React.CSSProperties = {
   fontSize: 11,
@@ -33,7 +33,7 @@ const SECTION_TITLE: React.CSSProperties = {
 
 function scoreColor(v: number): string {
   if (v >= 90) return EXITO;
-  if (v >= 80) return TAUPE_MEDIO;
+  if (v >= 80) return marcaViva.taupeMedio;
   if (v >= 60) return '#f57f17';
   return ERROR;
 }
@@ -149,7 +149,7 @@ function ConsolidadoCard({
         </Typography>
         <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.2, flex: 1 }}>
           {[
-            { label: 'Total RMs',    value: totalRms,                  color: TAUPE_MEDIO,  size: 22 },
+            { label: 'Total RMs',    value: totalRms,                  color: marcaViva.taupeMedio,  size: 22 },
             { label: 'Elegibles',    value: `${elegibles}`,            color: EXITO,  size: 22,
               sub: `${pctElegibles.toFixed(1)}% del equipo` },
             { label: 'Máximo ciclo', value: `${scoreMax.toFixed(1)}%`, color: EXITO,  size: 17 },
@@ -197,8 +197,8 @@ function TendenciaChart({ tendencia }: { tendencia: any[] }) {
         <AreaChart data={tendencia} margin={{ top: 22, right: 10, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={TAUPE_MEDIO} stopOpacity={0.25} />
-              <stop offset="95%" stopColor={TAUPE_MEDIO} stopOpacity={0.02} />
+              <stop offset="5%" stopColor={marcaViva.taupeMedio} stopOpacity={0.25} />
+              <stop offset="95%" stopColor={marcaViva.taupeMedio} stopOpacity={0.02} />
             </linearGradient>
           </defs>
           <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
@@ -212,17 +212,17 @@ function TendenciaChart({ tendencia }: { tendencia: any[] }) {
           <Area
             type="monotone"
             dataKey="score_promedio"
-            stroke={TAUPE_MEDIO}
+            stroke={marcaViva.taupeMedio}
             strokeWidth={2.5}
             fill="url(#areaGrad)"
-            dot={{ r: 5, fill: TAUPE_MEDIO, stroke: '#fff', strokeWidth: 2 }}
+            dot={{ r: 5, fill: marcaViva.taupeMedio, stroke: '#fff', strokeWidth: 2 }}
             activeDot={{ r: 7 }}
           >
             <LabelList
               dataKey="score_promedio"
               position="top"
               formatter={(v: number) => `${v.toFixed(1)}%`}
-              style={{ fontSize: 10, fontWeight: 700, fill: TAUPE_MEDIO }}
+              style={{ fontSize: 10, fontWeight: 700, fill: marcaViva.taupeMedio }}
             />
           </Area>
         </AreaChart>
@@ -232,7 +232,7 @@ function TendenciaChart({ tendencia }: { tendencia: any[] }) {
       <Box sx={{ display: 'flex', justifyContent: 'space-around' }}>
         {[
           { label: 'Mínimo ciclo', value: `${min.toFixed(1)}%`, color: ERROR },
-          { label: 'Promedio',     value: `${avg.toFixed(1)}%`, color: TAUPE_MEDIO },
+          { label: 'Promedio',     value: `${avg.toFixed(1)}%`, color: marcaViva.taupeMedio },
           { label: 'Máximo ciclo', value: `${max.toFixed(1)}%`, color: EXITO },
           { label: 'Crecimiento',  value: `${growth >= 0 ? '▲' : '▼'} ${Math.abs(growth).toFixed(1)} pp`, color: growth >= 0 ? EXITO : ERROR },
         ].map(stat => (
@@ -252,14 +252,16 @@ function TendenciaChart({ tendencia }: { tendencia: any[] }) {
 
 // ── Panel de distribución (donut + leyenda) ──────────────────────────────────
 
-const DIST_COLORS = [EXITO, TAUPE_MEDIO, '#f57f17', ERROR];
+// Función y no constante: en ámbito de módulo se evaluaría antes de que
+// `cargarMarca()` traiga la identidad, y el color quedaría en el de fábrica.
+const distColores = () => [EXITO, marcaViva.taupeMedio, '#f57f17', ERROR];
 const DIST_LABELS = ['Excelente', 'Bueno', 'En Desarrollo', 'Crítico'];
 
 function DistribucionPanel({ dist, totalRms }: { dist: any; totalRms: number }) {
   const distData = DIST_LABELS.map((label, i) => ({
     label,
     value: [dist.excelente, dist.bueno, dist.en_desarrollo, dist.critico][i] ?? 0,
-    color: DIST_COLORS[i],
+    color: distColores()[i],
   }));
   const hasData = distData.some(d => d.value > 0);
   return (
@@ -321,7 +323,7 @@ function RMRow({ rm, rank, isBottom }: { rm: any; rank: number; isBottom?: boole
   const pos = rm.posicion ?? rank;
   return (
     <TableRow hover>
-      <TableCell sx={{ py: 0.8, width: 32, fontWeight: 700, color: isBottom ? ERROR : TAUPE_MEDIO, fontSize: 12 }}>
+      <TableCell sx={{ py: 0.8, width: 32, fontWeight: 700, color: isBottom ? ERROR : marcaViva.taupeMedio, fontSize: 12 }}>
         #{pos}
       </TableCell>
       <TableCell sx={{ py: 0.8 }}>
@@ -516,7 +518,7 @@ export default function DashboardEjecutivo() {
               <Box sx={{ ml: 'auto' }}>
                 <Chip
                   label={`Mostrando: ${cicloNombre}`}
-                  sx={{ bgcolor: TAUPE, color: '#fff', fontWeight: 700, fontSize: 15, height: 36, px: 1.5, letterSpacing: 0.5, borderRadius: 2 }}
+                  sx={{ bgcolor: marcaViva.taupe, color: '#fff', fontWeight: 700, fontSize: 15, height: 36, px: 1.5, letterSpacing: 0.5, borderRadius: 2 }}
                 />
               </Box>
             )}
@@ -632,11 +634,11 @@ export default function DashboardEjecutivo() {
                             <Radar
                               name="Real"
                               dataKey="real"
-                              stroke={TAUPE}
-                              fill={TAUPE}
+                              stroke={marcaViva.taupe}
+                              fill={marcaViva.taupe}
                               fillOpacity={0.22}
                               strokeWidth={2.2}
-                              dot={{ r: 3.5, fill: TAUPE, strokeWidth: 0 }}
+                              dot={{ r: 3.5, fill: marcaViva.taupe, strokeWidth: 0 }}
                             />
                           </RadarChart>
                         </ResponsiveContainer>
@@ -644,7 +646,7 @@ export default function DashboardEjecutivo() {
                         {/* Leyenda */}
                         <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, mt: 0.5 }}>
                           {[
-                            { color: TAUPE, label: 'Real' },
+                            { color: marcaViva.taupe, label: 'Real' },
                             { color: '#4caf50', label: 'Meta' },
                           ].map(l => (
                             <Box key={l.label} sx={{ display: 'flex', alignItems: 'center', gap: 0.6 }}>
@@ -797,7 +799,7 @@ export default function DashboardEjecutivo() {
                       </Typography>
                       <Box sx={{ display: 'flex', justifyContent: 'space-around' }}>
                         {[
-                          { label: 'Total RMs',  value: total_rms,                        color: TAUPE_MEDIO },
+                          { label: 'Total RMs',  value: total_rms,                        color: marcaViva.taupeMedio },
                           { label: 'Elegibles',  value: d.total_elegibles ?? 0,           color: EXITO },
                           { label: 'IUP Prom.',  value: `${iupProm.toFixed(1)}%`,         color: scoreColor(iupProm) },
                         ].map(stat => (

@@ -13,11 +13,9 @@ import CorreoAdmin from './CorreoAdmin';
 import IdentidadVisual from './IdentidadVisual';
 import MedicosTopConfigTab from './MedicosTopConfigTab';
 import CatalogoErrores from './CatalogoErrores';
-import { ROJO } from '../../theme/marca';
-
+import { marcaViva } from '../../theme/marcaViva';
 // Antes era el naranja de Material (#ed6c02): el subrayado y la pestaña activa
 // de esta pantalla no seguían la marca. Ahora es el rojo de Mallén.
-const NARANJA = ROJO;
 
 export default function Administracion() {
   const [tab, setTab] = useState(0);
@@ -31,10 +29,10 @@ export default function Administracion() {
             onChange={(_, v) => setTab(v)}
             variant="scrollable"
             scrollButtons="auto"
-            TabIndicatorProps={{ sx: { backgroundColor: NARANJA, height: 3 } }}
+            TabIndicatorProps={{ sx: { backgroundColor: marcaViva.rojo, height: 3 } }}
             sx={{
               '& .MuiTab-root': { fontWeight: 700, textTransform: 'none', color: 'text.secondary' },
-              '& .MuiTab-root.Mui-selected': { color: NARANJA },
+              '& .MuiTab-root.Mui-selected': { color: marcaViva.rojo },
             }}
           >
             <Tab icon={<People fontSize="small" />} iconPosition="start" label="Usuarios" />

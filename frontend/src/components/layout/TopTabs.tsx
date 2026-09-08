@@ -12,7 +12,7 @@ import { Box, ButtonBase, Typography } from '@mui/material';
 
 import type { NavItem } from './Sidebar';
 import { NAV_ACTIVO, NAV_INACTIVO } from './navTokens';
-import { tinteDeSeccion } from '../../theme/marca';
+import { tinteDeSeccion } from '../../theme/secciones';
 
 export default function TopTabs({ items, seccion }: { items: NavItem[]; seccion?: string | null }) {
   const navigate = useNavigate();

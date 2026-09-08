@@ -19,7 +19,7 @@ import MedicalServicesIcon from '@mui/icons-material/MedicalServices';
 import { useQuery } from '@tanstack/react-query';
 import { PieChart, Pie, Cell, Tooltip as ReTooltip, Legend, ResponsiveContainer } from 'recharts';
 import { api } from '../../services/api';
-import { CAT_PAL, CATS } from './paleta';
+import { catPal, CATS } from './paleta';
 
 type MedicoPanel = {
   id: number; nombre: string; especialidad: string | null;
@@ -34,7 +34,7 @@ type PanelRMData = {
 };
 
 function KpiCat({ cat, valor, total }: { cat: string; valor: number; total: number }) {
-  const pal = CAT_PAL[cat];
+  const pal = catPal()[cat];
   const pct = total ? Math.round((valor / total) * 100) : 0;
   return (
     <Grid item xs={6} sm={4} md={2.4}>
@@ -126,7 +126,7 @@ export default function PanelRM() {
                 <ResponsiveContainer width="100%" height={260}>
                   <PieChart>
                     <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={90} label>
-                      {pieData.map((d) => <Cell key={d.cat} fill={CAT_PAL[d.cat].mid} />)}
+                      {pieData.map((d) => <Cell key={d.cat} fill={catPal()[d.cat].mid} />)}
                     </Pie>
                     <ReTooltip /><Legend />
                   </PieChart>
@@ -152,7 +152,7 @@ export default function PanelRM() {
                     </TableHead>
                     <TableBody>
                       {data.medicos.map((m) => {
-                        const pal = m.categoria ? CAT_PAL[m.categoria] : null;
+                        const pal = m.categoria ? catPal()[m.categoria] : null;
                         return (
                           <TableRow key={m.id} hover>
                             <TableCell>

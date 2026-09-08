@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, type MouseEvent } from 'react';
+import { marcaViva } from '../../theme/marcaViva';
 import {
   Box, Typography, Card, CardContent, Button, TextField, Stack, Chip, Divider,
   Table, TableHead, TableRow, TableCell, TableBody, Tabs, Tab, Alert, Checkbox,
@@ -648,7 +649,7 @@ export default function Examenes() {
                         Exportar a Excel
                       </Button>
                     </Box>
-                    <Table size="small" sx={{ '& thead th': { fontWeight: 700, color: 'primary.main', bgcolor: 'rgba(104,97,88,0.04)' } }}>
+                    <Table size="small" sx={{ '& thead th': { fontWeight: 700, color: 'primary.main', bgcolor: `${marcaViva.taupe}0A` } }}>
                       <TableHead><TableRow>
                         <TableCell>Evaluado</TableCell><TableCell>Tipo</TableCell>
                         <TableCell>Fecha del examen</TableCell><TableCell align="center">Score</TableCell><TableCell>Estado</TableCell>
@@ -719,7 +720,7 @@ export default function Examenes() {
                         </Stack>
                       );
                     })()}
-                    <Table size="small" sx={{ '& thead th': { fontWeight: 700, color: 'primary.main', bgcolor: 'rgba(104,97,88,0.04)' } }}>
+                    <Table size="small" sx={{ '& thead th': { fontWeight: 700, color: 'primary.main', bgcolor: `${marcaViva.taupe}0A` } }}>
                       <TableHead><TableRow>
                         <TableCell>#</TableCell><TableCell>Pregunta</TableCell>
                         <TableCell align="center" sx={{ width: 90 }}>% Acierto</TableCell>

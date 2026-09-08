@@ -10,8 +10,8 @@ import {
 } from 'recharts';
 import { useMemo, useState, useEffect } from 'react';
 import { api } from '../../services/api';
-import { BORDE_FUERTE, ERROR, EXITO, TAUPE_MEDIO } from '../../theme/marca';
-
+import { BORDE_FUERTE, ERROR, EXITO } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 export default function Comercial() {
   const [tab, setTab] = useState(0);
   const [paisCodigo, setPaisId] = useState('');
@@ -160,7 +160,7 @@ export default function Comercial() {
                         <YAxis />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="ventas" fill={TAUPE_MEDIO} name="Ventas Reales" />
+                        <Bar dataKey="ventas" fill={marcaViva.taupeMedio} name="Ventas Reales" />
                         <Bar dataKey="cuota" fill={BORDE_FUERTE} name="Cuota" />
                       </BarChart>
                     </ResponsiveContainer>

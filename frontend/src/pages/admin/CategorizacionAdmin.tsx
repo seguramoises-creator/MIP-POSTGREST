@@ -24,8 +24,8 @@ import Block from '@mui/icons-material/Block';
 import SaveIcon from '@mui/icons-material/Save';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../services/api';
-import { AVISO, TAUPE, TAUPE_MEDIO } from '../../theme/marca';
-
+import { AVISO } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 interface Ciclo { id: number; nombre: string; pais_codigo: string; anio: number; numero: number; cerrado: boolean; }
 interface Lote { LoadBatchKey: number; Periodo: string; ArchivoOrigen: string; FechaCargaUtc: string; UsuarioCarga: string; Estado: string; Mensaje: string | null; TotalMedicos: number; }
@@ -35,7 +35,10 @@ interface Componente { ComponenteKey: number; CodigoComponente: string; NombreCo
 interface Regla { ReglaKey: number; CodigoComponente: string; NombreComponente: string; CodigoRegla: string; ValorMinimo: number | null; ValorMaximo: number | null; ValorTexto: string | null; Criterio: number; PuntajePct: number; PuntajePctDisplay: number; Activo: boolean; CodigoPais: string; }
 
 const STEPS = ['Seleccionar archivo', 'Seleccionar ciclo', 'Cargar y calcular'];
-const CLASE_COLORS: Record<string, string> = { A: '#1b5e20', B: TAUPE_MEDIO, C: AVISO, D: '#6a1b9a' };
+// Función y no constante: en ámbito de módulo se evaluaría antes de que
+// `cargarMarca()` traiga la identidad, y el color quedaría en el de fábrica.
+const claseColores = (): Record<string, string> =>
+  ({ A: '#1b5e20', B: marcaViva.taupeMedio, C: AVISO, D: '#6a1b9a' });
 
 // ── Sub-componente: Pestaña Carga Excel ───────────────────────────────────────
 function TabCarga() {
@@ -134,7 +137,7 @@ function TabCarga() {
           <Box display="flex" flexWrap="wrap" gap={2} mb={2}>
             {[{ label: 'A', value: resultado.categoria_a }, { label: 'B', value: resultado.categoria_b }, { label: 'C', value: resultado.categoria_c }, { label: 'D', value: resultado.categoria_d }].map((c) => (
               <Box key={c.label} sx={{ textAlign: 'center', p: 1.5, border: 1, borderColor: 'divider', borderRadius: 2, minWidth: 80 }}>
-                <Typography variant="h5" fontWeight={700} color={CLASE_COLORS[c.label]}>{c.value}</Typography>
+                <Typography variant="h5" fontWeight={700} color={claseColores()[c.label]}>{c.value}</Typography>
                 <Typography variant="caption">Cat. {c.label}</Typography>
               </Box>
             ))}
@@ -211,7 +214,7 @@ function TabClasificacion() {
       <Paper variant="outlined">
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ bgcolor: TAUPE }}>
+            <TableRow sx={{ bgcolor: marcaViva.taupe }}>
               {['País','Clase','Puntaje Mín','Puntaje Máx','Activo','Vigente Desde','Vigente Hasta',''].map(h => (
                 <TableCell key={h} sx={{ color: '#fff', fontWeight: 700, fontSize: '0.78rem' }}>{h}</TableCell>
               ))}
@@ -222,7 +225,7 @@ function TabClasificacion() {
               <TableRow key={r.ClasificacionKey} hover>
                 <TableCell>{r.CodigoPais}</TableCell>
                 <TableCell>
-                  <Chip label={r.Clase} size="small" sx={{ bgcolor: CLASE_COLORS[r.Clase], color: '#fff', fontWeight: 700 }} />
+                  <Chip label={r.Clase} size="small" sx={{ bgcolor: claseColores()[r.Clase], color: '#fff', fontWeight: 700 }} />
                 </TableCell>
                 <TableCell>{(r.PuntajeMinPct * 100).toFixed(0)}%</TableCell>
                 <TableCell>{(r.PuntajeMaxPct * 100).toFixed(0)}%</TableCell>
@@ -377,7 +380,7 @@ function TabReglas() {
       <Paper variant="outlined" sx={{ mb: 3 }}>
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ bgcolor: TAUPE }}>
+            <TableRow sx={{ bgcolor: marcaViva.taupe }}>
               {['Componente','Tipo','Peso (%)',''].map(h => (
                 <TableCell key={h} sx={{ color: '#fff', fontWeight: 700, fontSize: '0.78rem' }}>{h}</TableCell>
               ))}
@@ -439,7 +442,7 @@ function TabReglas() {
       <Paper variant="outlined">
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ bgcolor: TAUPE }}>
+            <TableRow sx={{ bgcolor: marcaViva.taupe }}>
               {['Componente','Criterio','Valor Texto','Mín','Máx','Puntaje %','País','Activo',''].map(h => (
                 <TableCell key={h} sx={{ color: '#fff', fontWeight: 700, fontSize: '0.78rem' }}>{h}</TableCell>
               ))}
@@ -453,7 +456,7 @@ function TabReglas() {
                 <TableCell>{r.ValorTexto || '—'}</TableCell>
                 <TableCell align="right">{r.ValorMinimo ?? '—'}</TableCell>
                 <TableCell align="right">{r.ValorMaximo ?? '—'}</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 700, color: TAUPE_MEDIO }}>
+                <TableCell align="center" sx={{ fontWeight: 700, color: marcaViva.taupeMedio }}>
                   {r.PuntajePctDisplay}%
                 </TableCell>
                 <TableCell>{r.CodigoPais}</TableCell>

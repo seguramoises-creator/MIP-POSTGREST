@@ -13,18 +13,18 @@ import { api } from '../../services/api';
 import { useCicloStore } from '../../store/ciclo.store';
 
 import { KPI_ORDEN, kpiNombre } from '../../constants/kpi';
-import { AVISO, AVISO_OSCURO, AVISO_TENUE, ERROR, EXITO, NEUTRO_300, NEUTRO_400, NEUTRO_900, SUPERFICIE_3, SUPERFICIE_4, TAUPE, TAUPE_MEDIO } from '../../theme/marca';
-
+import { AVISO, AVISO_OSCURO, AVISO_TENUE, ERROR, EXITO, NEUTRO_300, NEUTRO_400, NEUTRO_900, SUPERFICIE_3, SUPERFICIE_4 } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 // ── helpers ───────────────────────────────────────────────────────────────────
 function catColor(v: number) {
   if (v >= 90) return EXITO;
-  if (v >= 80) return TAUPE_MEDIO;
+  if (v >= 80) return marcaViva.taupeMedio;
   if (v >= 60) return AVISO_OSCURO;
   return ERROR;
 }
 function catInfo(v: number) {
   if (v >= 90) return { label: 'Excelente',    color: EXITO, bg: '#e8f5e9' };
-  if (v >= 80) return { label: 'Bueno',         color: TAUPE_MEDIO, bg: SUPERFICIE_3 };
+  if (v >= 80) return { label: 'Bueno',         color: marcaViva.taupeMedio, bg: SUPERFICIE_3 };
   if (v >= 60) return { label: 'En Desarrollo', color: AVISO, bg: AVISO_TENUE };
   return              { label: 'Riesgo',        color: ERROR, bg: '#ffebee' };
 }
@@ -38,7 +38,7 @@ function trendInfo(diff: number) {
 }
 
 // ── stat card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, sub, color = TAUPE_MEDIO, subColor }: {
+function StatCard({ label, value, sub, color = marcaViva.taupeMedio, subColor }: {
   label: string; value: string | number; sub?: string; color?: string; subColor?: string;
 }) {
   return (
@@ -287,7 +287,7 @@ export default function Coaching() {
               sx={{ bgcolor: '#e8f5e9', color: EXITO, fontWeight: 700, fontSize: '0.78rem',
                 height: 28, px: 0.5, border: '1px solid #a5d6a7' }} />
             <Chip label={`${dist.avgPts.toFixed(1)} pts promedio`} size="small"
-              sx={{ bgcolor: SUPERFICIE_3, color: TAUPE_MEDIO, fontWeight: 700, fontSize: '0.78rem',
+              sx={{ bgcolor: SUPERFICIE_3, color: marcaViva.taupeMedio, fontWeight: 700, fontSize: '0.78rem',
                 height: 28, px: 0.5, border: '1px solid #D8D2CB' }} />
           </Box>
         )}
@@ -321,10 +321,10 @@ export default function Coaching() {
           // El color del VALOR respeta la carta de los indicadores (catColor:
           // verde >=90, azul 80-89, naranja 60-79, rojo <60). El signo de la
           // variación se colorea por dirección (trendInfo).
-          { label: 'Total RMs',     value: dist?.total ?? '—',   sub: '— Equipo completo',  color: TAUPE },
+          { label: 'Total RMs',     value: dist?.total ?? '—',   sub: '— Equipo completo',  color: marcaViva.taupe },
           { label: 'Prom. MIP',     value: dist ? dist.avgPts.toFixed(1) : '—',
             sub: dist ? `${trendInfo(dist.avgPts - 80).simbolo} ${Math.abs(dist.avgPts - 80).toFixed(1)} pts` : '—',
-            color: dist ? catColor(dist.avgPts) : TAUPE_MEDIO,
+            color: dist ? catColor(dist.avgPts) : marcaViva.taupeMedio,
             subColor: dist ? trendInfo(dist.avgPts - 80).color : undefined },
           { label: 'Puntaje Máx.',  value: dist ? dist.maxPts.toFixed(1) : '—',
             sub: cicloNombre, color: dist ? catColor(dist.maxPts) : EXITO },
@@ -365,7 +365,7 @@ export default function Coaching() {
             <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2 }}>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                  <Box sx={{ width: 3, height: 20, bgcolor: TAUPE_MEDIO, borderRadius: 2 }} />
+                  <Box sx={{ width: 3, height: 20, bgcolor: marcaViva.taupeMedio, borderRadius: 2 }} />
                   <Typography variant="subtitle1" fontWeight={700}>
                     Scorecard Integral de Indicadores
                   </Typography>
@@ -425,7 +425,7 @@ export default function Coaching() {
                 <Box sx={{ display: 'flex', gap: 2, mt: 1.5, flexWrap: 'wrap', justifyContent: 'center' }}>
                   {[
                     { label: 'Excelente ≥ 90%',    color: EXITO, bg: '#e8f5e9' },
-                    { label: 'Bueno 80–89%',        color: TAUPE_MEDIO, bg: SUPERFICIE_3 },
+                    { label: 'Bueno 80–89%',        color: marcaViva.taupeMedio, bg: SUPERFICIE_3 },
                     { label: 'En Desarrollo 60–79%',color: AVISO_OSCURO, bg: AVISO_TENUE },
                     { label: 'Riesgo < 60%',        color: ERROR, bg: '#ffebee' },
                   ].map(cat => (
@@ -477,13 +477,13 @@ export default function Coaching() {
               <Card elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, height: '100%' }}>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                    <Box sx={{ width: 3, height: 20, bgcolor: TAUPE_MEDIO, borderRadius: 2 }} />
+                    <Box sx={{ width: 3, height: 20, bgcolor: marcaViva.taupeMedio, borderRadius: 2 }} />
                     <Typography variant="subtitle1" fontWeight={700}>Distribución del Equipo</Typography>
                   </Box>
                   <DistCard label="Excelente"    count={dist.excelentes}   total={dist.total}
                     rangoLabel="≥ 90 puntos MIP"  color={EXITO} bg="#e8f5e9" miembros={dist.miembros.excelente} />
                   <DistCard label="Bueno"         count={dist.buenos}       total={dist.total}
-                    rangoLabel="80–89 puntos MIP" color={TAUPE_MEDIO} bg={SUPERFICIE_3} miembros={dist.miembros.bueno} />
+                    rangoLabel="80–89 puntos MIP" color={marcaViva.taupeMedio} bg={SUPERFICIE_3} miembros={dist.miembros.bueno} />
                   <DistCard label="En Desarrollo" count={dist.enDesarrollo} total={dist.total}
                     rangoLabel="60–79 puntos MIP" color={AVISO} bg={AVISO_TENUE} miembros={dist.miembros.enDesarrollo} />
                   <DistCard label="Crítico"       count={dist.criticos}  total={dist.total}
@@ -491,7 +491,7 @@ export default function Coaching() {
                   <Divider sx={{ my: 1.5 }} />
                   <Box sx={{ p: 1.5, bgcolor: '#f8f9fa', borderRadius: 1.5, border: '1px solid #EFEBE6' }}>
                     <Typography variant="caption"
-                      sx={{ color: TAUPE, fontWeight: 700, textTransform: 'uppercase',
+                      sx={{ color: marcaViva.taupe, fontWeight: 700, textTransform: 'uppercase',
                         letterSpacing: '0.8px', fontSize: '0.6rem' }}>
                       Principio Rector:
                     </Typography>

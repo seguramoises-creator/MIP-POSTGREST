@@ -97,66 +97,9 @@ export const DEGRADADO_BARRA =
 export const DEGRADADO_ENTRADA =
   `linear-gradient(135deg, ${TAUPE_NEGRO} 0%, ${TAUPE_PROFUNDO} 40%, ${TAUPE_MEDIO} 75%, ${TAUPE} 100%)`;
 
-/**
- * Color por SECCIÓN funcional del menú.
- *
- * Un icono a color solo informa si el color significa algo. Aquí cada familia de
- * trabajo tiene el suyo, así que el usuario aprende «lo rojo es campo, lo verde
- * es farmacia» y localiza por color antes de leer la etiqueta — que es justo lo
- * que se necesita cuando la lista de módulos ya pasa de treinta entradas.
- *
- * DÓNDE SE USAN: solo sobre superficie CLARA (hoja de «Más», listas de sección,
- * tarjetas). Sobre las barras oscuras manda el contraste, no el color — ver la
- * nota de legibilidad al sol en `navTokens.ts`.
- *
- * Todos superan 3:1 sobre blanco, el mínimo para elementos gráficos (WCAG
- * 1.4.11). Son tonos terrosos y algo desaturados a propósito: junto al taupe
- * cálido de Mallén, una paleta saturada de tonos puros se vería pegada encima
- * en vez de pertenecer a la misma familia.
+/*
+ * Los colores POR SECCIÓN del menú vivían aquí y se movieron a `theme/secciones.ts`:
+ * necesitan `marcaViva`, que a su vez importa este archivo para los valores de
+ * fábrica, y el ciclo entre ambos reventaba en la zona muerta de los `const`.
+ * Este módulo se queda como hoja, sin dependencias.
  */
-export const COLOR_SECCION: Record<string, string> = {
-  'Inicio':                ROJO,      // Panel de entrada — el color principal de la marca.
-  'Operación diaria':      ROJO,      // Trabajo de campo: la actividad central del representante.
-  'Maestros y planeación': '#2F7D6E', // Verde clínico — médicos, farmacias, panel.
-  'Desempeño y análisis':  '#B4661E', // Ámbar tostado — métricas, ranking, reconocimiento.
-  'Formación':             '#4E6E8E', // Azul pizarra — exámenes, coaching, aprendizaje.
-  'Datos':                 '#7A5C8E', // Ciruela — cargas, reportes, integración.
-  'Sistema':               TAUPE,     // Taupe corporativo — configuración y administración.
-};
-
-/**
- * Color de una sección por su TÍTULO (el mismo que usan `Sidebar` y `useNavSecciones`).
- * Taupe si el título no está mapeado — una sección nueva se ve neutra, nunca rota.
- */
-export function colorDeSeccion(titulo?: string | null): string {
-  return (titulo && COLOR_SECCION[titulo]) || TAUPE;
-}
-
-/**
- * Tinte CLARO de cada sección, para los ICONOS sobre las barras oscuras.
- *
- * El color pleno de `COLOR_SECCION` está pensado para superficie clara y sobre el
- * taupe de las barras se hunde (el verde clínico da 1.4:1). Estos tintes son la
- * misma familia de matiz llevada a alta luminancia: mantienen la pista de color
- * —rojizo=campo, verdoso=médicos, ámbar=desempeño— y superan el 3:1 que WCAG
- * 1.4.11 exige a los elementos gráficos, medidos contra el PEOR tramo del
- * degradado (#686158): entre 3.60:1 y 4.78:1.
- *
- * La ETIQUETA se queda en blanco (6.11:1), no en el tinte: como texto pequeño
- * necesitaría 4.5:1 y estos tintes no llegan. Así el icono aporta el color y el
- * texto conserva la legibilidad al sol, que es el requisito que manda en la barra.
- */
-export const TINTE_SECCION: Record<string, string> = {
-  'Inicio':                '#FFB3B8',
-  'Operación diaria':      '#FFB3B8',
-  'Maestros y planeación': '#A8E0D2',
-  'Desempeño y análisis':  '#F7CE9B',
-  'Formación':             '#B9D4EA',
-  'Datos':                 '#D9C2E8',
-  'Sistema':               '#E8E3DC',
-};
-
-/** Tinte claro de una sección para las barras oscuras; blanco si no está mapeada. */
-export function tinteDeSeccion(titulo?: string | null): string {
-  return (titulo && TINTE_SECCION[titulo]) || '#FFFFFF';
-}

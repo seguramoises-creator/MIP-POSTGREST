@@ -22,8 +22,8 @@ import {
 } from '@mui/icons-material';
 import { api } from '../../services/api';
 import type { ReceptividadDimensionAdmin, ReceptividadOpcionAdmin, ConfiguracionLsii } from '../../types';
-import { BORDE_SUAVE, ERROR_TENUE, NEUTRO_300, SUPERFICIE_2, SUPERFICIE_3, TAUPE_MEDIO } from '../../theme/marca';
-
+import { BORDE_SUAVE, ERROR_TENUE, NEUTRO_300, SUPERFICIE_2, SUPERFICIE_3 } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 // ── helpers ──────────────────────────────────────────────────────────────
 let tempIdSeq = -1;
 function nuevaOpcion(orden: number): ReceptividadOpcionAdmin {
@@ -191,7 +191,7 @@ export default function LsiiAdmin() {
       <Card elevation={0} sx={{ mb: 3, border: '1px solid #e0e7ef', borderRadius: 2 }}>
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-            <Lock fontSize="small" sx={{ color: TAUPE_MEDIO }} />
+            <Lock fontSize="small" sx={{ color: marcaViva.taupeMedio }} />
             <Typography variant="subtitle1" fontWeight={700}>Umbral de Corte de Cuadrantes</Typography>
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -281,7 +281,7 @@ export default function LsiiAdmin() {
                     {d.dimension_nombre || <span style={{ color: NEUTRO_300 }}>(nueva dimensión sin nombre)</span>}
                   </Typography>
                   <Chip label={d.dimension_codigo || 'SIN CÓDIGO'} size="small" variant="outlined" />
-                  <Chip label={`Peso ${(d.peso_dimension * 100).toFixed(0)}%`} size="small" sx={{ bgcolor: SUPERFICIE_3, color: TAUPE_MEDIO, fontWeight: 700 }} />
+                  <Chip label={`Peso ${(d.peso_dimension * 100).toFixed(0)}%`} size="small" sx={{ bgcolor: SUPERFICIE_3, color: marcaViva.taupeMedio, fontWeight: 700 }} />
                   <Chip label={`${activeOptions} opción(es) activa(s)`} size="small" variant="outlined" />
                   {!d.activo && <Chip label="Desactivada" size="small" color="default" sx={{ bgcolor: BORDE_SUAVE }} />}
                 </Box>

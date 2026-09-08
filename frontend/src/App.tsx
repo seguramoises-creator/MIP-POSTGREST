@@ -15,7 +15,7 @@ import Setup from './pages/setup/Setup';
 const DashboardEjecutivo = lazyWithReload(() => import('./pages/dashboard/DashboardEjecutivo'));
 import { NAV_ITEMS } from './components/layout/Sidebar';
 import { Rol } from './types';
-import { BORDE, FONDO, ROJO, ROJO_OSCURO, ROJO_TENUE, SUPERFICIE, SUPERFICIE_3, TAUPE, TAUPE_CLARO, TAUPE_PROFUNDO, TEXTO, TEXTO_TENUE } from './theme/marca';
+import { BORDE, FONDO, SUPERFICIE, SUPERFICIE_3, TEXTO, TEXTO_TENUE } from './theme/marca';
 import { marcaViva } from './theme/marcaViva';
 // El tema BEBE de los tokens: es la pieza que reparte color a todos los componentes
 // de MUI, así que si repitiera los hexadecimales el resto de la centralización
@@ -287,11 +287,11 @@ const crearTema = () => createTheme({
         root: ({ ownerState }: { ownerState: { variant?: string } }) =>
           ownerState.variant === 'outlined'
             ? {
-                borderColor: 'rgba(104,97,88,0.45)',
+                borderColor: `${marcaViva.taupe}73`,
                 borderWidth: 1.5,
-                boxShadow: '0 2px 10px rgba(104,97,88,0.06)',
+                boxShadow: `0 2px 10px ${marcaViva.taupe}0F`,
                 transition: 'box-shadow .2s ease, border-color .2s ease',
-                '&:hover': { borderColor: TAUPE, boxShadow: '0 4px 16px rgba(104,97,88,0.12)' },
+                '&:hover': { borderColor: marcaViva.taupe, boxShadow: `0 4px 16px ${marcaViva.taupe}1F` },
               }
             : {},
       },

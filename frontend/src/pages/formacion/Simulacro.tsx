@@ -18,12 +18,14 @@ import {
   misSesionesSimulacro, resumenSimulacro, detalleSimulacro,
   type SimulacroIniciado, type RondaSimulacro, type ResultadoSimulacro,
 } from '../../services/formacion.service';
-import { AVISO, BORDE_SUAVE, ERROR, EXITO, TAUPE_MEDIO } from '../../theme/marca';
-
-const DPAE: Record<number, { label: string; color: string }> = {
-  4: { label: 'Excelente (E)', color: EXITO }, 3: { label: 'Adecuado (A)', color: TAUPE_MEDIO },
+import { AVISO, BORDE_SUAVE, ERROR, EXITO } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
+// Función y no constante: en ámbito de módulo el color se copiaría antes de que
+// `cargarMarca()` traiga la identidad, y quedaría congelado en el de fábrica.
+const dpae = (): Record<number, { label: string; color: string }> => ({
+  4: { label: 'Excelente (E)', color: EXITO }, 3: { label: 'Adecuado (A)', color: marcaViva.taupeMedio },
   2: { label: 'En proceso (P)', color: AVISO }, 1: { label: 'Deficiente (D)', color: ERROR },
-};
+});
 
 function hablarNavegador(texto: string) {
   try {
@@ -102,7 +104,7 @@ export default function Simulacro() {
       <Box sx={{ p: 3, maxWidth: 640, mx: 'auto' }}>
         <Typography variant="h5" fontWeight={800} mb={2}>Resultado de la práctica</Typography>
         {(['apertura', 'desarrollo', 'cierre'] as const).map((f) => {
-          const v = resultado[f]; const info = DPAE[v];
+          const v = resultado[f]; const info = dpae()[v];
           return (
             <Card key={f} elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, mb: 1 }}>
               <CardContent sx={{ py: 1.25, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

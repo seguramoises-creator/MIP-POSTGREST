@@ -15,14 +15,22 @@
  * 3. «SIN REGISTROS» NO ES «NO TRABAJÓ». Un representante sin filas puede no
  *    haber sincronizado; la pantalla lo dice con esas palabras y el panel de
  *    seguimiento invita a revisar la sincronización antes de sacar conclusiones.
+ * 4. LA TABLA ARRANCA EN DIEZ FILAS, las de quien SÍ tiene agenda contra la que
+ *    medirse. Con cuarenta y tantos representantes y la mayoría sin planeación,
+ *    la pantalla se llenaba de rayas: el que sí va atrasado quedaba enterrado.
+ *    Se muestran primero los de menor avance —que son los que hay que mirar—, y
+ *    un botón despliega al resto. Recortar SIN esa salida sería esconder gente,
+ *    que es el mismo error que pintar un cero donde no hay dato.
  */
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Box, Card, CardContent, Typography, Stack, Table, TableHead, TableRow,
   TableCell, TableBody, Chip, Alert, CircularProgress, TextField, LinearProgress,
+  Button,
 } from '@mui/material';
-import { AVISO, AVISO_TENUE, BORDE_SUAVE, EXITO, SUPERFICIE_3, TAUPE_MEDIO } from '../../theme/marca';
+import { AVISO, AVISO_TENUE, BORDE_SUAVE, EXITO, SUPERFICIE_3 } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 import { resumenDia, type FilaRepresentante } from '../../services/visitaDia.service';
 import { TEXTO_TENUE } from '../../components/layout/navTokens';
 
@@ -60,8 +68,27 @@ function Avance({ pct, hechas, planeadas }: { pct: number | null; hechas: number
   );
 }
 
+/** Cuántas filas se ven sin desplegar. */
+const VISIBLES = 10;
+
+/**
+ * Orden de la tabla: primero quien tiene agenda, y dentro de ellos el más
+ * atrasado. Es el orden de la ATENCIÓN, no el alfabético — quien va al 20 % de su
+ * semana necesita una llamada hoy, y en una lista por código quedaba en el puesto
+ * treinta. Los que no tienen planeación van al final: no se les puede medir, así
+ * que no compiten por las primeras filas.
+ */
+function porUrgencia(a: FilaRepresentante, b: FilaRepresentante): number {
+  const pa = a.semana.avance_pct, pb = b.semana.avance_pct;
+  if (pa === null && pb === null) return a.codigo.localeCompare(b.codigo);
+  if (pa === null) return 1;
+  if (pb === null) return -1;
+  return pa - pb || a.codigo.localeCompare(b.codigo);
+}
+
 export default function ResumenDia() {
   const [fecha, setFecha] = useState(hoy());
+  const [verTodos, setVerTodos] = useState(false);
   const { data, isLoading, error } = useQuery({
     queryKey: ['resumen-dia', fecha],
     queryFn: () => resumenDia({ fecha }),
@@ -75,6 +102,10 @@ export default function ResumenDia() {
 
   const { totales, semana, ciclo, representantes } = data;
   const sinRegistros = representantes.filter((r) => r.v + r.r + r.farmacias === 0).length;
+  const ordenados = [...representantes].sort(porUrgencia);
+  const visibles = verTodos ? ordenados : ordenados.slice(0, VISIBLES);
+  const ocultos = ordenados.length - visibles.length;
+  const conAgenda = representantes.filter((r) => r.semana.avance_pct !== null).length;
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
@@ -116,7 +147,7 @@ export default function ResumenDia() {
                 semana, contadas hasta el día consultado.
               </Typography>
               <Stack direction="row" spacing={2} alignItems="center">
-                <Typography sx={{ fontSize: 26, fontWeight: 800, color: TAUPE_MEDIO }}>
+                <Typography sx={{ fontSize: 26, fontWeight: 800, color: marcaViva.taupeMedio }}>
                   {semana.avance_pct}%
                 </Typography>
                 <LinearProgress variant="determinate" value={Math.min(semana.avance_pct ?? 0, 100)}
@@ -143,6 +174,14 @@ export default function ResumenDia() {
           <Typography variant="body2" sx={{ color: TEXTO_TENUE }}>
             V: visitas médicas · R: revisitas · Con GD: acompañadas · MORE: hojas completadas.
           </Typography>
+          {/* Qué se está viendo, dicho antes de la tabla: una lista recortada sin
+              avisar se lee como la lista completa. */}
+          <Typography variant="caption" sx={{ color: TEXTO_TENUE }}>
+            {verTodos
+              ? `Los ${ordenados.length} representantes, del menor avance al mayor.`
+              : `Los ${visibles.length} de menor avance, de ${ordenados.length}. `
+                + `${conAgenda} tienen agenda esta semana.`}
+          </Typography>
         </CardContent>
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small">
@@ -159,7 +198,7 @@ export default function ResumenDia() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {representantes.map((r: FilaRepresentante) => {
+              {visibles.map((r: FilaRepresentante) => {
                 const sin = r.v + r.r + r.farmacias === 0;
                 return (
                   <TableRow key={r.rm_id} hover>
@@ -191,6 +230,15 @@ export default function ResumenDia() {
             </TableBody>
           </Table>
         </Box>
+        {(ocultos > 0 || verTodos) && (
+          <Box sx={{ px: 2, py: 1.5, borderTop: `1px solid ${BORDE_SUAVE}` }}>
+            <Button size="small" onClick={() => setVerTodos(!verTodos)}>
+              {verTodos
+                ? `Ver solo los ${VISIBLES} de menor avance`
+                : `Ver los ${ocultos} restantes`}
+            </Button>
+          </Box>
+        )}
       </Card>
 
       {sinRegistros > 0 && (

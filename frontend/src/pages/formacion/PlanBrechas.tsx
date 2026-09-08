@@ -29,16 +29,18 @@ import {
   obtenerUmbralesBrechas, fijarUmbralBrecha,
   type AlertaBrechaPersistida, type PrioridadBrecha, type ReglaBrecha,
 } from '../../services/formacion.service';
-import { AVISO, AVISO_TENUE, ERROR, SUPERFICIE_3, TAUPE_MEDIO } from '../../theme/marca';
-
+import { AVISO, AVISO_TENUE, ERROR, SUPERFICIE_3 } from '../../theme/marca';
+import { marcaViva } from '../../theme/marcaViva';
 // Roles que operan el plan (coincide con RequireCapacitacion del backend).
 const ROLES_ESCRITURA = ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION'];
 
-const PRIORIDAD: Record<PrioridadBrecha, { label: string; color: string; bg: string; orden: number }> = {
+// Función y no constante: en ámbito de módulo el color se copiaría antes de que
+// `cargarMarca()` traiga la identidad, y quedaría congelado en el de fábrica.
+const prioridad = (): Record<PrioridadBrecha, { label: string; color: string; bg: string; orden: number }> => ({
   alta:        { label: 'Alta',        color: ERROR, bg: '#ffebee', orden: 0 },
   media:       { label: 'Media',       color: AVISO, bg: AVISO_TENUE, orden: 1 },
-  informativa: { label: 'Informativa', color: TAUPE_MEDIO, bg: SUPERFICIE_3, orden: 2 },
-};
+  informativa: { label: 'Informativa', color: marcaViva.taupeMedio, bg: SUPERFICIE_3, orden: 2 },
+});
 
 // Etiqueta legible + ícono por regla. El texto explica en una línea qué causa
 // distingue la regla, que es justo lo que no se ve en el KPI crudo.
@@ -51,7 +53,7 @@ const REGLA: Record<ReglaBrecha, { titulo: string; icono: React.ReactNode }> = {
 };
 
 const ORDEN_PRIORIDAD = (a: AlertaBrechaPersistida, b: AlertaBrechaPersistida) =>
-  PRIORIDAD[a.prioridad].orden - PRIORIDAD[b.prioridad].orden;
+  prioridad()[a.prioridad].orden - prioridad()[b.prioridad].orden;
 
 function TarjetaResumen({ label, valor, color }: { label: string; valor: number; color: string }) {
   return (
@@ -153,9 +155,9 @@ export default function PlanBrechas() {
 
       {/* Resumen por prioridad */}
       <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={4}><TarjetaResumen label="Prioridad alta" valor={conteo.alta} color={PRIORIDAD.alta.color} /></Grid>
-        <Grid item xs={4}><TarjetaResumen label="Prioridad media" valor={conteo.media} color={PRIORIDAD.media.color} /></Grid>
-        <Grid item xs={4}><TarjetaResumen label="Informativas" valor={conteo.informativa} color={PRIORIDAD.informativa.color} /></Grid>
+        <Grid item xs={4}><TarjetaResumen label="Prioridad alta" valor={conteo.alta} color={prioridad().alta.color} /></Grid>
+        <Grid item xs={4}><TarjetaResumen label="Prioridad media" valor={conteo.media} color={prioridad().media.color} /></Grid>
+        <Grid item xs={4}><TarjetaResumen label="Informativas" valor={conteo.informativa} color={prioridad().informativa.color} /></Grid>
       </Grid>
 
       <FormControlLabel
@@ -195,7 +197,7 @@ function TarjetaAlerta({ alerta, puedeEscribir, onAtender, atendiendo }: {
   onAtender: () => void; atendiendo: boolean;
 }) {
   const navigate = useNavigate();
-  const p = PRIORIDAD[alerta.prioridad];
+  const p = prioridad()[alerta.prioridad];
   const r = REGLA[alerta.regla_aplicada];
 
   return (

@@ -13,8 +13,8 @@ import {
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useCicloStore } from '../store/ciclo.store';
-import { AVISO_MEDIO, ERROR, EXITO, EXITO_MEDIO, TAUPE } from '../theme/marca';
-
+import { AVISO_MEDIO, ERROR, EXITO, EXITO_MEDIO } from '../theme/marca';
+import { marcaViva } from '../theme/marcaViva';
 type Salud = {
   nombre: string; estado: string; vencido: boolean;
   fecha_inicio: string; fecha_fin: string;
@@ -100,7 +100,7 @@ export default function SaludCiclo() {
         <Grid item xs={6} sm={4} md={2.4}>
           <Metrica icon={<EventAvailable sx={{ fontSize: 16 }} />} label="DÍAS HÁBILES"
             valor={`${data.dias_transcurridos}/${data.dias_totales}`} pct={data.progreso_pct}
-            sub={`${data.dias_restantes} restantes`} color={TAUPE} />
+            sub={`${data.dias_restantes} restantes`} color={marcaViva.taupe} />
         </Grid>
         <Grid item xs={6} sm={4} md={2.4}>
           <Metrica icon={<FactCheck sx={{ fontSize: 16 }} />} label="PLANEACIÓN VM"
