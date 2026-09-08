@@ -76,7 +76,10 @@ export const IDENTIDADES: Record<string, Identidad> = {
     logoColor: vistaLogo,
     // El azul marino original de VISTA, recuperado de `navTokens.ts` anterior al
     // rebrand (`#1a237e` y el degradado que arrancaba en `#0d1b4c`).
-    rojo: '#1F6F8F',   // el acento turquesa del degradado original
+    // Azul de acción MEDIDO sobre el propio logotipo (#0050B4 es uno de sus tonos
+    // luminosos). El turquesa anterior venía del degradado viejo y no era un color
+    // de VISTA: se veía prestado junto al azul de la marca.
+    rojo: '#0050B4',
     taupe: '#1A237E',  // azul marino: barras, superficies y texto fuerte
     /**
      * Tonos exactos, y aquí hay un motivo concreto además del habitual.
@@ -96,8 +99,18 @@ export const IDENTIDADES: Record<string, Identidad> = {
      * archivo sea un JPEG, el fondo hay que igualarlo aquí.
      */
     exactos: {
-      rojoOscuro: '#1A5E7A',    // turquesa oscurecido: enlaces sobre blanco
-      rojoTenue: '#E8F2F6',     // fondo de avisos y realces suaves
+      rojoOscuro: '#003C87',    // azul oscurecido: enlaces y texto sobre blanco
+      /**
+       * Aquí `rojoTenue` NO es un fondo pálido como en Mallén: es el azul de
+       * acción ACLARADO, para el botón que se apoya sobre el degradado oscuro
+       * de la pantalla de entrada.
+       *
+       * Medido: el azul de marca (#0050B4) sobre esa tarjeta da 2.24:1 — por
+       * debajo del 3:1 que WCAG 1.4.11 exige a un elemento gráfico, así que el
+       * botón se difuminaría en el fondo. Este tono da 3.42:1 contra la tarjeta
+       * y 4.88:1 con su texto blanco encima.
+       */
+      rojoTenue: '#2E6FD0',
       taupeProfundo: '#011D42', // 0% del degradado — el fondo del propio logotipo
       taupeMedio: '#0D1F60',    // 55% — tránsito hacia el azul de marca
       taupeNegro: '#00122C',    // arranque del degradado de la pantalla de entrada

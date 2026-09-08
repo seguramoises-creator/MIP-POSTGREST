@@ -110,13 +110,35 @@ export default function Login() {
         background: marcaViva.degradadoEntrada,
       }}
     >
-      <Card sx={{ width: 440, mx: 2, borderRadius: 3, boxShadow: 24, overflow: 'hidden' }}>
+      {/* La tarjeta lleva el MISMO degradado que el fondo, no blanco. Al perder la
+          superficie clara, todo lo de dentro tuvo que invertirse: etiquetas, bordes y
+          texto de los campos pasan a blanco, y el botón usa el azul ACLARADO
+          (`rojoTenue` en esta identidad) porque el azul de marca sobre este fondo da
+          2.24:1 — se difuminaría. Un borde tenue la despega del fondo lo justo para
+          que siga leyéndose como una tarjeta y no como un hueco. */}
+      <Card sx={{ width: 440, mx: 2, borderRadius: 3, boxShadow: 24, overflow: 'hidden',
+                  background: marcaViva.degradadoEntrada,
+                  border: '1px solid rgba(255,255,255,0.16)',
+                  // Un solo sitio decide el color de TODO lo que va dentro: sin esto
+                  // habría que teñir campo por campo y el próximo que se añada nacería
+                  // ilegible.
+                  color: '#FFFFFF',
+                  '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.78)' },
+                  '& .MuiInputLabel-root.Mui-focused': { color: '#FFFFFF' },
+                  '& .MuiOutlinedInput-root': {
+                    color: '#FFFFFF',
+                    '& fieldset': { borderColor: 'rgba(255,255,255,0.32)' },
+                    '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.55)' },
+                    '&.Mui-focused fieldset': { borderColor: '#FFFFFF' },
+                  },
+                  '& .MuiIconButton-root': { color: 'rgba(255,255,255,0.78)' },
+                }}>
         {/* El logotipo a color de Mallén es vector SIN fondo propio, y sus contraformas
             (los huecos de la abeja y de las letras) están dibujadas en blanco. Necesita
             por tanto una superficie clara y aire alrededor: a sangre, como iba el logo
             anterior —que traía su propio fondo oscuro incrustado—, las contraformas se
             confundirían con el borde de la tarjeta. */}
-        <Box sx={{ bgcolor: '#FFFFFF', px: { xs: 3, sm: 5 }, py: { xs: 2, sm: 4 },
+        <Box sx={{ px: { xs: 3, sm: 5 }, py: { xs: 2, sm: 4 },
                    lineHeight: 0, display: 'flex', justifyContent: 'center' }}>
           {/* `maxWidth` en vez de `width: 100%`: a ancho completo el logo se llevaba 239px
               de una tarjeta de 621 en un iPhone —un 38% solo para la marca— y empujaba el
@@ -129,7 +151,7 @@ export default function Login() {
         <CardContent sx={{ p: 4, pt: 3 }}>
           {/* Subtítulo */}
           <Box sx={{ textAlign: 'center', mb: 3 }}>
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.80)' }}>
               Sistema Corporativo de Gestión Comercial
             </Typography>
           </Box>
@@ -182,7 +204,13 @@ export default function Login() {
               size="large"
               type="submit"
               disabled={loading || !username || !password}
-              sx={{ py: 1.5, borderRadius: 2, fontWeight: 700 }}
+              // El azul ACLARADO de la identidad: el de marca sobre este degradado da
+              // 2.24:1 y el botón se perdería en el fondo. Este da 3.42:1 contra la
+              // tarjeta y 4.88:1 con su texto blanco.
+              sx={{ py: 1.5, borderRadius: 2, fontWeight: 700,
+                    bgcolor: marcaViva.rojoTenue, color: '#FFFFFF',
+                    '&:hover': { bgcolor: marcaViva.rojo },
+                    '&.Mui-disabled': { bgcolor: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.5)' } }}
             >
               {loading ? <CircularProgress size={24} color="inherit" /> : 'Iniciar Sesión'}
             </Button>
@@ -190,7 +218,7 @@ export default function Login() {
 
           <Box textAlign="center" mt={2}>
             <Link component="button" type="button" underline="hover" onClick={abrirFp}
-                  sx={{ fontSize: 14, fontWeight: 600 }}>
+                  sx={{ fontSize: 14, fontWeight: 600, color: '#FFFFFF' }}>
               ¿Olvidó su contraseña?
             </Link>
           </Box>
