@@ -147,25 +147,22 @@ export default function Login() {
                   border: '1px solid rgba(255,255,255,0.10)',
                   boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
                   color: '#FFFFFF' }}>
-        <CardContent sx={{ p: { xs: 3, sm: 4.5 } }}>
-          {/* ESQUINAS REDONDEADAS, y no es decoración. El logotipo de VISTA es un JPEG
-              incrustado en el `.svg`: un rectángulo con su propio fondo. Medido sobre el
-              archivo, ese fondo NO es plano —va de `#001834` en las esquinas a `#042A64`
-              en el centro—, así que ningún color de tarjeta lo hace desaparecer; probé
-              igualarlo y se sigue viendo el recuadro. Redondeado y con un filo tenue
-              alrededor, la placa se lee como una pieza puesta a propósito en vez de como
-              un recorte mal pegado. Desaparecería del todo con un logotipo con
-              transparencia; mientras el archivo sea un JPEG, esto es lo honesto.
+        {/* EL LOGOTIPO VA A SANGRE, ocupando el ancho completo de la tarjeta.
+            No es una preferencia estética: el archivo es un JPEG incrustado en el
+            `.svg`, o sea un RECTÁNGULO con su propio fondo, y ese fondo no es plano
+            —medido sobre el archivo, va de `#001834` en las esquinas a `#042A64` en el
+            centro—, así que ningún color de tarjeta lo hace desaparecer. Centrado y con
+            aire alrededor se veían DOS rectángulos, uno dentro del otro, como un logo
+            pisando a otro. Llevándolo de borde a borde solo queda uno: el recuadro del
+            archivo pasa a ser el encabezado de la tarjeta.
 
-              Acotado en ancho: a sangre se llevaba casi el 40 % de la tarjeta en un móvil
-              y empujaba el botón de entrar contra el borde inferior. */}
-          <Box sx={{ display: 'flex', justifyContent: 'center', lineHeight: 0, mb: 2 }}>
-            <Box component="img" src={marcaViva.logo.logoColor} alt={marcaViva.logo.nombre}
-                 sx={{ width: '100%', maxWidth: { xs: 220, sm: 300 }, height: 'auto',
-                       display: 'block', borderRadius: 2,
-                       boxShadow: '0 0 0 1px rgba(255,255,255,0.07)' }} />
-          </Box>
+            No necesita esquinas propias — el `overflow: hidden` de la tarjeta lo
+            recorta. Y desaparecería el problema de raíz con un logotipo con
+            transparencia; mientras el archivo sea un JPEG, esta es la salida limpia. */}
+        <Box component="img" src={marcaViva.logo.logoColor} alt={marcaViva.logo.nombre}
+             sx={{ width: '100%', height: 'auto', display: 'block' }} />
 
+        <CardContent sx={{ p: { xs: 3, sm: 4.5 }, pt: { xs: 3, sm: 3.5 } }}>
           <Box sx={{ textAlign: 'center', mb: 3.5 }}>
             {/* El nombre sale de la identidad, no escrito a mano: en la instalación de
                 otro cliente esta línea tiene que decir el suyo. */}
