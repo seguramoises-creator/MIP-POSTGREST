@@ -78,6 +78,31 @@ export const IDENTIDADES: Record<string, Identidad> = {
     // rebrand (`#1a237e` y el degradado que arrancaba en `#0d1b4c`).
     rojo: '#1F6F8F',   // el acento turquesa del degradado original
     taupe: '#1A237E',  // azul marino: barras, superficies y texto fuerte
+    /**
+     * Tonos exactos, y aquí hay un motivo concreto además del habitual.
+     *
+     * El logotipo de VISTA no es un vectorial con fondo transparente: es un JPEG
+     * incrustado dentro de un `.svg`, o sea un RECTÁNGULO con su propio fondo
+     * azul (`#011D42`, medido sobre el propio archivo). Como se apoya en el
+     * extremo IZQUIERDO de la barra, ese extremo tiene que valer exactamente lo
+     * mismo o se ve el borde del recuadro recortado contra el degradado.
+     *
+     * Por eso `taupeProfundo` —el 0% del degradado, justo debajo del logotipo—
+     * es el color del propio archivo. Derivarlo por cálculo daba `#0F1447`, que
+     * está cerca y por eso el corte se notaba: lo bastante parecido para parecer
+     * intencionado, lo bastante distinto para verse.
+     *
+     * La alternativa real sería un logotipo con transparencia. Mientras el
+     * archivo sea un JPEG, el fondo hay que igualarlo aquí.
+     */
+    exactos: {
+      rojoOscuro: '#1A5E7A',    // turquesa oscurecido: enlaces sobre blanco
+      rojoTenue: '#E8F2F6',     // fondo de avisos y realces suaves
+      taupeProfundo: '#011D42', // 0% del degradado — el fondo del propio logotipo
+      taupeMedio: '#0D1F60',    // 55% — tránsito hacia el azul de marca
+      taupeNegro: '#00122C',    // arranque del degradado de la pantalla de entrada
+      taupeClaro: '#2E3894',    // bordes y acentos sobre fondo oscuro
+    },
   },
 };
 

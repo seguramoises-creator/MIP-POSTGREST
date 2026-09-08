@@ -169,8 +169,11 @@ export default function MainLayout() {
                          // el área de contenido. Ahora cabe entero en la barra. */}
                           }} />}
             </Box>
-            {/* Empuja las acciones al extremo derecho de la barra. */}
-            <Box sx={{ flexGrow: 1 }} />
+            {/* Empuja el avatar al extremo derecho — SOLO en la disposición lateral.
+                En `pestanas` no debe existir: `TopTabs` ya ocupa el hueco central y se
+                centra con márgenes automáticos, así que un separador aquí le robaba el
+                espacio libre y las pestañas quedaban desplazadas a la derecha. */}
+            {lateral && <Box sx={{ flexGrow: 1 }} />}
             {!lateral && <TopTabs items={seccionActiva?.items ?? []} seccion={seccionActiva?.titulo ?? 'Inicio'} />}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
               {gd?.gerente && (
