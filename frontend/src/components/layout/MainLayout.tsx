@@ -1,7 +1,7 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import {
   Box, AppBar, Toolbar, Typography,
-  Avatar, Divider, Chip,
+  Avatar, Divider, Chip, Tooltip, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Alert, Stack,
   Drawer, List, ListItemButton, ListItemIcon, ListItemText,
 } from '@mui/material';
@@ -181,6 +181,23 @@ export default function MainLayout() {
                 />
               )}
               <CicloPaisBadge />
+              {/* Avatar de Perfil — SOLO en la disposición lateral, y no es un
+                  adorno: el panel de Perfil (instalar app, cambiar contraseña,
+                  cerrar sesión) se abría únicamente desde la barra inferior, así
+                  que al ocultarla se quedaba inalcanzable. Aquí vuelve al sitio
+                  donde estaba antes del rediseño — el comentario del propio
+                  panel lo dice: «recoge lo que antes colgaba del avatar de
+                  arriba a la derecha». */}
+              {lateral && (
+                <Tooltip title={nombreCompleto || 'Perfil'}>
+                  <IconButton onClick={() => setPerfilOpen(true)} sx={{ ml: 0.5 }}>
+                    <Avatar sx={{ width: 34, height: 34, fontSize: 15, fontWeight: 700,
+                                  bgcolor: 'rgba(255,255,255,0.18)', color: NAV_ACTIVO }}>
+                      {nombreCompleto?.[0]?.toUpperCase() || 'U'}
+                    </Avatar>
+                  </IconButton>
+                </Tooltip>
+              )}
             </Box>
           </Toolbar>
         </AppBar>
