@@ -20,13 +20,31 @@
  */
 export interface Instalacion {
   modoIngesta: 'excel' | 'integracion';
+  /**
+   * Disposición del menú.
+   *
+   * `pestanas` — barra superior + barra inferior. Pensada para el móvil y para
+   *   quien usa la aplicación de pie, en la calle.
+   * `lateral` — el menú lateral clásico. Aprovecha mejor una pantalla ancha y
+   *   enseña todas las secciones a la vez, que es lo que se quiere al presentar
+   *   el sistema en una sala.
+   *
+   * Vive aquí y no en una rama aparte por una razón aprendida a golpes: una
+   * instalación que se queda con su disposición en su propio código deja de
+   * poder actualizarse con un `git pull`, y cada mejora posterior exige rehacer
+   * el trasplante a mano.
+   */
+  layout: 'pestanas' | 'lateral';
 }
 
-/** Fábrica: `excel`. Ninguna instalación existente cambia sin que alguien lo decida. */
-export const instalacion: Instalacion = { modoIngesta: 'excel' };
+/** Fábrica. Ninguna instalación existente cambia sin que alguien lo decida. */
+export const instalacion: Instalacion = { modoIngesta: 'excel', layout: 'pestanas' };
 
 /** ¿Los datos entran por integración con el sistema del cliente? */
 export const esIntegrada = () => instalacion.modoIngesta === 'integracion';
+
+/** ¿Esta instalación usa el menú lateral en vez de las barras? */
+export const esLayoutLateral = () => instalacion.layout === 'lateral';
 
 /**
  * Lee la configuración y la aplica. Nunca lanza: sin conexión se queda en
@@ -38,9 +56,12 @@ export async function cargarInstalacion(): Promise<void> {
     const base = (import.meta as any).env?.VITE_API_URL || '/api/v1';
     const r = await fetch(`${base}/admin/config/app`);
     if (!r.ok) return;
-    const { modo_ingesta } = await r.json();
+    const { modo_ingesta, layout } = await r.json();
     if (modo_ingesta === 'integracion' || modo_ingesta === 'excel') {
       instalacion.modoIngesta = modo_ingesta;
+    }
+    if (layout === 'lateral' || layout === 'pestanas') {
+      instalacion.layout = layout;
     }
   } catch {
     /* sin conexión: se queda en `excel` */

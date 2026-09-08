@@ -9,6 +9,8 @@ import { Logout, LockReset, SupervisorAccount, InstallMobile } from '@mui/icons-
 import { useState, useEffect, useMemo } from 'react';
 import BottomNav from './BottomNav';
 import TopTabs from './TopTabs';
+import Sidebar from './Sidebar';
+import { esLayoutLateral } from '../../config/instalacion';
 import { useNavSecciones } from './useNavSecciones';
 import { APP_FONDO, BOTTOM_NAV_H, NAV_ACTIVO, navTaupe, navFondo, TEXTO_TENUE } from './navTokens';
 import InstalarAppDialog from '../InstalarAppDialog';
@@ -24,6 +26,9 @@ import { useCicloStore } from '../../store/ciclo.store';
 import { marcaViva } from '../../theme/marcaViva';
 
 export default function MainLayout() {
+  // Disposición del menú de ESTA instalación. Se lee al arrancar, antes de
+  // pintar, así que no parpadea entre una y otra.
+  const lateral = esLayoutLateral();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   // Franja global País+Ciclo: se oculta donde es redundante — en /visita/registrar
@@ -127,6 +132,10 @@ export default function MainLayout() {
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+      {/* Las dos disposiciones conviven en el mismo código y cada instalación
+          elige la suya (`config/instalacion.ts`). El contenedor ya era flex en
+          fila, así que el lateral entra como primer hijo sin tocar el resto. */}
+      {lateral && <Sidebar />}
       <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <AppBar
           position="sticky"
@@ -157,7 +166,7 @@ export default function MainLayout() {
                          // el área de contenido. Ahora cabe entero en la barra. */}
                           }} />
             </Box>
-            <TopTabs items={seccionActiva?.items ?? []} seccion={seccionActiva?.titulo ?? 'Inicio'} />
+            {!lateral && <TopTabs items={seccionActiva?.items ?? []} seccion={seccionActiva?.titulo ?? 'Inicio'} />}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
               {gd?.gerente && (
                 <Chip
@@ -286,7 +295,7 @@ export default function MainLayout() {
         </Box>
       </Box>
 
-      <BottomNav activa={seccionActiva?.titulo ?? null} onPerfil={() => setPerfilOpen(true)} />
+      {!lateral && <BottomNav activa={seccionActiva?.titulo ?? null} onPerfil={() => setPerfilOpen(true)} />}
     </Box>
   );
 }

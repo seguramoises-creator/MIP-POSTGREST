@@ -1195,9 +1195,25 @@ _LOGOS = ("vista", "mallen")
 _MODOS_INGESTA = ("excel", "integracion")
 
 
+# ── Disposición del menú ───────────────────────────────────────────────────
+# `pestanas` (fábrica) = barra superior + barra inferior, pensada para móvil y
+# para quien usa la aplicación de pie en la calle.
+# `lateral` = el menú lateral clásico, que aprovecha mejor una pantalla ancha y
+# muestra todas las secciones a la vez.
+#
+# Es CONFIGURACIÓN y no una rama aparte a propósito: una instalación que se
+# quedó con el menú lateral en su propio código deja de poder actualizarse con
+# un `git pull`, y la siguiente mejora exige rehacer el trasplante a mano. Con
+# una clave, las dos disposiciones viven en el mismo código y cada instalación
+# elige.
+_LAYOUTS = ("pestanas", "lateral")
+
+
 class AppConfig(BaseModel):
     modo_ingesta: str = Field("", max_length=20,
                               description="excel | integracion")
+    layout: str = Field("", max_length=20,
+                        description="pestanas | lateral")
 
 
 @router.get("/config/app", summary="Configuración de la instalación")
@@ -1205,7 +1221,8 @@ def get_config_app(db: Session = Depends(get_db)):
     """Sin autenticación, por el mismo motivo que los colores: el frontend la lee
     antes de pintar para decidir qué menús existen, y ahí todavía no hay sesión.
     No revela nada — solo dice por qué puerta entran los datos."""
-    return {"modo_ingesta": _cfg.obtener(db, "MODO_INGESTA") or "excel"}
+    return {"modo_ingesta": _cfg.obtener(db, "MODO_INGESTA") or "excel",
+            "layout": _cfg.obtener(db, "LAYOUT") or "pestanas"}
 
 
 @router.put("/config/app", response_model=Msg, summary="Guardar configuración de la instalación")
@@ -1215,6 +1232,11 @@ def put_config_app(data: AppConfig, db: Session = Depends(get_db), _=AdminOnly):
         raise HTTPException(422, f"«{modo}» no es un modo válido. "
                                  f"Opciones: {', '.join(_MODOS_INGESTA)}.")
     _cfg.fijar(db, "MODO_INGESTA", modo or "excel")
+    layout = (data.layout or "").strip().lower()
+    if layout and layout not in _LAYOUTS:
+        raise HTTPException(422, f"«{layout}» no es una disposición válida. "
+                                 f"Opciones: {', '.join(_LAYOUTS)}.")
+    _cfg.fijar(db, "LAYOUT", layout or "pestanas")
     return Msg(message="Configuración guardada. Recarga la página para verla.")
 
 
