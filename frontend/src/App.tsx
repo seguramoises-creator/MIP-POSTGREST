@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { esIntegrada } from './config/instalacion';
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useState, useMemo, Suspense } from 'react';
 import axios from 'axios';
 import { lazyWithReload, ErrorBoundary } from './components/common/resilience';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -68,9 +68,26 @@ const Conocimientos = lazyWithReload(() => import('./pages/conocimientos/Conocim
 
 const qc = new QueryClient({ defaultOptions: { queries: { staleTime: 120000, retry: 1 } } });
 
-const theme = createTheme({
-  // Marca Laboratorios Mallén (colores extraídos del vectorial del logo, ver theme/marca.ts).
-  // El rojo es `primary` porque manda en las ACCIONES: botones, estado activo, acentos.
+/**
+ * El tema se construye en una FUNCIÓN, no en una constante de módulo, y la
+ * diferencia no es de estilo.
+ *
+ * `marcaViva` es un objeto mutable que `cargarMarca()` rellena al arrancar. Pero
+ * los `import` de un módulo se evalúan ANTES que cualquier línea de `main.tsx`,
+ * así que el cuerpo de este archivo corría —y congelaba el tema— antes de que
+ * llegara la paleta del servidor. Las barras y el logotipo seguían la marca
+ * elegida y TODO lo que MUI pinta como `primary` (botones, enlaces, acentos) se
+ * quedaba con el color de fábrica: una instalación con identidad propia salía a
+ * medio pintar.
+ *
+ * Es el mismo error que tenía `navTokens.ts` con `NAV_FONDO`. Copiar una
+ * propiedad de un objeto mutable a una constante de módulo la congela; leerla
+ * al pintar, no.
+ */
+const crearTema = () => createTheme({
+  // Los colores salen de la identidad VIGENTE de la instalación (`theme/identidades.ts`),
+  // no de una marca fija. El color de acción es `primary` porque manda en lo que se
+  // puede tocar: botones, estado activo, acentos.
   // `contrastText` en blanco explícito — MUI calcularía negro sobre este rojo (3.83:1 con
   // blanco, 5.5:1 con negro), y un botón de acción con texto negro rompería la marca.
   // `dark` es el rojo oscurecido: es el único que pasa AA como TEXTO sobre blanco (5.71:1),
@@ -81,7 +98,10 @@ const theme = createTheme({
     // `info` se redefine porque MUI lo usa en TODO componente con color="info"
     // (Chip, Button, Badge…), no solo en Alert: sin esto seguían saliendo azules
     // sueltos por la app aunque el tema fuera de Mallén.
-    info:       { main: TAUPE, dark: TAUPE_PROFUNDO, light: '#8A8177', contrastText: '#FFFFFF' },
+    // De la paleta VIVA, igual que primary/secondary: con las constantes de
+    // fábrica, una instalación con identidad propia veía sus Chip y Button
+    // `color="info"` en el color de otra marca.
+    info:       { main: marcaViva.taupe, dark: marcaViva.taupeProfundo, light: marcaViva.taupeClaro, contrastText: '#FFFFFF' },
     background: { default: FONDO },
     text:       { primary: TEXTO, secondary: TEXTO_TENUE },
   },
@@ -394,9 +414,13 @@ function AppRoutes() {
 }
 
 export default function App() {
+  // Se construye AQUÍ, al pintar, cuando `cargarMarca()` ya dejó la paleta del
+  // servidor en `marcaViva`. `useMemo` sin dependencias: una sola vez por sesión,
+  // pero después de la carga — no al importar el módulo.
+  const tema = useMemo(() => crearTema(), []);
   return (
     <QueryClientProvider client={qc}>
-      <ThemeProvider theme={theme}>
+      <ThemeProvider theme={tema}>
         <CssBaseline />
         <BrowserRouter>
           <AppRoutes />

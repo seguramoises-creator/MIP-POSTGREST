@@ -158,14 +158,19 @@ export default function MainLayout() {
                   tamaños intermedios seguían leyéndose pequeños. Al quitar el título de
                   sección, el logo pasa a ser el único elemento de la izquierda y puede
                   ocupar ese espacio sin apretar nada. */}
-              <Box component="img" src={marcaViva.logo.logoBlanco} alt={marcaViva.logo.nombre}
+              {/* En la disposición LATERAL el logotipo ya preside el menú de la
+                  izquierda: repetirlo aquí lo mostraba dos veces en la misma
+                  pantalla, uno al lado del otro. Se omite. */}
+              {!lateral && <Box component="img" src={marcaViva.logo.logoBlanco} alt={marcaViva.logo.nombre}
                    sx={{ height: { xs: 44, sm: 60 }, width: 'auto', display: 'block', flexShrink: 0,
                          // Sin márgenes negativos: la versión anterior hacía que el logo
                          // desbordara hacia la fila de pestañas, y en las secciones de un
                          // solo ítem esa fila NO se renderiza — el logo quedaba cortado por
                          // el área de contenido. Ahora cabe entero en la barra. */}
-                          }} />
+                          }} />}
             </Box>
+            {/* Empuja las acciones al extremo derecho de la barra. */}
+            <Box sx={{ flexGrow: 1 }} />
             {!lateral && <TopTabs items={seccionActiva?.items ?? []} seccion={seccionActiva?.titulo ?? 'Inicio'} />}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
               {gd?.gerente && (
