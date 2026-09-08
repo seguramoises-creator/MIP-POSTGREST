@@ -9,7 +9,7 @@ import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { authService } from '../../services/auth.service';
 import { Rol } from '../../types';
-import { marcaViva } from '../../theme/marcaViva';
+import { marcaViva, tinteSobre } from '../../theme/marcaViva';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -98,6 +98,34 @@ export default function Login() {
     }
   };
 
+  // El enlace es el único texto pequeño a color sobre la tarjeta, así que es el que
+  // fija el listón: se ACLARA el azul de acción hasta pasar 4.5:1 contra el fondo de
+  // la tarjeta en vez de escribir un tono a mano, que solo serviría para esta marca.
+  const azulEnlace = tinteSobre(marcaViva.rojo, marcaViva.taupeProfundo, 4.5);
+
+  // Etiqueta ENCIMA del campo, no flotante: sobre una caja blanca la etiqueta de MUI
+  // se apoya en el borde y hay que teñirla contra dos fondos a la vez. Arriba se lee
+  // igual con el campo vacío y con el campo lleno.
+  const Etiqueta = ({ children }: { children: React.ReactNode }) => (
+    <Typography component="label" sx={{ display: 'block', mb: 0.75, fontSize: 14,
+                                        fontWeight: 700, color: '#FFFFFF' }}>
+      {children}
+    </Typography>
+  );
+
+  // Campo blanco sobre tarjeta oscura. Va aquí y no repetido en cada TextField para
+  // que el próximo campo que se añada nazca con el mismo aspecto.
+  const campoBlanco = {
+    '& .MuiOutlinedInput-root': {
+      bgcolor: '#FFFFFF', borderRadius: 2.5,
+      '& input': { color: '#11151F', padding: '14px 16px' },
+      '& fieldset': { borderColor: 'transparent' },
+      '&:hover fieldset': { borderColor: 'rgba(0,0,0,0.18)' },
+      '&.Mui-focused fieldset': { borderColor: marcaViva.rojoTenue, borderWidth: 2 },
+    },
+    '& .MuiIconButton-root': { color: 'rgba(17,21,31,0.55)' },
+  };
+
   return (
     <Box
       sx={{
@@ -105,54 +133,47 @@ export default function Login() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        // Degradado del taupe Mallén. El rojo de marca NO entra aquí: como fondo a pantalla
-        // completa competiría con el botón de acción, que es lo único que debe pedir el clic.
-        background: marcaViva.degradadoEntrada,
+        // Un RESPLANDOR, no una banda: el degradado lineal de antes pintaba una diagonal
+        // que cruzaba la tarjeta y la partía en dos tonos. Centrado algo por encima del
+        // formulario, el fondo se aclara justo detrás de la tarjeta y se apaga hacia los
+        // bordes, así que la tarjeta queda siempre MÁS OSCURA que lo que la rodea y se
+        // sostiene sola sin depender del borde.
+        background: `radial-gradient(ellipse 95% 75% at 42% 28%, ${marcaViva.rojoOscuro} 0%,`
+                  + ` ${marcaViva.taupeProfundo} 48%, ${marcaViva.taupeNegro} 100%)`,
       }}
     >
-      {/* La tarjeta lleva el MISMO degradado que el fondo, no blanco. Al perder la
-          superficie clara, todo lo de dentro tuvo que invertirse: etiquetas, bordes y
-          texto de los campos pasan a blanco, y el botón usa el azul ACLARADO
-          (`rojoTenue` en esta identidad) porque el azul de marca sobre este fondo da
-          2.24:1 — se difuminaría. Un borde tenue la despega del fondo lo justo para
-          que siga leyéndose como una tarjeta y no como un hueco. */}
-      <Card sx={{ width: 440, mx: 2, borderRadius: 3, boxShadow: 24, overflow: 'hidden',
-                  background: marcaViva.degradadoEntrada,
-                  border: '1px solid rgba(255,255,255,0.16)',
-                  // Un solo sitio decide el color de TODO lo que va dentro: sin esto
-                  // habría que teñir campo por campo y el próximo que se añada nacería
-                  // ilegible.
-                  color: '#FFFFFF',
-                  '& .MuiInputLabel-root': { color: 'rgba(255,255,255,0.78)' },
-                  '& .MuiInputLabel-root.Mui-focused': { color: '#FFFFFF' },
-                  '& .MuiOutlinedInput-root': {
-                    color: '#FFFFFF',
-                    '& fieldset': { borderColor: 'rgba(255,255,255,0.32)' },
-                    '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.55)' },
-                    '&.Mui-focused fieldset': { borderColor: '#FFFFFF' },
-                  },
-                  '& .MuiIconButton-root': { color: 'rgba(255,255,255,0.78)' },
-                }}>
-        {/* El logotipo a color de Mallén es vector SIN fondo propio, y sus contraformas
-            (los huecos de la abeja y de las letras) están dibujadas en blanco. Necesita
-            por tanto una superficie clara y aire alrededor: a sangre, como iba el logo
-            anterior —que traía su propio fondo oscuro incrustado—, las contraformas se
-            confundirían con el borde de la tarjeta. */}
-        <Box sx={{ px: { xs: 3, sm: 5 }, py: { xs: 2, sm: 4 },
-                   lineHeight: 0, display: 'flex', justifyContent: 'center' }}>
-          {/* `maxWidth` en vez de `width: 100%`: a ancho completo el logo se llevaba 239px
-              de una tarjeta de 621 en un iPhone —un 38% solo para la marca— y empujaba el
-              botón de entrar cerca del borde inferior. Acotado, la marca sigue siendo lo
-              primero que se ve y el formulario cabe holgado. */}
-          <Box component="img" src={marcaViva.logo.logoColor} alt={marcaViva.logo.nombre}
-               sx={{ width: '100%', maxWidth: { xs: 190, sm: 300 }, height: 'auto', display: 'block' }} />
-        </Box>
+      <Card sx={{ width: 460, mx: 2, borderRadius: 4, overflow: 'hidden',
+                  bgcolor: marcaViva.taupeProfundo,
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
+                  color: '#FFFFFF' }}>
+        <CardContent sx={{ p: { xs: 3, sm: 4.5 } }}>
+          {/* ESQUINAS REDONDEADAS, y no es decoración. El logotipo de VISTA es un JPEG
+              incrustado en el `.svg`: un rectángulo con su propio fondo. Medido sobre el
+              archivo, ese fondo NO es plano —va de `#001834` en las esquinas a `#042A64`
+              en el centro—, así que ningún color de tarjeta lo hace desaparecer; probé
+              igualarlo y se sigue viendo el recuadro. Redondeado y con un filo tenue
+              alrededor, la placa se lee como una pieza puesta a propósito en vez de como
+              un recorte mal pegado. Desaparecería del todo con un logotipo con
+              transparencia; mientras el archivo sea un JPEG, esto es lo honesto.
 
-        <CardContent sx={{ p: 4, pt: 3 }}>
-          {/* Subtítulo */}
-          <Box sx={{ textAlign: 'center', mb: 3 }}>
-            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.80)' }}>
-              Sistema Corporativo de Gestión Comercial
+              Acotado en ancho: a sangre se llevaba casi el 40 % de la tarjeta en un móvil
+              y empujaba el botón de entrar contra el borde inferior. */}
+          <Box sx={{ display: 'flex', justifyContent: 'center', lineHeight: 0, mb: 2 }}>
+            <Box component="img" src={marcaViva.logo.logoColor} alt={marcaViva.logo.nombre}
+                 sx={{ width: '100%', maxWidth: { xs: 220, sm: 300 }, height: 'auto',
+                       display: 'block', borderRadius: 2,
+                       boxShadow: '0 0 0 1px rgba(255,255,255,0.07)' }} />
+          </Box>
+
+          <Box sx={{ textAlign: 'center', mb: 3.5 }}>
+            {/* El nombre sale de la identidad, no escrito a mano: en la instalación de
+                otro cliente esta línea tiene que decir el suyo. */}
+            <Typography sx={{ fontSize: 27, fontWeight: 800, letterSpacing: '-0.01em' }}>
+              Bienvenido a {marcaViva.logo.nombre}
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.72)', mt: 0.5 }}>
+              Ingresa a tu espacio de gestión comercial
             </Typography>
           </Box>
 
@@ -163,68 +184,76 @@ export default function Login() {
           )}
 
           <form onSubmit={handleLogin}>
-            <TextField
-              fullWidth
-              label="Usuario"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              sx={{ mb: 2.5 }}
-              autoFocus
-              disabled={loading}
-              // En móvil el teclado autocapitaliza y autocorrige un campo de texto: "mdavid"
-              // llegaba como "Mdavid" y el login fallaba con "Credenciales incorrectas".
-              inputProps={{ autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false,
-                            autoComplete: 'username' }}
-            />
-            <TextField
-              fullWidth
-              label="Contraseña"
-              type={showPwd ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              sx={{ mb: 3 }}
-              disabled={loading}
-              // Al pulsar el ojo el campo pasa a texto plano: sin esto, el móvil
-              // autocapitalizaría lo que se escriba a partir de ese momento.
-              inputProps={{ autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false,
-                            autoComplete: 'current-password' }}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton onClick={() => setShowPwd(!showPwd)} edge="end">
-                      {showPwd ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
+            <Box sx={{ mb: 2.5 }}>
+              <Etiqueta>Usuario</Etiqueta>
+              <TextField
+                fullWidth
+                placeholder="Ingresa tu usuario"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                sx={campoBlanco}
+                autoFocus
+                disabled={loading}
+                // En móvil el teclado autocapitaliza y autocorrige un campo de texto: "mdavid"
+                // llegaba como "Mdavid" y el login fallaba con "Credenciales incorrectas".
+                inputProps={{ autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false,
+                              autoComplete: 'username' }}
+              />
+            </Box>
+            <Box sx={{ mb: 3.5 }}>
+              <Etiqueta>Contraseña</Etiqueta>
+              <TextField
+                fullWidth
+                placeholder="Ingresa tu contraseña"
+                type={showPwd ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                sx={campoBlanco}
+                disabled={loading}
+                // Al pulsar el ojo el campo pasa a texto plano: sin esto, el móvil
+                // autocapitalizaría lo que se escriba a partir de ese momento.
+                inputProps={{ autoCapitalize: 'none', autoCorrect: 'off', spellCheck: false,
+                              autoComplete: 'current-password' }}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton onClick={() => setShowPwd(!showPwd)} edge="end">
+                        {showPwd ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Box>
             <Button
               fullWidth
               variant="contained"
               size="large"
               type="submit"
               disabled={loading || !username || !password}
-              // El azul ACLARADO de la identidad: el de marca sobre este degradado da
-              // 2.24:1 y el botón se perdería en el fondo. Este da 3.42:1 contra la
-              // tarjeta y 4.88:1 con su texto blanco.
-              sx={{ py: 1.5, borderRadius: 2, fontWeight: 700,
+              // El azul ACLARADO de la identidad: el de marca sobre esta tarjeta da
+              // 2.24:1, por debajo del 3:1 que WCAG 1.4.11 exige a un elemento gráfico,
+              // y el botón se difuminaría. Este da 3.42:1 contra la tarjeta.
+              sx={{ py: 1.6, borderRadius: 2.5, fontWeight: 700, fontSize: 16,
+                    textTransform: 'none', boxShadow: 'none',
                     bgcolor: marcaViva.rojoTenue, color: '#FFFFFF',
-                    '&:hover': { bgcolor: marcaViva.rojo },
-                    '&.Mui-disabled': { bgcolor: 'rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.5)' } }}
+                    '&:hover': { bgcolor: marcaViva.rojo, boxShadow: 'none' },
+                    '&.Mui-disabled': { bgcolor: 'rgba(255,255,255,0.14)', color: 'rgba(255,255,255,0.45)' } }}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Iniciar Sesión'}
+              {loading ? <CircularProgress size={24} color="inherit" /> : 'Iniciar sesión'}
             </Button>
           </form>
 
-          <Box textAlign="center" mt={2}>
+          <Box textAlign="center" mt={2.5}>
             <Link component="button" type="button" underline="hover" onClick={abrirFp}
-                  sx={{ fontSize: 14, fontWeight: 600, color: '#FFFFFF' }}>
-              ¿Olvidó su contraseña?
+                  sx={{ fontSize: 14, fontWeight: 700, color: azulEnlace }}>
+              ¿Olvidaste tu contraseña?
             </Link>
           </Box>
 
-          <Typography variant="caption" color="text.disabled" display="block" textAlign="center" mt={3}>
-            v1.0.0 — Confidencial
+          <Typography variant="caption" display="block" textAlign="center" mt={3}
+                      sx={{ color: 'rgba(255,255,255,0.55)' }}>
+            v1.0.0 • Confidencial
           </Typography>
         </CardContent>
       </Card>
