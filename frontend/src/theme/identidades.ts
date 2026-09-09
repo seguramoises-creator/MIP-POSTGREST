@@ -21,25 +21,32 @@ import * as fabrica from './marca';
 import mallenBlanco from '../assets/mallen-logo-blanco.svg';
 import mallenColor from '../assets/mallen-logo.svg';
 /*
- * PNG CON TRANSPARENCIA, no el `.svg` que había antes — y el `.svg` no era un
- * vectorial: llevaba un JPEG incrustado, o sea un RECTÁNGULO con su propio fondo
- * azul. Ese fondo no es plano (medido sobre el archivo: de `#001834` en las
- * esquinas a `#042A64` en el centro), así que ningún color de barra o de tarjeta lo
- * hacía desaparecer: el logotipo se veía montado sobre su propia placa, con relieve.
+ * VISTA TIENE DOS ARCHIVOS, y cada uno sirve para un fondo — igual que Mallén.
  *
- * El PNG se obtuvo del mismo JPEG quitándole el fondo: el dibujo es claro sobre
- * oscuro, así que se estima el fondo con un desenfoque fuerte, se resta, y lo que
- * sobresale del ruido es el dibujo; la opacidad sale de esa diferencia con una rampa
- * suave para no dentar los bordes. Se recortó además el marco y el aire sobrante.
- * Si algún día llega un vectorial de verdad, sustituye a este archivo sin más.
+ * El `.svg` nunca fue un vectorial: lleva un JPEG incrustado, o sea un RECTÁNGULO
+ * con su propio fondo azul y una moldura dibujada. Ese fondo no es plano (medido:
+ * de `#001834` en las esquinas a `#042A64` en el centro), así que sobre las barras
+ * y sobre la tarjeta de entrada el logotipo se veía montado en su propia placa, con
+ * relieve, y ningún color de superficie lo tapaba.
+ *
+ * El PNG sale de ese mismo JPEG sin el fondo: el dibujo es claro sobre oscuro, así
+ * que se estima el fondo con un desenfoque fuerte, se resta, y lo que sobresale del
+ * ruido es el dibujo; la opacidad viene de esa diferencia con una rampa suave para
+ * no dentar los bordes, y se recortan la moldura y el aire sobrante.
+ *
+ * Pero el dibujo es CLARO: sobre una superficie blanca desaparecería. Por eso el
+ * PNG es el de fondo oscuro y el `.svg` original —que trae su propia placa— sigue
+ * siendo el de fondo claro, donde esa placa es justo lo que lo hace legible. Con un
+ * vectorial de verdad, uno solo bastaría para los dos.
  */
-import vistaLogo from '../assets/vista-logo.png';
+import vistaBlanco from '../assets/vista-logo.png';
+import vistaColor from '../assets/vista-logo.svg';
 
 export interface Identidad {
   nombre: string;
-  /** Sobre fondo OSCURO (barras superior e inferior). */
+  /** Sobre fondo OSCURO (barras superior e inferior, tarjeta de entrada). */
   logoBlanco: string;
-  /** Sobre fondo CLARO (entrada, activación de cuenta). */
+  /** Sobre fondo CLARO (activación de cuenta, pantalla de Identidad visual). */
   logoColor: string;
   /** Color de acción de fábrica para esta identidad. */
   rojo: string;
@@ -82,11 +89,10 @@ export const IDENTIDADES: Record<string, Identidad> = {
   },
   vista: {
     nombre: 'VISTA',
-    // El logotipo de VISTA es legible sobre ambos fondos, así que no necesita
-    // dos versiones. Se repite la misma referencia en lugar de inventar un
-    // archivo que no existe.
-    logoBlanco: vistaLogo,
-    logoColor: vistaLogo,
+    // Ver la nota de los imports: el PNG sin fondo va sobre lo oscuro; el archivo
+    // original, que trae su propia placa azul, va sobre lo claro.
+    logoBlanco: vistaBlanco,
+    logoColor: vistaColor,
     // El azul marino original de VISTA, recuperado de `navTokens.ts` anterior al
     // rebrand (`#1a237e` y el degradado que arrancaba en `#0d1b4c`).
     // Azul de acción MEDIDO sobre el propio logotipo (#0050B4 es uno de sus tonos

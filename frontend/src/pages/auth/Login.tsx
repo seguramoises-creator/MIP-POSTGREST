@@ -148,15 +148,17 @@ export default function Login() {
                   boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
                   color: '#FFFFFF' }}>
         <CardContent sx={{ p: { xs: 3, sm: 4.5 } }}>
-          {/* Centrado y con aire: el logotipo ya no trae placa propia —es un PNG con
-              transparencia, ver `identidades.ts`—, así que se apoya directamente en la
-              tarjeta. Antes iba a sangre para que su recuadro pasara por encabezado;
-              eso ya no hace falta.
+          {/* LA VERSIÓN DE FONDO OSCURO, no la de color: esta tarjeta dejó de ser
+              blanca. Es la razón por la que cada identidad guarda dos archivos —el de
+              Mallén a color tiene sus contraformas dibujadas en blanco y aquí se
+              perdería; el de VISTA es un PNG sin fondo y sobre blanco desaparecería.
+              Elegir por la SUPERFICIE y no por la pantalla es lo que hace que las dos
+              instalaciones se vean bien con el mismo código.
 
-              Acotado en ancho: a sangre se llevaba casi el 40 % de la tarjeta en un
-              móvil y empujaba el botón de entrar contra el borde inferior. */}
+              Centrado y acotado en ancho: a sangre se llevaba casi el 40 % de la
+              tarjeta en un móvil y empujaba el botón de entrar contra el borde. */}
           <Box sx={{ display: 'flex', justifyContent: 'center', lineHeight: 0, mb: 2.5 }}>
-            <Box component="img" src={marcaViva.logo.logoColor} alt={marcaViva.logo.nombre}
+            <Box component="img" src={marcaViva.logo.logoBlanco} alt={marcaViva.logo.nombre}
                  sx={{ width: '100%', maxWidth: { xs: 220, sm: 300 }, height: 'auto',
                        display: 'block' }} />
           </Box>
