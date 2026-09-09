@@ -20,7 +20,20 @@
 import * as fabrica from './marca';
 import mallenBlanco from '../assets/mallen-logo-blanco.svg';
 import mallenColor from '../assets/mallen-logo.svg';
-import vistaLogo from '../assets/vista-logo.svg';
+/*
+ * PNG CON TRANSPARENCIA, no el `.svg` que había antes — y el `.svg` no era un
+ * vectorial: llevaba un JPEG incrustado, o sea un RECTÁNGULO con su propio fondo
+ * azul. Ese fondo no es plano (medido sobre el archivo: de `#001834` en las
+ * esquinas a `#042A64` en el centro), así que ningún color de barra o de tarjeta lo
+ * hacía desaparecer: el logotipo se veía montado sobre su propia placa, con relieve.
+ *
+ * El PNG se obtuvo del mismo JPEG quitándole el fondo: el dibujo es claro sobre
+ * oscuro, así que se estima el fondo con un desenfoque fuerte, se resta, y lo que
+ * sobresale del ruido es el dibujo; la opacidad sale de esa diferencia con una rampa
+ * suave para no dentar los bordes. Se recortó además el marco y el aire sobrante.
+ * Si algún día llega un vectorial de verdad, sustituye a este archivo sin más.
+ */
+import vistaLogo from '../assets/vista-logo.png';
 
 export interface Identidad {
   nombre: string;
@@ -84,19 +97,12 @@ export const IDENTIDADES: Record<string, Identidad> = {
     /**
      * Tonos exactos, y aquí hay un motivo concreto además del habitual.
      *
-     * El logotipo de VISTA no es un vectorial con fondo transparente: es un JPEG
-     * incrustado dentro de un `.svg`, o sea un RECTÁNGULO con su propio fondo
-     * azul (`#011D42`, medido sobre el propio archivo). Como se apoya en el
-     * extremo IZQUIERDO de la barra, ese extremo tiene que valer exactamente lo
-     * mismo o se ve el borde del recuadro recortado contra el degradado.
-     *
-     * Por eso `taupeProfundo` —el 0% del degradado, justo debajo del logotipo—
-     * es el color del propio archivo. Derivarlo por cálculo daba `#0F1447`, que
-     * está cerca y por eso el corte se notaba: lo bastante parecido para parecer
-     * intencionado, lo bastante distinto para verse.
-     *
-     * La alternativa real sería un logotipo con transparencia. Mientras el
-     * archivo sea un JPEG, el fondo hay que igualarlo aquí.
+     * `taupeProfundo` —el 0% del degradado, justo debajo del logotipo— es el azul
+     * que traía el fondo del archivo original (`#011D42`). Nació para que el
+     * extremo izquierdo de la barra valiera lo mismo que ese fondo y no se viera
+     * el corte del recuadro; ahora el logotipo tiene transparencia y ya no hace
+     * falta igualar nada, pero el tono se queda: es el arranque afinado del
+     * degradado, y recalcularlo daba `#0F1447`, que ensucia el azul.
      */
     exactos: {
       rojoOscuro: '#003C87',    // azul oscurecido: enlaces y texto sobre blanco

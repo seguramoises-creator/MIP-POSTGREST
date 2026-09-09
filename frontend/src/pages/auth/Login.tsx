@@ -147,22 +147,20 @@ export default function Login() {
                   border: '1px solid rgba(255,255,255,0.10)',
                   boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
                   color: '#FFFFFF' }}>
-        {/* EL LOGOTIPO VA A SANGRE, ocupando el ancho completo de la tarjeta.
-            No es una preferencia estética: el archivo es un JPEG incrustado en el
-            `.svg`, o sea un RECTÁNGULO con su propio fondo, y ese fondo no es plano
-            —medido sobre el archivo, va de `#001834` en las esquinas a `#042A64` en el
-            centro—, así que ningún color de tarjeta lo hace desaparecer. Centrado y con
-            aire alrededor se veían DOS rectángulos, uno dentro del otro, como un logo
-            pisando a otro. Llevándolo de borde a borde solo queda uno: el recuadro del
-            archivo pasa a ser el encabezado de la tarjeta.
+        <CardContent sx={{ p: { xs: 3, sm: 4.5 } }}>
+          {/* Centrado y con aire: el logotipo ya no trae placa propia —es un PNG con
+              transparencia, ver `identidades.ts`—, así que se apoya directamente en la
+              tarjeta. Antes iba a sangre para que su recuadro pasara por encabezado;
+              eso ya no hace falta.
 
-            No necesita esquinas propias — el `overflow: hidden` de la tarjeta lo
-            recorta. Y desaparecería el problema de raíz con un logotipo con
-            transparencia; mientras el archivo sea un JPEG, esta es la salida limpia. */}
-        <Box component="img" src={marcaViva.logo.logoColor} alt={marcaViva.logo.nombre}
-             sx={{ width: '100%', height: 'auto', display: 'block' }} />
+              Acotado en ancho: a sangre se llevaba casi el 40 % de la tarjeta en un
+              móvil y empujaba el botón de entrar contra el borde inferior. */}
+          <Box sx={{ display: 'flex', justifyContent: 'center', lineHeight: 0, mb: 2.5 }}>
+            <Box component="img" src={marcaViva.logo.logoColor} alt={marcaViva.logo.nombre}
+                 sx={{ width: '100%', maxWidth: { xs: 220, sm: 300 }, height: 'auto',
+                       display: 'block' }} />
+          </Box>
 
-        <CardContent sx={{ p: { xs: 3, sm: 4.5 }, pt: { xs: 3, sm: 3.5 } }}>
           <Box sx={{ textAlign: 'center', mb: 3.5 }}>
             {/* El nombre sale de la identidad, no escrito a mano: en la instalación de
                 otro cliente esta línea tiene que decir el suyo. */}
