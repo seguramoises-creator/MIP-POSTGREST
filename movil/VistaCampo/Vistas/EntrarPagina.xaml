@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="VistaCampo.Vistas.EntrarPagina"
+             Shell.NavBarIsVisible="False"
+             Title="Entrar">
+
+    <Grid>
+        <!-- El degradado de la identidad, de casi negro al color de estructura. -->
+        <Grid.Background>
+            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                <GradientStop Color="{StaticResource FondoNegro}" Offset="0.0" />
+                <GradientStop Color="{StaticResource FondoProfundo}" Offset="0.45" />
+                <GradientStop Color="{DynamicResource Estructura}" Offset="1.0" />
+            </LinearGradientBrush>
+        </Grid.Background>
+
+        <ScrollView>
+            <VerticalStackLayout Padding="24,60,24,24" Spacing="18" VerticalOptions="Center">
+
+                <Label Text="{Binding Bienvenida}" HorizontalOptions="Center"
+                       FontSize="27" FontAttributes="Bold" TextColor="{StaticResource Blanco}" />
+                <Label Text="Registra tu jornada de campo" HorizontalOptions="Center"
+                       FontSize="14" TextColor="#C9D4E8" Margin="0,-10,0,10" />
+
+                <Border Style="{StaticResource Tarjeta}" Padding="18">
+                    <VerticalStackLayout Spacing="14">
+
+                        <VerticalStackLayout>
+                            <Label Text="Usuario" Style="{StaticResource Etiqueta}" />
+                            <!-- Sin autocapitalizar ni corregir: en el móvil "mdavid"
+                                 llegaba como "Mdavid" y el login fallaba con
+                                 "Credenciales incorrectas". -->
+                            <Entry Text="{Binding Usuario}" Placeholder="Tu usuario"
+                                   Keyboard="Plain" IsSpellCheckEnabled="False"
+                                   IsTextPredictionEnabled="False" ReturnType="Next" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout>
+                            <Label Text="Contraseña" Style="{StaticResource Etiqueta}" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Entry Text="{Binding Clave}" Placeholder="Tu contraseña"
+                                       IsPassword="{Binding MostrarClave, Converter={StaticResource Negar}}"
+                                       Keyboard="Plain" IsSpellCheckEnabled="False"
+                                       IsTextPredictionEnabled="False" ReturnType="Go"
+                                       ReturnCommand="{Binding EntrarCommand}" />
+                                <Button Grid.Column="1" Text="Ver" WidthRequest="64" HeightRequest="52"
+                                        Style="{StaticResource BotonSecundario}"
+                                        Command="{Binding AlternarClaveCommand}" />
+                            </Grid>
+                        </VerticalStackLayout>
+
+                        <Button Text="Iniciar sesión" Style="{StaticResource BotonPrincipal}"
+                                Command="{Binding EntrarCommand}" IsEnabled="{Binding Ocupado, Converter={StaticResource Negar}}" />
+
+                        <ActivityIndicator IsRunning="{Binding Ocupado}" IsVisible="{Binding Ocupado}"
+                                           Color="{DynamicResource Accion}" />
+
+                        <Label Text="{Binding Error}" IsVisible="{Binding HayError}"
+                               TextColor="{StaticResource Error}" FontAttributes="Bold" />
+                        <Label Text="{Binding Aviso}" IsVisible="{Binding HayAviso}"
+                               TextColor="{StaticResource Aviso}" />
+
+                        <Button Text="Servidor" Style="{StaticResource BotonSecundario}"
+                                HeightRequest="44" FontSize="13"
+                                Command="{Binding AlternarServidorCommand}" />
+                        <Entry Text="{Binding Servidor}" IsVisible="{Binding MostrarServidor}"
+                               Placeholder="https://…" Keyboard="Url" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Label Text="v1.0 · Confidencial" HorizontalOptions="Center"
+                       FontSize="12" TextColor="#8FA0BC" />
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+</ContentPage>

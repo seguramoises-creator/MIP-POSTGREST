@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:v="clr-namespace:VistaCampo.Vistas"
+             x:Class="VistaCampo.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Resources/Styles/Colors.xaml" />
+                <ResourceDictionary Source="Resources/Styles/Styles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <v:Negar x:Key="Negar" />
+            <v:HayTexto x:Key="HayTexto" />
+            <v:ListaVacia x:Key="ListaVacia" />
+            <v:ColorSeleccion x:Key="ColorSeleccion" />
+            <v:TipoVisitaATexto x:Key="TipoATexto" />
+            <v:EstadoATexto x:Key="EstadoTexto" />
+            <v:EstadoAColor x:Key="EstadoColor" />
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

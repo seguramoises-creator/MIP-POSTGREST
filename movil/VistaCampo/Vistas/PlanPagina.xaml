@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:m="clr-namespace:VistaCampo.Modelos"
+             xmlns:sys="clr-namespace:System;assembly=netstandard"
+             x:Class="VistaCampo.Vistas.PlanPagina"
+             Title="Plan">
+
+    <Grid RowDefinitions="Auto,Auto,*" Padding="16" RowSpacing="12">
+
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+            <Border Style="{StaticResource Tarjeta}">
+                <VerticalStackLayout>
+                    <Label Text="Vistas planeadas" Style="{StaticResource Tenue}" />
+                    <Label Text="{Binding TotalVistas}" FontSize="30" FontAttributes="Bold" />
+                </VerticalStackLayout>
+            </Border>
+            <Border Grid.Column="1" Style="{StaticResource Tarjeta}">
+                <VerticalStackLayout>
+                    <Label Text="Revisitas" Style="{StaticResource Tenue}" />
+                    <Label Text="{Binding TotalRevisitas}" FontSize="30" FontAttributes="Bold" />
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="1" Style="{StaticResource Tarjeta}" BackgroundColor="#FDECEA"
+                IsVisible="{Binding HayProblemas}">
+            <VerticalStackLayout>
+                <Label Text="Tu plan tiene problemas" FontAttributes="Bold"
+                       TextColor="{StaticResource Error}" />
+                <CollectionView ItemsSource="{Binding Problemas}" HeightRequest="90">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="sys:String">
+                            <Label Text="{Binding .}" FontSize="13" TextColor="{StaticResource Error}" />
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </VerticalStackLayout>
+        </Border>
+
+        <CollectionView Grid.Row="2" ItemsSource="{Binding Items}"
+                        IsGrouped="False">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="m:ItemPlan">
+                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,8">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <VerticalStackLayout>
+                                <Label Text="{Binding Medico}" FontAttributes="Bold" />
+                                <Label Style="{StaticResource Tenue}"
+                                       Text="{Binding TipoVisita, Converter={StaticResource TipoATexto}}" />
+                            </VerticalStackLayout>
+                            <Label Grid.Column="1" VerticalOptions="Center" FontAttributes="Bold"
+                                   TextColor="{DynamicResource Accion}"
+                                   Text="{Binding Semana, StringFormat='Semana {0}'}" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentPage>

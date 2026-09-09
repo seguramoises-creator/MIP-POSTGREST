@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Paleta de partida.
+
+  Los dos colores de IDENTIDAD (Accion y Estructura) se sobrescriben al arrancar con lo
+  que diga el servidor, y por eso todo lo que los usa lo hace con DynamicResource: un
+  StaticResource los congelaría en estos valores y el color configurado no llegaría a la
+  pantalla — el mismo error que costó tres veces en la versión web.
+
+  Los demás son de FUNCIÓN, no de marca: no dependen del cliente y por eso van fijos.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- Identidad (se reemplazan en caliente) -->
+    <Color x:Key="Accion">#0050B4</Color>
+    <Color x:Key="AccionClara">#2E6FD0</Color>
+    <Color x:Key="Estructura">#1A237E</Color>
+    <Color x:Key="FondoProfundo">#011D42</Color>
+    <Color x:Key="FondoNegro">#00122C</Color>
+
+    <!-- Superficies y texto -->
+    <Color x:Key="Fondo">#F4F6FA</Color>
+    <Color x:Key="Superficie">#FFFFFF</Color>
+    <Color x:Key="Borde">#DCE2EC</Color>
+    <Color x:Key="Texto">#11151F</Color>
+    <Color x:Key="TextoTenue">#5A6478</Color>
+    <Color x:Key="Blanco">#FFFFFF</Color>
+
+    <!-- Función -->
+    <Color x:Key="Exito">#1B7F3B</Color>
+    <Color x:Key="Aviso">#B25E00</Color>
+    <Color x:Key="Error">#B3261E</Color>
+
+</ResourceDictionary>

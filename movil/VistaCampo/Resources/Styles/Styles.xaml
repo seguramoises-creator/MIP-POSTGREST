@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Estilos pensados para el SOL y para UNA MANO.
+
+  Tres decisiones que no son estéticas:
+   1. Texto en peso 600 o más: el texto fino se deshace con el reflejo mucho antes que
+      el sólido, a igualdad de contraste.
+   2. Nada de gris claro sobre blanco ni de translucidez: a plena luz simplemente no
+      está.
+   3. Toda zona pulsable mide 48 puntos como mínimo. Se usa con prisa, de pie, a veces
+      con el maletín en la misma mano.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <Style TargetType="Page" ApplyToDerivedTypes="True">
+        <Setter Property="BackgroundColor" Value="{StaticResource Fondo}" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <Style TargetType="Label">
+        <Setter Property="TextColor" Value="{StaticResource Texto}" />
+        <Setter Property="FontSize" Value="15" />
+    </Style>
+
+    <Style x:Key="Titulo" TargetType="Label">
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="TextColor" Value="{StaticResource Texto}" />
+    </Style>
+
+    <Style x:Key="Etiqueta" TargetType="Label">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="TextColor" Value="{StaticResource Texto}" />
+        <Setter Property="Margin" Value="0,0,0,4" />
+    </Style>
+
+    <Style x:Key="Tenue" TargetType="Label">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="TextColor" Value="{StaticResource TextoTenue}" />
+    </Style>
+
+    <Style TargetType="Entry">
+        <Setter Property="TextColor" Value="{StaticResource Texto}" />
+        <Setter Property="PlaceholderColor" Value="{StaticResource TextoTenue}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource Superficie}" />
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="HeightRequest" Value="52" />
+    </Style>
+
+    <Style TargetType="Editor">
+        <Setter Property="TextColor" Value="{StaticResource Texto}" />
+        <Setter Property="PlaceholderColor" Value="{StaticResource TextoTenue}" />
+        <Setter Property="BackgroundColor" Value="{StaticResource Superficie}" />
+        <Setter Property="FontSize" Value="16" />
+    </Style>
+
+    <Style x:Key="BotonPrincipal" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+        <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="FontSize" Value="17" />
+        <Setter Property="HeightRequest" Value="54" />
+        <Setter Property="CornerRadius" Value="12" />
+    </Style>
+
+    <Style x:Key="BotonSecundario" TargetType="Button">
+        <Setter Property="BackgroundColor" Value="{StaticResource Superficie}" />
+        <Setter Property="TextColor" Value="{DynamicResource Accion}" />
+        <Setter Property="BorderColor" Value="{StaticResource Borde}" />
+        <Setter Property="BorderWidth" Value="1" />
+        <Setter Property="FontAttributes" Value="Bold" />
+        <Setter Property="HeightRequest" Value="50" />
+        <Setter Property="CornerRadius" Value="12" />
+    </Style>
+
+    <Style x:Key="Tarjeta" TargetType="Border">
+        <Setter Property="BackgroundColor" Value="{StaticResource Superficie}" />
+        <Setter Property="Stroke" Value="{StaticResource Borde}" />
+        <Setter Property="StrokeThickness" Value="1" />
+        <Setter Property="Padding" Value="14" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 14" />
+    </Style>
+
+    <Style TargetType="Shell" ApplyToDerivedTypes="True">
+        <Setter Property="Shell.BackgroundColor" Value="{DynamicResource Estructura}" />
+        <Setter Property="Shell.ForegroundColor" Value="{StaticResource Blanco}" />
+        <Setter Property="Shell.TitleColor" Value="{StaticResource Blanco}" />
+        <Setter Property="Shell.TabBarBackgroundColor" Value="{DynamicResource Estructura}" />
+        <Setter Property="Shell.TabBarForegroundColor" Value="{StaticResource Blanco}" />
+        <!-- 0.92 y no el 0.6 habitual: a plena luz un blanco tenue no se ve, y el
+             visitador vería iconos flotando sin etiqueta. -->
+        <Setter Property="Shell.TabBarUnselectedColor" Value="#EAEAEA" />
+        <Setter Property="Shell.TabBarTitleColor" Value="{StaticResource Blanco}" />
+    </Style>
+
+</ResourceDictionary>

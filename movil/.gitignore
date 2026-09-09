@@ -1,0 +1,6 @@
+# Compilados de .NET / MAUI. El APK pesa 29 MB: no va al repositorio.
+bin/
+obj/
+*.apk
+*.aab
+*.user

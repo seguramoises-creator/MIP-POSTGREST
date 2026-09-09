@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<!-- SOLO ANDROID. El proyecto queda multiplataforma por dentro (MAUI lo es), pero
+		     no se compila iOS ni Windows: cada objetivo extra alarga la compilación y
+		     esconde errores que nadie va a ver, porque la app se usa en el teléfono del
+		     visitador y en ningún otro sitio. Añadir un objetivo el día que haga falta
+		     es una línea. -->
+		<TargetFrameworks>net10.0-android</TargetFrameworks>
+
+		<OutputType>Exe</OutputType>
+		<RootNamespace>VistaCampo</RootNamespace>
+		<UseMaui>true</UseMaui>
+		<SingleProject>true</SingleProject>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<MauiXamlInflator>SourceGen</MauiXamlInflator>
+
+		<ApplicationTitle>VISTA Campo</ApplicationTitle>
+		<ApplicationId>com.vistamip.campo</ApplicationId>
+		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+		<ApplicationVersion>1</ApplicationVersion>
+
+		<!-- Android 8.0 como suelo: por debajo quedan teléfonos que ya no reciben
+		     actualizaciones de seguridad y que en la calle son minoría. -->
+		<SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#011D42" />
+		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#011D42" BaseSize="128,128" />
+		<MauiImage Include="Resources\Images\*" />
+		<MauiFont Include="Resources\Fonts\*" />
+		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+		<!-- MVVM por generador de código: evita escribir a mano el INotifyPropertyChanged
+		     de cada propiedad, que es donde se cuelan los errores de refresco. -->
+		<PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+		<!-- La base local. No es una caché opcional: mientras no hay red ES la fuente de
+		     verdad de lo que el visitador capturó. -->
+		<!-- `sqlite-net-base` y no `sqlite-net-pcl`: son la MISMA biblioteca, pero la
+		     segunda arrastra `bundle_green` como dependencia fija y no hay forma de
+		     sacárselo. La `base` deja elegir el motor, que es justo lo que hace falta
+		     aquí. A cambio hay que arrancar el proveedor a mano (`Batteries_V2.Init()`
+		     en `MauiProgram`); sin esa llamada, la app falla al abrir la base. -->
+		<PackageReference Include="sqlite-net-base" Version="1.9.172" />
+		<!-- `bundle_sqlite3` y NO `bundle_green`, que es el que arrastra `sqlite-net-pcl`
+		     por defecto.
+
+		     `bundle_green` empaqueta su propio binario de SQLite (`e_sqlite3`), y ESE
+		     binario tiene una vulnerabilidad de severidad alta declarada
+		     (GHSA-2m69-gcr7-jv3q) que sigue abierta en toda la línea 2.x — subir de
+		     versión no la arregla, lo comprobé. `bundle_sqlite3` usa en cambio el SQLite
+		     DEL SISTEMA operativo, que en Android mantiene parcheado el fabricante con
+		     las actualizaciones del teléfono. Se cambia la dependencia en vez de aceptar
+		     el aviso: es una base local con datos de campo, no un ejemplo. -->
+		<PackageReference Include="SQLitePCLRaw.bundle_sqlite3" Version="2.1.11" />
+		<PackageReference Include="SQLitePCLRaw.core" Version="2.1.11" />
+	</ItemGroup>
+
+</Project>

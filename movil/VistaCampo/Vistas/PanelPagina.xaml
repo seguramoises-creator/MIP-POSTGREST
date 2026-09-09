@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:m="clr-namespace:VistaCampo.Modelos"
+             x:Class="VistaCampo.Vistas.PanelPagina"
+             Title="Panel">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*" Padding="16" RowSpacing="12">
+
+        <Entry Text="{Binding Busqueda}" Placeholder="Buscar por nombre"
+               Keyboard="Plain" IsSpellCheckEnabled="False" IsTextPredictionEnabled="False" />
+
+        <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="8">
+            <Button Text="Médicos" HeightRequest="48" Style="{StaticResource BotonSecundario}"
+                    BackgroundColor="{Binding VerFarmacias, Converter={StaticResource ColorSeleccion}, ConverterParameter=inverso}"
+                    Clicked="VerMedicos" />
+            <Button Grid.Column="1" Text="Farmacias" HeightRequest="48" Style="{StaticResource BotonSecundario}"
+                    BackgroundColor="{Binding VerFarmacias, Converter={StaticResource ColorSeleccion}}"
+                    Clicked="VerFarmacias" />
+        </Grid>
+
+        <Border Grid.Row="2" Style="{StaticResource Tarjeta}" BackgroundColor="#FFF4E5"
+                IsVisible="{Binding HayPendientes}">
+            <Label Text="{Binding TextoPendientes}" TextColor="{StaticResource Aviso}" />
+        </Border>
+
+        <CollectionView Grid.Row="3" ItemsSource="{Binding Medicos}"
+                        IsVisible="{Binding VerFarmacias, Converter={StaticResource Negar}}">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="m:MedicoPanel">
+                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,8">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="16" />
+                            <Label Text="{Binding Subtitulo}" Style="{StaticResource Tenue}" />
+                            <Label FontSize="12" FontAttributes="Bold" TextColor="{StaticResource Aviso}"
+                                   Text="Pendiente de aprobación del Gerente de Distrito"
+                                   IsVisible="{Binding SePuedeVisitar, Converter={StaticResource Negar}}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <CollectionView Grid.Row="3" ItemsSource="{Binding Farmacias}"
+                        IsVisible="{Binding VerFarmacias}">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="m:FarmaciaPanel">
+                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,8">
+                        <VerticalStackLayout>
+                            <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="16" />
+                            <Label Text="{Binding Direccion}" Style="{StaticResource Tenue}" />
+                            <Label FontSize="12" FontAttributes="Bold" TextColor="{StaticResource Aviso}"
+                                   Text="Pendiente de aprobación"
+                                   IsVisible="{Binding SePuedeVisitar, Converter={StaticResource Negar}}" />
+                        </VerticalStackLayout>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+    </Grid>
+</ContentPage>

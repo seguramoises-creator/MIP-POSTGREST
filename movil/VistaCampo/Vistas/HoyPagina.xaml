@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:m="clr-namespace:VistaCampo.Modelos"
+             x:Class="VistaCampo.Vistas.HoyPagina"
+             Title="Hoy">
+
+    <RefreshView IsRefreshing="{Binding Ocupado}" Command="{Binding CargarCommand}">
+        <ScrollView>
+            <VerticalStackLayout Padding="16" Spacing="14">
+
+                <!-- Estado de la cola: lo primero, porque es lo que responde «¿subió mi trabajo?» -->
+                <Border Style="{StaticResource Tarjeta}">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <VerticalStackLayout>
+                            <Label Text="Estado de envío" Style="{StaticResource Tenue}" />
+                            <Label Text="{Binding EstadoCola}" FontSize="18" FontAttributes="Bold" />
+                        </VerticalStackLayout>
+                        <Button Grid.Column="1" Text="Sincronizar" Style="{StaticResource BotonSecundario}"
+                                WidthRequest="130" Command="{Binding SincronizarCommand}" />
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource Tarjeta}" IsVisible="{Binding PuedeCapturar, Converter={StaticResource Negar}}"
+                        BackgroundColor="#FFF4E5">
+                    <Label Text="{Binding AvisoSoloConsulta}" TextColor="{StaticResource Aviso}" />
+                </Border>
+
+                <Border Style="{StaticResource Tarjeta}" IsVisible="{Binding SinCatalogos}" BackgroundColor="#FFF4E5">
+                    <Label TextColor="{StaticResource Aviso}"
+                           Text="Todavía no se han descargado tus médicos. Toca Sincronizar cuando tengas señal." />
+                </Border>
+
+                <!-- Cifras del día -->
+                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
+                    <Border Style="{StaticResource Tarjeta}">
+                        <VerticalStackLayout>
+                            <Label Text="Vistas" Style="{StaticResource Tenue}" />
+                            <Label Text="{Binding Vistas}" FontSize="32" FontAttributes="Bold" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Column="1" Style="{StaticResource Tarjeta}">
+                        <VerticalStackLayout>
+                            <Label Text="Revisitas" Style="{StaticResource Tenue}" />
+                            <Label Text="{Binding Revisitas}" FontSize="32" FontAttributes="Bold" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Row="1" Style="{StaticResource Tarjeta}">
+                        <VerticalStackLayout>
+                            <Label Text="Farmacias" Style="{StaticResource Tenue}" />
+                            <Label Text="{Binding Farmacias}" FontSize="32" FontAttributes="Bold" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource Tarjeta}">
+                        <VerticalStackLayout>
+                            <Label Text="Con gerente" Style="{StaticResource Tenue}" />
+                            <Label Text="{Binding Acompanadas}" FontSize="32" FontAttributes="Bold" />
+                        </VerticalStackLayout>
+                    </Border>
+                </Grid>
+
+                <Label Text="Tu agenda de hoy" Style="{StaticResource Titulo}" FontSize="19" Margin="0,6,0,0" />
+                <Label Style="{StaticResource Tenue}" IsVisible="{Binding Agenda.Count, Converter={StaticResource ListaVacia}}"
+                       Text="Sin agenda descargada para hoy." />
+
+                <CollectionView ItemsSource="{Binding Agenda}" HeightRequest="240">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="m:ItemAgenda">
+                            <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,8">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <VerticalStackLayout>
+                                        <Label Text="{Binding Nombre}" FontAttributes="Bold" />
+                                        <Label Style="{StaticResource Tenue}"
+                                               Text="{Binding TipoVisita, Converter={StaticResource TipoATexto}}" />
+                                    </VerticalStackLayout>
+                                    <Label Grid.Column="1" Text="✓" FontSize="22"
+                                           TextColor="{StaticResource Exito}"
+                                           IsVisible="{Binding Registrada}" VerticalOptions="Center" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+
+                <Label Text="{Binding Aviso}" IsVisible="{Binding HayAviso}" TextColor="{StaticResource Aviso}" />
+                <Label Text="{Binding Error}" IsVisible="{Binding HayError}" TextColor="{StaticResource Error}" />
+
+            </VerticalStackLayout>
+        </ScrollView>
+    </RefreshView>
+</ContentPage>

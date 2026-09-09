@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Los permisos se piden EN CONTEXTO, no al abrir: la ubicación la primera vez que se
+  registra una visita y la cámara la primera vez que se toma una foto. Pedirlos todos
+  de golpe al arrancar es la forma más rápida de que el visitador los deniegue todos.
+
+  Ubicación y cámara son OPCIONALES para la app: si se deniegan, la visita se registra
+  igual. Por eso van declaradas con `required="false"` — un teléfono sin cámara o sin
+  GPS debe poder instalarla.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+	<application android:allowBackup="true"
+	             android:icon="@mipmap/appicon"
+	             android:roundIcon="@mipmap/appicon_round"
+	             android:supportsRtl="true"
+	             android:label="VISTA Campo"></application>
+
+	<uses-permission android:name="android.permission.INTERNET" />
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+	<!-- Georreferencia de la visita -->
+	<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+	<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+
+	<!-- Foto del centro médico -->
+	<uses-permission android:name="android.permission.CAMERA" />
+
+	<!-- Aviso de capturas por vencer (la ventana del servidor es de 60 minutos) -->
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+	<uses-feature android:name="android.hardware.camera" android:required="false" />
+	<uses-feature android:name="android.hardware.location" android:required="false" />
+	<uses-feature android:name="android.hardware.location.gps" android:required="false" />
+</manifest>

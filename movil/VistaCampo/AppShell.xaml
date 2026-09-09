@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Barra INFERIOR de cinco pestañas, no un menú lateral: el visitador usa el pulgar y la
+  parte alta de la pantalla no la alcanza con una mano.
+-->
+<Shell xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+       xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+       xmlns:v="clr-namespace:VistaCampo.Vistas"
+       x:Class="VistaCampo.AppShell"
+       Shell.FlyoutBehavior="Disabled"
+       Title="VISTA Campo">
+
+    <!-- La entrada va fuera de la barra: mientras no hay sesión no hay nada que navegar. -->
+    <ShellContent Route="entrar" ContentTemplate="{DataTemplate v:EntrarPagina}"
+                  Shell.TabBarIsVisible="False" Shell.NavBarIsVisible="False" />
+
+    <TabBar>
+        <ShellContent Route="hoy" Title="Hoy" ContentTemplate="{DataTemplate v:HoyPagina}" />
+        <ShellContent Route="registrar" Title="Registrar" ContentTemplate="{DataTemplate v:RegistrarPagina}" />
+        <ShellContent Route="panel" Title="Panel" ContentTemplate="{DataTemplate v:PanelPagina}" />
+        <ShellContent Route="plan" Title="Plan" ContentTemplate="{DataTemplate v:PlanPagina}" />
+        <ShellContent Route="perfil" Title="Perfil" ContentTemplate="{DataTemplate v:PerfilPagina}" />
+    </TabBar>
+
+</Shell>

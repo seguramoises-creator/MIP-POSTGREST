@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:m="clr-namespace:VistaCampo.Modelos"
+             x:Class="VistaCampo.Vistas.RegistrarPagina"
+             Title="Registrar">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="14">
+
+            <Border Style="{StaticResource Tarjeta}" BackgroundColor="#FFF4E5"
+                    IsVisible="{Binding PuedeCapturar, Converter={StaticResource Negar}}">
+                <Label TextColor="{StaticResource Aviso}"
+                       Text="En esta instalación las visitas llegan del sistema de tu compañía. Aquí solo se consultan." />
+            </Border>
+
+            <VerticalStackLayout IsVisible="{Binding PuedeCapturar}" Spacing="14">
+
+                <!-- Médico o farmacia -->
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                    <Button Text="Médico" HeightRequest="48"
+                            Style="{StaticResource BotonSecundario}"
+                            BackgroundColor="{Binding EsFarmacia, Converter={StaticResource ColorSeleccion}, ConverterParameter=inverso}"
+                            Clicked="ElegirMedico" />
+                    <Button Grid.Column="1" Text="Farmacia" HeightRequest="48"
+                            Style="{StaticResource BotonSecundario}"
+                            BackgroundColor="{Binding EsFarmacia, Converter={StaticResource ColorSeleccion}}"
+                            Clicked="ElegirFarmacia" />
+                </Grid>
+
+                <VerticalStackLayout>
+                    <Label Text="¿A quién visitaste?" Style="{StaticResource Etiqueta}" />
+                    <Entry Text="{Binding Busqueda}" Placeholder="Escribe el nombre"
+                           Keyboard="Plain" IsSpellCheckEnabled="False" IsTextPredictionEnabled="False" />
+                    <Label Text="{Binding Elegido}" IsVisible="{Binding Elegido, Converter={StaticResource HayTexto}}"
+                           FontAttributes="Bold" FontSize="17" Margin="0,8,0,0"
+                           TextColor="{DynamicResource Accion}" />
+                </VerticalStackLayout>
+
+                <CollectionView ItemsSource="{Binding Medicos}" SelectedItem="{Binding Medico}"
+                                SelectionMode="Single" HeightRequest="170"
+                                IsVisible="{Binding EsFarmacia, Converter={StaticResource Negar}}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="m:MedicoPanel">
+                            <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,6" Padding="12">
+                                <VerticalStackLayout>
+                                    <Label Text="{Binding Nombre}" FontAttributes="Bold" />
+                                    <Label Text="{Binding Subtitulo}" Style="{StaticResource Tenue}" />
+                                    <Label Text="Pendiente de aprobación" FontSize="12" FontAttributes="Bold"
+                                           TextColor="{StaticResource Aviso}"
+                                           IsVisible="{Binding SePuedeVisitar, Converter={StaticResource Negar}}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+
+                <CollectionView ItemsSource="{Binding Farmacias}" SelectedItem="{Binding Farmacia}"
+                                SelectionMode="Single" HeightRequest="170"
+                                IsVisible="{Binding EsFarmacia}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="m:FarmaciaPanel">
+                            <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,6" Padding="12">
+                                <VerticalStackLayout>
+                                    <Label Text="{Binding Nombre}" FontAttributes="Bold" />
+                                    <Label Text="{Binding Direccion}" Style="{StaticResource Tenue}" />
+                                    <Label Text="Pendiente de aprobación" FontSize="12" FontAttributes="Bold"
+                                           TextColor="{StaticResource Aviso}"
+                                           IsVisible="{Binding SePuedeVisitar, Converter={StaticResource Negar}}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+
+                <!-- Vista o Revisita: dos botones grandes, nunca un desplegable -->
+                <VerticalStackLayout IsVisible="{Binding EsFarmacia, Converter={StaticResource Negar}}">
+                    <Label Text="Tipo de visita" Style="{StaticResource Etiqueta}" />
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button Text="Vista" HeightRequest="50" Style="{StaticResource BotonSecundario}"
+                                BackgroundColor="{Binding EsVista, Converter={StaticResource ColorSeleccion}}"
+                                Command="{Binding ElegirVistaCommand}" />
+                        <Button Grid.Column="1" Text="Revisita" HeightRequest="50"
+                                Style="{StaticResource BotonSecundario}"
+                                BackgroundColor="{Binding EsRevisita, Converter={StaticResource ColorSeleccion}}"
+                                Command="{Binding ElegirRevisitaCommand}" />
+                    </Grid>
+                </VerticalStackLayout>
+
+                <Grid ColumnDefinitions="Auto,*">
+                    <CheckBox IsChecked="{Binding EsNoVisita}" />
+                    <Label Grid.Column="1" VerticalOptions="Center"
+                           Text="No pude visitar (registrar el motivo)" />
+                </Grid>
+
+                <VerticalStackLayout IsVisible="{Binding EsNoVisita}">
+                    <Label Text="Motivo" Style="{StaticResource Etiqueta}" />
+                    <Picker ItemsSource="{Binding Causas}" SelectedItem="{Binding Causa}"
+                            Title="Elige el motivo" HeightRequest="52" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout>
+                    <Label Text="¿Qué pasó en la visita?" Style="{StaticResource Etiqueta}" />
+                    <Editor Text="{Binding Comentario}" HeightRequest="110"
+                            Placeholder="Describe algo concreto: qué producto, qué objeción, qué acordaron"
+                            IsSpellCheckEnabled="False" />
+                    <Label Text="{Binding AyudaComentario}" Style="{StaticResource Tenue}" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout>
+                    <Label Text="¿Hace cuánto fue?" Style="{StaticResource Etiqueta}" />
+                    <Picker ItemsSource="{Binding Minutos}" SelectedItem="{Binding HaceMinutos}"
+                            HeightRequest="52" />
+                    <Label Style="{StaticResource Tenue}"
+                           Text="El sistema solo acepta visitas de la última hora." />
+                </VerticalStackLayout>
+
+                <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding EsFarmacia, Converter={StaticResource Negar}}">
+                    <CheckBox IsChecked="{Binding Acompanado}" />
+                    <Label Grid.Column="1" VerticalOptions="Center" Text="Me acompañó el Gerente de Distrito" />
+                </Grid>
+
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                    <Button Text="Tomar foto" Style="{StaticResource BotonSecundario}"
+                            Command="{Binding TomarFotoCommand}" />
+                    <Button Grid.Column="1" Text="Quitar" WidthRequest="90"
+                            Style="{StaticResource BotonSecundario}"
+                            IsVisible="{Binding RutaFoto, Converter={StaticResource HayTexto}}"
+                            Command="{Binding QuitarFotoCommand}" />
+                </Grid>
+                <Label Style="{StaticResource Tenue}" Text="La foto es opcional." />
+
+                <Button Text="Guardar visita" Style="{StaticResource BotonPrincipal}"
+                        Command="{Binding GuardarCommand}" />
+
+                <ActivityIndicator IsRunning="{Binding Ocupado}" IsVisible="{Binding Ocupado}"
+                                   Color="{DynamicResource Accion}" />
+                <Label Text="{Binding Error}" IsVisible="{Binding HayError}"
+                       TextColor="{StaticResource Error}" FontAttributes="Bold" />
+                <Label Text="{Binding Aviso}" IsVisible="{Binding HayAviso}"
+                       TextColor="{StaticResource Exito}" FontAttributes="Bold" />
+                <Label Text="{Binding Ubicacion}" Style="{StaticResource Tenue}"
+                       IsVisible="{Binding Ubicacion, Converter={StaticResource HayTexto}}" />
+            </VerticalStackLayout>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>
