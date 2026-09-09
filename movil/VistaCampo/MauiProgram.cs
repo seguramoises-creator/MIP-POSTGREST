@@ -33,6 +33,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<BaseLocal>();
         builder.Services.AddSingleton<ServicioInstalacion>();
         builder.Services.AddSingleton<ServicioSincronizacion>();
+        builder.Services.AddSingleton<ServicioAltas>();
 
         // ── Pantallas ────────────────────────────────────────────────────────
         // Transitorias: cada vez que se abre una pestaña se arma limpia, sin arrastrar
@@ -43,6 +44,8 @@ public static class MauiProgram
         builder.Services.AddTransient<PanelVista>();
         builder.Services.AddTransient<PlanVista>();
         builder.Services.AddTransient<PerfilVista>();
+        builder.Services.AddTransient<AltaMedicoVista>();
+        builder.Services.AddTransient<AltaFarmaciaVista>();
 
         builder.Services.AddTransient<EntrarPagina>();
         builder.Services.AddTransient<HoyPagina>();
@@ -50,6 +53,8 @@ public static class MauiProgram
         builder.Services.AddTransient<PanelPagina>();
         builder.Services.AddTransient<PlanPagina>();
         builder.Services.AddTransient<PerfilPagina>();
+        builder.Services.AddTransient<AltaMedicoPagina>();
+        builder.Services.AddTransient<AltaFarmaciaPagina>();
 
 #if DEBUG
         builder.Logging.AddDebug();

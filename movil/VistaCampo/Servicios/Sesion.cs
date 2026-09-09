@@ -28,6 +28,17 @@ public class Sesion
     public string? NombreCompleto { get; private set; }
     public string? Rol { get; private set; }
 
+    /// <summary>
+    /// El país del visitador. No viaja en el token, así que se pide a `/auth/me` al
+    /// entrar y se guarda: el vocabulario de clasificación de un médico es POR PAÍS, y
+    /// sin él no se puede ni dibujar el formulario de alta.
+    /// </summary>
+    public string? PaisCodigo
+    {
+        get => Preferences.Get("pais_codigo", null as string);
+        set { if (!string.IsNullOrWhiteSpace(value)) Preferences.Set("pais_codigo", value); }
+    }
+
     public async Task<string?> AccessTokenAsync() => await Leer(CLAVE_ACCESO);
     public async Task<string?> RefreshTokenAsync() => await Leer(CLAVE_REFRESCO);
 

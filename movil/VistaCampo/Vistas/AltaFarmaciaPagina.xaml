@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:m="clr-namespace:VistaCampo.Modelos"
+             xmlns:vm="clr-namespace:VistaCampo.VistaModelos"
+             x:Class="VistaCampo.Vistas.AltaFarmaciaPagina"
+             x:DataType="vm:AltaFarmaciaVista"
+             Title="Nueva farmacia">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="14">
+
+            <Border Style="{StaticResource Tarjeta}" BackgroundColor="#FFF4E5"
+                    IsVisible="{Binding SinConexion}">
+                <Label Text="{Binding AvisoSinConexion}" TextColor="{StaticResource Aviso}" />
+            </Border>
+
+            <VerticalStackLayout IsVisible="{Binding SinConexion, Converter={StaticResource Negar}}"
+                                 Spacing="14">
+
+                <Grid ColumnDefinitions="Auto,*">
+                    <CheckBox IsChecked="{Binding EsCadena}" />
+                    <Label Grid.Column="1" VerticalOptions="Center" Text="Es de una cadena" />
+                </Grid>
+
+                <VerticalStackLayout IsVisible="{Binding EsCadena}">
+                    <Label Text="Cadena" Style="{StaticResource Etiqueta}" />
+                    <Entry Text="{Binding Cadena}" Placeholder="Ej. Carol, GBC, Los Hidalgos" />
+                    <Label Text="Sucursal" Style="{StaticResource Etiqueta}" Margin="0,10,0,4" />
+                    <Entry Text="{Binding Sucursal}" Placeholder="Ej. Naco, Pantoja" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout IsVisible="{Binding EsCadena, Converter={StaticResource Negar}}">
+                    <Label Text="Nombre de la farmacia" Style="{StaticResource Etiqueta}" />
+                    <Entry Text="{Binding Nombre}" Placeholder="Nombre completo" />
+                </VerticalStackLayout>
+
+                <!-- Buscar ANTES de crear: es la regla del sistema y lo que evita la
+                     mitad de los duplicados. El formulario de abajo no se habilita
+                     hasta que una búsqueda vuelve vacía. -->
+                <Button Text="Buscar si ya existe" Style="{StaticResource BotonPrincipal}"
+                        Command="{Binding BuscarCommand}" />
+
+                <Border Style="{StaticResource Tarjeta}" IsVisible="{Binding HayEncontradas}">
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="Ya está en el sistema" FontAttributes="Bold" />
+                        <Label Style="{StaticResource Tenue}"
+                               Text="Agrégala a tu panel en vez de crearla otra vez." />
+                        <CollectionView ItemsSource="{Binding Encontradas}" HeightRequest="180">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="m:FarmaciaMaestro">
+                                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,8" Padding="10">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <VerticalStackLayout>
+                                                <Label Text="{Binding Nombre}" FontAttributes="Bold" />
+                                                <Label Text="{Binding Direccion}" Style="{StaticResource Tenue}" />
+                                            </VerticalStackLayout>
+                                            <Button Grid.Column="1" Text="Agregar" WidthRequest="100"
+                                                    Style="{StaticResource BotonSecundario}"
+                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type vm:AltaFarmaciaVista}}, Path=AgregarCommand}"
+                                                    CommandParameter="{Binding .}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </VerticalStackLayout>
+                </Border>
+
+                <VerticalStackLayout IsVisible="{Binding PuedeCrear}" Spacing="12">
+                    <Label Text="Datos de la farmacia" Style="{StaticResource Titulo}" FontSize="19" />
+
+                    <VerticalStackLayout>
+                        <Label Text="Dirección" Style="{StaticResource Etiqueta}" />
+                        <Entry Text="{Binding Direccion}" Placeholder="Calle, número, referencia" />
+                        <Label Style="{StaticResource Tenue}" Text="Obligatoria." />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout>
+                        <Label Text="Encargado" Style="{StaticResource Etiqueta}" />
+                        <Entry Text="{Binding Encargado}" Placeholder="Quién atiende" />
+                        <Label Style="{StaticResource Tenue}" Text="Obligatorio." />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout>
+                        <Label Text="Sector" Style="{StaticResource Etiqueta}" />
+                        <Entry Text="{Binding Sector}" Placeholder="Opcional" />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout>
+                        <Label Text="Teléfono" Style="{StaticResource Etiqueta}" />
+                        <Entry Text="{Binding Telefono}" Keyboard="Telephone" Placeholder="Opcional" />
+                    </VerticalStackLayout>
+
+                    <Label Text="{Binding AyudaCreacion}" Style="{StaticResource Tenue}" />
+
+                    <Button Text="Enviar para aprobación" Style="{StaticResource BotonPrincipal}"
+                            Command="{Binding CrearCommand}" />
+                </VerticalStackLayout>
+
+                <ActivityIndicator IsRunning="{Binding Ocupado}" IsVisible="{Binding Ocupado}"
+                                   Color="{DynamicResource Accion}" />
+                <Label Text="{Binding Error}" IsVisible="{Binding HayError}"
+                       TextColor="{StaticResource Error}" FontAttributes="Bold" />
+                <Label Text="{Binding Aviso}" IsVisible="{Binding HayAviso}"
+                       TextColor="{StaticResource Exito}" FontAttributes="Bold" />
+            </VerticalStackLayout>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

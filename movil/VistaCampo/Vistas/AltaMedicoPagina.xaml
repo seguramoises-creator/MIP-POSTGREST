@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:m="clr-namespace:VistaCampo.Modelos"
+             xmlns:vm="clr-namespace:VistaCampo.VistaModelos"
+             xmlns:sys="clr-namespace:System;assembly=netstandard"
+             x:Class="VistaCampo.Vistas.AltaMedicoPagina"
+             x:DataType="vm:AltaMedicoVista"
+             Title="Nuevo médico">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="16" Spacing="14">
+
+            <Border Style="{StaticResource Tarjeta}" BackgroundColor="#FFF4E5"
+                    IsVisible="{Binding SinConexion}">
+                <Label Text="{Binding AvisoSinConexion}" TextColor="{StaticResource Aviso}" />
+            </Border>
+
+            <VerticalStackLayout IsVisible="{Binding SinConexion, Converter={StaticResource Negar}}"
+                                 Spacing="14">
+
+                <!-- BUSCAR PRIMERO: casi siempre el médico ya está en otro panel del país
+                     y basta con copiarlo, sin reescribir la ficha. -->
+                <Border Style="{StaticResource Tarjeta}">
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="¿Ya está registrado?" Style="{StaticResource Etiqueta}" />
+                        <Label Style="{StaticResource Tenue}"
+                               Text="Búscalo antes de crearlo: si ya existe en otro panel, se copia sin volver a capturar la ficha." />
+                        <Entry Text="{Binding Busqueda}" Placeholder="Escribe el nombre"
+                               Keyboard="Plain" IsSpellCheckEnabled="False" IsTextPredictionEnabled="False" />
+                        <CollectionView ItemsSource="{Binding Existentes}" HeightRequest="180">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="m:MedicoExistente">
+                                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,6" Padding="10">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <VerticalStackLayout>
+                                                <Label Text="{Binding Nombre}" FontAttributes="Bold" />
+                                                <Label Text="{Binding Detalle}" Style="{StaticResource Tenue}" />
+                                                <Label Text="{Binding Origen}" Style="{StaticResource Tenue}" FontSize="12" />
+                                            </VerticalStackLayout>
+                                            <Button Grid.Column="1" Text="Copiar" WidthRequest="92"
+                                                    Style="{StaticResource BotonSecundario}"
+                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type vm:AltaMedicoVista}}, Path=CopiarCommand}"
+                                                    CommandParameter="{Binding .}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </VerticalStackLayout>
+                </Border>
+
+                <Label Text="Datos del médico" Style="{StaticResource Titulo}" FontSize="19" />
+
+                <Border Style="{StaticResource Tarjeta}" BackgroundColor="#E8F3EA"
+                        IsVisible="{Binding Copiando}">
+                    <Label Text="{Binding OrigenCopia}" TextColor="{StaticResource Exito}" />
+                </Border>
+
+                <VerticalStackLayout>
+                    <Label Text="Nombre completo" Style="{StaticResource Etiqueta}" />
+                    <Entry Text="{Binding Nombre}" Placeholder="Nombre y apellidos" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout>
+                    <Label Text="Centro médico" Style="{StaticResource Etiqueta}" />
+                    <Entry Text="{Binding Centro}" Placeholder="Dónde pasa consulta" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout>
+                    <Label Text="Exequátur" Style="{StaticResource Etiqueta}" />
+                    <Entry Text="{Binding Exequatur}" Placeholder="Opcional" Keyboard="Plain" />
+                    <Label Style="{StaticResource Tenue}"
+                           Text="Si lo pones, evita que se cree dos veces el mismo médico." />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout>
+                    <Label Text="Teléfono" Style="{StaticResource Etiqueta}" />
+                    <Entry Text="{Binding Telefono}" Keyboard="Telephone" Placeholder="Opcional" />
+                </VerticalStackLayout>
+
+                <VerticalStackLayout>
+                    <Label Text="Dirección" Style="{StaticResource Etiqueta}" />
+                    <Entry Text="{Binding Direccion}" Placeholder="Opcional" />
+                </VerticalStackLayout>
+
+                <!-- La clasificación se DIBUJA con lo que manda el servidor: el
+                     vocabulario es cerrado y cambia por país. La categoría no aparece
+                     por ningún lado, ni se elige: la revela el sistema al aprobar. -->
+                <Label Text="Clasificación" Style="{StaticResource Titulo}" FontSize="19" />
+                <Label Style="{StaticResource Tenue}"
+                       Text="La categoría del médico la calcula el sistema con estos datos cuando tu gerente aprueba el alta. No se elige." />
+
+                <Label Style="{StaticResource Tenue}" IsVisible="{Binding PlantillaLista, Converter={StaticResource Negar}}"
+                       Text="No se pudo cargar el formulario de clasificación." />
+
+                <CollectionView ItemsSource="{Binding Criterios}" HeightRequest="420">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="m:CriterioCaptura">
+                            <VerticalStackLayout Margin="0,0,0,12">
+                                <Label Text="{Binding Etiqueta}" Style="{StaticResource Etiqueta}" />
+                                <Entry Text="{Binding ValorNumero}" Keyboard="Numeric"
+                                       IsVisible="{Binding EsNumerico}" Placeholder="Escribe la cifra" />
+                                <Picker ItemsSource="{Binding Opciones}" SelectedItem="{Binding ValorTexto}"
+                                        IsVisible="{Binding EsTexto}" Title="Elige una opción"
+                                        HeightRequest="52" />
+                            </VerticalStackLayout>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+
+                <!-- Posible duplicado: se enseñan las coincidencias y decide el
+                     visitador. Un duplicado DURO no ofrece continuar. -->
+                <Border Style="{StaticResource Tarjeta}" BackgroundColor="#FDECEA"
+                        IsVisible="{Binding HayDuplicados}">
+                    <VerticalStackLayout Spacing="6">
+                        <Label Text="Puede que ya esté registrado" FontAttributes="Bold"
+                               TextColor="{StaticResource Error}" />
+                        <CollectionView ItemsSource="{Binding Duplicados}" HeightRequest="80">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate x:DataType="sys:String">
+                                    <Label Text="{Binding .}" FontSize="13" />
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                        <Button Text="Es otro médico, continuar"
+                                Style="{StaticResource BotonSecundario}"
+                                IsVisible="{Binding DuplicadoBloqueante, Converter={StaticResource Negar}}"
+                                Command="{Binding ConfirmarDistintoCommand}" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Button Text="Enviar para aprobación" Style="{StaticResource BotonPrincipal}"
+                        Command="{Binding GuardarCommand}" />
+
+                <ActivityIndicator IsRunning="{Binding Ocupado}" IsVisible="{Binding Ocupado}"
+                                   Color="{DynamicResource Accion}" />
+                <Label Text="{Binding Error}" IsVisible="{Binding HayError}"
+                       TextColor="{StaticResource Error}" FontAttributes="Bold" />
+                <Label Text="{Binding Aviso}" IsVisible="{Binding HayAviso}"
+                       TextColor="{StaticResource Exito}" FontAttributes="Bold" />
+            </VerticalStackLayout>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

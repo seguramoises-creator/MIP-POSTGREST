@@ -5,7 +5,7 @@
              x:Class="VistaCampo.Vistas.PanelPagina"
              Title="Panel">
 
-    <Grid RowDefinitions="Auto,Auto,Auto,*" Padding="16" RowSpacing="12">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Padding="16" RowSpacing="12">
 
         <Entry Text="{Binding Busqueda}" Placeholder="Buscar por nombre"
                Keyboard="Plain" IsSpellCheckEnabled="False" IsTextPredictionEnabled="False" />
@@ -19,12 +19,21 @@
                     Clicked="VerFarmacias" />
         </Grid>
 
-        <Border Grid.Row="2" Style="{StaticResource Tarjeta}" BackgroundColor="#FFF4E5"
+        <!-- El alta va aquí, junto a la lista donde se ve qué falta: es el sitio donde
+             el visitador se da cuenta de que el médico que acaba de visitar no está. -->
+        <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="8">
+            <Button Text="+ Médico" Style="{StaticResource BotonSecundario}"
+                    Clicked="NuevoMedico" />
+            <Button Grid.Column="1" Text="+ Farmacia" Style="{StaticResource BotonSecundario}"
+                    Clicked="NuevaFarmacia" />
+        </Grid>
+
+        <Border Grid.Row="3" Style="{StaticResource Tarjeta}" BackgroundColor="#FFF4E5"
                 IsVisible="{Binding HayPendientes}">
             <Label Text="{Binding TextoPendientes}" TextColor="{StaticResource Aviso}" />
         </Border>
 
-        <CollectionView Grid.Row="3" ItemsSource="{Binding Medicos}"
+        <CollectionView Grid.Row="4" ItemsSource="{Binding Medicos}"
                         IsVisible="{Binding VerFarmacias, Converter={StaticResource Negar}}">
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="m:MedicoPanel">
@@ -41,7 +50,7 @@
             </CollectionView.ItemTemplate>
         </CollectionView>
 
-        <CollectionView Grid.Row="3" ItemsSource="{Binding Farmacias}"
+        <CollectionView Grid.Row="4" ItemsSource="{Binding Farmacias}"
                         IsVisible="{Binding VerFarmacias}">
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="m:FarmaciaPanel">
