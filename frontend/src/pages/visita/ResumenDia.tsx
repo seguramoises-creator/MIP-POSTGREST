@@ -15,19 +15,20 @@
  * 3. «SIN REGISTROS» NO ES «NO TRABAJÓ». Un representante sin filas puede no
  *    haber sincronizado; la pantalla lo dice con esas palabras y el panel de
  *    seguimiento invita a revisar la sincronización antes de sacar conclusiones.
- * 4. LA TABLA ARRANCA EN DIEZ FILAS, las de quien SÍ tiene agenda contra la que
- *    medirse. Con cuarenta y tantos representantes y la mayoría sin planeación,
- *    la pantalla se llenaba de rayas: el que sí va atrasado quedaba enterrado.
- *    Se muestran primero los de menor avance —que son los que hay que mirar—, y
- *    un botón despliega al resto. Recortar SIN esa salida sería esconder gente,
- *    que es el mismo error que pintar un cero donde no hay dato.
+ * 4. DIEZ FILAS POR PÁGINA, con paginador. Con cuarenta y tantos representantes la
+ *    tabla ocupaba tres pantallas y el resto de la página quedaba fuera de vista;
+ *    desplegarla con un botón resolvía lo mismo creciendo, que es justo lo que no
+ *    se quiere. Paginada, la tarjeta mide SIEMPRE lo mismo. El orden es por MENOR
+ *    avance, así que la primera página ya trae a quien hay que mirar, y el
+ *    paginador deja llegar a todos: recortar sin salida sería esconder gente, el
+ *    mismo error que pintar un cero donde no hay dato.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Box, Card, CardContent, Typography, Stack, Table, TableHead, TableRow,
   TableCell, TableBody, Chip, Alert, CircularProgress, TextField, LinearProgress,
-  Button,
+  Pagination,
 } from '@mui/material';
 import { AVISO, AVISO_TENUE, BORDE_SUAVE, EXITO, SUPERFICIE_3 } from '../../theme/marca';
 import { marcaViva } from '../../theme/marcaViva';
@@ -68,8 +69,8 @@ function Avance({ pct, hechas, planeadas }: { pct: number | null; hechas: number
   );
 }
 
-/** Cuántas filas se ven sin desplegar. */
-const VISIBLES = 10;
+/** Filas por página. Fija la altura de la tarjeta: no crece con el equipo. */
+const POR_PAGINA = 10;
 
 /**
  * Orden de la tabla: primero quien tiene agenda, y dentro de ellos el más
@@ -88,7 +89,11 @@ function porUrgencia(a: FilaRepresentante, b: FilaRepresentante): number {
 
 export default function ResumenDia() {
   const [fecha, setFecha] = useState(hoy());
-  const [verTodos, setVerTodos] = useState(false);
+  const [pagina, setPagina] = useState(1);
+
+  // Cambiar de día es empezar de cero: quedarse en la página 4 de un día que solo
+  // tiene dos dejaría la tabla vacía sin explicar por qué.
+  useEffect(() => { setPagina(1); }, [fecha]);
   const { data, isLoading, error } = useQuery({
     queryKey: ['resumen-dia', fecha],
     queryFn: () => resumenDia({ fecha }),
@@ -103,8 +108,12 @@ export default function ResumenDia() {
   const { totales, semana, ciclo, representantes } = data;
   const sinRegistros = representantes.filter((r) => r.v + r.r + r.farmacias === 0).length;
   const ordenados = [...representantes].sort(porUrgencia);
-  const visibles = verTodos ? ordenados : ordenados.slice(0, VISIBLES);
-  const ocultos = ordenados.length - visibles.length;
+  const paginas = Math.max(1, Math.ceil(ordenados.length / POR_PAGINA));
+  // Se acota al rango REAL en vez de confiar en el estado: si el equipo encoge —otro
+  // día, otro filtro— la página guardada puede quedar fuera y la tabla saldría vacía
+  // sin decir nada. Acotar aquí es un renglón; diagnosticar «no hay datos» es una tarde.
+  const actual = Math.min(pagina, paginas);
+  const visibles = ordenados.slice((actual - 1) * POR_PAGINA, actual * POR_PAGINA);
   const conAgenda = representantes.filter((r) => r.semana.avance_pct !== null).length;
 
   return (
@@ -177,10 +186,8 @@ export default function ResumenDia() {
           {/* Qué se está viendo, dicho antes de la tabla: una lista recortada sin
               avisar se lee como la lista completa. */}
           <Typography variant="caption" sx={{ color: TEXTO_TENUE }}>
-            {verTodos
-              ? `Los ${ordenados.length} representantes, del menor avance al mayor.`
-              : `Los ${visibles.length} de menor avance, de ${ordenados.length}. `
-                + `${conAgenda} tienen agenda esta semana.`}
+            {`${ordenados.length} representantes, del menor avance al mayor · `}
+            {`${conAgenda} con agenda esta semana`}
           </Typography>
         </CardContent>
         <Box sx={{ overflowX: 'auto' }}>
@@ -230,13 +237,19 @@ export default function ResumenDia() {
             </TableBody>
           </Table>
         </Box>
-        {(ocultos > 0 || verTodos) && (
-          <Box sx={{ px: 2, py: 1.5, borderTop: `1px solid ${BORDE_SUAVE}` }}>
-            <Button size="small" onClick={() => setVerTodos(!verTodos)}>
-              {verTodos
-                ? `Ver solo los ${VISIBLES} de menor avance`
-                : `Ver los ${ocultos} restantes`}
-            </Button>
+        {paginas > 1 && (
+          <Box sx={{ px: 2, py: 1.5, borderTop: `1px solid ${BORDE_SUAVE}`,
+                     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                     flexWrap: 'wrap', gap: 1 }}>
+            <Typography variant="caption" sx={{ color: TEXTO_TENUE }}>
+              {(actual - 1) * POR_PAGINA + 1}–{(actual - 1) * POR_PAGINA + visibles.length}
+              {' '}de {ordenados.length}
+            </Typography>
+            {/* Primera y última página además de las flechas: con cinco páginas, volver
+                al principio a base de clics es lo que hace que nadie vuelva. */}
+            <Pagination count={paginas} page={actual} onChange={(_, p) => setPagina(p)}
+                        size="small" shape="rounded" color="primary"
+                        showFirstButton showLastButton siblingCount={1} />
           </Box>
         )}
       </Card>
