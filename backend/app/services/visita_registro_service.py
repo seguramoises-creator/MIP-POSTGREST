@@ -52,7 +52,30 @@ def _medico_del_vm(db: Session, vm_id: int, medico_id: int) -> MedicoVisita:
     return m
 
 
+def _ya_registrada(db: Session, vm_id: int, uuid_cliente: str | None) -> VisitaRegistro | None:
+    """La visita que ese teléfono ya envió con esa huella, si existe.
+
+    Es lo que hace SEGURO reintentar desde el móvil. Sin esto, la única forma de que la
+    cola no duplique sería no reintentar nunca — y entonces una respuesta perdida en un
+    parqueo subterráneo se lleva por delante el trabajo de la mañana.
+
+    Devolver la visita existente y no un error: para el teléfono el reintento tiene que
+    verse EXACTAMENTE como si hubiera funcionado a la primera. Un 409 aquí obligaría a
+    cada cliente a distinguir «ya estaba» de «falló», y esa distinción se implementa mal
+    tarde o temprano."""
+    if not uuid_cliente:
+        return None
+    return db.query(VisitaRegistro).filter(
+        VisitaRegistro.vm_id == vm_id,
+        VisitaRegistro.uuid_cliente == uuid_cliente).first()
+
+
 def registrar_visita(db: Session, vm_id: int, datos: VisitaRegistrar, usuario_id: int | None) -> VisitaRegistro:
+    repetida = _ya_registrada(db, vm_id, getattr(datos, "uuid_cliente", None))
+    if repetida is not None:
+        logger.info(f"Reintento de visita ya registrada id={repetida.id} VM={vm_id} "
+                    f"uuid={datos.uuid_cliente} — se devuelve la existente")
+        return repetida
     _medico_del_vm(db, vm_id, datos.medico_id)
     ciclo_id = ciclo_por_defecto(db, vm_id)  # ciclo ABIERTO del país del VM
     if ciclo_id is None:
@@ -68,6 +91,7 @@ def registrar_visita(db: Session, vm_id: int, datos: VisitaRegistrar, usuario_id
         comentario=datos.comentario, productos=productos, ejecutada=True, registrado_por=usuario_id,
         acompanado=bool(getattr(datos, "acompanado", False)),
         latitud=getattr(datos, "latitud", None), longitud=getattr(datos, "longitud", None),
+        uuid_cliente=getattr(datos, "uuid_cliente", None),
     )
     db.add(v)
     db.commit()
@@ -77,6 +101,11 @@ def registrar_visita(db: Session, vm_id: int, datos: VisitaRegistrar, usuario_id
 
 
 def registrar_no_visita(db: Session, vm_id: int, datos: VisitaNoVisita, usuario_id: int | None) -> VisitaRegistro:
+    repetida = _ya_registrada(db, vm_id, getattr(datos, "uuid_cliente", None))
+    if repetida is not None:
+        logger.info(f"Reintento de no-visita ya registrada id={repetida.id} VM={vm_id} "
+                    f"uuid={datos.uuid_cliente} — se devuelve la existente")
+        return repetida
     _medico_del_vm(db, vm_id, datos.medico_id)
     ciclo_id = ciclo_por_defecto(db, vm_id)  # ciclo ABIERTO del país del VM
     if ciclo_id is None:
@@ -88,6 +117,7 @@ def registrar_no_visita(db: Session, vm_id: int, datos: VisitaNoVisita, usuario_
         tipo_visita="V", fecha_hora=datetime.now(timezone.utc),
         comentario=(datos.comentario or None), ejecutada=False,
         causa_no_visita=datos.causa, registrado_por=usuario_id,
+        uuid_cliente=getattr(datos, "uuid_cliente", None),
     )
     db.add(v)
     db.commit()

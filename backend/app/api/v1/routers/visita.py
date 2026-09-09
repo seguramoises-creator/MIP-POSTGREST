@@ -621,33 +621,37 @@ def agenda_hoy(vm_id: int | None = None, db: Session = Depends(get_db), current_
 @router.post("/registrar", response_model=dict, status_code=status.HTTP_201_CREATED)
 def registrar_visita(datos: VisitaRegistrar, vm_id: int | None = None,
                      db: Session = Depends(get_db), current_user=RegistrarVisitaGuard):
-    """La captura de visitas está cerrada: las visitas provienen del SFA de
-    Mallén (esquema `ext`) y se integran desde ahí.
+    """Registra una visita ejecutada. Usa la hora del SERVIDOR (ventana de 60 min).
 
-    Se conserva el endpoint devolviendo 409 en vez de borrarlo para que un
-    cliente antiguo reciba un motivo legible en lugar de un 404 sin explicación.
-    """
-    raise HTTPException(
-        status.HTTP_409_CONFLICT,
-        "El registro de visitas está cerrado: las visitas provienen del SFA de "
-        "Mallén y se integran automáticamente. Lo ya registrado sigue disponible "
-        "para consulta.")
+    Solo donde la instalación captura: si `MODO_INGESTA=integracion` —Mallén— esto
+    responde 409 con el motivo, porque ahí las visitas llegan del SFA del cliente y
+    una segunda puerta duplicaría el dato. Ver `captura_service`."""
+    from app.services import captura_service, visita_registro_service
+    captura_service.exigir_captura_habilitada(db)
+    try:
+        v = visita_registro_service.registrar_visita(
+            db, _vm_registro(db, current_user, vm_id), datos, getattr(current_user, "id", None))
+        return {"id": v.id, "tipo": v.tipo_visita,
+                "hora": v.fecha_hora.isoformat() if v.fecha_hora else None,
+                "uuid_cliente": v.uuid_cliente}
+    except ValueError as e:
+        _raise_captura_error(e)
 
 
 @router.post("/no-visita", response_model=dict, status_code=status.HTTP_201_CREATED)
 def registrar_no_visita(datos: VisitaNoVisita, vm_id: int | None = None,
                         db: Session = Depends(get_db), current_user=RegistrarVisitaGuard):
-    """La captura de visitas está cerrada: las visitas provienen del SFA de
-    Mallén (esquema `ext`) y se integran desde ahí.
+    """Registra una no-visita con su causa (no cuenta como visita ni penaliza cobertura).
 
-    Se conserva el endpoint devolviendo 409 en vez de borrarlo para que un
-    cliente antiguo reciba un motivo legible en lugar de un 404 sin explicación.
-    """
-    raise HTTPException(
-        status.HTTP_409_CONFLICT,
-        "El registro de visitas está cerrado: las visitas provienen del SFA de "
-        "Mallén y se integran automáticamente. Lo ya registrado sigue disponible "
-        "para consulta.")
+    Sujeta al mismo interruptor de instalación que `registrar`."""
+    from app.services import captura_service, visita_registro_service
+    captura_service.exigir_captura_habilitada(db)
+    try:
+        v = visita_registro_service.registrar_no_visita(
+            db, _vm_registro(db, current_user, vm_id), datos, getattr(current_user, "id", None))
+        return {"id": v.id, "causa": v.causa_no_visita, "uuid_cliente": v.uuid_cliente}
+    except ValueError as e:
+        _raise_captura_error(e)
 
 
 @router.post("/{visita_id}/foto", response_model=dict, status_code=status.HTTP_201_CREATED)
@@ -655,17 +659,23 @@ async def subir_foto_visita(
     visita_id: int, archivo: UploadFile = File(...),
     db: Session = Depends(get_db), current_user=RegistrarVisitaGuard,
 ):
-    """La captura de visitas está cerrada: las visitas provienen del SFA de
-    Mallén (esquema `ext`) y se integran desde ahí.
-
-    Se conserva el endpoint devolviendo 409 en vez de borrarlo para que un
-    cliente antiguo reciba un motivo legible en lugar de un 404 sin explicación.
-    """
-    raise HTTPException(
-        status.HTTP_409_CONFLICT,
-        "El registro de visitas está cerrado: las visitas provienen del SFA de "
-        "Mallén y se integran automáticamente. Lo ya registrado sigue disponible "
-        "para consulta.")
+    """Sube la foto del centro para una visita (JPEG/PNG). Se guarda como BLOB.
+    El cliente comprime antes de subir."""
+    from app.models.visita import VisitaRegistro
+    from app.services import captura_service, visita_registro_service
+    captura_service.exigir_captura_habilitada(db)
+    # El país se resuelve ANTES de leer el archivo: no tiene sentido comprobar quién
+    # puede escribir después de haberse tragado 3 MB de subida. Mismo criterio que en
+    # el GET de la foto.
+    _exigir_pais_vm(db, current_user,
+                    db.query(VisitaRegistro.vm_id).filter(VisitaRegistro.id == visita_id).scalar())
+    contenido = await archivo.read()
+    try:
+        visita_registro_service.guardar_foto_visita(
+            db, visita_id, contenido, archivo.content_type or "image/jpeg")
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return {"id": visita_id, "bytes": len(contenido)}
 
 
 @router.get("/{visita_id}/foto")

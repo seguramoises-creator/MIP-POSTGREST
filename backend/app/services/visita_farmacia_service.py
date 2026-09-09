@@ -62,6 +62,20 @@ def registrar_visita(db: Session, vm_id: int, panel: FarmaciaVisita,
     (la verificación de que pertenece al VM que llama es responsabilidad del
     router — mismo patrón que `_verificar_alcance_gd` en la aprobación).
     """
+    # El reintento del móvil se resuelve ANTES de cualquier guard: si esa visita ya
+    # entró, devolverla es la respuesta correcta aunque entretanto la farmacia haya
+    # dejado de ser elegible o el ciclo se haya cerrado. Rechazar aquí borraría un
+    # registro que YA existe en la base, y el teléfono lo marcaría como perdido.
+    uuid_cliente = getattr(datos, "uuid_cliente", None)
+    if uuid_cliente:
+        repetida = db.query(FactVisitaFarmacia).filter(
+            FactVisitaFarmacia.vm_id == vm_id,
+            FactVisitaFarmacia.uuid_cliente == uuid_cliente).first()
+        if repetida is not None:
+            logger.info(f"Reintento de visita a farmacia ya registrada id={repetida.id} "
+                        f"VM={vm_id} uuid={uuid_cliente} — se devuelve la existente")
+            return repetida
+
     _guard_f22(db, panel)
 
     ciclo_id = ciclo_por_defecto(db, vm_id)  # ciclo ABIERTO del país del VM
@@ -80,6 +94,7 @@ def registrar_visita(db: Session, vm_id: int, panel: FarmaciaVisita,
         causa_no_visita=datos.causa_no_visita,
         latitud=datos.latitud, longitud=datos.longitud,
         registrado_por=usuario_id,
+        uuid_cliente=uuid_cliente,
     )
     db.add(v)
     db.commit()

@@ -247,6 +247,22 @@ def _db_con_panel(panel):
     return db
 
 
+@pytest.fixture
+def captura(monkeypatch):
+    """Enciende o apaga la captura de la instalación.
+
+    Se sustituye `captura_habilitada` y no el valor de configuración porque estas
+    pruebas corren contra una sesión simulada, que no sabe responder una consulta a
+    `DIM_Parametro`. Lo que se ejercita aquí es el CABLEADO del guard en cada endpoint;
+    que el interruptor lea bien la configuración lo cubre
+    `test_captura_visitas_cerrada.py`."""
+    from app.services import captura_service
+
+    def fijar(habilitada: bool):
+        monkeypatch.setattr(captura_service, "captura_habilitada", lambda db: habilitada)
+    return fijar
+
+
 
 # Task 5 (integración Mallén) cerró POST /farmacias/{panel_id}/visita: las visitas
 # entran por el SFA (esquema `ext`), no por VISTA. Los cuatro tests que existían
@@ -258,9 +274,10 @@ def _db_con_panel(panel):
 # 409) sin probar nada real, así que se reemplazan por los dos de abajo. Ver
 # test_captura_visitas_cerrada.py para el contrato general de los 5 endpoints.
 
-def test_registrar_visita_farmacia_cerrada_409_no_escribe(monkeypatch):
-    """El endpoint está cerrado: responde 409 con motivo legible y no llega a
-    tocar el servicio ni la base de datos."""
+def test_registrar_visita_farmacia_cerrada_409_no_escribe(monkeypatch, captura):
+    """Donde la instalación NO captura (Mallén): 409 con motivo legible, y ni el
+    servicio ni la base se tocan."""
+    captura(False)
     panel = _panel(vm_id=7)
     db = _db_con_panel(panel)
     registrar = MagicMock()
@@ -277,14 +294,22 @@ def test_registrar_visita_farmacia_cerrada_409_no_escribe(monkeypatch):
     db.commit.assert_not_called()
 
 
-def test_registrar_visita_farmacia_cerrada_409_sin_importar_dueno_del_panel():
-    """Antes esto daba 403 por ownership (panel de otro VM); el cierre corta
-    antes de llegar a ese chequeo, así que ahora da 409 igual."""
-    panel = _panel(vm_id=999)  # pertenece a otro VM
-    db = _db_con_panel(panel)
+def test_registrar_visita_farmacia_panel_ajeno_403_con_la_captura_abierta(monkeypatch, captura):
+    """Con la captura abierta vuelve a mandar el chequeo de dueño: el panel de otro
+    VM da 403.
+
+    Es la prueba que el cierre global había dejado sin sentido —tapaba el 403 con un
+    409— y la que importa de verdad: si mañana se reabre la captura y este guard se
+    hubiera perdido por el camino, un representante podría registrar visitas en el
+    panel de un compañero."""
+    captura(True)
+    registrar = MagicMock()
+    monkeypatch.setattr(mod.visita_svc, "registrar_visita", registrar)
+    db = _db_con_panel(_panel(vm_id=999))  # pertenece a otro VM
     client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
     r = client.post("/api/v1/farmacias/1/visita", json={"comentario": "Visita de rutina hoy"})
-    assert r.status_code == 409
+    assert r.status_code == 403
+    registrar.assert_not_called()
 
 
 def test_registrar_visita_rol_sin_permiso_403():
@@ -314,9 +339,9 @@ def _visita_farmacia(**over):
     return SimpleNamespace(**base)
 
 
-def test_subir_foto_visita_farmacia_cerrada_409_no_escribe(monkeypatch):
-    """El endpoint está cerrado: responde 409 y no llega a tocar el servicio
-    de guardado de foto ni la base de datos."""
+def test_subir_foto_visita_farmacia_cerrada_409_no_escribe(monkeypatch, captura):
+    """Instalación sin captura: 409, y el servicio de guardado no se toca."""
+    captura(False)
     guardar = MagicMock()
     monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", guardar)
     db = _db_con_panel(_visita_farmacia(vm_id=7))
@@ -329,14 +354,32 @@ def test_subir_foto_visita_farmacia_cerrada_409_no_escribe(monkeypatch):
     guardar.assert_not_called()
 
 
-def test_subir_foto_visita_farmacia_cerrada_409_sin_importar_dueno():
-    """Antes esto daba 403 (IDOR, foto de otro VM); el cierre corta antes de
-    llegar a `_cargar_visita_farmacia_scoped`, así que ahora da 409 igual."""
+def test_subir_foto_de_visita_ajena_403_con_la_captura_abierta(monkeypatch, captura):
+    """El IDOR sigue cerrado: con la captura abierta, pegarle una foto a la visita de
+    otro VM da 403 y no llega al servicio."""
+    captura(True)
+    guardar = MagicMock()
+    monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", guardar)
     db = _db_con_panel(_visita_farmacia(vm_id=999))  # de otro VM
     client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
     r = client.post("/api/v1/farmacias/1/foto",
                     files={"archivo": ("x.jpg", _JPEG, "image/jpeg")})
-    assert r.status_code == 409
+    assert r.status_code == 403
+    guardar.assert_not_called()
+
+
+def test_subir_foto_propia_201_con_la_captura_abierta(monkeypatch, captura):
+    """El camino feliz, que el cierre global había borrado de la suite."""
+    captura(True)
+    guardar = MagicMock()
+    monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", guardar)
+    db = _db_con_panel(_visita_farmacia(vm_id=7))
+    client = _client(U(Rol.REPRESENTANTE_MEDICO, rm_id=7), db=db)
+    r = client.post("/api/v1/farmacias/1/foto",
+                    files={"archivo": ("x.jpg", _JPEG, "image/jpeg")})
+    assert r.status_code == 201
+    assert r.json()["bytes"] == len(_JPEG)
+    guardar.assert_called_once()
 
 
 def test_obtener_foto_visita_farmacia_404_sin_foto(monkeypatch):
@@ -381,9 +424,11 @@ def test_obtener_foto_visita_farmacia_de_otro_vm_403(monkeypatch):
     obtener.assert_not_called()
 
 
-def test_subir_foto_visita_farmacia_cerrada_409_tambien_para_admin(monkeypatch):
-    """El cierre es GLOBAL (Task 5): ni siquiera ADMIN puede subir una foto de
-    visita nueva, sea cual sea el VM dueño."""
+def test_subir_foto_visita_farmacia_cerrada_409_tambien_para_admin(monkeypatch, captura):
+    """El cierre es de la INSTALACIÓN, no del usuario: donde no se captura, ni ADMIN
+    escribe. No es una restricción de permisos —es que esa puerta no existe ahí—, y
+    por eso 409 y no 403."""
+    captura(False)
     guardar = MagicMock()
     monkeypatch.setattr(mod.visita_svc, "guardar_foto_visita", guardar)
     db = _db_con_panel(_visita_farmacia(vm_id=999))

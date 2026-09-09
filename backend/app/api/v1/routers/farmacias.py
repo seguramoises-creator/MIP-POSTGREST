@@ -147,6 +147,29 @@ def _raise_negocio(e: ValueError) -> None:
     raise HTTPException(status.HTTP_409_CONFLICT, msg)
 
 
+def _raise_captura_error(e: ValueError) -> None:
+    """Traduce un ValueError del registro de visita a farmacia: F22 (panel no
+    aprobado / maestro no activa) y ciclo cerrado son conflictos de estado (409);
+    el resto (p. ej. «No hay ciclo activo») son errores de negocio (400)."""
+    if isinstance(e, visita_svc.PanelNoAprobadoError):
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    msg = str(e)
+    if "cerrado" in msg.lower() or "solo lectura" in msg.lower():
+        raise HTTPException(status.HTTP_409_CONFLICT, msg)
+    raise HTTPException(status.HTTP_400_BAD_REQUEST, msg)
+
+
+def _cargar_panel_del_vm(db: Session, panel_id: int, vm_id: int) -> FarmaciaVisita:
+    """Carga el registro de panel y verifica que pertenece al VM que llama
+    (403 si no) — mismo criterio de auto-scope que el resto del router."""
+    panel = db.query(FarmaciaVisita).filter(FarmaciaVisita.id == panel_id).first()
+    if panel is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"Panel de farmacia ID={panel_id} no encontrado.")
+    if panel.vm_id != vm_id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Esta farmacia no pertenece a tu panel.")
+    return panel
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Búsqueda anti-dup del maestro (F25/F09) — VM+
 # ─────────────────────────────────────────────────────────────────────────
@@ -360,17 +383,26 @@ def registrar_visita_farmacia(
     db: Session = Depends(get_db),
     current_user: Usuario = RegistrarPanel,
 ):
-    """La captura de visitas está cerrada: las visitas provienen del SFA de
-    Mallén (esquema `ext`) y se integran desde ahí.
+    """Registra una visita AD-HOC a una farmacia del panel (guard F22).
 
-    Se conserva el endpoint devolviendo 409 en vez de borrarlo para que un
-    cliente antiguo reciba un motivo legible en lugar de un 404 sin explicación.
-    """
-    raise HTTPException(
-        status.HTTP_409_CONFLICT,
-        "El registro de visitas está cerrado: las visitas provienen del SFA de "
-        "Mallén y se integran automáticamente. Lo ya registrado sigue disponible "
-        "para consulta.")
+    Solo donde la instalación captura: con `MODO_INGESTA=integracion` responde 409
+    con el motivo, igual que la visita médica. Ver `captura_service`."""
+    from app.services import captura_service
+    captura_service.exigir_captura_habilitada(db)
+    vm = _scope_vm(current_user, vm_id)
+    if not vm:
+        raise HTTPException(400, "Indica el VM (vm_id).")
+    panel = _cargar_panel_del_vm(db, panel_id, vm)
+    try:
+        v = visita_svc.registrar_visita(db, vm, panel, body, usuario_id=current_user.id)
+    except ValueError as e:
+        _raise_captura_error(e)
+    return {
+        "id": v.id, "vm_id": v.vm_id, "ciclo_id": v.ciclo_id, "farmacia_id": v.farmacia_id,
+        "ejecutada": v.ejecutada,
+        "hora": v.fecha_hora.isoformat() if v.fecha_hora else None,
+        "uuid_cliente": v.uuid_cliente,
+    }
 
 
 @router.post("/{visita_id}/foto", response_model=dict, status_code=status.HTTP_201_CREATED,
@@ -379,17 +411,18 @@ async def subir_foto_visita_farmacia(
     visita_id: int, archivo: UploadFile = File(...),
     db: Session = Depends(get_db), current_user: Usuario = RegistrarPanel,
 ):
-    """La captura de visitas está cerrada: las visitas provienen del SFA de
-    Mallén (esquema `ext`) y se integran desde ahí.
-
-    Se conserva el endpoint devolviendo 409 en vez de borrarlo para que un
-    cliente antiguo reciba un motivo legible en lugar de un 404 sin explicación.
-    """
-    raise HTTPException(
-        status.HTTP_409_CONFLICT,
-        "El registro de visitas está cerrado: las visitas provienen del SFA de "
-        "Mallén y se integran automáticamente. Lo ya registrado sigue disponible "
-        "para consulta.")
+    """Sube la foto de una visita a farmacia. Se guarda como BLOB."""
+    from app.services import captura_service
+    captura_service.exigir_captura_habilitada(db)
+    # Verifica dueño/equipo ANTES de escribir la foto: resolverla solo por `id` sería
+    # un IDOR — cualquiera con el número podría pegarle una imagen a la visita de otro.
+    _cargar_visita_farmacia_scoped(db, current_user, visita_id)
+    contenido = await archivo.read()
+    try:
+        visita_svc.guardar_foto_visita(db, visita_id, contenido, archivo.content_type or "image/jpeg")
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    return {"id": visita_id, "bytes": len(contenido)}
 
 
 @router.get("/{visita_id}/foto", summary="Obtener la foto de una visita a farmacia")

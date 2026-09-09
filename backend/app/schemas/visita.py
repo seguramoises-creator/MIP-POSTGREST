@@ -271,6 +271,11 @@ class VisitaRegistrar(BaseModel):
     acompanado: bool = False  # visita acompañada por el Gerente de Distrito
     latitud: float | None = None
     longitud: float | None = None
+    # Huella que pone el móvil para que un REINTENTO no cree una visita doble. Si la
+    # primera petición llegó y se perdió la respuesta, el reintento trae la misma huella
+    # y el servidor devuelve la visita que ya existe en vez de crear otra. Opcional: la
+    # web no la manda y no la necesita, porque ahí el usuario ve el resultado.
+    uuid_cliente: str | None = Field(default=None, max_length=36)
 
     @field_validator("tipo_visita")
     @classmethod
@@ -295,6 +300,7 @@ class VisitaNoVisita(BaseModel):
     medico_id: int
     causa: str
     comentario: str | None = None
+    uuid_cliente: str | None = Field(default=None, max_length=36)  # ver `VisitaRegistrar`
 
     @field_validator("causa")
     @classmethod

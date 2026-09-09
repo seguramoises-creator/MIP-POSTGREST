@@ -118,6 +118,12 @@ class VisitaRegistro(Base):
     __table_args__ = (
         Index("IX_FactVisita_vm_ciclo", "vm_id", "ciclo_id"),
         Index("IX_FactVisita_medico", "medico_id"),
+        # La huella del cliente es ÚNICA POR VM, no global: dos teléfonos distintos no
+        # deberían poder anularse un envío por un choque de identificadores, y a la vez
+        # el mismo teléfono reintentando no debe crear dos visitas. `NULL` no participa
+        # del unique en PostgreSQL, así que las visitas creadas desde la web —que no
+        # traen huella— no se estorban entre sí.
+        Index("UQ_FactVisita_uuid_cliente", "vm_id", "uuid_cliente", unique=True),
         {"schema": "Visita"},
     )
 
@@ -139,6 +145,11 @@ class VisitaRegistro(Base):
     longitud: Mapped[float | None] = mapped_column(Numeric(10, 7), nullable=True)
     foto: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     foto_mime: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Huella que pone el teléfono al capturar, para que un REINTENTO no cree una visita
+    # doble. Sin ella, el móvil no puede reenviar con seguridad lo que quedó en cola: si
+    # la primera petición llegó y se perdió la respuesta, el reintento duplicaría el
+    # registro y ensuciaría la cobertura. Nula cuando la visita se creó desde la web.
+    uuid_cliente: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 class PlaneacionCiclo(Base):
@@ -475,7 +486,11 @@ class FarmaciaVisita(Base):
 class FactVisitaFarmacia(Base):
     """Registro de visita a farmacia (Opción A: tabla paralela a FactVisita, cero regresión)."""
     __tablename__ = "FactVisitaFarmacia"
-    __table_args__ = (Index("IX_FactVisitaFarm_vm_ciclo", "vm_id", "ciclo_id"), {"schema": "Visita"})
+    __table_args__ = (
+        Index("IX_FactVisitaFarm_vm_ciclo", "vm_id", "ciclo_id"),
+        Index("UQ_FactVisitaFarm_uuid_cliente", "vm_id", "uuid_cliente", unique=True),
+        {"schema": "Visita"},
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     vm_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_RM.id"), nullable=False)
     ciclo_id: Mapped[int] = mapped_column(Integer, ForeignKey("Config.DIM_Ciclo.id"), nullable=False)
@@ -489,6 +504,8 @@ class FactVisitaFarmacia(Base):
     foto: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     foto_mime: Mapped[str | None] = mapped_column(String(40), nullable=True)
     registrado_por: Mapped[int | None] = mapped_column(Integer, ForeignKey("Security.DIM_Usuario.id"), nullable=True)
+    # Misma huella de reintento que en `FactVisita` — ver la nota de allí.
+    uuid_cliente: Mapped[str | None] = mapped_column(String(36), nullable=True)
 
 
 AVISO_RECORDATORIO = "RECORDATORIO"

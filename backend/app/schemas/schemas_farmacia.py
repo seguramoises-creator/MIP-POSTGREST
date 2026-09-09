@@ -166,6 +166,8 @@ class VisitaFarmaciaRegistrar(BaseModel):
     causa_no_visita: str | None = Field(default=None, max_length=80)
     latitud: float | None = None
     longitud: float | None = None
+    #: Huella de reintento del móvil — ver `VisitaRegistrar` en `schemas/visita.py`.
+    uuid_cliente: str | None = Field(default=None, max_length=36)
 
 
 class VisitaFarmaciaResponse(BaseModel):
