@@ -1,0 +1,334 @@
+{
+  "generado": "20260910-122023",
+  "gerentes": [
+    {
+      "id": 1,
+      "antes": "ARCADIO SANCHEZ",
+      "despues": "Ana Álvarez"
+    },
+    {
+      "id": 2,
+      "antes": "DARWIN LA PAZ",
+      "despues": "Luis Herrera"
+    },
+    {
+      "id": 3,
+      "antes": "ELEDY MELENDEZ",
+      "despues": "Carmen Pardo"
+    },
+    {
+      "id": 4,
+      "antes": "PAULA DUQUE",
+      "despues": "Jorge Zamora"
+    },
+    {
+      "id": 5,
+      "antes": "JUAN ANT. CORREA",
+      "despues": "Elena Guzmán"
+    },
+    {
+      "id": 6,
+      "antes": "MANUELA PEREZ",
+      "despues": "Pablo Olmedo"
+    }
+  ],
+  "rms": [
+    {
+      "id": 1,
+      "antes": "FRANCIA MARTINEZ",
+      "despues": "Marta Vega"
+    },
+    {
+      "id": 2,
+      "antes": "RAMON MERAN",
+      "despues": "Diego Franco"
+    },
+    {
+      "id": 3,
+      "antes": "LEO HERRERA",
+      "despues": "Sofía Álvarez"
+    },
+    {
+      "id": 4,
+      "antes": "SMARLIN HENRIQUEZ",
+      "despues": "Andrés Herrera"
+    },
+    {
+      "id": 5,
+      "antes": "MAYERLYN MEJIA",
+      "despues": "Lucía Pardo"
+    },
+    {
+      "id": 6,
+      "antes": "KALAJAN FERRERAS",
+      "despues": "Miguel Zamora"
+    },
+    {
+      "id": 7,
+      "antes": "JOSE MARTIN DEL RIO",
+      "despues": "Clara Guzmán"
+    },
+    {
+      "id": 8,
+      "antes": "MILQUI ACEVEDO",
+      "despues": "Tomás Olmedo"
+    },
+    {
+      "id": 9,
+      "antes": "ELEONOR DOMINGUEZ",
+      "despues": "Irene Vega"
+    },
+    {
+      "id": 10,
+      "antes": "SAGRARIO DE LEON",
+      "despues": "Javier Franco"
+    },
+    {
+      "id": 11,
+      "antes": "CARLOS MORENO",
+      "despues": "Paula Álvarez"
+    },
+    {
+      "id": 12,
+      "antes": "ZULEIKA VASQUEZ",
+      "despues": "Raúl Herrera"
+    },
+    {
+      "id": 13,
+      "antes": "DENVER PAULINO",
+      "despues": "Nuria Pardo"
+    },
+    {
+      "id": 14,
+      "antes": "LUIS GOMEZ",
+      "despues": "Óscar Zamora"
+    },
+    {
+      "id": 15,
+      "antes": "BIELKA ESTEVEZ",
+      "despues": "Alba Guzmán"
+    },
+    {
+      "id": 16,
+      "antes": "JOSE LUIS FERNANDEZ",
+      "despues": "Iván Olmedo"
+    },
+    {
+      "id": 17,
+      "antes": "MADELIN REYES",
+      "despues": "Rosa Vega"
+    },
+    {
+      "id": 18,
+      "antes": "LUCRECIA JIMENEZ",
+      "despues": "Hugo Franco"
+    },
+    {
+      "id": 19,
+      "antes": "EMILIO PEGUERO",
+      "despues": "Silvia Álvarez"
+    },
+    {
+      "id": 20,
+      "antes": "JOSE ESTEVES MARTINEZ",
+      "despues": "Adrián Herrera"
+    },
+    {
+      "id": 21,
+      "antes": "WILSON VASQUEZ",
+      "despues": "Julia Pardo"
+    },
+    {
+      "id": 22,
+      "antes": "OLIMPIA MOREL",
+      "despues": "Marcos Zamora"
+    },
+    {
+      "id": 23,
+      "antes": "LEONEL VELEZ",
+      "despues": "Teresa Guzmán"
+    },
+    {
+      "id": 24,
+      "antes": "NAIROBY POLANCO",
+      "despues": "Alonso Olmedo"
+    },
+    {
+      "id": 25,
+      "antes": "RAYNNER MENDEZ",
+      "despues": "Nerea Vega"
+    },
+    {
+      "id": 26,
+      "antes": "ALVIS PAULINO",
+      "despues": "Gabriel Franco"
+    },
+    {
+      "id": 27,
+      "antes": "JONATHAN ARIAS",
+      "despues": "Beatriz Álvarez"
+    },
+    {
+      "id": 28,
+      "antes": "HEIDY CONTRERAS",
+      "despues": "Emilio Herrera"
+    },
+    {
+      "id": 29,
+      "antes": "ORLANDO JIMENEZ",
+      "despues": "Patricia Pardo"
+    },
+    {
+      "id": 30,
+      "antes": "PABLO FERNANDEZ",
+      "despues": "Sergio Zamora"
+    },
+    {
+      "id": 31,
+      "antes": "NELLYS VALDEZ",
+      "despues": "Cristina Guzmán"
+    },
+    {
+      "id": 32,
+      "antes": "BERNI CASTRO",
+      "despues": "Daniel Olmedo"
+    },
+    {
+      "id": 33,
+      "antes": "JOSE EDUARDO RODRIGUEZ",
+      "despues": "Laura Vega"
+    },
+    {
+      "id": 34,
+      "antes": "PAUL MATOS",
+      "despues": "Rubén Franco"
+    },
+    {
+      "id": 35,
+      "antes": "YAIRA SUERO",
+      "despues": "Mónica Álvarez"
+    },
+    {
+      "id": 36,
+      "antes": "FRANCIA OVIEDO",
+      "despues": "Álvaro Herrera"
+    },
+    {
+      "id": 37,
+      "antes": "FRANCHESCA HICHEZ",
+      "despues": "Isabel Pardo"
+    },
+    {
+      "id": 38,
+      "antes": "ORQUIDEA RAMIREZ",
+      "despues": "Fernando Zamora"
+    },
+    {
+      "id": 39,
+      "antes": "ZARINA COLON",
+      "despues": "Natalia Guzmán"
+    },
+    {
+      "id": 40,
+      "antes": "SANTA MENDEZ",
+      "despues": "Ramiro Olmedo"
+    },
+    {
+      "id": 41,
+      "antes": "JOEL DURAN",
+      "despues": "Verónica Vega"
+    },
+    {
+      "id": 42,
+      "antes": "EDWARD GRULLON",
+      "despues": "Leandro Franco"
+    },
+    {
+      "id": 43,
+      "antes": "LEONELA REYES",
+      "despues": "Susana Álvarez"
+    },
+    {
+      "id": 44,
+      "antes": "JOSE LUIS DUARTE",
+      "despues": "Ignacio Herrera"
+    },
+    {
+      "id": 45,
+      "antes": "FRANCISCO JIMENEZ",
+      "despues": "Amelia Pardo"
+    },
+    {
+      "id": 46,
+      "antes": "ADRIANA RODRIGUEZ PAULINO",
+      "despues": "Rodrigo Zamora"
+    },
+    {
+      "id": 47,
+      "antes": "FEDERICO MICELI",
+      "despues": "Olivia Guzmán"
+    },
+    {
+      "id": 48,
+      "antes": "Angel Amauris Miclei Calderon",
+      "despues": "Néstor Olmedo"
+    }
+  ],
+  "usuarios": [
+    {
+      "id": 4,
+      "antes": "FRANCIA MARTINEZ",
+      "despues": "Marta Vega"
+    },
+    {
+      "id": 6,
+      "antes": "FRANCIA MARTINEZ",
+      "despues": "Marta Vega"
+    },
+    {
+      "id": 7,
+      "antes": "FRANCIA MARTINEZ",
+      "despues": "Marta Vega"
+    },
+    {
+      "id": 10,
+      "antes": "FRANCIA MARTINEZ",
+      "despues": "Marta Vega"
+    },
+    {
+      "id": 11,
+      "antes": "PAULA DUQUE",
+      "despues": "Jorge Zamora"
+    },
+    {
+      "id": 13,
+      "antes": "FRANCHESCA HICHEZ",
+      "despues": "Isabel Pardo"
+    },
+    {
+      "id": 14,
+      "antes": "PAULA DUQUE",
+      "despues": "Jorge Zamora"
+    },
+    {
+      "id": 15,
+      "antes": "ALVIS PAULINO",
+      "despues": "Gabriel Franco"
+    },
+    {
+      "id": 18,
+      "antes": "CARLOS MORENO",
+      "despues": "Paula Álvarez"
+    },
+    {
+      "id": 25,
+      "antes": "ADRIANA RODRIGUEZ PAULINO",
+      "despues": "Rodrigo Zamora"
+    },
+    {
+      "id": 36,
+      "antes": "ELEDY MELENDEZ ",
+      "despues": "Carmen Pardo"
+    }
+  ]
+}

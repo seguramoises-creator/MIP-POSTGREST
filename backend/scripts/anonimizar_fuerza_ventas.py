@@ -66,7 +66,8 @@ def leer(db):
     rms = db.execute(text(
         'SELECT id, codigo, nombre FROM "Config"."DIM_RM" ORDER BY id')).all()
     usu = db.execute(text(
-        'SELECT id, username, nombre_completo FROM "Security"."DIM_Usuario" ORDER BY id')).all()
+        'SELECT id, username, nombre_completo, rm_id, gerente_id '
+        'FROM "Security"."DIM_Usuario" ORDER BY id')).all()
     return ger, rms, usu
 
 
@@ -105,8 +106,19 @@ def main() -> int:
         por_nombre[(g.nombre or "").strip().upper()] = mapa_ger[g.id]
     for r in rms:
         por_nombre[(r.nombre or "").strip().upper()] = mapa_rm[r.id]
-    cambios_usu = [(u.id, u.nombre_completo, por_nombre[(u.nombre_completo or "").strip().upper()])
-                   for u in usu if (u.nombre_completo or "").strip().upper() in por_nombre]
+    # Se empareja PRIMERO por el vínculo (rm_id / gerente_id) y solo después por el
+    # texto del nombre.
+    cambios_usu = []
+    for u in usu:
+        destino = None
+        if u.rm_id and u.rm_id in mapa_rm:
+            destino = mapa_rm[u.rm_id]
+        elif u.gerente_id and u.gerente_id in mapa_ger:
+            destino = mapa_ger[u.gerente_id]
+        else:
+            destino = por_nombre.get((u.nombre_completo or "").strip().upper())
+        if destino and destino != (u.nombre_completo or ""):
+            cambios_usu.append((u.id, u.nombre_completo, destino))
 
     print(f"Gerentes: {len(ger)} · Representantes: {len(rms)} · "
           f"Usuarios que comparten nombre: {len(cambios_usu)}\n")
