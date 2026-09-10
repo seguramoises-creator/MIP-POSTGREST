@@ -27,7 +27,7 @@ import {
 
 const EXPLICACION: Record<FuenteConocimientos, string> = {
   EXAMEN_VISTA: 'Las notas salen de los exámenes de VISTA; Capacitación las consolida por ciclo. Esta pantalla queda de solo lectura.',
-  NOTA_EXTERNA: 'Las notas las envía Laboratorio Mallén y entran por la integración. Esta pantalla queda de solo lectura.',
+  NOTA_EXTERNA: 'Las notas las envía el cliente y entran por la integración. Esta pantalla queda de solo lectura.',
   CAPTURA_MANUAL: 'Las notas se capturan aquí y entran al ciclo con el botón "Integrar al ciclo".',
 };
 

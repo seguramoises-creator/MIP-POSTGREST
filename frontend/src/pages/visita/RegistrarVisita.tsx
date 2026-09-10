@@ -17,6 +17,7 @@ import {
 } from '../../services/farmacias.service';
 import { BORDE, EXITO, NEUTRO_300, SUPERFICIE_2, SUPERFICIE_4 } from '../../theme/marca';
 import { marcaViva } from '../../theme/marcaViva';
+import { esIntegrada } from '../../config/instalacion';
 // ── Paleta profesional (médica / farmacéutica) ───────────────────────────────
 // Función y no constante: en ámbito de módulo se evaluaría antes de que
 // `cargarMarca()` traiga la identidad, y el color quedaría en el de fábrica.
@@ -803,10 +804,18 @@ export default function RegistrarVisita() {
 
   return (
     <Box sx={{ maxWidth: 620, mx: 'auto', p: { xs: 1.5, sm: 3 } }}>
-      <Alert severity="info" sx={{ mb: 2 }}>
-        El registro de visitas está cerrado: las visitas provienen del SFA de Mallén
-        y se integran automáticamente. Lo ya registrado sigue disponible para consulta.
-      </Alert>
+      {/* SOLO donde la instalación NO captura.
+          Este aviso era incondicional desde que se cerró la captura para todos, y dejó
+          de ser cierto en cuanto la decisión pasó a ser de la instalación
+          (`MODO_INGESTA`): en un montaje que sí captura, la pantalla decía «está
+          cerrado» mientras el formulario de abajo guardaba sin problema. Una pantalla
+          que se contradice a sí misma enseña a no leer sus avisos. */}
+      {esIntegrada() && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          El registro de visitas está cerrado: las visitas provienen del SFA del cliente
+          y se integran automáticamente. Lo ya registrado sigue disponible para consulta.
+        </Alert>
+      )}
       {/* Encabezado de la pantalla.
           ANTES era un bloque con degradado azul oscuro y un halo teal difuminado.
           Dejó de funcionar cuando la navegación pasó a barras azules: la pestaña

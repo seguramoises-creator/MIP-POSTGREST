@@ -71,7 +71,7 @@ export default function LotesIntegracion() {
 
   return (
     <Box sx={{ p: 3, maxWidth: 1200, mx: 'auto' }}>
-      <Typography variant="h5" fontWeight={800} mb={2}>Lotes de Mallén</Typography>
+      <Typography variant="h5" fontWeight={800} mb={2}>Lotes del cliente</Typography>
 
       <Grid container spacing={2} mb={3}>
         {ESTADOS.map((e) => (
@@ -89,7 +89,7 @@ export default function LotesIntegracion() {
       {lotes.isLoading ? <CircularProgress /> : lotes.isError ? (
         <Alert severity="warning">No se pudieron cargar los lotes.</Alert>
       ) : filas.length === 0 ? (
-        <Alert severity="info">Aún no se ha recibido ningún lote de Mallén.</Alert>
+        <Alert severity="info">Aún no se ha recibido ningún lote del cliente.</Alert>
       ) : (
         <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2 }}>
           <Table size="small">
@@ -169,7 +169,7 @@ function DialogoHallazgos({ loteId, onClose }: { loteId: number | null; onClose:
         ) : (
           <>
             <Alert severity="info" sx={{ mb: 2 }}>
-              Este detalle es lo que hay que enviarle al equipo técnico de Mallén para corregir.
+              Este detalle es lo que hay que enviarle al equipo técnico del cliente para corregir.
             </Alert>
             <Table size="small">
               <TableHead>
@@ -245,7 +245,7 @@ function SeccionDimensiones({ paisCodigo }: { paisCodigo: string | null }) {
           <TableHead>
             <TableRow>
               <TableCell>Dimensión</TableCell>
-              <TableCell align="right">En Mallén</TableCell>
+              <TableCell align="right">En el cliente</TableCell>
               <TableCell align="right">Mapeadas</TableCell>
               <TableCell align="right">Pendientes</TableCell>
             </TableRow>
@@ -298,7 +298,7 @@ function SeccionDimensiones({ paisCodigo }: { paisCodigo: string | null }) {
             <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2 }}>
               <Box sx={{ p: 2 }}>
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  Esto es lo que hay que enviarle al equipo técnico de Mallén para corregir.
+                  Esto es lo que hay que enviarle al equipo técnico del cliente para corregir.
                 </Alert>
                 <Table size="small">
                   <TableHead>
@@ -361,7 +361,7 @@ function SeccionVisitas({ paisCodigo }: { paisCodigo: string | null }) {
     <Box sx={{ mt: 5 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
         <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>Visitas</Typography>
-        <TextField size="small" label="Ciclo (código de Mallén)" value={cicloCodigo}
+        <TextField size="small" label="Ciclo (código del cliente)" value={cicloCodigo}
           onChange={(e) => setCicloCodigo(e.target.value)} sx={{ width: 220 }} />
         <Button variant="contained" startIcon={<Sync />}
           disabled={!cicloCodigo.trim() || integrar.isPending}
@@ -386,7 +386,7 @@ function SeccionVisitas({ paisCodigo }: { paisCodigo: string | null }) {
             <TableHead>
               <TableRow>
                 <TableCell>Hecho</TableCell>
-                <TableCell align="right">En Mallén</TableCell>
+                <TableCell align="right">En el cliente</TableCell>
                 <TableCell align="right">Integradas</TableCell>
               </TableRow>
             </TableHead>
@@ -451,7 +451,7 @@ function SeccionVisitas({ paisCodigo }: { paisCodigo: string | null }) {
           {resultado.hallazgos.length > 0 && (
             <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2, p: 2 }}>
               <Alert severity="info" sx={{ mb: 2 }}>
-                Esto es lo que hay que enviarle al equipo técnico de Mallén para corregir.
+                Esto es lo que hay que enviarle al equipo técnico del cliente para corregir.
               </Alert>
               <Table size="small">
                 <TableHead>
@@ -565,7 +565,7 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
             <TableHead>
               <TableRow>
                 <TableCell>Qué</TableCell>
-                <TableCell align="right">En Mallén</TableCell>
+                <TableCell align="right">En el cliente</TableCell>
                 <TableCell align="right">Enlazados</TableCell>
                 <TableCell align="right">Sin enlazar</TableCell>
               </TableRow>
@@ -604,8 +604,8 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
         <Alert severity="info" sx={{ mb: 2 }}>
           De los {d.prescriptores.huerfanos + d.prescriptores.casi_enlazados}
           {' '}prescriptores sin enlazar por exequátur,{' '}
-          {d.prescriptores.enlazables_por_codigo} traen el código de médico de
-          Mallén y ese código SÍ está sincronizado en VISTA — no se enlazan
+          {d.prescriptores.enlazables_por_codigo} traen el código de médico del
+          cliente y ese código SÍ está sincronizado en VISTA — no se enlazan
           por ahí (es solo medición, ver §11.9), pero es la evidencia para
           decidir si vale la pena.
         </Alert>
@@ -626,7 +626,7 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
             Recetas atribuibles ({d.recetas.total} en total)
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {d.recetas.directas} traen representante de Mallén ·{' '}
+            {d.recetas.directas} traen representante del cliente ·{' '}
             {d.recetas.por_cadena} se atribuyen por el panel ·{' '}
             {d.recetas.ambiguas} ambiguas ·{' '}
             {d.recetas.huerfanas} sin dueño (cuentan para el mercado)
@@ -639,7 +639,7 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
                 `${d.recetas.sin_ciclo} porque su período no tiene ciclo mapeado`}
               {d.recetas.sin_ciclo > 0 && d.recetas.rm_no_enlazado > 0 && ' y '}
               {d.recetas.rm_no_enlazado > 0 &&
-                `${d.recetas.rm_no_enlazado} porque Mallén reporta un representante que VISTA aún no tiene sincronizado (corre primero la sincronización de dimensiones)`}
+                `${d.recetas.rm_no_enlazado} porque el cliente reporta un representante que VISTA aún no tiene sincronizado (corre primero la sincronización de dimensiones)`}
               . El resto no tiene un prescriptor o panel vigente que las reclame.
             </Typography>
           )}
@@ -662,7 +662,7 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
               <TableHead>
                 <TableRow>
                   <TableCell>Entidad</TableCell>
-                  <TableCell align="right">En Mallén</TableCell>
+                  <TableCell align="right">En el cliente</TableCell>
                   <TableCell align="right">Enlazados</TableCell>
                   <TableCell align="right">Ya enlazados</TableCell>
                   <TableCell align="right">Sin enlazar</TableCell>
@@ -690,7 +690,7 @@ function SeccionIR({ paisCodigo }: { paisCodigo: string | null }) {
             <Paper elevation={0} sx={{ border: '1px solid #e0e7ef', borderRadius: 2 }}>
               <Box sx={{ p: 2 }}>
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  Esto es lo que hay que enviarle al equipo técnico de Mallén para corregir.
+                  Esto es lo que hay que enviarle al equipo técnico del cliente para corregir.
                 </Alert>
                 <Table size="small">
                   <TableHead>

@@ -125,7 +125,7 @@ def _mensajes_omitidas_por_excel(conteo: dict[str, int], verbo: str) -> list[str
     return [
         f"{n} fila(s) de {ind_codigo} {verbo}: ya no se carga por Excel; se "
         f"captura en la pantalla de Conocimientos, llega por exámenes o la "
-        f"envía Mallén, según la fuente del país."
+        f"envía el cliente, según la fuente del país."
         for ind_codigo, n in conteo.items()
     ]
 

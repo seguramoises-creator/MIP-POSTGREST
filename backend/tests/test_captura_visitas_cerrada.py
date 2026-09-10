@@ -57,19 +57,21 @@ def test_mallen_sigue_cerrado(modo):
     assert exc.value.status_code == 409
 
 
-def test_el_mensaje_de_mallen_no_cambia(modo):
-    """Palabra por palabra el de antes.
+def test_el_mensaje_no_nombra_a_ningun_cliente(modo):
+    """El texto exacto, y sin el nombre de nadie.
 
-    No es un capricho: ese texto ya se muestra en pantalla en la instalación del
-    cliente. Cambiarlo porque nosotros movimos el guard de archivo sería hacerle un
-    cambio visible a un cliente que no pidió nada."""
+    La suite es la misma para todos los clientes, así que ninguno debe leer el nombre
+    de otro en un mensaje de error. Se fija palabra por palabra —no basta con
+    comprobar que «Mallén» no aparece— porque un mensaje que se ve en pantalla no
+    debe cambiar por descuido al mover código de sitio."""
     db = modo("integracion")
     with pytest.raises(HTTPException) as exc:
         captura_service.exigir_captura_habilitada(db)
     assert exc.value.detail == (
-        "El registro de visitas está cerrado: las visitas provienen del SFA de "
-        "Mallén y se integran automáticamente. Lo ya registrado sigue disponible "
+        "El registro de visitas está cerrado: las visitas provienen del SFA del "
+        "cliente y se integran automáticamente. Lo ya registrado sigue disponible "
         "para consulta.")
+    assert "Mallén" not in exc.value.detail
 
 
 @pytest.mark.parametrize("valor", ["excel", "vista", "", None, "EXCEL", "cualquier-cosa"])

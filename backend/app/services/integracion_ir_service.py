@@ -244,7 +244,7 @@ def sincronizar_producto_ir(db: Session, pais_codigo: str,
                 hallazgos.append(Hallazgo(
                     ENT_PRODUCTO_IR, fila.producto_ir_codigo,
                     f"El producto «{fila.nombre}» está marcado como propio pero no "
-                    f"trae equivalencia con el catálogo de Mallén; sus recetas no "
+                    f"trae equivalencia con el catálogo del cliente; sus recetas no "
                     f"se podrán contar.", SEVERIDAD_ERROR))
             else:
                 conteo.omitidos += 1

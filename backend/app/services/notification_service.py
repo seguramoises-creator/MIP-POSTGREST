@@ -740,15 +740,15 @@ def notificar_lotes_recibidos(db: Session) -> int:
         f"{' · ' + l.periodo if l.periodo else ''}</li>"
         for l in pendientes)
     cuerpo = (
-        f"<h2>Datos nuevos de Mallén esperando validación</h2>"
+        f"<h2>Datos nuevos del cliente esperando validación</h2>"
         f"<p>Hay {len(pendientes)} lote(s) en estado RECIBIDO. No se integran solos: "
-        f"hay que validarlos desde <b>Sistema → Lotes de Mallén</b>.</p>"
+        f"hay que validarlos desde <b>Sistema → Lotes del cliente</b>.</p>"
         f"<ul>{filas}</ul>"
         f"<p>Mientras sigan sin validar, VISTA muestra la información anterior.</p>")
 
     enviados = 0
     for u in destinatarios:
-        if _enviar(u.email, f"VISTA — {len(pendientes)} lote(s) de Mallén por validar", cuerpo):
+        if _enviar(u.email, f"VISTA — {len(pendientes)} lote(s) del cliente por validar", cuerpo):
             enviados += 1
 
     ahora = datetime.now(timezone.utc).replace(tzinfo=None)

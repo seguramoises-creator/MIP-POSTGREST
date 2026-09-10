@@ -34,8 +34,8 @@ from app.services import config_service as _cfg
 MODO_CERRADO = "integracion"
 
 MENSAJE_CERRADA = (
-    "El registro de visitas está cerrado: las visitas provienen del SFA de "
-    "Mallén y se integran automáticamente. Lo ya registrado sigue disponible "
+    "El registro de visitas está cerrado: las visitas provienen del SFA del "
+    "cliente y se integran automáticamente. Lo ya registrado sigue disponible "
     "para consulta."
 )
 

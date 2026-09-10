@@ -140,7 +140,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Configuración',   path: '/admin',    icon: <Settings />,           roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
       { label: 'Administración',  path: '/usuarios', icon: <AdminPanelSettings />, recurso: 'config.usuarios', roles: ['ADMIN'] },
       { label: 'Conexiones de IA', path: '/conexiones-ia', icon: <Hub />, roles: ['ADMIN'] },
-      { label: 'Lotes de Mallén', path: '/integracion/lotes', icon: <CloudSync />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
+      { label: 'Lotes del cliente', path: '/integracion/lotes', icon: <CloudSync />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
       { label: 'Conocimientos', path: '/conocimientos', icon: <Grading />, roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'CAPACITACION'] },
     ],
   },

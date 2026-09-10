@@ -547,8 +547,8 @@ def sincronizar_medico(db: Session, pais_codigo: str, hallazgos: list) -> Conteo
                         ENT_MEDICO, fila.medico_codigo,
                         f"Hay otro médico homónimo («{fila.nombre}») ya "
                         f"sincronizado con el código «{candidato_ajeno.codigo}» "
-                        f"de Mallén; el contrato no trae centro_trabajo para "
-                        f"distinguirlos. Mallén debe enviarlo para diferenciar "
+                        f"del cliente; el contrato no trae centro_trabajo para "
+                        f"distinguirlos. El cliente debe enviarlo para diferenciar "
                         f"a los dos médicos; la fila se omitió (no se fusionó "
                         f"ni se duplicó).", SEVERIDAD_AVISO))
                     continue
@@ -686,7 +686,7 @@ def sincronizar_farmacia(db: Session, pais_codigo: str, hallazgos: list) -> Cont
                 != maestro_farmacia_service.normalizar(registro.nombre_completo)):
             hallazgos.append(Hallazgo(
                 ENT_FARMACIA, fila.farmacia_codigo,
-                f"El nombre en Mallén («{fila.nombre}») difiere del "
+                f"El nombre en el sistema del cliente («{fila.nombre}») difiere del "
                 f"nombre_completo guardado en VISTA («{registro.nombre_completo}»); "
                 f"el nombre no se sincroniza automáticamente, hay que revisarlo "
                 f"a mano en VISTA.", SEVERIDAD_AVISO))

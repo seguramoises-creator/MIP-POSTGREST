@@ -236,7 +236,7 @@ def integrar_conocimientos(db: Session, pais_codigo: str, ciclo_codigo: str,
         hallazgos.append(Hallazgo(
             "factevaluacionconocimiento", ciclo_codigo,
             f"En {pais_codigo}, {fuentes.INDICADOR_CONOCIMIENTOS} lo alimenta "
-            f"«{fuente}»; las notas de Mallén no se integraron. Cambia la fuente "
+            f"«{fuente}»; las notas del cliente no se integraron. Cambia la fuente "
             f"en Conocimientos si esa es la decisión.", SEVERIDAD_ERROR))
         return {"abortado": True, "motivo": "fuente_ajena", "rms_integrados": 0}
 

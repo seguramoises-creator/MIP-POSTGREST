@@ -246,7 +246,7 @@ export default function IdentidadVisual() {
             {guardando ? 'Guardando…' : 'Guardar y aplicar'}
           </Button>
           <Button variant="outlined" startIcon={<RestartAlt />} onClick={restablecer}>
-            Volver a los colores de Mallén
+            Volver a los colores de la identidad
           </Button>
         </Stack>
         <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: TEXTO_TENUE }}>

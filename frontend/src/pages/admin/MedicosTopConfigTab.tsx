@@ -64,7 +64,7 @@ export default function MedicosTopConfigTab() {
       <Alert severity="warning" sx={{ mb: 2 }}>
         Los valores por defecto ({cfg.dias_recordatorio_default} días / {cfg.pct_ciclo_escalamiento_default}%)
         son una posición razonable, <strong>no una decisión cerrada</strong>: siguen pendientes de
-        confirmar con el laboratorio (Mallén). Quien los ajuste debe saber que puede cambiar.
+        confirmar con el cliente. Quien los ajuste debe saber que puede cambiar.
         Dejar un campo vacío equivale a usar el valor por defecto.
       </Alert>
 
