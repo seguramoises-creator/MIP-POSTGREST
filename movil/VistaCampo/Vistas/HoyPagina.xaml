@@ -21,6 +21,15 @@
                     </Grid>
                 </Border>
 
+                <Border Style="{StaticResource Tarjeta}" BackgroundColor="#FFF4E5"
+                        IsVisible="{Binding HayAviso}">
+                    <Label Text="{Binding Aviso}" TextColor="{StaticResource Aviso}" />
+                </Border>
+                <Border Style="{StaticResource Tarjeta}" BackgroundColor="#FDECEA"
+                        IsVisible="{Binding HayError}">
+                    <Label Text="{Binding Error}" TextColor="{StaticResource Error}" />
+                </Border>
+
                 <Border Style="{StaticResource Tarjeta}" IsVisible="{Binding PuedeCapturar, Converter={StaticResource Negar}}"
                         BackgroundColor="#FFF4E5">
                     <Label Text="{Binding AvisoSoloConsulta}" TextColor="{StaticResource Aviso}" />
@@ -36,25 +45,25 @@
                     <Border Style="{StaticResource Tarjeta}">
                         <VerticalStackLayout>
                             <Label Text="Vistas" Style="{StaticResource Tenue}" />
-                            <Label Text="{Binding Vistas}" FontSize="32" FontAttributes="Bold" />
+                            <Label Text="{Binding TextoVistas}" FontSize="32" FontAttributes="Bold" />
                         </VerticalStackLayout>
                     </Border>
                     <Border Grid.Column="1" Style="{StaticResource Tarjeta}">
                         <VerticalStackLayout>
                             <Label Text="Revisitas" Style="{StaticResource Tenue}" />
-                            <Label Text="{Binding Revisitas}" FontSize="32" FontAttributes="Bold" />
+                            <Label Text="{Binding TextoRevisitas}" FontSize="32" FontAttributes="Bold" />
                         </VerticalStackLayout>
                     </Border>
                     <Border Grid.Row="1" Style="{StaticResource Tarjeta}">
                         <VerticalStackLayout>
                             <Label Text="Farmacias" Style="{StaticResource Tenue}" />
-                            <Label Text="{Binding Farmacias}" FontSize="32" FontAttributes="Bold" />
+                            <Label Text="{Binding TextoFarmacias}" FontSize="32" FontAttributes="Bold" />
                         </VerticalStackLayout>
                     </Border>
                     <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource Tarjeta}">
                         <VerticalStackLayout>
                             <Label Text="Con gerente" Style="{StaticResource Tenue}" />
-                            <Label Text="{Binding Acompanadas}" FontSize="32" FontAttributes="Bold" />
+                            <Label Text="{Binding TextoAcompanadas}" FontSize="32" FontAttributes="Bold" />
                         </VerticalStackLayout>
                     </Border>
                 </Grid>
@@ -81,9 +90,6 @@
                         </DataTemplate>
                     </CollectionView.ItemTemplate>
                 </CollectionView>
-
-                <Label Text="{Binding Aviso}" IsVisible="{Binding HayAviso}" TextColor="{StaticResource Aviso}" />
-                <Label Text="{Binding Error}" IsVisible="{Binding HayError}" TextColor="{StaticResource Error}" />
 
             </VerticalStackLayout>
         </ScrollView>

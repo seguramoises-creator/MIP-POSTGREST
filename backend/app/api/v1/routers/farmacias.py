@@ -287,9 +287,12 @@ def panel_listar(
     # Estado de visita (hoy/ciclo) + último comentario — como la pestaña de Médico,
     # adaptado AD-HOC (sin agenda/planeación). Una sola query agregada por VM+ciclo
     # (no N+1), ver `visita_farmacia_service.estado_visita_panel`.
-    estados: dict = {}
-    if ciclo_id is not None:
-        estados = visita_svc.estado_visita_panel(db, vm, ciclo_id, [p.id for p in paneles])
+    # Se calcula SIEMPRE, no solo con `ciclo_id`: `visitada_hoy` no depende del ciclo
+    # (es una comparación de fecha), y dejarlo detrás del filtro hacía que el móvil
+    # —que no manda ciclo— recibiera `visitada_hoy=False` en todas y enseñara
+    # «Farmacias 0» con visitas registradas ese mismo día. `ciclo_id=0` solo deja
+    # `visitada_ciclo` en falso, que es lo correcto cuando no se pidió un ciclo.
+    estados = visita_svc.estado_visita_panel(db, vm, ciclo_id or 0, [p.id for p in paneles])
 
     def _motivo(p: FarmaciaVisita) -> Optional[str]:
         """F26: motivo de rechazo — primero el del panel (siempre lo trae `rechazar()`,

@@ -77,7 +77,7 @@ public class ApiCliente
         {
             resp = await _http.SendAsync(await PeticionAsync(metodo, ruta, cuerpo?.Invoke()));
         }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        catch (Exception)
         {
             throw new ErrorApi("No se pudo contactar el servidor. Revisa tu conexión.");
         }
@@ -89,7 +89,7 @@ public class ApiCliente
             {
                 resp = await _http.SendAsync(await PeticionAsync(metodo, ruta, cuerpo?.Invoke()));
             }
-            catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+            catch (Exception)
             {
                 throw new ErrorApi("No se pudo contactar el servidor. Revisa tu conexión.");
             }
@@ -127,18 +127,49 @@ public class ApiCliente
         throw new ErrorApi(detalle, r.StatusCode);
     }
 
+    /// <summary>
+    /// Lee el cuerpo de la respuesta traduciendo un corte de conexión a un mensaje.
+    ///
+    /// La conexión no solo se cae al ENVIAR: se cae a media lectura. Con el servidor
+    /// tumbado la app llegó a mostrar «Algo falló: unexpected end of stream on
+    /// com.android.okhttp.Address@34bee068» — el fallo era correcto, el mensaje era una
+    /// excepción interna en crudo delante de un visitador en la calle. El `try/catch`
+    /// del envío no lo cubría porque esto ocurre después, al leer.
+    ///
+    /// Se atrapa CUALQUIER excepción y no una lista de tipos: el primer intento filtró
+    /// por `HttpRequestException or IOException` y el mensaje en crudo siguió saliendo
+    /// igual, porque el que sube desde okhttp es un `Java.IO.IOException`, que NO
+    /// hereda de `System.IO.IOException`. Aquí dentro solo se lee una respuesta HTTP;
+    /// no hay lógica de negocio que una captura amplia pueda tapar.
+    /// </summary>
+    private static async Task<T> LeerAsync<T>(HttpResponseMessage r)
+    {
+        try
+        {
+            return (await r.Content.ReadFromJsonAsync<T>(Json))!;
+        }
+        catch (JsonException)
+        {
+            throw new ErrorApi("El servidor respondió algo que no se pudo leer.");
+        }
+        catch (Exception)
+        {
+            throw new ErrorApi("Se cortó la conexión con el servidor. Vuelve a intentar.");
+        }
+    }
+
     public async Task<T> ObtenerAsync<T>(string ruta)
     {
         using var r = await EnviarAsync(HttpMethod.Get, ruta);
         await LanzarSiFalloAsync(r);
-        return (await r.Content.ReadFromJsonAsync<T>(Json))!;
+        return await LeerAsync<T>(r);
     }
 
     public async Task<T> EnviarJsonAsync<T>(string ruta, object cuerpo)
     {
         using var r = await EnviarAsync(HttpMethod.Post, ruta, () => JsonContent.Create(cuerpo));
         await LanzarSiFalloAsync(r);
-        return (await r.Content.ReadFromJsonAsync<T>(Json))!;
+        return await LeerAsync<T>(r);
     }
 
     public async Task<T> SubirArchivoAsync<T>(string ruta, string rutaLocal, string mime)
@@ -153,7 +184,7 @@ public class ApiCliente
             return contenido;
         });
         await LanzarSiFalloAsync(r);
-        return (await r.Content.ReadFromJsonAsync<T>(Json))!;
+        return await LeerAsync<T>(r);
     }
 
     // ── Sesión ───────────────────────────────────────────────────────────────
@@ -171,7 +202,7 @@ public class ApiCliente
         {
             r = await _http.PostAsync(Url("/auth/login"), form);
         }
-        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        catch (Exception)
         {
             throw new ErrorApi("No se pudo contactar el servidor. Revisa tu conexión.");
         }

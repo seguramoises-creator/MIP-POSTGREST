@@ -15,6 +15,13 @@ public partial class HoyPagina : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
+        _vm.Activar();
         await _vm.CargarAsync();
+    }
+
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+        _vm.Desactivar();
     }
 }

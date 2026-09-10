@@ -26,6 +26,24 @@ public partial class App : Application
         };
     }
 
+    /// <summary>
+    /// Al volver a primer plano se reintenta la cola. Medido en el teléfono: con un
+    /// pendiente en cola y el servidor caído, al volver el servidor NADA subía — pasaron
+    /// 25 segundos con la app abierta y el envío seguía ahí, esperando a que alguien
+    /// pulsara Sincronizar.
+    ///
+    /// El evento de red no basta, y por eso hacen falta los dos: Android solo lo dispara
+    /// cuando cambia el estado de la CONEXIÓN, no cuando el servidor del otro lado vuelve
+    /// a responder. En la calle pasa constantemente — el teléfono marca wifi o datos todo
+    /// el rato mientras la petición no llega a ninguna parte—, y volver a abrir la app es
+    /// justo lo que hace el visitador entre una visita y la siguiente.
+    /// </summary>
+    protected override void OnResume()
+    {
+        base.OnResume();
+        _ = _sync.ProcesarAsync();
+    }
+
     protected override Window CreateWindow(IActivationState? activationState)
     {
         var ventana = new Window(new AppShell());
