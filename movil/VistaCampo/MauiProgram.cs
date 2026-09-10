@@ -48,6 +48,10 @@ public static class MauiProgram
         builder.Services.AddTransient<AltaFarmaciaVista>();
 
         builder.Services.AddTransient<EntrarPagina>();
+
+        builder.Services.AddTransient<VistaModelos.CambiarClaveVista>();
+
+        builder.Services.AddTransient<Vistas.CambiarClavePagina>();
         builder.Services.AddTransient<HoyPagina>();
         builder.Services.AddTransient<RegistrarPagina>();
         builder.Services.AddTransient<PanelPagina>();

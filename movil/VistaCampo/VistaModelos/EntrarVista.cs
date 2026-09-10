@@ -56,10 +56,11 @@ public partial class EntrarVista : BaseVista
 
             if (debeCambiar)
             {
-                // No se deja pasar: la web obliga a cambiarla y aquí también, o el
-                // visitador quedaría con una clave que el sistema ya dio por vencida.
-                Error = "Debes cambiar tu contraseña antes de entrar. Hazlo desde la web.";
-                await _sesion.CerrarAsync();
+                // No se deja pasar a Hoy, pero TAMPOCO se le echa: se le lleva a cambiarla
+                // aquí mismo. Antes decía «Hazlo desde la web» y cerraba la sesión, que
+                // para un visitador recién dado de alta es un callejón — está en la calle,
+                // con el teléfono, y la app solo le ofrece un sitio al que no puede ir.
+                if (Shell.Current is not null) await Shell.Current.GoToAsync("//cambiar-clave");
                 return;
             }
 

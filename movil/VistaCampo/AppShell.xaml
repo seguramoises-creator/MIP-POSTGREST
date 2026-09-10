@@ -14,6 +14,9 @@
     <ShellContent Route="entrar" ContentTemplate="{DataTemplate v:EntrarPagina}"
                   Shell.TabBarIsVisible="False" Shell.NavBarIsVisible="False" />
 
+    <ShellContent Route="cambiar-clave" ContentTemplate="{DataTemplate v:CambiarClavePagina}"
+                  Shell.TabBarIsVisible="False" />
+
     <TabBar>
         <ShellContent Route="hoy" Title="Hoy" ContentTemplate="{DataTemplate v:HoyPagina}" Icon="tab_hoy.png" />
         <ShellContent Route="registrar" Title="Registrar" ContentTemplate="{DataTemplate v:RegistrarPagina}" Icon="tab_registrar.png" />

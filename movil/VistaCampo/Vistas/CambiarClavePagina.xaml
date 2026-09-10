@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  El cambio de contraseña de la primera entrada, hecho en el teléfono.
+
+  Sin barra de pestañas: es un paso obligatorio, no un sitio al que se navega. Salir de
+  aquí es cerrar la sesión, y el botón lo dice.
+-->
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="VistaCampo.Vistas.CambiarClavePagina"
+             Shell.TabBarIsVisible="False"
+             Title="Tu contraseña">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="18" Spacing="12" VerticalOptions="Center">
+
+            <Label Text="🔐" FontSize="34" HorizontalOptions="Center" />
+            <Label Text="Crea tu contraseña" Style="{StaticResource Titulo}"
+                   HorizontalOptions="Center" />
+            <Label Style="{StaticResource Tenue}" HorizontalTextAlignment="Center"
+                   Text="Es la primera vez que entras. Cambia la contraseña que te dieron por una tuya." />
+
+            <VerticalStackLayout Margin="0,8,0,0">
+                <Label Text="Contraseña actual" Style="{StaticResource Etiqueta}" />
+                <Entry Text="{Binding Actual}" IsPassword="True"
+                       Placeholder="La que te entregaron" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout>
+                <Label Text="Nueva contraseña" Style="{StaticResource Etiqueta}" />
+                <Entry Text="{Binding Nueva}" IsPassword="True" Placeholder="Tu nueva contraseña" />
+            </VerticalStackLayout>
+
+            <VerticalStackLayout>
+                <Label Text="Repite la nueva" Style="{StaticResource Etiqueta}" />
+                <Entry Text="{Binding Repetida}" IsPassword="True" Placeholder="Otra vez, para confirmar" />
+                <Label Text="{Binding Ayuda}" Style="{StaticResource Tenue}" />
+            </VerticalStackLayout>
+
+            <Button Text="🔐  Guardar y entrar" Style="{StaticResource BotonPrincipal}"
+                    Command="{Binding GuardarCommand}" />
+            <Button Text="🚪  Salir sin cambiarla" Style="{StaticResource BotonSecundario}"
+                    Command="{Binding CancelarCommand}" />
+
+            <ActivityIndicator IsRunning="{Binding Ocupado}" IsVisible="{Binding Ocupado}"
+                               Color="{DynamicResource Accion}" />
+            <Label Text="{Binding Error}" IsVisible="{Binding HayError}"
+                   TextColor="{StaticResource Error}" FontAttributes="Bold" />
+            <Label Text="{Binding Aviso}" IsVisible="{Binding HayAviso}"
+                   TextColor="{StaticResource Exito}" FontAttributes="Bold" />
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

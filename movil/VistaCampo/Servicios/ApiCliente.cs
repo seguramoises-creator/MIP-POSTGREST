@@ -217,6 +217,20 @@ public class ApiCliente
         }
     }
 
+    /// <summary>
+    /// Cambia la contraseña del usuario que tiene la sesión abierta.
+    ///
+    /// Se puede llamar con la marca de «debe cambiar» puesta: el login devuelve tokens
+    /// válidos junto a esa marca, que es lo que permite hacer el cambio desde el propio
+    /// teléfono en vez de mandar al visitador a la web.
+    /// </summary>
+    public async Task CambiarClaveAsync(string actual, string nueva)
+    {
+        using var r = await EnviarAsync(HttpMethod.Post, "/auth/change-password",
+            () => JsonContent.Create(new { password_actual = actual, password_nuevo = nueva }));
+        await LanzarSiFalloAsync(r);
+    }
+
     private async Task<bool> RenovarAsync()
     {
         var refresco = await _sesion.RefreshTokenAsync();
