@@ -9,7 +9,7 @@
              Title="Nuevo médico">
 
     <ScrollView>
-        <VerticalStackLayout Padding="16" Spacing="14">
+        <VerticalStackLayout Padding="10" Spacing="8">
 
             <Border Style="{StaticResource Tarjeta}" BackgroundColor="#FFF4E5"
                     IsVisible="{Binding SinConexion}">
@@ -31,7 +31,7 @@
                         <CollectionView ItemsSource="{Binding Existentes}" HeightRequest="180">
                             <CollectionView.ItemTemplate>
                                 <DataTemplate x:DataType="m:MedicoExistente">
-                                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,6" Padding="10">
+                                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,4" Padding="10">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <VerticalStackLayout>
                                                 <Label Text="{Binding Nombre}" FontAttributes="Bold" />

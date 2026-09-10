@@ -8,7 +8,7 @@
              Title="Nueva farmacia">
 
     <ScrollView>
-        <VerticalStackLayout Padding="16" Spacing="14">
+        <VerticalStackLayout Padding="10" Spacing="8">
 
             <Border Style="{StaticResource Tarjeta}" BackgroundColor="#FFF4E5"
                     IsVisible="{Binding SinConexion}">
@@ -49,7 +49,7 @@
                         <CollectionView ItemsSource="{Binding Encontradas}" HeightRequest="180">
                             <CollectionView.ItemTemplate>
                                 <DataTemplate x:DataType="m:FarmaciaMaestro">
-                                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,8" Padding="10">
+                                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,5" Padding="10">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <VerticalStackLayout>
                                                 <Label Text="{Binding Nombre}" FontAttributes="Bold" />

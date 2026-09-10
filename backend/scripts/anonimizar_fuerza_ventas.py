@@ -66,7 +66,7 @@ def leer(db):
     rms = db.execute(text(
         'SELECT id, codigo, nombre FROM "Config"."DIM_RM" ORDER BY id')).all()
     usu = db.execute(text(
-        'SELECT id, username, nombre_completo, rm_id, gerente_id '
+        'SELECT id, username, nombre_completo, rol, rm_id, gerente_id '
         'FROM "Security"."DIM_Usuario" ORDER BY id')).all()
     return ger, rms, usu
 
@@ -108,8 +108,15 @@ def main() -> int:
         por_nombre[(r.nombre or "").strip().upper()] = mapa_rm[r.id]
     # Se empareja PRIMERO por el vínculo (rm_id / gerente_id) y solo después por el
     # texto del nombre.
+    # SOLO la fuerza de ventas. Atar por `rm_id`/`gerente_id` sin mirar el ROL renombró
+    # la cuenta del ADMINISTRADOR y una de QA, que tenían ese vínculo puesto de arrastre:
+    # se pidieron los nombres de gerentes y visitadores, no los de todo el que estuviera
+    # enlazado a una ficha.
+    ROLES = {"REPRESENTANTE_MEDICO", "GERENTE_DISTRITO", "GERENTE_MARCA"}
     cambios_usu = []
     for u in usu:
+        if (u.rol or "") not in ROLES:
+            continue
         destino = None
         if u.rm_id and u.rm_id in mapa_rm:
             destino = mapa_rm[u.rm_id]

@@ -333,4 +333,14 @@ public class VisitaDelDia
     public string Tipo { get; set; } = "V";
     public string Hora { get; set; } = "";
     public bool Ejecutada { get; set; } = true;
+    public bool TieneGps { get; set; }
+    public bool TieneFoto { get; set; }
+
+    /// <summary>Lo que se puede comprobar de esa visita, dicho en un renglon.</summary>
+    public string Evidencia => string.Join("  ", new[]
+    {
+        Tipo == "R" ? "Revisita" : "Vista",
+        TieneGps ? "📍 GPS" : null,
+        TieneFoto ? "📷 Foto" : null,
+    }.Where(s => s is not null)!);
 }

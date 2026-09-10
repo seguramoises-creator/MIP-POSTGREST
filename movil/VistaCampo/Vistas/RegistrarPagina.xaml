@@ -39,13 +39,13 @@
           sí viene del propio elemento.
         -->
         <ControlTemplate x:Key="FichaVisita">
-            <Border Style="{StaticResource Tarjeta}" Margin="0,2,0,8" Padding="12">
+            <Border Style="{StaticResource Tarjeta}" Margin="0,2,0,6" Padding="9">
                 <VerticalStackLayout Spacing="12">
 
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                         <VerticalStackLayout>
                             <Label Text="{TemplateBinding BindingContext.Nombre}"
-                                   FontAttributes="Bold" FontSize="15" />
+                                   FontAttributes="Bold" FontSize="13" />
                             <Label Text="{TemplateBinding BindingContext.Detalle}"
                                    Style="{StaticResource Tenue}" FontSize="11" />
                         </VerticalStackLayout>
@@ -79,19 +79,19 @@
                                 <Grid ColumnDefinitions="*,*,*">
                                     <VerticalStackLayout>
                                         <Label Text="{Binding BindingContext.TextoTipoResumen, Source={x:Reference pagina}}"
-                                               FontAttributes="Bold" FontSize="14" HorizontalOptions="Center" />
+                                               FontAttributes="Bold" FontSize="13" HorizontalOptions="Center" />
                                         <Label Text="Tipo" Style="{StaticResource Tenue}" FontSize="9"
                                                LineBreakMode="NoWrap" HorizontalOptions="Center" />
                                     </VerticalStackLayout>
                                     <VerticalStackLayout Grid.Column="1">
                                         <Label Text="{Binding BindingContext.NumProductos, Source={x:Reference pagina}}"
-                                               FontAttributes="Bold" FontSize="14" HorizontalOptions="Center" />
+                                               FontAttributes="Bold" FontSize="13" HorizontalOptions="Center" />
                                         <Label Text="Productos" Style="{StaticResource Tenue}" FontSize="9"
                                                LineBreakMode="NoWrap" HorizontalOptions="Center" />
                                     </VerticalStackLayout>
                                     <VerticalStackLayout Grid.Column="2">
                                         <Label Text="{Binding BindingContext.NumMuestras, Source={x:Reference pagina}}"
-                                               FontAttributes="Bold" FontSize="14" HorizontalOptions="Center" />
+                                               FontAttributes="Bold" FontSize="13" HorizontalOptions="Center" />
                                         <Label Text="Muestras" Style="{StaticResource Tenue}" FontSize="9"
                                                LineBreakMode="NoWrap" HorizontalOptions="Center" />
                                     </VerticalStackLayout>
@@ -203,12 +203,12 @@
         <!-- La ficha de registro de una FARMACIA: sin tipo, sin productos y con el
              comentario OPCIONAL — así lo acepta el servidor para farmacia. -->
         <ControlTemplate x:Key="FichaFarmacia">
-            <Border Style="{StaticResource Tarjeta}" Margin="0,2,0,8" Padding="12">
+            <Border Style="{StaticResource Tarjeta}" Margin="0,2,0,6" Padding="9">
                 <VerticalStackLayout Spacing="12">
                     <VerticalStackLayout>
                         <HorizontalStackLayout Spacing="6">
                             <Label Text="{TemplateBinding BindingContext.Nombre}"
-                                   FontAttributes="Bold" FontSize="15" />
+                                   FontAttributes="Bold" FontSize="13" />
                             <Border StrokeThickness="1" Stroke="#C9D6E8" Padding="0"
                                     StrokeShape="RoundRectangle 8" VerticalOptions="Center">
                                 <Label Text="{TemplateBinding BindingContext.Badge}" FontSize="10"
@@ -253,7 +253,7 @@
     </ContentPage.Resources>
 
     <ScrollView x:Name="lienzo">
-        <VerticalStackLayout Padding="14" Spacing="12">
+        <VerticalStackLayout Padding="10" Spacing="8">
 
             <Border Style="{StaticResource Tarjeta}" BackgroundColor="#FFF4E5"
                     IsVisible="{Binding PuedeCapturar, Converter={StaticResource Negar}}">
@@ -295,7 +295,7 @@
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                                 <Label Text="📋" FontSize="17" VerticalOptions="Center" />
                                 <Label Grid.Column="1" Text="Médicos de hoy" FontAttributes="Bold"
-                                       FontSize="16" VerticalOptions="Center" />
+                                       FontSize="14" VerticalOptions="Center" />
                                 <Border Grid.Column="2" BackgroundColor="#FFF4E5" StrokeThickness="0"
                                         Padding="0" StrokeShape="RoundRectangle 10">
                                     <Label Text="{Binding TextoPendientes}" Style="{StaticResource Chip}"
@@ -322,7 +322,7 @@
                                     <DataTemplate x:DataType="m:ItemAgenda">
                                         <VerticalStackLayout>
                                             <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8"
-                                                  Padding="4,8" BackgroundColor="{Binding Activa, Converter={StaticResource ColorSeleccion}, ConverterParameter=fila}">
+                                                  Padding="3,6" BackgroundColor="{Binding Activa, Converter={StaticResource ColorSeleccion}, ConverterParameter=fila}">
                                                 <Grid.GestureRecognizers>
                                                     <TapGestureRecognizer
                                                         Command="{Binding BindingContext.SeleccionarCitaCommand, Source={x:Reference pagina}}"
@@ -342,7 +342,7 @@
                                                            HorizontalOptions="Center" VerticalOptions="Center" />
                                                 </Border>
                                                 <VerticalStackLayout Grid.Column="2" VerticalOptions="Center">
-                                                    <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="14" />
+                                                    <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="13" />
                                                     <Label Text="{Binding Subtitulo}" Style="{StaticResource Tenue}" FontSize="11" />
                                                 </VerticalStackLayout>
                                                 <Label Grid.Column="3" Text="{Binding TextoEstado}" FontSize="11"
@@ -371,7 +371,7 @@
                                     <DataTemplate x:DataType="m:ItemAgenda">
                                         <VerticalStackLayout>
                                             <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8"
-                                                  Padding="4,8" BackgroundColor="{Binding Activa, Converter={StaticResource ColorSeleccion}, ConverterParameter=fila}">
+                                                  Padding="3,6" BackgroundColor="{Binding Activa, Converter={StaticResource ColorSeleccion}, ConverterParameter=fila}">
                                                 <Grid.GestureRecognizers>
                                                     <TapGestureRecognizer
                                                         Command="{Binding BindingContext.SeleccionarCitaCommand, Source={x:Reference pagina}}"
@@ -391,7 +391,7 @@
                                                            HorizontalOptions="Center" VerticalOptions="Center" />
                                                 </Border>
                                                 <VerticalStackLayout Grid.Column="2" VerticalOptions="Center">
-                                                    <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="14" />
+                                                    <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="13" />
                                                     <Label Text="{Binding Subtitulo}" Style="{StaticResource Tenue}" FontSize="11" />
                                                 </VerticalStackLayout>
                                                 <Label Grid.Column="3" Text="{Binding TextoEstado}" FontSize="11"
@@ -418,9 +418,9 @@
                     <Border Style="{StaticResource Tarjeta}">
                         <VerticalStackLayout Spacing="8">
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                <Label Text="✅" FontSize="16" VerticalOptions="Center" />
+                                <Label Text="✅" FontSize="14" VerticalOptions="Center" />
                                 <Label Grid.Column="1" Text="Registradas hoy" FontAttributes="Bold"
-                                       FontSize="16" VerticalOptions="Center" />
+                                       FontSize="14" VerticalOptions="Center" />
                                 <Border Grid.Column="2" StrokeThickness="1" Stroke="#B7E4C7" Padding="0"
                                         StrokeShape="RoundRectangle 10">
                                     <Label Text="{Binding TituloRegistradas}" Style="{StaticResource Chip}" />
@@ -436,8 +436,9 @@
                                     <DataTemplate x:DataType="m:VisitaDelDia">
                                         <Grid ColumnDefinitions="*,Auto" Padding="2,4">
                                             <VerticalStackLayout>
-                                                <Label Text="{Binding Medico}" FontAttributes="Bold" FontSize="13" />
-                                                <Label Text="{Binding Hora}" Style="{StaticResource Tenue}" FontSize="11" />
+                                                <Label Text="{Binding Medico}" FontAttributes="Bold" FontSize="12" />
+                                                <Label Text="{Binding Evidencia}" Style="{StaticResource Tenue}" FontSize="10" />
+                                                <Label Text="{Binding Hora}" Style="{StaticResource Tenue}" FontSize="10" />
                                             </VerticalStackLayout>
                                             <Label Grid.Column="1" Text="✓" FontSize="18" VerticalOptions="Center"
                                                    TextColor="{StaticResource Exito}" />
@@ -452,9 +453,9 @@
                     <Border Style="{StaticResource Tarjeta}">
                         <VerticalStackLayout Spacing="8">
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                                <Label Text="🕘" FontSize="16" VerticalOptions="Center" />
+                                <Label Text="🕘" FontSize="14" VerticalOptions="Center" />
                                 <Label Grid.Column="1" Text="Visitas anteriores" FontAttributes="Bold"
-                                       FontSize="16" VerticalOptions="Center" />
+                                       FontSize="14" VerticalOptions="Center" />
                                 <Border Grid.Column="2" StrokeThickness="1" Stroke="#D8D2CB" Padding="0"
                                         StrokeShape="RoundRectangle 10">
                                     <Label Text="🔒 Solo lectura" Style="{StaticResource Chip}" />
@@ -484,7 +485,7 @@
                             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                                 <Label Text="🏥" FontSize="17" VerticalOptions="Center" />
                                 <Label Grid.Column="1" Text="Mis farmacias" FontAttributes="Bold"
-                                       FontSize="16" VerticalOptions="Center" />
+                                       FontSize="14" VerticalOptions="Center" />
                                 <Border Grid.Column="2" StrokeThickness="1" Stroke="#B7E4C7" Padding="0"
                                         StrokeShape="RoundRectangle 10">
                                     <Label Text="{Binding TextoFarmaciasActivas}" Style="{StaticResource Chip}" />
@@ -500,7 +501,7 @@
                                 <BindableLayout.ItemTemplate>
                                     <DataTemplate x:DataType="m:FarmaciaPanel">
                                         <VerticalStackLayout>
-                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="4,8"
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="3,6"
                                                   BackgroundColor="{Binding Activa, Converter={StaticResource ColorSeleccion}, ConverterParameter=fila}">
                                                 <Grid.GestureRecognizers>
                                                     <TapGestureRecognizer
@@ -510,7 +511,7 @@
                                                 <Label Text="🏥" FontSize="17" VerticalOptions="Start" />
                                                 <VerticalStackLayout Grid.Column="1">
                                                     <HorizontalStackLayout Spacing="6">
-                                                        <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="14" />
+                                                        <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="13" />
                                                         <Border StrokeThickness="1" Stroke="#C9D6E8" Padding="0"
                                                                 StrokeShape="RoundRectangle 8" VerticalOptions="Center">
                                                             <Label Text="{Binding Badge}" FontSize="10" Padding="6,2"
@@ -546,7 +547,7 @@
                                 <BindableLayout.ItemTemplate>
                                     <DataTemplate x:DataType="m:FarmaciaPanel">
                                         <VerticalStackLayout>
-                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="4,8"
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="3,6"
                                                   BackgroundColor="{Binding Activa, Converter={StaticResource ColorSeleccion}, ConverterParameter=fila}">
                                                 <Grid.GestureRecognizers>
                                                     <TapGestureRecognizer
@@ -556,7 +557,7 @@
                                                 <Label Text="🏥" FontSize="17" VerticalOptions="Start" />
                                                 <VerticalStackLayout Grid.Column="1">
                                                     <HorizontalStackLayout Spacing="6">
-                                                        <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="14" />
+                                                        <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="13" />
                                                         <Border StrokeThickness="1" Stroke="#C9D6E8" Padding="0"
                                                                 StrokeShape="RoundRectangle 8" VerticalOptions="Center">
                                                             <Label Text="{Binding Badge}" FontSize="10" Padding="6,2"

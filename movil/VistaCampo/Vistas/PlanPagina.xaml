@@ -42,7 +42,7 @@
                         IsGrouped="False">
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="m:ItemPlan">
-                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,8">
+                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,5">
                         <Grid ColumnDefinitions="*,Auto">
                             <VerticalStackLayout>
                                 <Label Text="{Binding Medico}" FontAttributes="Bold" />

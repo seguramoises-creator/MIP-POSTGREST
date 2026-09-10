@@ -7,14 +7,14 @@
 
     <RefreshView IsRefreshing="{Binding Ocupado}" Command="{Binding CargarCommand}">
         <ScrollView>
-            <VerticalStackLayout Padding="16" Spacing="14">
+            <VerticalStackLayout Padding="10" Spacing="8">
 
                 <!-- Estado de la cola: lo primero, porque es lo que responde «¿subió mi trabajo?» -->
                 <Border Style="{StaticResource Tarjeta}">
                     <Grid ColumnDefinitions="*,Auto">
                         <VerticalStackLayout>
-                            <Label Text="Estado de envío" Style="{StaticResource Tenue}" />
-                            <Label Text="{Binding EstadoCola}" FontSize="18" FontAttributes="Bold" />
+                            <Label Text="📤  Estado de envío" Style="{StaticResource Tenue}" />
+                            <Label Text="{Binding EstadoCola}" FontSize="15" FontAttributes="Bold" />
                         </VerticalStackLayout>
                         <Button Grid.Column="1" Text="🔄  Sincronizar" Style="{StaticResource BotonSecundario}"
                                 WidthRequest="130" Command="{Binding SincronizarCommand}" />
@@ -41,44 +41,44 @@
                 </Border>
 
                 <!-- Cifras del día -->
-                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
+                <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="5">
                     <Border Style="{StaticResource Tarjeta}">
                         <VerticalStackLayout>
-                            <Label Text="Vistas" Style="{StaticResource Tenue}" />
-                            <Label Text="{Binding TextoVistas}" FontSize="32" FontAttributes="Bold" />
+                            <Label Text="🩺 Vistas" Style="{StaticResource Tenue}" FontSize="9" LineBreakMode="TailTruncation" />
+                            <Label Text="{Binding TextoVistas}" FontSize="19" FontAttributes="Bold" HorizontalOptions="Center" />
                         </VerticalStackLayout>
                     </Border>
                     <Border Grid.Column="1" Style="{StaticResource Tarjeta}">
                         <VerticalStackLayout>
-                            <Label Text="Revisitas" Style="{StaticResource Tenue}" />
-                            <Label Text="{Binding TextoRevisitas}" FontSize="32" FontAttributes="Bold" />
+                            <Label Text="🔁 Revisitas" Style="{StaticResource Tenue}" FontSize="9" LineBreakMode="TailTruncation" />
+                            <Label Text="{Binding TextoRevisitas}" FontSize="19" FontAttributes="Bold" HorizontalOptions="Center" />
                         </VerticalStackLayout>
                     </Border>
-                    <Border Grid.Row="1" Style="{StaticResource Tarjeta}">
+                    <Border Grid.Column="2" Style="{StaticResource Tarjeta}">
                         <VerticalStackLayout>
-                            <Label Text="Farmacias" Style="{StaticResource Tenue}" />
-                            <Label Text="{Binding TextoFarmacias}" FontSize="32" FontAttributes="Bold" />
+                            <Label Text="🏥 Farmacias" Style="{StaticResource Tenue}" FontSize="9" LineBreakMode="TailTruncation" />
+                            <Label Text="{Binding TextoFarmacias}" FontSize="19" FontAttributes="Bold" HorizontalOptions="Center" />
                         </VerticalStackLayout>
                     </Border>
-                    <Border Grid.Row="1" Grid.Column="1" Style="{StaticResource Tarjeta}">
+                    <Border Grid.Column="3" Style="{StaticResource Tarjeta}">
                         <VerticalStackLayout>
-                            <Label Text="Con gerente" Style="{StaticResource Tenue}" />
-                            <Label Text="{Binding TextoAcompanadas}" FontSize="32" FontAttributes="Bold" />
+                            <Label Text="👥 Con gerente" Style="{StaticResource Tenue}" FontSize="9" LineBreakMode="TailTruncation" />
+                            <Label Text="{Binding TextoAcompanadas}" FontSize="19" FontAttributes="Bold" HorizontalOptions="Center" />
                         </VerticalStackLayout>
                     </Border>
                 </Grid>
 
-                <Label Text="Tu agenda de hoy" Style="{StaticResource Titulo}" FontSize="19" Margin="0,6,0,0" />
+                <Label Text="📋  Tu agenda de hoy" Style="{StaticResource Titulo}" FontSize="15" Margin="0,6,0,0" />
                 <Label Style="{StaticResource Tenue}" IsVisible="{Binding Agenda.Count, Converter={StaticResource ListaVacia}}"
                        Text="Sin agenda descargada para hoy." />
 
-                <CollectionView ItemsSource="{Binding Agenda}" HeightRequest="240">
+                <CollectionView ItemsSource="{Binding Agenda}" HeightRequest="300">
                     <CollectionView.ItemTemplate>
                         <DataTemplate x:DataType="m:ItemAgenda">
-                            <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,8">
+                            <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,4" Padding="7">
                                 <Grid ColumnDefinitions="*,Auto">
                                     <VerticalStackLayout>
-                                        <Label Text="{Binding Nombre}" FontAttributes="Bold" />
+                                        <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="12" />
                                         <Label Style="{StaticResource Tenue}"
                                                Text="{Binding TipoVisita, Converter={StaticResource TipoATexto}}" />
                                     </VerticalStackLayout>

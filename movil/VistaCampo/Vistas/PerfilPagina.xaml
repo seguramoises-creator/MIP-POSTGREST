@@ -6,7 +6,7 @@
              Title="Perfil">
 
     <ScrollView>
-        <VerticalStackLayout Padding="16" Spacing="14">
+        <VerticalStackLayout Padding="10" Spacing="8">
 
             <Border Style="{StaticResource Tarjeta}">
                 <VerticalStackLayout Spacing="4">
@@ -38,7 +38,7 @@
             <CollectionView ItemsSource="{Binding Cola}" HeightRequest="300">
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="m:EnvioPendiente">
-                        <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,8">
+                        <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,5">
                             <VerticalStackLayout Spacing="2">
                                 <Grid ColumnDefinitions="*,Auto">
                                     <Label Text="{Binding Etiqueta}" FontAttributes="Bold" />

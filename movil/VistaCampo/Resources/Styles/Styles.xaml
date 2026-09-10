@@ -20,24 +20,24 @@
 
     <Style TargetType="Label">
         <Setter Property="TextColor" Value="{StaticResource Texto}" />
-        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontSize" Value="13" />
     </Style>
 
     <Style x:Key="Titulo" TargetType="Label">
-        <Setter Property="FontSize" Value="24" />
+        <Setter Property="FontSize" Value="18" />
         <Setter Property="FontAttributes" Value="Bold" />
         <Setter Property="TextColor" Value="{StaticResource Texto}" />
     </Style>
 
     <Style x:Key="Etiqueta" TargetType="Label">
-        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontSize" Value="12" />
         <Setter Property="FontAttributes" Value="Bold" />
         <Setter Property="TextColor" Value="{StaticResource Texto}" />
         <Setter Property="Margin" Value="0,0,0,4" />
     </Style>
 
     <Style x:Key="Tenue" TargetType="Label">
-        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontSize" Value="11" />
         <Setter Property="TextColor" Value="{StaticResource TextoTenue}" />
     </Style>
 
@@ -45,24 +45,26 @@
         <Setter Property="TextColor" Value="{StaticResource Texto}" />
         <Setter Property="PlaceholderColor" Value="{StaticResource TextoTenue}" />
         <Setter Property="BackgroundColor" Value="{StaticResource Superficie}" />
-        <Setter Property="FontSize" Value="16" />
-        <Setter Property="HeightRequest" Value="52" />
+        <Setter Property="FontSize" Value="14" />
+        <!-- 48 y no menos: es lo que mide un dedo. La pantalla se aprieta con la
+             letra, nunca con la zona pulsable. -->
+        <Setter Property="HeightRequest" Value="48" />
     </Style>
 
     <Style TargetType="Editor">
         <Setter Property="TextColor" Value="{StaticResource Texto}" />
         <Setter Property="PlaceholderColor" Value="{StaticResource TextoTenue}" />
         <Setter Property="BackgroundColor" Value="{StaticResource Superficie}" />
-        <Setter Property="FontSize" Value="16" />
+        <Setter Property="FontSize" Value="14" />
     </Style>
 
     <Style x:Key="BotonPrincipal" TargetType="Button">
         <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
         <Setter Property="TextColor" Value="{StaticResource Blanco}" />
         <Setter Property="FontAttributes" Value="Bold" />
-        <Setter Property="FontSize" Value="17" />
-        <Setter Property="HeightRequest" Value="54" />
-        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="HeightRequest" Value="48" />
+        <Setter Property="CornerRadius" Value="10" />
     </Style>
 
     <Style x:Key="BotonSecundario" TargetType="Button">
@@ -71,16 +73,17 @@
         <Setter Property="BorderColor" Value="{StaticResource Borde}" />
         <Setter Property="BorderWidth" Value="1" />
         <Setter Property="FontAttributes" Value="Bold" />
-        <Setter Property="HeightRequest" Value="50" />
-        <Setter Property="CornerRadius" Value="12" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="HeightRequest" Value="48" />
+        <Setter Property="CornerRadius" Value="10" />
     </Style>
 
     <Style x:Key="Tarjeta" TargetType="Border">
         <Setter Property="BackgroundColor" Value="{StaticResource Superficie}" />
         <Setter Property="Stroke" Value="{StaticResource Borde}" />
         <Setter Property="StrokeThickness" Value="1" />
-        <Setter Property="Padding" Value="14" />
-        <Setter Property="StrokeShape" Value="RoundRectangle 14" />
+        <Setter Property="Padding" Value="9" />
+        <Setter Property="StrokeShape" Value="RoundRectangle 10" />
     </Style>
 
     <Style TargetType="Shell" ApplyToDerivedTypes="True">

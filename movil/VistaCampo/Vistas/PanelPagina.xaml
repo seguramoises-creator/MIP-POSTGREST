@@ -37,7 +37,7 @@
                         IsVisible="{Binding VerFarmacias, Converter={StaticResource Negar}}">
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="m:MedicoPanel">
-                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,8">
+                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,5">
                         <VerticalStackLayout>
                             <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="16" />
                             <Label Text="{Binding Subtitulo}" Style="{StaticResource Tenue}" />
@@ -54,7 +54,7 @@
                         IsVisible="{Binding VerFarmacias}">
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="m:FarmaciaPanel">
-                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,8">
+                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,5">
                         <VerticalStackLayout>
                             <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="16" />
                             <Label Text="{Binding Direccion}" Style="{StaticResource Tenue}" />

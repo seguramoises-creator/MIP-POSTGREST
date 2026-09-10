@@ -250,6 +250,7 @@ public partial class RegistrarVista : BaseVista
             // equivocado y nadie lo nota, porque el texto es plausible en los dos.
             LimpiarCaptura();
             Error = null;
+            _ = UbicarEnSegundoPlanoAsync();
         }
         NotificarSeleccion();
     }
@@ -284,6 +285,7 @@ public partial class RegistrarVista : BaseVista
         {
             Cita = null;
             LimpiarCaptura();
+            _ = UbicarEnSegundoPlanoAsync();
         }
         Error = value is not null && !value.SePuedeVisitar
             ? "Esta farmacia está pendiente de aprobación — todavía no puedes registrarle visita."
@@ -378,6 +380,8 @@ public partial class RegistrarVista : BaseVista
         Tipo = ServicioSincronizacion.Texto(v, "tipo_visita") ?? "V",
         Hora = (ServicioSincronizacion.Texto(v, "hora") ?? "").Replace('T', ' '),
         Ejecutada = !v.TryGetProperty("ejecutada", out var e) || e.ValueKind != JsonValueKind.False,
+        TieneGps = v.TryGetProperty("tiene_gps", out var g) && g.ValueKind == JsonValueKind.True,
+        TieneFoto = v.TryGetProperty("tiene_foto", out var f) && f.ValueKind == JsonValueKind.True,
     };
 
     private async Task FiltrarAsync()
@@ -484,6 +488,22 @@ public partial class RegistrarVista : BaseVista
                 GeolocationAccuracy.Medium, TimeSpan.FromSeconds(8)));
         }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// Pide la ubicación en cuanto se abre la ficha, sin bloquear nada.
+    ///
+    /// El GPS de un edificio médico tarda; hacerlo aquí le da esos segundos mientras el
+    /// visitador escribe, y para cuando guarda ya está. Si no llega, se vuelve a
+    /// intentar al guardar y, si tampoco, la visita se registra igual: la coordenada es
+    /// opcional en el servidor justo porque dentro de una consulta a menudo no fija.
+    /// </summary>
+    private async Task UbicarEnSegundoPlanoAsync()
+    {
+        var u = await UbicacionAsync();
+        if (u is null) return;
+        Latitud = u.Latitude;
+        Longitud = u.Longitude;
     }
 
     [RelayCommand]
