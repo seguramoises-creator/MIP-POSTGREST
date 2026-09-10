@@ -238,8 +238,14 @@ public class ServicioSincronizacion
             {
                 Id = Entero(m, "id"),
                 Nombre = Texto(m, "nombre_completo") ?? Texto(m, "nombre") ?? "(sin nombre)",
-                Especialidad = Texto(m, "especialidad"),
-                Centro = Texto(m, "centro_medico") ?? Texto(m, "centro"),
+                Provincia = Texto(m, "provincia"),
+                // `especialidad_nombre` y `centro_trabajo`, que es lo que manda el
+                // servidor. Se leia "especialidad" y "centro_medico" —dos claves que no
+                // existen— asi que el subtitulo salia VACIO en las 199 fichas y el Panel
+                // era una lista de nombres con un hueco debajo. Tercera vez que un nombre
+                // de campo equivocado se ve como «ese medico no tiene esos datos».
+                Especialidad = Texto(m, "especialidad_nombre") ?? Texto(m, "especialidad"),
+                Centro = Texto(m, "centro_trabajo") ?? Texto(m, "centro_medico"),
                 Categoria = Texto(m, "categoria"),
                 EstadoAprobacion = Texto(m, "estado_aprobacion") ?? "APROBADO",
                 Activo = !m.TryGetProperty("activo", out var a) || a.GetBoolean(),

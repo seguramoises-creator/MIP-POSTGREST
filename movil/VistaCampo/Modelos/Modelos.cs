@@ -46,13 +46,17 @@ public class MedicoPanel
     public string? Especialidad { get; set; }
     public string? Centro { get; set; }
     public string? Categoria { get; set; }
+    public string? Provincia { get; set; }
     /// <summary>APROBADO | PENDIENTE_ALTA | RECHAZADO. Solo un aprobado admite visita.</summary>
     public string EstadoAprobacion { get; set; } = "APROBADO";
     public bool Activo { get; set; } = true;
 
     public bool SePuedeVisitar => Activo && EstadoAprobacion == "APROBADO";
     public string Subtitulo => string.Join(" · ",
-        new[] { Especialidad, Centro }.Where(s => !string.IsNullOrWhiteSpace(s))!);
+        new[] { Especialidad, Centro, Provincia }.Where(s => !string.IsNullOrWhiteSpace(s))!);
+
+    [Ignore] public string TextoCategoria => string.IsNullOrWhiteSpace(Categoria) ? "?" : Categoria!;
+    [Ignore] public bool HaySubtitulo => !string.IsNullOrWhiteSpace(Subtitulo);
 }
 
 /// <summary>

@@ -5,16 +5,16 @@
              x:Class="VistaCampo.Vistas.PanelPagina"
              Title="Panel">
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Padding="16" RowSpacing="12">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" Padding="10" RowSpacing="7">
 
         <Entry Text="{Binding Busqueda}" Placeholder="Buscar por nombre"
                Keyboard="Plain" IsSpellCheckEnabled="False" IsTextPredictionEnabled="False" />
 
         <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="8">
-            <Button Text="🩺  Médicos" HeightRequest="48" Style="{StaticResource BotonSecundario}"
+            <Button Text="🩺  Médicos" HeightRequest="44" FontSize="12" Style="{StaticResource BotonSecundario}"
                     BackgroundColor="{Binding VerFarmacias, Converter={StaticResource ColorSeleccion}, ConverterParameter=inverso}"
                     Clicked="VerMedicos" />
-            <Button Grid.Column="1" Text="🏥  Farmacias" HeightRequest="48" Style="{StaticResource BotonSecundario}"
+            <Button Grid.Column="1" Text="🏥  Farmacias" HeightRequest="44" FontSize="12" Style="{StaticResource BotonSecundario}"
                     BackgroundColor="{Binding VerFarmacias, Converter={StaticResource ColorSeleccion}}"
                     Clicked="VerFarmacias" />
         </Grid>
@@ -22,9 +22,9 @@
         <!-- El alta va aquí, junto a la lista donde se ve qué falta: es el sitio donde
              el visitador se da cuenta de que el médico que acaba de visitar no está. -->
         <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="8">
-            <Button Text="🩺➕  Médico" Style="{StaticResource BotonSecundario}"
+            <Button Text="🩺➕  Médico" HeightRequest="44" FontSize="12" Style="{StaticResource BotonSecundario}"
                     Clicked="NuevoMedico" />
-            <Button Grid.Column="1" Text="🏥➕  Farmacia" Style="{StaticResource BotonSecundario}"
+            <Button Grid.Column="1" Text="🏥➕  Farmacia" HeightRequest="44" FontSize="12" Style="{StaticResource BotonSecundario}"
                     Clicked="NuevaFarmacia" />
         </Grid>
 
@@ -37,14 +37,23 @@
                         IsVisible="{Binding VerFarmacias, Converter={StaticResource Negar}}">
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="m:MedicoPanel">
-                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,5">
-                        <VerticalStackLayout>
-                            <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="16" />
-                            <Label Text="{Binding Subtitulo}" Style="{StaticResource Tenue}" />
-                            <Label FontSize="12" FontAttributes="Bold" TextColor="{StaticResource Aviso}"
-                                   Text="Pendiente de aprobación del Gerente de Distrito"
-                                   IsVisible="{Binding SePuedeVisitar, Converter={StaticResource Negar}}" />
-                        </VerticalStackLayout>
+                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,3" Padding="7">
+                        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="7">
+                            <Border WidthRequest="22" HeightRequest="22" StrokeThickness="0"
+                                    BackgroundColor="#D6E4FF" StrokeShape="RoundRectangle 11"
+                                    VerticalOptions="Center">
+                                <Label Text="{Binding TextoCategoria}" FontSize="10" FontAttributes="Bold"
+                                       TextColor="#1E52C7" HorizontalOptions="Center" VerticalOptions="Center" />
+                            </Border>
+                            <VerticalStackLayout Grid.Column="1">
+                                <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="12" />
+                                <Label Text="{Binding Subtitulo}" Style="{StaticResource Tenue}" FontSize="10"
+                                       IsVisible="{Binding HaySubtitulo}" />
+                                <Label FontSize="10" FontAttributes="Bold" TextColor="{StaticResource Aviso}"
+                                       Text="Pendiente de aprobación del Gerente de Distrito"
+                                       IsVisible="{Binding SePuedeVisitar, Converter={StaticResource Negar}}" />
+                            </VerticalStackLayout>
+                        </Grid>
                     </Border>
                 </DataTemplate>
             </CollectionView.ItemTemplate>
@@ -54,10 +63,10 @@
                         IsVisible="{Binding VerFarmacias}">
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="m:FarmaciaPanel">
-                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,5">
+                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,3" Padding="7">
                         <VerticalStackLayout>
-                            <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="16" />
-                            <Label Text="{Binding Direccion}" Style="{StaticResource Tenue}" />
+                            <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="12" />
+                            <Label Text="{Binding Detalle}" Style="{StaticResource Tenue}" FontSize="10" />
                             <Label FontSize="12" FontAttributes="Bold" TextColor="{StaticResource Aviso}"
                                    Text="Pendiente de aprobación"
                                    IsVisible="{Binding SePuedeVisitar, Converter={StaticResource Negar}}" />
