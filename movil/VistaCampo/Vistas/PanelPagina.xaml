@@ -11,10 +11,10 @@
                Keyboard="Plain" IsSpellCheckEnabled="False" IsTextPredictionEnabled="False" />
 
         <Grid Grid.Row="1" ColumnDefinitions="*,*" ColumnSpacing="8">
-            <Button Text="Médicos" HeightRequest="48" Style="{StaticResource BotonSecundario}"
+            <Button Text="🩺  Médicos" HeightRequest="48" Style="{StaticResource BotonSecundario}"
                     BackgroundColor="{Binding VerFarmacias, Converter={StaticResource ColorSeleccion}, ConverterParameter=inverso}"
                     Clicked="VerMedicos" />
-            <Button Grid.Column="1" Text="Farmacias" HeightRequest="48" Style="{StaticResource BotonSecundario}"
+            <Button Grid.Column="1" Text="🏥  Farmacias" HeightRequest="48" Style="{StaticResource BotonSecundario}"
                     BackgroundColor="{Binding VerFarmacias, Converter={StaticResource ColorSeleccion}}"
                     Clicked="VerFarmacias" />
         </Grid>
@@ -22,9 +22,9 @@
         <!-- El alta va aquí, junto a la lista donde se ve qué falta: es el sitio donde
              el visitador se da cuenta de que el médico que acaba de visitar no está. -->
         <Grid Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="8">
-            <Button Text="+ Médico" Style="{StaticResource BotonSecundario}"
+            <Button Text="🩺➕  Médico" Style="{StaticResource BotonSecundario}"
                     Clicked="NuevoMedico" />
-            <Button Grid.Column="1" Text="+ Farmacia" Style="{StaticResource BotonSecundario}"
+            <Button Grid.Column="1" Text="🏥➕  Farmacia" Style="{StaticResource BotonSecundario}"
                     Clicked="NuevaFarmacia" />
         </Grid>
 

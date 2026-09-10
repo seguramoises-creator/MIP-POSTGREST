@@ -85,7 +85,13 @@ public class ColorSeleccion : IValueConverter
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
         var activo = value is bool b && b;
-        if ((parameter as string) == "inverso") activo = !activo;
+        var modo = parameter as string;
+        if (modo == "inverso") activo = !activo;
+        // La FILA abierta se marca en ámbar, como en la suite, y no en el azul de un
+        // botón elegido: son dos cosas distintas —«esto es lo que estoy registrando»
+        // frente a «este botón está pulsado»— y pintarlas igual las confunde.
+        if (modo == "fila")
+            return activo ? Color.FromArgb("#FFF3D6") : Colors.Transparent;
         return activo ? Color.FromArgb("#D6E4FA") : Color.FromArgb("#FFFFFF");
     }
 

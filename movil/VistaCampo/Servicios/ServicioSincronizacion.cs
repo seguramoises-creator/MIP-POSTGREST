@@ -62,6 +62,7 @@ public class ServicioSincronizacion
     {
         if (!HayRed) return;
         if (!await _candado.WaitAsync(0)) return;   // ya hay una pasada corriendo
+        Aviso = null;   // cada pasada parte de cero: un aviso viejo miente sobre el estado
         try
         {
             foreach (var envio in await _base.PorEnviarAsync())
@@ -77,6 +78,24 @@ public class ServicioSincronizacion
                     // Sin red: se queda pendiente y se reintenta más tarde. NO es un
                     // rechazo — marcarlo como tal borraría trabajo válido.
                     envio.Intentos++;
+                    break;
+                }
+                catch (ErrorApi e) when (EsReintentable(e))
+                {
+                    // El servidor contestó, pero lo que dijo NO es «tu dato está mal».
+                    //
+                    // Medido en el teléfono: una no-visita perfectamente válida quedó
+                    // como «No entró — No se pudo validar las credenciales». Era un 401:
+                    // el token había caducado y el refresco tampoco valía. La captura no
+                    // tenía ningún problema, y la app la dio por perdida y siguió — con
+                    // un «Guardado. Subiendo…» en pantalla que ya no era verdad.
+                    //
+                    // Un fallo de sesión o del servidor se reintenta; solo se marca como
+                    // rechazado lo que el servidor rechaza POR SU CONTENIDO.
+                    envio.Intentos++;
+                    Aviso = e.Codigo == System.Net.HttpStatusCode.Unauthorized
+                        ? "Tu sesión venció. Vuelve a entrar y tu trabajo subirá solo."
+                        : "El servidor no está respondiendo bien; se reintentará solo.";
                     break;
                 }
                 catch (ErrorApi e)
@@ -99,6 +118,27 @@ public class ServicioSincronizacion
         }
     }
 
+    /// <summary>
+    /// Lo que el visitador ve cuando la cola no puede seguir por algo que no es su dato.
+    /// Vacío mientras todo va bien.
+    /// </summary>
+    public string? Aviso { get; private set; }
+
+    /// <summary>
+    /// ¿Este fallo dice «tu dato está mal» o «ahora no puedo»?
+    ///
+    /// Solo lo primero justifica marcar la captura como rechazada, que es una decisión
+    /// que el visitador tiene que ir a deshacer a mano. Sesión vencida (401), permiso
+    /// momentáneo (403), límite de peticiones (429) y cualquier 5xx son del servidor o
+    /// del momento, no del trabajo hecho en la calle: se reintentan.
+    /// </summary>
+    private static bool EsReintentable(ErrorApi e)
+    {
+        if (e.Codigo is null) return true;                    // sin respuesta
+        var n = (int)e.Codigo.Value;
+        return n == 401 || n == 403 || n == 429 || n >= 500;
+    }
+
     private async Task SubirAsync(EnvioPendiente envio)
     {
         switch (envio.Tipo)
@@ -117,6 +157,17 @@ public class ServicioSincronizacion
                     var r = await _api.EnviarJsonAsync<JsonElement>(ruta, cuerpo);
                     if (r.TryGetProperty("id", out var id) && id.TryGetInt32(out var n))
                         await EnlazarFotosAsync(envio.UuidCliente, n, envio.Tipo == "farmacia");
+                    break;
+                }
+            case "muestras":
+                {
+                    // Van en su PROPIO envío, después de la visita y como la suite: el
+                    // servidor las registra por médico (`/visita/muestras`), no dentro de
+                    // la visita. Separadas, un fallo aquí no arrastra a la visita —que es
+                    // el dato que no se puede perder— y la cola las reintenta sola.
+                    // No llevan `hace_minutos`: no son un hecho con hora, son un conteo.
+                    await _api.EnviarJsonAsync<JsonElement>("/visita/muestras",
+                        JsonSerializer.Deserialize<Dictionary<string, object?>>(envio.Cuerpo)!);
                     break;
                 }
             case "foto":
@@ -198,19 +249,42 @@ public class ServicioSincronizacion
             await _base.ReemplazarAgendaAsync(agenda.Select(a => new ItemAgenda
             {
                 MedicoId = Entero(a, "medico_id"),
-                Nombre = Texto(a, "medico") ?? Texto(a, "nombre") ?? "(sin nombre)",
+                Nombre = Texto(a, "nombre") ?? "(sin nombre)",
                 TipoVisita = Texto(a, "tipo_visita") ?? "V",
-                Registrada = a.TryGetProperty("registrada", out var r) && r.ValueKind == JsonValueKind.True,
+                // El servidor manda `estado` ("pendiente"|"registrada"), NO un booleano
+                // `registrada`. Preguntando por la clave que no existe, TODAS las citas
+                // quedaban en pendiente y el ✓ de la agenda no aparecía nunca — sin un
+                // solo error: una agenda entera de pendientes es perfectamente creíble.
+                Registrada = (Texto(a, "estado") ?? "pendiente") == "registrada",
+                NoVisita = a.TryGetProperty("no_visita", out var nv) && nv.ValueKind == JsonValueKind.True,
+                Especialidad = Texto(a, "especialidad"),
+                Centro = Texto(a, "centro_trabajo"),
+                Provincia = Texto(a, "provincia"),
+                Categoria = Texto(a, "categoria"),
+                DiaSemana = Texto(a, "dia_semana"),
+                HoraEstimada = Texto(a, "hora_estimada"),
+                Grupo = Texto(a, "grupo") ?? "ciclo",
             }).Where(a => a.MedicoId > 0));
 
             var plan = await _api.ObtenerAsync<List<JsonElement>>("/visita/planeacion");
-            await _base.ReemplazarPlanAsync(plan.Select(p => new ItemPlan
+            // La planeación viene por `medico_id` SIN el nombre: el nombre se resuelve
+            // contra el panel que se acaba de descargar. Antes se leía una clave `medico`
+            // que el servidor nunca manda, y el `??` la convertía en «(sin nombre)» —
+            // las 25 filas del plan decían lo mismo, sin un solo error, y eso se lee como
+            // «mi planeación está sin médicos» y no como «la app buscó donde no era».
+            var nombres = (await _base.MedicosAsync()).ToDictionary(m => m.Id, m => m.Nombre);
+            await _base.ReemplazarPlanAsync(plan.Select(p =>
             {
-                MedicoId = Entero(p, "medico_id"),
-                Medico = Texto(p, "medico") ?? "(sin nombre)",
-                TipoVisita = Texto(p, "tipo_visita") ?? "V",
-                Semana = Entero(p, "semana"),
-                Dia = Texto(p, "dia"),
+                var id = Entero(p, "medico_id");
+                return new ItemPlan
+                {
+                    MedicoId = id,
+                    Medico = nombres.TryGetValue(id, out var n) ? n : "(no está en tu panel)",
+                    TipoVisita = Texto(p, "tipo_visita") ?? "V",
+                    Semana = Entero(p, "semana"),
+                    Dia = Texto(p, "dia_semana"),
+                    Hora = Texto(p, "hora_estimada"),
+                };
             }));
 
             // La parrilla del ciclo: qué productos puede promocionar el visitador. Sin
@@ -221,8 +295,15 @@ public class ServicioSincronizacion
             {
                 Id = Entero(p, "id"),
                 Nombre = Texto(p, "nombre") ?? Texto(p, "producto") ?? "(sin nombre)",
+                // El CÓDIGO, que es con lo que el servidor cruza el registro contra la
+                // parrilla y contra las muestras. Hoy coincide con el nombre en los datos
+                // que hay, pero solo por casualidad: `nombre` cae al código únicamente
+                // cuando no hay ficha de producto. Mandar el nombre funcionaría hasta el
+                // día en que dejaran de coincidir, y entonces el cruce daría cero sin avisar.
+                Codigo = Texto(p, "producto") ?? Texto(p, "nombre") ?? "",
                 MensajeClave = Texto(p, "mensaje_clave"),
                 Prioridad = Entero(p, "prioridad"),
+                MetaMuestras = Entero(p, "meta_muestras"),
             }).Where(p => p.Id > 0));
 
             var farmacias = await _api.ObtenerAsync<List<JsonElement>>("/farmacias/panel");
@@ -237,6 +318,11 @@ public class ServicioSincronizacion
                 Id = Entero(f, "panel_id"),
                 Nombre = Texto(f, "nombre_completo") ?? Texto(f, "nombre") ?? "(sin nombre)",
                 Direccion = Texto(f, "direccion"),
+                Encargado = Texto(f, "encargado"),
+                EsCadena = f.TryGetProperty("es_cadena", out var ec) && ec.ValueKind == JsonValueKind.True,
+                UltimoComentario = Texto(f, "ultimo_comentario"),
+                VisitadaHoy = f.TryGetProperty("visitada_hoy", out var vh) && vh.ValueKind == JsonValueKind.True,
+                VisitadaCiclo = f.TryGetProperty("visitada_ciclo", out var vc) && vc.ValueKind == JsonValueKind.True,
                 EstadoAprobacion = Texto(f, "estado_aprobacion") ?? "APROBADO",
             }).Where(f => f.Id > 0));
 

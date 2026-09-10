@@ -15,11 +15,11 @@
                   Shell.TabBarIsVisible="False" Shell.NavBarIsVisible="False" />
 
     <TabBar>
-        <ShellContent Route="hoy" Title="Hoy" ContentTemplate="{DataTemplate v:HoyPagina}" />
-        <ShellContent Route="registrar" Title="Registrar" ContentTemplate="{DataTemplate v:RegistrarPagina}" />
-        <ShellContent Route="panel" Title="Panel" ContentTemplate="{DataTemplate v:PanelPagina}" />
-        <ShellContent Route="plan" Title="Plan" ContentTemplate="{DataTemplate v:PlanPagina}" />
-        <ShellContent Route="perfil" Title="Perfil" ContentTemplate="{DataTemplate v:PerfilPagina}" />
+        <ShellContent Route="hoy" Title="Hoy" ContentTemplate="{DataTemplate v:HoyPagina}" Icon="tab_hoy.png" />
+        <ShellContent Route="registrar" Title="Registrar" ContentTemplate="{DataTemplate v:RegistrarPagina}" Icon="tab_registrar.png" />
+        <ShellContent Route="panel" Title="Panel" ContentTemplate="{DataTemplate v:PanelPagina}" Icon="tab_panel.png" />
+        <ShellContent Route="plan" Title="Plan" ContentTemplate="{DataTemplate v:PlanPagina}" Icon="tab_plan.png" />
+        <ShellContent Route="perfil" Title="Perfil" ContentTemplate="{DataTemplate v:PerfilPagina}" Icon="tab_perfil.png" />
     </TabBar>
 
 </Shell>

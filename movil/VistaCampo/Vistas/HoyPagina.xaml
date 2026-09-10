@@ -16,7 +16,7 @@
                             <Label Text="Estado de envío" Style="{StaticResource Tenue}" />
                             <Label Text="{Binding EstadoCola}" FontSize="18" FontAttributes="Bold" />
                         </VerticalStackLayout>
-                        <Button Grid.Column="1" Text="Sincronizar" Style="{StaticResource BotonSecundario}"
+                        <Button Grid.Column="1" Text="🔄  Sincronizar" Style="{StaticResource BotonSecundario}"
                                 WidthRequest="130" Command="{Binding SincronizarCommand}" />
                     </Grid>
                 </Border>

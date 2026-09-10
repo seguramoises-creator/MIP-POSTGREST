@@ -1,12 +1,259 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+  Registrar Visita — la MISMA información que la suite, en el mismo orden.
+
+  La ficha se despliega DENTRO de la fila del médico (o de la farmacia), no en un bloque
+  aparte: así el visitador no pierde de vista a quién está registrando.
+
+  Se usa `BindableLayout` sobre un StackLayout y no `CollectionView`: la ficha desplegada
+  cambia el alto de una fila y anida sus propias listas (productos), y el reciclado de
+  CollectionView con alturas variables anidadas deja filas cortadas. Aquí las listas son
+  de decenas de elementos, no de miles — virtualizar no aporta y sí rompe.
+-->
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:m="clr-namespace:VistaCampo.Modelos"
+             x:Name="pagina"
              x:Class="VistaCampo.Vistas.RegistrarPagina"
              Title="Registrar">
 
-    <ScrollView>
-        <VerticalStackLayout Padding="16" Spacing="14">
+    <ContentPage.Resources>
+        <!-- Encabezado de sección: mismas mayúsculas discretas que la suite. -->
+        <Style x:Key="Seccion" TargetType="Label">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontAttributes" Value="Bold" />
+            <Setter Property="TextColor" Value="#6B7280" />
+            <Setter Property="CharacterSpacing" Value="0.6" />
+        </Style>
+        <Style x:Key="Chip" TargetType="Label">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontAttributes" Value="Bold" />
+            <Setter Property="Padding" Value="8,3" />
+            <Setter Property="TextColor" Value="#5A6472" />
+        </Style>
+
+        <!--
+          La ficha de registro de un MÉDICO. Vive dentro de la fila.
+          Las propiedades del formulario son del modelo de vista de la PÁGINA, no de la
+          fila: se llega a él por `x:Reference pagina`. Lo de la fila (nombre, detalle)
+          sí viene del propio elemento.
+        -->
+        <ControlTemplate x:Key="FichaVisita">
+            <Border Style="{StaticResource Tarjeta}" Margin="0,2,0,8" Padding="12">
+                <VerticalStackLayout Spacing="12">
+
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                        <VerticalStackLayout>
+                            <Label Text="{TemplateBinding BindingContext.Nombre}"
+                                   FontAttributes="Bold" FontSize="15" />
+                            <Label Text="{TemplateBinding BindingContext.Detalle}"
+                                   Style="{StaticResource Tenue}" FontSize="11" />
+                        </VerticalStackLayout>
+                        <Grid Grid.Column="1" ColumnDefinitions="Auto,Auto" ColumnSpacing="6">
+                            <Button Text="Vista" FontSize="12" HeightRequest="34" WidthRequest="66" Padding="0"
+                                    Style="{StaticResource BotonSecundario}"
+                                    BackgroundColor="{Binding BindingContext.EsVista, Source={x:Reference pagina}, Converter={StaticResource ColorSeleccion}}"
+                                    IsEnabled="{Binding BindingContext.PuedeElegirVista, Source={x:Reference pagina}}"
+                                    Command="{Binding BindingContext.ElegirVistaCommand, Source={x:Reference pagina}}" />
+                            <Button Grid.Column="1" Text="Revisita" FontSize="12" HeightRequest="34" WidthRequest="76" Padding="0"
+                                    Style="{StaticResource BotonSecundario}"
+                                    BackgroundColor="{Binding BindingContext.EsRevisita, Source={x:Reference pagina}, Converter={StaticResource ColorSeleccion}}"
+                                    IsEnabled="{Binding BindingContext.PuedeElegirRevisita, Source={x:Reference pagina}}"
+                                    Command="{Binding BindingContext.ElegirRevisitaCommand, Source={x:Reference pagina}}" />
+                        </Grid>
+                    </Grid>
+
+                    <!-- Hora real + resumen -->
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="10" IsVisible="{Binding BindingContext.EsVisitaEfectiva, Source={x:Reference pagina}}">
+                        <VerticalStackLayout>
+                            <Label Text="⏰  HORA REAL DE LA VISITA" Style="{StaticResource Seccion}" />
+                            <TimePicker Time="{Binding BindingContext.HoraReal, Source={x:Reference pagina}}"
+                                        Format="hh:mm tt" HeightRequest="44" />
+                            <Label Text="{Binding BindingContext.TextoAhora, Source={x:Reference pagina}}"
+                                   FontSize="11" FontAttributes="Bold" TextColor="{StaticResource Exito}" />
+                        </VerticalStackLayout>
+                        <Border Grid.Column="1" BackgroundColor="#F4F7FB" StrokeThickness="0"
+                                Padding="8" StrokeShape="RoundRectangle 8">
+                            <VerticalStackLayout Spacing="6">
+                                <Label Text="RESUMEN DE LA VISITA" Style="{StaticResource Seccion}" />
+                                <Grid ColumnDefinitions="*,*,*">
+                                    <VerticalStackLayout>
+                                        <Label Text="{Binding BindingContext.TextoTipoResumen, Source={x:Reference pagina}}"
+                                               FontAttributes="Bold" FontSize="14" HorizontalOptions="Center" />
+                                        <Label Text="Tipo" Style="{StaticResource Tenue}" FontSize="9"
+                                               LineBreakMode="NoWrap" HorizontalOptions="Center" />
+                                    </VerticalStackLayout>
+                                    <VerticalStackLayout Grid.Column="1">
+                                        <Label Text="{Binding BindingContext.NumProductos, Source={x:Reference pagina}}"
+                                               FontAttributes="Bold" FontSize="14" HorizontalOptions="Center" />
+                                        <Label Text="Productos" Style="{StaticResource Tenue}" FontSize="9"
+                                               LineBreakMode="NoWrap" HorizontalOptions="Center" />
+                                    </VerticalStackLayout>
+                                    <VerticalStackLayout Grid.Column="2">
+                                        <Label Text="{Binding BindingContext.NumMuestras, Source={x:Reference pagina}}"
+                                               FontAttributes="Bold" FontSize="14" HorizontalOptions="Center" />
+                                        <Label Text="Muestras" Style="{StaticResource Tenue}" FontSize="9"
+                                               LineBreakMode="NoWrap" HorizontalOptions="Center" />
+                                    </VerticalStackLayout>
+                                </Grid>
+                                <HorizontalStackLayout Spacing="6">
+                                    <Border StrokeThickness="1" Stroke="#D8D2CB" Padding="0" StrokeShape="RoundRectangle 9">
+                                        <Label Text="{Binding BindingContext.TextoUbicacion, Source={x:Reference pagina}}"
+                                               FontSize="10" Padding="7,2" TextColor="#5A6472" />
+                                    </Border>
+                                    <Border StrokeThickness="1" Stroke="#D8D2CB" Padding="0" StrokeShape="RoundRectangle 9">
+                                        <Label Text="{Binding BindingContext.TextoFoto, Source={x:Reference pagina}}"
+                                               FontSize="10" Padding="7,2" TextColor="#5A6472" />
+                                    </Border>
+                                </HorizontalStackLayout>
+                            </VerticalStackLayout>
+                        </Border>
+                    </Grid>
+
+                    <!-- Productos y muestras -->
+                    <VerticalStackLayout Spacing="4" IsVisible="{Binding BindingContext.EsVisitaEfectiva, Source={x:Reference pagina}}">
+                        <Label Text="💊  PRODUCTOS Y MUESTRAS" Style="{StaticResource Seccion}" />
+                        <Label Text="Propuestos por prioridad de la parrilla promocional"
+                               Style="{StaticResource Tenue}" FontSize="11" />
+                        <Label Style="{StaticResource Tenue}" FontSize="11"
+                               IsVisible="{Binding BindingContext.HayProductos, Source={x:Reference pagina}, Converter={StaticResource Negar}}"
+                               Text="No hay parrilla de productos para esta línea." />
+                        <VerticalStackLayout Spacing="2"
+                                             BindableLayout.ItemsSource="{Binding BindingContext.Productos, Source={x:Reference pagina}}">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="m:ProductoParrilla">
+                                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,*"
+                                          ColumnSpacing="6" RowSpacing="2" Padding="0,8">
+                                        <CheckBox IsChecked="{Binding Elegido}" VerticalOptions="Center" />
+                                        <Border Grid.Column="1" WidthRequest="22" HeightRequest="22" StrokeThickness="0"
+                                                BackgroundColor="#1F3B73" StrokeShape="RoundRectangle 11"
+                                                VerticalOptions="Center">
+                                            <Label Text="{Binding Prioridad}" FontSize="10" FontAttributes="Bold"
+                                                   TextColor="White" HorizontalOptions="Center" VerticalOptions="Center" />
+                                        </Border>
+                                        <VerticalStackLayout Grid.Column="2" VerticalOptions="Center">
+                                            <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="13" />
+                                            <Label Text="{Binding Propuesto}" Style="{StaticResource Tenue}" FontSize="10" />
+                                        </VerticalStackLayout>
+                                        <!-- Los dos campos van DEBAJO del nombre: en un telefono, cinco
+                                             columnas en una fila dejaban el nombre en tres lineas. -->
+                                        <Grid Grid.Row="1" Grid.Column="2" ColumnDefinitions="Auto,72,*"
+                                              ColumnSpacing="6">
+                                            <Label Text="Muestras" Style="{StaticResource Tenue}" FontSize="10"
+                                                   VerticalOptions="Center" />
+                                            <Entry Grid.Column="1" Text="{Binding Muestras}" Keyboard="Numeric"
+                                                   HorizontalTextAlignment="Center" FontAttributes="Bold"
+                                                   IsEnabled="{Binding Editable}" VerticalOptions="Center" />
+                                            <Picker Grid.Column="2" SelectedIndex="{Binding MencionIndice}"
+                                                    ItemsSource="{Binding BindingContext.Menciones, Source={x:Reference pagina}}"
+                                                    IsEnabled="{Binding Editable}" HeightRequest="44" FontSize="12"
+                                                    VerticalOptions="Center" />
+                                        </Grid>
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+
+                    <!-- Comentario -->
+                    <VerticalStackLayout>
+                        <Label Text="💬  COMENTARIO DE VISITA *" Style="{StaticResource Seccion}" />
+                        <Editor Text="{Binding BindingContext.Comentario, Source={x:Reference pagina}}"
+                                HeightRequest="96" IsSpellCheckEnabled="False"
+                                Placeholder="Describe algo relevante que ocurrió en la visita…" />
+                        <Label Text="{Binding BindingContext.AyudaComentario, Source={x:Reference pagina}}"
+                               Style="{StaticResource Tenue}" FontSize="11" />
+                    </VerticalStackLayout>
+
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6" IsVisible="{Binding BindingContext.EsVisitaEfectiva, Source={x:Reference pagina}}">
+                        <Switch IsToggled="{Binding BindingContext.Acompanado, Source={x:Reference pagina}}"
+                                VerticalOptions="Center" />
+                        <Label Grid.Column="1" VerticalOptions="Center" FontSize="13"
+                               Text="Visita acompañada por el Gerente de Distrito" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                        <CheckBox IsChecked="{Binding BindingContext.EsNoVisita, Source={x:Reference pagina}}" />
+                        <Label Grid.Column="1" VerticalOptions="Center" FontSize="13"
+                               Text="No pude visitar (registrar el motivo)" />
+                    </Grid>
+                    <Picker ItemsSource="{Binding BindingContext.Causas, Source={x:Reference pagina}}"
+                            SelectedItem="{Binding BindingContext.Causa, Source={x:Reference pagina}}"
+                            IsVisible="{Binding BindingContext.EsNoVisita, Source={x:Reference pagina}}"
+                            Title="Elige el motivo" HeightRequest="48" />
+
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button Text="📍  Ubicación" FontSize="13" Style="{StaticResource BotonSecundario}"
+                                Command="{Binding BindingContext.CapturarUbicacionCommand, Source={x:Reference pagina}}" />
+                        <Button Grid.Column="1" Text="📷  Tomar foto" FontSize="13"
+                                Style="{StaticResource BotonSecundario}"
+                                Command="{Binding BindingContext.TomarFotoCommand, Source={x:Reference pagina}}" />
+                    </Grid>
+                    <Button Text="🗑  Quitar foto" FontSize="13" Style="{StaticResource BotonSecundario}"
+                            IsVisible="{Binding BindingContext.RutaFoto, Source={x:Reference pagina}, Converter={StaticResource HayTexto}}"
+                            Command="{Binding BindingContext.QuitarFotoCommand, Source={x:Reference pagina}}" />
+
+                    <Button Text="💾  Guardar visita" Style="{StaticResource BotonPrincipal}"
+                            Command="{Binding BindingContext.GuardarCommand, Source={x:Reference pagina}}" />
+
+                </VerticalStackLayout>
+            </Border>
+        </ControlTemplate>
+
+        <!-- La ficha de registro de una FARMACIA: sin tipo, sin productos y con el
+             comentario OPCIONAL — así lo acepta el servidor para farmacia. -->
+        <ControlTemplate x:Key="FichaFarmacia">
+            <Border Style="{StaticResource Tarjeta}" Margin="0,2,0,8" Padding="12">
+                <VerticalStackLayout Spacing="12">
+                    <VerticalStackLayout>
+                        <HorizontalStackLayout Spacing="6">
+                            <Label Text="{TemplateBinding BindingContext.Nombre}"
+                                   FontAttributes="Bold" FontSize="15" />
+                            <Border StrokeThickness="1" Stroke="#C9D6E8" Padding="0"
+                                    StrokeShape="RoundRectangle 8" VerticalOptions="Center">
+                                <Label Text="{TemplateBinding BindingContext.Badge}" FontSize="10"
+                                       Padding="6,2" TextColor="#3B6FB6" />
+                            </Border>
+                        </HorizontalStackLayout>
+                        <Label Text="{TemplateBinding BindingContext.Detalle}"
+                               Style="{StaticResource Tenue}" FontSize="11" />
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout>
+                        <Label Text="💬  COMENTARIO DE VISITA" Style="{StaticResource Seccion}" />
+                        <Editor Text="{Binding BindingContext.Comentario, Source={x:Reference pagina}}"
+                                HeightRequest="96" IsSpellCheckEnabled="False"
+                                Placeholder="Describe algo relevante que ocurrió en la visita… (opcional)" />
+                    </VerticalStackLayout>
+
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6">
+                        <CheckBox IsChecked="{Binding BindingContext.EsNoVisita, Source={x:Reference pagina}}" />
+                        <Label Grid.Column="1" VerticalOptions="Center" FontSize="13"
+                               Text="No pude visitar (registrar el motivo)" />
+                    </Grid>
+                    <Picker ItemsSource="{Binding BindingContext.Causas, Source={x:Reference pagina}}"
+                            SelectedItem="{Binding BindingContext.Causa, Source={x:Reference pagina}}"
+                            IsVisible="{Binding BindingContext.EsNoVisita, Source={x:Reference pagina}}"
+                            Title="Elige el motivo" HeightRequest="48" />
+
+                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                        <Button Text="📍  Ubicación" FontSize="13" Style="{StaticResource BotonSecundario}"
+                                Command="{Binding BindingContext.CapturarUbicacionCommand, Source={x:Reference pagina}}" />
+                        <Button Grid.Column="1" Text="📷  Tomar foto" FontSize="13"
+                                Style="{StaticResource BotonSecundario}"
+                                Command="{Binding BindingContext.TomarFotoCommand, Source={x:Reference pagina}}" />
+                    </Grid>
+
+                    <Button Text="💾  Guardar visita" Style="{StaticResource BotonPrincipal}"
+                            Command="{Binding BindingContext.GuardarCommand, Source={x:Reference pagina}}" />
+
+                </VerticalStackLayout>
+            </Border>
+        </ControlTemplate>
+    </ContentPage.Resources>
+
+    <ScrollView x:Name="lienzo">
+        <VerticalStackLayout Padding="14" Spacing="12">
 
             <Border Style="{StaticResource Tarjeta}" BackgroundColor="#FFF4E5"
                     IsVisible="{Binding PuedeCapturar, Converter={StaticResource Negar}}">
@@ -14,158 +261,333 @@
                        Text="En esta instalación las visitas llegan del sistema de tu compañía. Aquí solo se consultan." />
             </Border>
 
-            <VerticalStackLayout IsVisible="{Binding PuedeCapturar}" Spacing="14">
+            <!-- El resultado de guardar va ARRIBA y fuera de la ficha: guardar CIERRA la
+                 ficha, así que un aviso dentro de ella se escribía y desaparecía a la vez.
+                 Aquí sobrevive al cierre y es lo primero que se ve al volver la lista. -->
+            <Border Style="{StaticResource Tarjeta}" BackgroundColor="#E8F5EC"
+                    IsVisible="{Binding HayAviso}">
+                <Label Text="{Binding Aviso}" TextColor="{StaticResource Exito}" FontAttributes="Bold" />
+            </Border>
+            <Border Style="{StaticResource Tarjeta}" BackgroundColor="#FDECEA"
+                    IsVisible="{Binding HayError}">
+                <Label Text="{Binding Error}" TextColor="{StaticResource Error}" FontAttributes="Bold" />
+            </Border>
+
+            <VerticalStackLayout IsVisible="{Binding PuedeCapturar}" Spacing="12">
 
                 <!-- Médico o farmacia -->
                 <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                    <Button Text="Médico" HeightRequest="48"
+                    <Button Text="🩺  Médico" HeightRequest="46" FontSize="14"
                             Style="{StaticResource BotonSecundario}"
                             BackgroundColor="{Binding EsFarmacia, Converter={StaticResource ColorSeleccion}, ConverterParameter=inverso}"
-                            Clicked="ElegirMedico" />
-                    <Button Grid.Column="1" Text="Farmacia" HeightRequest="48"
+                            Command="{Binding ElegirMedicoCommand}" />
+                    <Button Grid.Column="1" Text="🏥  Farmacia" HeightRequest="46" FontSize="14"
                             Style="{StaticResource BotonSecundario}"
                             BackgroundColor="{Binding EsFarmacia, Converter={StaticResource ColorSeleccion}}"
-                            Clicked="ElegirFarmacia" />
+                            Command="{Binding ElegirFarmaciaCommand}" />
                 </Grid>
 
-                <VerticalStackLayout>
-                    <Label Text="¿A quién visitaste?" Style="{StaticResource Etiqueta}" />
-                    <Entry Text="{Binding Busqueda}" Placeholder="Escribe el nombre"
-                           Keyboard="Plain" IsSpellCheckEnabled="False" IsTextPredictionEnabled="False" />
-                    <Label Text="{Binding Elegido}" IsVisible="{Binding Elegido, Converter={StaticResource HayTexto}}"
-                           FontAttributes="Bold" FontSize="17" Margin="0,8,0,0"
-                           TextColor="{DynamicResource Accion}" />
-                </VerticalStackLayout>
+                <!-- ══════════════ MÉDICOS ══════════════ -->
+                <VerticalStackLayout Spacing="12" IsVisible="{Binding EsFarmacia, Converter={StaticResource Negar}}">
 
-                <CollectionView ItemsSource="{Binding Medicos}" SelectedItem="{Binding Medico}"
-                                SelectionMode="Single" HeightRequest="170"
-                                IsVisible="{Binding EsFarmacia, Converter={StaticResource Negar}}">
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="m:MedicoPanel">
-                            <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,6" Padding="12">
-                                <VerticalStackLayout>
-                                    <Label Text="{Binding Nombre}" FontAttributes="Bold" />
-                                    <Label Text="{Binding Subtitulo}" Style="{StaticResource Tenue}" />
-                                    <Label Text="Pendiente de aprobación" FontSize="12" FontAttributes="Bold"
-                                           TextColor="{StaticResource Aviso}"
-                                           IsVisible="{Binding SePuedeVisitar, Converter={StaticResource Negar}}" />
-                                </VerticalStackLayout>
+                    <Border Style="{StaticResource Tarjeta}">
+                        <VerticalStackLayout Spacing="8">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                <Label Text="📋" FontSize="17" VerticalOptions="Center" />
+                                <Label Grid.Column="1" Text="Médicos de hoy" FontAttributes="Bold"
+                                       FontSize="16" VerticalOptions="Center" />
+                                <Border Grid.Column="2" BackgroundColor="#FFF4E5" StrokeThickness="0"
+                                        Padding="0" StrokeShape="RoundRectangle 10">
+                                    <Label Text="{Binding TextoPendientes}" Style="{StaticResource Chip}"
+                                           TextColor="{StaticResource Aviso}" />
+                                </Border>
+                            </Grid>
+
+                            <Grid ColumnDefinitions="*,110" ColumnSpacing="8">
+                                <Entry Text="{Binding Busqueda}" Placeholder="Buscar médico…"
+                                       Keyboard="Plain" IsSpellCheckEnabled="False" IsTextPredictionEnabled="False" />
+                                <Picker Grid.Column="1" ItemsSource="{Binding Categorias}"
+                                        SelectedItem="{Binding Categoria}" Title="Cat." HeightRequest="48" />
+                            </Grid>
+
+                            <Picker ItemsSource="{Binding Panel}" SelectedItem="{Binding FueraDeAgenda}"
+                                    ItemDisplayBinding="{Binding Nombre}" HeightRequest="48"
+                                    Title="Médico fuera de agenda (no programada)" />
+
+                            <!-- Del día -->
+                            <Label Text="{Binding TituloDelDia}" Style="{StaticResource Seccion}"
+                                   IsVisible="{Binding HayDelDia}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding DelDia}" Spacing="2">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="m:ItemAgenda">
+                                        <VerticalStackLayout>
+                                            <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8"
+                                                  Padding="4,8" BackgroundColor="{Binding Activa, Converter={StaticResource ColorSeleccion}, ConverterParameter=fila}">
+                                                <Grid.GestureRecognizers>
+                                                    <TapGestureRecognizer
+                                                        Command="{Binding BindingContext.SeleccionarCitaCommand, Source={x:Reference pagina}}"
+                                                        CommandParameter="{Binding .}" />
+                                                </Grid.GestureRecognizers>
+                                                <Border WidthRequest="34" HeightRequest="34" StrokeThickness="0"
+                                                        BackgroundColor="#EEF2FF" StrokeShape="RoundRectangle 17">
+                                                    <Label Text="{Binding Inicial}" FontSize="11" FontAttributes="Bold"
+                                                           TextColor="#4338CA"
+                                                           HorizontalOptions="Center" VerticalOptions="Center" />
+                                                </Border>
+                                                <Border Grid.Column="1" WidthRequest="22" HeightRequest="22" StrokeThickness="0"
+                                                        BackgroundColor="#D6E4FF" StrokeShape="RoundRectangle 11"
+                                                        VerticalOptions="Center">
+                                                    <Label Text="{Binding TextoCategoria}" FontSize="10" FontAttributes="Bold"
+                                                           TextColor="#1E52C7"
+                                                           HorizontalOptions="Center" VerticalOptions="Center" />
+                                                </Border>
+                                                <VerticalStackLayout Grid.Column="2" VerticalOptions="Center">
+                                                    <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="14" />
+                                                    <Label Text="{Binding Subtitulo}" Style="{StaticResource Tenue}" FontSize="11" />
+                                                </VerticalStackLayout>
+                                                <Label Grid.Column="3" Text="{Binding TextoEstado}" FontSize="11"
+                                                       FontAttributes="Bold" VerticalOptions="Center"
+                                                       TextColor="{StaticResource Aviso}" />
+                                            </Grid>
+                                            <ContentView>
+                                                <ContentView.Triggers>
+                                                    <DataTrigger TargetType="ContentView"
+                                                                 Binding="{Binding Activa}" Value="True">
+                                                        <Setter Property="ControlTemplate"
+                                                                Value="{StaticResource FichaVisita}" />
+                                                    </DataTrigger>
+                                                </ContentView.Triggers>
+                                            </ContentView>
+                                        </VerticalStackLayout>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+
+                            <!-- Del ciclo -->
+                            <Label Text="{Binding TituloDelCiclo}" Style="{StaticResource Seccion}"
+                                   IsVisible="{Binding HayDelCiclo}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding DelCiclo}" Spacing="2">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="m:ItemAgenda">
+                                        <VerticalStackLayout>
+                                            <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8"
+                                                  Padding="4,8" BackgroundColor="{Binding Activa, Converter={StaticResource ColorSeleccion}, ConverterParameter=fila}">
+                                                <Grid.GestureRecognizers>
+                                                    <TapGestureRecognizer
+                                                        Command="{Binding BindingContext.SeleccionarCitaCommand, Source={x:Reference pagina}}"
+                                                        CommandParameter="{Binding .}" />
+                                                </Grid.GestureRecognizers>
+                                                <Border WidthRequest="34" HeightRequest="34" StrokeThickness="0"
+                                                        BackgroundColor="#EEF2FF" StrokeShape="RoundRectangle 17">
+                                                    <Label Text="{Binding Inicial}" FontSize="11" FontAttributes="Bold"
+                                                           TextColor="#4338CA"
+                                                           HorizontalOptions="Center" VerticalOptions="Center" />
+                                                </Border>
+                                                <Border Grid.Column="1" WidthRequest="22" HeightRequest="22" StrokeThickness="0"
+                                                        BackgroundColor="#D6E4FF" StrokeShape="RoundRectangle 11"
+                                                        VerticalOptions="Center">
+                                                    <Label Text="{Binding TextoCategoria}" FontSize="10" FontAttributes="Bold"
+                                                           TextColor="#1E52C7"
+                                                           HorizontalOptions="Center" VerticalOptions="Center" />
+                                                </Border>
+                                                <VerticalStackLayout Grid.Column="2" VerticalOptions="Center">
+                                                    <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="14" />
+                                                    <Label Text="{Binding Subtitulo}" Style="{StaticResource Tenue}" FontSize="11" />
+                                                </VerticalStackLayout>
+                                                <Label Grid.Column="3" Text="{Binding TextoEstado}" FontSize="11"
+                                                       FontAttributes="Bold" VerticalOptions="Center"
+                                                       TextColor="{StaticResource Aviso}" />
+                                            </Grid>
+                                            <ContentView>
+                                                <ContentView.Triggers>
+                                                    <DataTrigger TargetType="ContentView"
+                                                                 Binding="{Binding Activa}" Value="True">
+                                                        <Setter Property="ControlTemplate"
+                                                                Value="{StaticResource FichaVisita}" />
+                                                    </DataTrigger>
+                                                </ContentView.Triggers>
+                                            </ContentView>
+                                        </VerticalStackLayout>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Registradas hoy -->
+                    <Border Style="{StaticResource Tarjeta}">
+                        <VerticalStackLayout Spacing="8">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                <Label Text="✅" FontSize="16" VerticalOptions="Center" />
+                                <Label Grid.Column="1" Text="Registradas hoy" FontAttributes="Bold"
+                                       FontSize="16" VerticalOptions="Center" />
+                                <Border Grid.Column="2" StrokeThickness="1" Stroke="#B7E4C7" Padding="0"
+                                        StrokeShape="RoundRectangle 10">
+                                    <Label Text="{Binding TituloRegistradas}" Style="{StaticResource Chip}" />
+                                </Border>
+                            </Grid>
+                            <Border BackgroundColor="#1D6FE0" StrokeThickness="0" Padding="12"
+                                    StrokeShape="RoundRectangle 8"
+                                    IsVisible="{Binding HayRegistradas, Converter={StaticResource Negar}}">
+                                <Label Text="ℹ  Aún no hay visitas registradas hoy." TextColor="White" FontSize="13" />
                             </Border>
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding RegistradasHoy}" Spacing="4">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="m:VisitaDelDia">
+                                        <Grid ColumnDefinitions="*,Auto" Padding="2,4">
+                                            <VerticalStackLayout>
+                                                <Label Text="{Binding Medico}" FontAttributes="Bold" FontSize="13" />
+                                                <Label Text="{Binding Hora}" Style="{StaticResource Tenue}" FontSize="11" />
+                                            </VerticalStackLayout>
+                                            <Label Grid.Column="1" Text="✓" FontSize="18" VerticalOptions="Center"
+                                                   TextColor="{StaticResource Exito}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
 
-                <CollectionView ItemsSource="{Binding Farmacias}" SelectedItem="{Binding Farmacia}"
-                                SelectionMode="Single" HeightRequest="170"
-                                IsVisible="{Binding EsFarmacia}">
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="m:FarmaciaPanel">
-                            <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,6" Padding="12">
-                                <VerticalStackLayout>
-                                    <Label Text="{Binding Nombre}" FontAttributes="Bold" />
-                                    <Label Text="{Binding Direccion}" Style="{StaticResource Tenue}" />
-                                    <Label Text="Pendiente de aprobación" FontSize="12" FontAttributes="Bold"
-                                           TextColor="{StaticResource Aviso}"
-                                           IsVisible="{Binding SePuedeVisitar, Converter={StaticResource Negar}}" />
-                                </VerticalStackLayout>
-                            </Border>
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
-
-                <!-- Vista o Revisita: dos botones grandes, nunca un desplegable -->
-                <VerticalStackLayout IsVisible="{Binding EsFarmacia, Converter={StaticResource Negar}}">
-                    <Label Text="Tipo de visita" Style="{StaticResource Etiqueta}" />
-                    <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
-                        <Button Text="Vista" HeightRequest="50" Style="{StaticResource BotonSecundario}"
-                                BackgroundColor="{Binding EsVista, Converter={StaticResource ColorSeleccion}}"
-                                Command="{Binding ElegirVistaCommand}" />
-                        <Button Grid.Column="1" Text="Revisita" HeightRequest="50"
-                                Style="{StaticResource BotonSecundario}"
-                                BackgroundColor="{Binding EsRevisita, Converter={StaticResource ColorSeleccion}}"
-                                Command="{Binding ElegirRevisitaCommand}" />
-                    </Grid>
+                    <!-- Visitas anteriores -->
+                    <Border Style="{StaticResource Tarjeta}">
+                        <VerticalStackLayout Spacing="8">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                <Label Text="🕘" FontSize="16" VerticalOptions="Center" />
+                                <Label Grid.Column="1" Text="Visitas anteriores" FontAttributes="Bold"
+                                       FontSize="16" VerticalOptions="Center" />
+                                <Border Grid.Column="2" StrokeThickness="1" Stroke="#D8D2CB" Padding="0"
+                                        StrokeShape="RoundRectangle 10">
+                                    <Label Text="🔒 Solo lectura" Style="{StaticResource Chip}" />
+                                </Border>
+                            </Grid>
+                            <Label Style="{StaticResource Tenue}" FontSize="12"
+                                   IsVisible="{Binding HayAnteriores, Converter={StaticResource Negar}}"
+                                   Text="Sin visitas anteriores descargadas." />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding Anteriores}" Spacing="4">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="m:VisitaDelDia">
+                                        <VerticalStackLayout Padding="2,4">
+                                            <Label Text="{Binding Medico}" FontAttributes="Bold" FontSize="13" />
+                                            <Label Text="{Binding Hora}" Style="{StaticResource Tenue}" FontSize="11" />
+                                        </VerticalStackLayout>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
                 </VerticalStackLayout>
 
-                <Grid ColumnDefinitions="Auto,*">
-                    <CheckBox IsChecked="{Binding EsNoVisita}" />
-                    <Label Grid.Column="1" VerticalOptions="Center"
-                           Text="No pude visitar (registrar el motivo)" />
-                </Grid>
+                <!-- ══════════════ FARMACIAS ══════════════ -->
+                <VerticalStackLayout Spacing="12" IsVisible="{Binding EsFarmacia}">
+                    <Border Style="{StaticResource Tarjeta}">
+                        <VerticalStackLayout Spacing="8">
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                                <Label Text="🏥" FontSize="17" VerticalOptions="Center" />
+                                <Label Grid.Column="1" Text="Mis farmacias" FontAttributes="Bold"
+                                       FontSize="16" VerticalOptions="Center" />
+                                <Border Grid.Column="2" StrokeThickness="1" Stroke="#B7E4C7" Padding="0"
+                                        StrokeShape="RoundRectangle 10">
+                                    <Label Text="{Binding TextoFarmaciasActivas}" Style="{StaticResource Chip}" />
+                                </Border>
+                            </Grid>
 
-                <VerticalStackLayout IsVisible="{Binding EsNoVisita}">
-                    <Label Text="Motivo" Style="{StaticResource Etiqueta}" />
-                    <Picker ItemsSource="{Binding Causas}" SelectedItem="{Binding Causa}"
-                            Title="Elige el motivo" HeightRequest="52" />
+                            <Entry Text="{Binding Busqueda}" Placeholder="Buscar farmacia…"
+                                   Keyboard="Plain" IsSpellCheckEnabled="False" IsTextPredictionEnabled="False" />
+
+                            <Label Text="{Binding TituloFarmaciasPendientes}" Style="{StaticResource Seccion}"
+                                   IsVisible="{Binding HayFarmaciasPendientes}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding FarmaciasPendientes}" Spacing="2">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="m:FarmaciaPanel">
+                                        <VerticalStackLayout>
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="4,8"
+                                                  BackgroundColor="{Binding Activa, Converter={StaticResource ColorSeleccion}, ConverterParameter=fila}">
+                                                <Grid.GestureRecognizers>
+                                                    <TapGestureRecognizer
+                                                        Command="{Binding BindingContext.SeleccionarFarmaciaCommand, Source={x:Reference pagina}}"
+                                                        CommandParameter="{Binding .}" />
+                                                </Grid.GestureRecognizers>
+                                                <Label Text="🏥" FontSize="17" VerticalOptions="Start" />
+                                                <VerticalStackLayout Grid.Column="1">
+                                                    <HorizontalStackLayout Spacing="6">
+                                                        <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="14" />
+                                                        <Border StrokeThickness="1" Stroke="#C9D6E8" Padding="0"
+                                                                StrokeShape="RoundRectangle 8" VerticalOptions="Center">
+                                                            <Label Text="{Binding Badge}" FontSize="10" Padding="6,2"
+                                                                   TextColor="#3B6FB6" />
+                                                        </Border>
+                                                    </HorizontalStackLayout>
+                                                    <Label Text="{Binding Direccion}" Style="{StaticResource Tenue}" FontSize="11" />
+                                                    <Label Text="{Binding ComentarioAnterior}" FontSize="11"
+                                                           FontAttributes="Italic" TextColor="#8A7F72"
+                                                           IsVisible="{Binding HayComentarioAnterior}" />
+                                                </VerticalStackLayout>
+                                                <Label Grid.Column="2" Text="{Binding TextoEstado}" FontSize="11"
+                                                       FontAttributes="Bold" VerticalOptions="Center"
+                                                       TextColor="{StaticResource Aviso}" />
+                                            </Grid>
+                                            <ContentView>
+                                                <ContentView.Triggers>
+                                                    <DataTrigger TargetType="ContentView"
+                                                                 Binding="{Binding Activa}" Value="True">
+                                                        <Setter Property="ControlTemplate"
+                                                                Value="{StaticResource FichaFarmacia}" />
+                                                    </DataTrigger>
+                                                </ContentView.Triggers>
+                                            </ContentView>
+                                        </VerticalStackLayout>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+
+                            <Label Text="{Binding TituloFarmaciasVisitadas}" Style="{StaticResource Seccion}"
+                                   IsVisible="{Binding HayFarmaciasVisitadas}" />
+                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding FarmaciasVisitadas}" Spacing="2">
+                                <BindableLayout.ItemTemplate>
+                                    <DataTemplate x:DataType="m:FarmaciaPanel">
+                                        <VerticalStackLayout>
+                                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="4,8"
+                                                  BackgroundColor="{Binding Activa, Converter={StaticResource ColorSeleccion}, ConverterParameter=fila}">
+                                                <Grid.GestureRecognizers>
+                                                    <TapGestureRecognizer
+                                                        Command="{Binding BindingContext.SeleccionarFarmaciaCommand, Source={x:Reference pagina}}"
+                                                        CommandParameter="{Binding .}" />
+                                                </Grid.GestureRecognizers>
+                                                <Label Text="🏥" FontSize="17" VerticalOptions="Start" />
+                                                <VerticalStackLayout Grid.Column="1">
+                                                    <HorizontalStackLayout Spacing="6">
+                                                        <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="14" />
+                                                        <Border StrokeThickness="1" Stroke="#C9D6E8" Padding="0"
+                                                                StrokeShape="RoundRectangle 8" VerticalOptions="Center">
+                                                            <Label Text="{Binding Badge}" FontSize="10" Padding="6,2"
+                                                                   TextColor="#3B6FB6" />
+                                                        </Border>
+                                                    </HorizontalStackLayout>
+                                                    <Label Text="{Binding Direccion}" Style="{StaticResource Tenue}" FontSize="11" />
+                                                </VerticalStackLayout>
+                                                <Label Grid.Column="2" Text="{Binding TextoEstado}" FontSize="11"
+                                                       FontAttributes="Bold" VerticalOptions="Center"
+                                                       TextColor="{StaticResource Exito}" />
+                                            </Grid>
+                                            <ContentView>
+                                                <ContentView.Triggers>
+                                                    <DataTrigger TargetType="ContentView"
+                                                                 Binding="{Binding Activa}" Value="True">
+                                                        <Setter Property="ControlTemplate"
+                                                                Value="{StaticResource FichaFarmacia}" />
+                                                    </DataTrigger>
+                                                </ContentView.Triggers>
+                                            </ContentView>
+                                        </VerticalStackLayout>
+                                    </DataTemplate>
+                                </BindableLayout.ItemTemplate>
+                            </VerticalStackLayout>
+                        </VerticalStackLayout>
+                    </Border>
                 </VerticalStackLayout>
-
-                <VerticalStackLayout>
-                    <Label Text="¿Qué pasó en la visita?" Style="{StaticResource Etiqueta}" />
-                    <Editor Text="{Binding Comentario}" HeightRequest="110"
-                            Placeholder="Describe algo concreto: qué producto, qué objeción, qué acordaron"
-                            IsSpellCheckEnabled="False" />
-                    <Label Text="{Binding AyudaComentario}" Style="{StaticResource Tenue}" />
-                </VerticalStackLayout>
-
-                <VerticalStackLayout>
-                    <Label Text="¿Hace cuánto fue?" Style="{StaticResource Etiqueta}" />
-                    <Picker ItemsSource="{Binding Minutos}" SelectedItem="{Binding HaceMinutos}"
-                            HeightRequest="52" />
-                    <Label Style="{StaticResource Tenue}"
-                           Text="El sistema solo acepta visitas de la última hora." />
-                </VerticalStackLayout>
-
-                <!-- Los productos de la parrilla del ciclo. El ORDEN en que se marcan es
-                     la mención que se manda (1ª, 2ª, 3ª): el primero es el que se llevó
-                     la visita. -->
-                <VerticalStackLayout IsVisible="{Binding EsFarmacia, Converter={StaticResource Negar}}">
-                    <Label Text="Productos promocionados" Style="{StaticResource Etiqueta}" />
-                    <Label Style="{StaticResource Tenue}"
-                           IsVisible="{Binding HayProductos, Converter={StaticResource Negar}}"
-                           Text="No hay parrilla publicada para tu línea en este ciclo." />
-                    <CollectionView ItemsSource="{Binding Productos}" HeightRequest="190"
-                                    IsVisible="{Binding HayProductos}">
-                        <CollectionView.ItemTemplate>
-                            <DataTemplate x:DataType="m:ProductoParrilla">
-                                <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,2">
-                                    <CheckBox IsChecked="{Binding Elegido}" VerticalOptions="Center" />
-                                    <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
-                                        <Label Text="{Binding Nombre}" FontAttributes="Bold" />
-                                        <Label Text="{Binding Subtitulo}" Style="{StaticResource Tenue}" />
-                                    </VerticalStackLayout>
-                                </Grid>
-                            </DataTemplate>
-                        </CollectionView.ItemTemplate>
-                    </CollectionView>
-                    <Label Text="{Binding ResumenProductos}" Style="{StaticResource Tenue}" />
-                </VerticalStackLayout>
-
-                <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding EsFarmacia, Converter={StaticResource Negar}}">
-                    <CheckBox IsChecked="{Binding Acompanado}" />
-                    <Label Grid.Column="1" VerticalOptions="Center" Text="Me acompañó el Gerente de Distrito" />
-                </Grid>
-
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                    <Button Text="Tomar foto" Style="{StaticResource BotonSecundario}"
-                            Command="{Binding TomarFotoCommand}" />
-                    <Button Grid.Column="1" Text="Quitar" WidthRequest="90"
-                            Style="{StaticResource BotonSecundario}"
-                            IsVisible="{Binding RutaFoto, Converter={StaticResource HayTexto}}"
-                            Command="{Binding QuitarFotoCommand}" />
-                </Grid>
-                <Label Style="{StaticResource Tenue}" Text="La foto es opcional." />
-
-                <Button Text="Guardar visita" Style="{StaticResource BotonPrincipal}"
-                        Command="{Binding GuardarCommand}" />
 
                 <ActivityIndicator IsRunning="{Binding Ocupado}" IsVisible="{Binding Ocupado}"
                                    Color="{DynamicResource Accion}" />
-                <Label Text="{Binding Error}" IsVisible="{Binding HayError}"
-                       TextColor="{StaticResource Error}" FontAttributes="Bold" />
-                <Label Text="{Binding Aviso}" IsVisible="{Binding HayAviso}"
-                       TextColor="{StaticResource Exito}" FontAttributes="Bold" />
-                <Label Text="{Binding Ubicacion}" Style="{StaticResource Tenue}"
-                       IsVisible="{Binding Ubicacion, Converter={StaticResource HayTexto}}" />
             </VerticalStackLayout>
         </VerticalStackLayout>
     </ScrollView>

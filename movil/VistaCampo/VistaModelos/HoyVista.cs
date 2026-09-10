@@ -116,6 +116,10 @@ public partial class HoyVista : BaseVista
 
     private void RefrescarEstadoCola()
     {
+        // Si la cola se paró por algo que NO es el dato del visitador (sesión vencida,
+        // servidor caído), tiene que decirlo aquí: si no, la pantalla enseña «N por
+        // enviar» sin explicar por qué no bajan, que se lee como que la app no hace nada.
+        if (!string.IsNullOrWhiteSpace(_sync.Aviso)) Aviso = _sync.Aviso;
         HayPendientes = _sync.Pendientes > 0;
         HayRechazados = _sync.Rechazados > 0;
         EstadoCola = _sync.Rechazados > 0
@@ -142,7 +146,11 @@ public partial class HoyVista : BaseVista
             Aviso = "Sin conexión: no se pudo consultar tu día. Lo que registres se guarda igual.";
             return;
         }
-        Aviso = null;
+        // Se limpia lo que puso la carga ANTERIOR, pero NUNCA el aviso de la cola: es el
+        // que dice por qué no sube nada (sesión vencida, servidor mal). Borrarlo aquí lo
+        // hacía invisible — se ponía y se quitaba en la misma pasada, y la pantalla se
+        // quedaba con «1 por enviar» y las cifras en «—» sin decir de qué se trataba.
+        if (string.IsNullOrWhiteSpace(_sync.Aviso)) Aviso = null;
 
         await EjecutarAsync(async () =>
         {

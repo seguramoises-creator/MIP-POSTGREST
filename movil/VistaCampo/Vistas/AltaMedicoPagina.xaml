@@ -38,7 +38,7 @@
                                                 <Label Text="{Binding Detalle}" Style="{StaticResource Tenue}" />
                                                 <Label Text="{Binding Origen}" Style="{StaticResource Tenue}" FontSize="12" />
                                             </VerticalStackLayout>
-                                            <Button Grid.Column="1" Text="Copiar" WidthRequest="92"
+                                            <Button Grid.Column="1" Text="📋  Copiar" WidthRequest="92"
                                                     Style="{StaticResource BotonSecundario}"
                                                     Command="{Binding Source={RelativeSource AncestorType={x:Type vm:AltaMedicoVista}}, Path=CopiarCommand}"
                                                     CommandParameter="{Binding .}" />
@@ -123,14 +123,14 @@
                                 </DataTemplate>
                             </CollectionView.ItemTemplate>
                         </CollectionView>
-                        <Button Text="Es otro médico, continuar"
+                        <Button Text="➡  Es otro médico, continuar"
                                 Style="{StaticResource BotonSecundario}"
                                 IsVisible="{Binding DuplicadoBloqueante, Converter={StaticResource Negar}}"
                                 Command="{Binding ConfirmarDistintoCommand}" />
                     </VerticalStackLayout>
                 </Border>
 
-                <Button Text="Enviar para aprobación" Style="{StaticResource BotonPrincipal}"
+                <Button Text="📤  Enviar para aprobación" Style="{StaticResource BotonPrincipal}"
                         Command="{Binding GuardarCommand}" />
 
                 <ActivityIndicator IsRunning="{Binding Ocupado}" IsVisible="{Binding Ocupado}"

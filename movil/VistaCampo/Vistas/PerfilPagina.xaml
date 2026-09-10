@@ -27,7 +27,7 @@
                 </VerticalStackLayout>
             </Border>
 
-            <Button Text="Descargar catálogos" Style="{StaticResource BotonSecundario}"
+            <Button Text="⬇  Descargar catálogos" Style="{StaticResource BotonSecundario}"
                     Command="{Binding DescargarCatalogosCommand}" />
 
             <Label Text="Tu cola de envío" Style="{StaticResource Titulo}" FontSize="19" />
@@ -62,13 +62,13 @@
                 </CollectionView.ItemTemplate>
             </CollectionView>
 
-            <Button Text="Reintentar los que no entraron" Style="{StaticResource BotonSecundario}"
+            <Button Text="🔄  Reintentar los que no entraron" Style="{StaticResource BotonSecundario}"
                     Command="{Binding ReintentarCommand}" />
 
             <Label Text="{Binding Aviso}" IsVisible="{Binding HayAviso}" TextColor="{StaticResource Aviso}" />
             <Label Text="{Binding Error}" IsVisible="{Binding HayError}" TextColor="{StaticResource Error}" />
 
-            <Button Text="Cerrar sesión" Style="{StaticResource BotonSecundario}"
+            <Button Text="🚪  Cerrar sesión" Style="{StaticResource BotonSecundario}"
                     TextColor="{StaticResource Error}" Command="{Binding SalirCommand}" Margin="0,10,0,0" />
             <Label Style="{StaticResource Tenue}" HorizontalOptions="Center"
                    Text="Lo que tengas sin enviar se conserva al cerrar sesión." />

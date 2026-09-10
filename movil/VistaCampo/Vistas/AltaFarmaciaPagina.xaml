@@ -38,7 +38,7 @@
                 <!-- Buscar ANTES de crear: es la regla del sistema y lo que evita la
                      mitad de los duplicados. El formulario de abajo no se habilita
                      hasta que una búsqueda vuelve vacía. -->
-                <Button Text="Buscar si ya existe" Style="{StaticResource BotonPrincipal}"
+                <Button Text="🔎  Buscar si ya existe" Style="{StaticResource BotonPrincipal}"
                         Command="{Binding BuscarCommand}" />
 
                 <Border Style="{StaticResource Tarjeta}" IsVisible="{Binding HayEncontradas}">
@@ -55,7 +55,7 @@
                                                 <Label Text="{Binding Nombre}" FontAttributes="Bold" />
                                                 <Label Text="{Binding Direccion}" Style="{StaticResource Tenue}" />
                                             </VerticalStackLayout>
-                                            <Button Grid.Column="1" Text="Agregar" WidthRequest="100"
+                                            <Button Grid.Column="1" Text="➕  Agregar" WidthRequest="100"
                                                     Style="{StaticResource BotonSecundario}"
                                                     Command="{Binding Source={RelativeSource AncestorType={x:Type vm:AltaFarmaciaVista}}, Path=AgregarCommand}"
                                                     CommandParameter="{Binding .}" />
@@ -94,7 +94,7 @@
 
                     <Label Text="{Binding AyudaCreacion}" Style="{StaticResource Tenue}" />
 
-                    <Button Text="Enviar para aprobación" Style="{StaticResource BotonPrincipal}"
+                    <Button Text="📤  Enviar para aprobación" Style="{StaticResource BotonPrincipal}"
                             Command="{Binding CrearCommand}" />
                 </VerticalStackLayout>
 

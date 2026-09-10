@@ -44,13 +44,13 @@
                                        Keyboard="Plain" IsSpellCheckEnabled="False"
                                        IsTextPredictionEnabled="False" ReturnType="Go"
                                        ReturnCommand="{Binding EntrarCommand}" />
-                                <Button Grid.Column="1" Text="Ver" WidthRequest="64" HeightRequest="52"
+                                <Button Grid.Column="1" Text="👁" WidthRequest="64" HeightRequest="52"
                                         Style="{StaticResource BotonSecundario}"
                                         Command="{Binding AlternarClaveCommand}" />
                             </Grid>
                         </VerticalStackLayout>
 
-                        <Button Text="Iniciar sesión" Style="{StaticResource BotonPrincipal}"
+                        <Button Text="🔐  Iniciar sesión" Style="{StaticResource BotonPrincipal}"
                                 Command="{Binding EntrarCommand}" IsEnabled="{Binding Ocupado, Converter={StaticResource Negar}}" />
 
                         <ActivityIndicator IsRunning="{Binding Ocupado}" IsVisible="{Binding Ocupado}"
@@ -61,7 +61,7 @@
                         <Label Text="{Binding Aviso}" IsVisible="{Binding HayAviso}"
                                TextColor="{StaticResource Aviso}" />
 
-                        <Button Text="Servidor" Style="{StaticResource BotonSecundario}"
+                        <Button Text="🌐  Servidor" Style="{StaticResource BotonSecundario}"
                                 HeightRequest="44" FontSize="13"
                                 Command="{Binding AlternarServidorCommand}" />
                         <Entry Text="{Binding Servidor}" IsVisible="{Binding MostrarServidor}"
