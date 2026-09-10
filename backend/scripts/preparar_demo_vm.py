@@ -93,9 +93,11 @@ def main() -> int:
             if pid is None:
                 pid = db.execute(text(
                     'INSERT INTO "Config"."DIM_Producto" '
-                    '(codigo, nombre, linea_id, area_terapeutica, activo) '
-                    'VALUES (:c, :n, :l, :a, true) RETURNING id'),
-                    {"c": codigo, "n": nombre, "l": rm.linea_id, "a": linea}).scalar()
+                    '(codigo, nombre, linea_id, area_terapeutica, descripcion, '
+                    ' meta_muestras_visita, activo) '
+                    'VALUES (:c, :n, :l, :a, :d, :mm, true) RETURNING id'),
+                    {"c": codigo, "n": nombre, "l": rm.linea_id, "a": linea,
+                     "d": mensaje, "mm": muestras}).scalar()
             db.execute(text(
                 'INSERT INTO "Visita"."ParrillaPromocional" '
                 '(ciclo_id, linea_id, producto_id, producto, mensaje_clave, prioridad, '
