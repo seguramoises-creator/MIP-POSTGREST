@@ -119,8 +119,9 @@ def main() -> int:
                 db.execute(text(
                     'INSERT INTO "Visita"."DIM_FarmaciaVisita" '
                     '(vm_id, maestro_farmacia_id, estado_aprobacion, ciclo_alta_id, '
-                    ' ciclos_sin_visita, fecha_solicitud, fecha_aprobacion) '
-                    "VALUES (:vm, :m, 'APROBADO', :c, 0, :ts, :ts)"),
+                    ' ciclos_sin_visita, activo, fecha_registro, fecha_solicitud, '
+                    ' fecha_aprobacion) '
+                    "VALUES (:vm, :m, 'APROBADO', :c, 0, true, :ts, :ts, :ts)"),
                     {"vm": rm.id, "m": m.id, "c": ciclo.id, "ts": ahora})
             else:
                 db.execute(text(
