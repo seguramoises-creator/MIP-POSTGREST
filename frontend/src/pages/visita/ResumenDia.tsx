@@ -27,12 +27,13 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Box, Card, CardContent, Typography, Stack, Table, TableHead, TableRow,
-  TableCell, TableBody, Chip, Alert, CircularProgress, TextField, LinearProgress,
+  TableCell, TableBody, Chip, Alert, CircularProgress, TextField, LinearProgress, MenuItem,
   Pagination,
 } from '@mui/material';
 import { AVISO, AVISO_TENUE, BORDE_SUAVE, EXITO, SUPERFICIE_3 } from '../../theme/marca';
 import { marcaViva } from '../../theme/marcaViva';
 import { resumenDia, type FilaRepresentante } from '../../services/visitaDia.service';
+import { listarGerentesVisita, type Catalogo } from '../../services/visita.service';
 import { TEXTO_TENUE } from '../../components/layout/navTokens';
 
 const hoy = () => new Date().toISOString().slice(0, 10);
@@ -40,11 +41,17 @@ const hoy = () => new Date().toISOString().slice(0, 10);
 /** Una cifra grande con su explicación debajo. */
 function Tarjeta({ titulo, valor, detalle }: { titulo: string; valor: string; detalle: string }) {
   return (
-    <Card variant="outlined" sx={{ flex: 1, minWidth: 210, borderRadius: 2 }}>
-      <CardContent sx={{ py: 2 }}>
-        <Typography variant="body2" sx={{ color: TEXTO_TENUE }}>{titulo}</Typography>
-        <Typography sx={{ fontSize: 34, fontWeight: 800, lineHeight: 1.15 }}>{valor}</Typography>
-        <Typography variant="caption" sx={{ color: TEXTO_TENUE }}>{detalle}</Typography>
+    <Card variant="outlined" sx={{ flex: 1, minWidth: 168, borderRadius: 2 }}>
+      {/* Densidad: la cifra manda, el resto acompaña. Antes cada tarjeta gastaba el
+          alto de tres filas de la tabla para decir un número de un dígito. */}
+      <CardContent sx={{ py: 1, px: 1.5, '&:last-child': { pb: 1 } }}>
+        <Typography variant="caption" sx={{ color: TEXTO_TENUE, display: 'block', lineHeight: 1.2 }}>
+          {titulo}
+        </Typography>
+        <Typography sx={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1 }}>{valor}</Typography>
+        <Typography variant="caption" sx={{ color: TEXTO_TENUE, fontSize: '0.68rem' }}>
+          {detalle}
+        </Typography>
       </CardContent>
     </Card>
   );
@@ -70,7 +77,7 @@ function Avance({ pct, hechas, planeadas }: { pct: number | null; hechas: number
 }
 
 /** Filas por página. Fija la altura de la tarjeta: no crece con el equipo. */
-const POR_PAGINA = 10;
+const POR_PAGINA = 14;
 
 /**
  * Orden de la tabla: primero quien tiene agenda, y dentro de ellos el más
@@ -89,14 +96,22 @@ function porUrgencia(a: FilaRepresentante, b: FilaRepresentante): number {
 
 export default function ResumenDia() {
   const [fecha, setFecha] = useState(hoy());
+  const [gerenteId, setGerenteId] = useState<number | ''>('');
   const [pagina, setPagina] = useState(1);
+  const [gerentes, setGerentes] = useState<Catalogo[]>([]);
+
+  // El catálogo se pide una vez: no cambia entre días ni entre filtros.
+  useEffect(() => { listarGerentesVisita().then(setGerentes).catch(() => setGerentes([])); }, []);
 
   // Cambiar de día es empezar de cero: quedarse en la página 4 de un día que solo
   // tiene dos dejaría la tabla vacía sin explicar por qué.
-  useEffect(() => { setPagina(1); }, [fecha]);
+  useEffect(() => { setPagina(1); }, [fecha, gerenteId]);
   const { data, isLoading, error } = useQuery({
-    queryKey: ['resumen-dia', fecha],
-    queryFn: () => resumenDia({ fecha }),
+    // El filtro va al SERVIDOR y no se aplica sobre lo ya traído: las tarjetas de
+    // arriba y el avance de la semana los calcula él. Filtrar solo la tabla dejaría
+    // «2 visitas registradas» encima de un equipo de un gerente que no hizo ninguna.
+    queryKey: ['resumen-dia', fecha, gerenteId],
+    queryFn: () => resumenDia({ fecha, ...(gerenteId ? { gerente_id: gerenteId } : {}) }),
     // Se mira durante la jornada: media hora de antigüedad ya engaña.
     refetchInterval: 120_000,
   });
@@ -122,15 +137,23 @@ export default function ResumenDia() {
         Fuerza de ventas · {fecha === hoy() ? 'hoy' : 'día consultado'}
       </Typography>
       <Typography variant="h5" fontWeight={800}>Así va el día</Typography>
-      <Typography variant="body2" sx={{ color: TEXTO_TENUE, mb: 2.5 }}>
+      <Typography variant="body2" sx={{ color: TEXTO_TENUE, mb: 1.5 }}>
         Actividad registrada, por equipo y representante.
       </Typography>
 
-      <TextField type="date" size="small" label="Día" value={fecha}
-                 onChange={(e) => setFecha(e.target.value)}
-                 InputLabelProps={{ shrink: true }} sx={{ mb: 2.5, width: 190 }} />
+      <Stack direction="row" spacing={1.5} sx={{ mb: 1.5, flexWrap: 'wrap' }} useFlexGap>
+        <TextField type="date" size="small" label="Día" value={fecha}
+                   onChange={(e) => setFecha(e.target.value)}
+                   InputLabelProps={{ shrink: true }} sx={{ width: 180 }} />
+        <TextField select size="small" label="Gerente de Distrito" value={gerenteId}
+                   onChange={(e) => setGerenteId(e.target.value === '' ? '' : Number(e.target.value))}
+                   sx={{ minWidth: 240 }}>
+          <MenuItem value="">Todos los distritos</MenuItem>
+          {gerentes.map((g) => <MenuItem key={g.id} value={g.id}>{g.nombre}</MenuItem>)}
+        </TextField>
+      </Stack>
 
-      <Stack direction="row" spacing={2} sx={{ mb: 2.5, flexWrap: 'wrap' }} useFlexGap>
+      <Stack direction="row" spacing={1.5} sx={{ mb: 1.5, flexWrap: 'wrap' }} useFlexGap>
         <Tarjeta titulo="Visitas registradas" valor={String(totales.visitas)}
                  detalle={`${totales.medicas} médicas · ${totales.farmacias} farmacias`} />
         <Tarjeta titulo="Representantes con actividad"
@@ -143,9 +166,9 @@ export default function ResumenDia() {
       </Stack>
 
       {/* El avance del equipo, o el motivo por el que no se puede calcular. */}
-      <Card variant="outlined" sx={{ mb: 2.5, borderRadius: 2,
+      <Card variant="outlined" sx={{ mb: 1.5, borderRadius: 2,
                                      bgcolor: semana.calculable ? SUPERFICIE_3 : AVISO_TENUE }}>
-        <CardContent sx={{ py: 1.75 }}>
+        <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
           {semana.calculable ? (
             <>
               <Typography variant="body2" sx={{ fontWeight: 700 }}>
