@@ -31,9 +31,9 @@ from app.db.database import SessionLocal  # noqa: E402
 # Productos de demostración, uno por prioridad. `meta_muestras` distinto en cada uno
 # para que se vea que la parrilla PROPONE cantidades y no un número fijo.
 PRODUCTOS_DEMO = [
-    ("VITALEX 500", "Primera línea en su indicación; dosis única diaria.", 1, 3),
-    ("CARDIOVIT 10", "Perfil de tolerancia favorable en tratamiento prolongado.", 2, 3),
-    ("NUTRIVIT D3", "Complemento de mantenimiento; adherencia sencilla.", 3, 4),
+    ("DEMO-VTX", "VITALEX 500", "Primera línea en su indicación; dosis única diaria.", 1, 3),
+    ("DEMO-CDV", "CARDIOVIT 10", "Perfil de tolerancia favorable en tratamiento prolongado.", 2, 3),
+    ("DEMO-NTV", "NUTRIVIT D3", "Complemento de mantenimiento; adherencia sencilla.", 3, 4),
 ]
 
 
@@ -86,15 +86,16 @@ def main() -> int:
     creado = []
 
     if parrilla == 0:
-        for nombre, mensaje, prioridad, muestras in PRODUCTOS_DEMO:
+        for codigo, nombre, mensaje, prioridad, muestras in PRODUCTOS_DEMO:
             pid = db.execute(text(
                 'SELECT id FROM "Config"."DIM_Producto" WHERE nombre = :n AND linea_id = :l'),
                 {"n": nombre, "l": rm.linea_id}).scalar()
             if pid is None:
                 pid = db.execute(text(
-                    'INSERT INTO "Config"."DIM_Producto" (nombre, linea_id, area_terapeutica, activo) '
-                    'VALUES (:n, :l, :a, true) RETURNING id'),
-                    {"n": nombre, "l": rm.linea_id, "a": linea}).scalar()
+                    'INSERT INTO "Config"."DIM_Producto" '
+                    '(codigo, nombre, linea_id, area_terapeutica, activo) '
+                    'VALUES (:c, :n, :l, :a, true) RETURNING id'),
+                    {"c": codigo, "n": nombre, "l": rm.linea_id, "a": linea}).scalar()
             db.execute(text(
                 'INSERT INTO "Visita"."ParrillaPromocional" '
                 '(ciclo_id, linea_id, producto_id, producto, mensaje_clave, prioridad, '
