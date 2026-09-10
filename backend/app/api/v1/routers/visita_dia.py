@@ -21,6 +21,7 @@ from app.core.deps import get_current_active_user
 from app.db.database import get_db
 from app.models.dimensiones import RepresentanteMedico
 from app.models.usuario import Usuario
+from app.core.tiempo import hoy_local
 from app.services import visita_dia_service
 
 router = APIRouter(prefix="/visita", tags=["Visita — Monitor del día"])
@@ -71,7 +72,10 @@ def resumen_dia(
     if not pc:
         raise HTTPException(400, "No se pudo determinar el país: indícalo en la consulta "
                                  "o asigna un país al usuario.")
+    # `date.today()` era un TERCER reloj: el del sistema operativo del proceso, que no
+    # es ni UTC ni el del pais del representante. En el servidor (UTC) adelantaba el dia
+    # a las 8 de la noche de RD; en un portatil daba otra cosa distinta.
     return visita_dia_service.resumen_dia(
-        db, pais_codigo=pc, f=fecha or date.today(),
+        db, pais_codigo=pc, f=fecha or hoy_local(db, pc),
         gerente_id=gerente_id, linea_id=linea_id,
         rm_ids=_alcance(db, current_user))

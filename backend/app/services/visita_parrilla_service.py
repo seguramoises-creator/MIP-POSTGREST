@@ -21,6 +21,17 @@ from app.services.visita_cobertura_service import ciclo_por_defecto
 from app.services import recalculo_service
 
 
+def _ahora_utc() -> datetime:
+    """UTC y sin huso: la escala en que estan definidas estas columnas.
+
+    Un valor consciente aqui volveria a dejar lo almacenado en manos de la zona de la
+    sesion de PostgreSQL. Hoy la conexion la fuerza a UTC (`app/db/database.py`), asi
+    que funcionaria igual — pero por una opcion de conexion, no porque el codigo lo
+    diga. Esa dependencia invisible es justo la que causo el desvio."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+
 def _guard_ciclo_abierto(db, ciclo_id):
     """Bloquea escrituras sobre ciclos cerrados (inmutables)."""
     try:
@@ -143,7 +154,7 @@ def guardar_parrilla(db: Session, ciclo_id: int | None, linea_id: int,
             ciclo_id=ciclo_id, linea_id=linea_id, producto_id=it.producto_id, producto=it.producto,
             mensaje_clave=it.mensaje_clave, segmento_target=it.segmento_target, prioridad=it.prioridad,
             meta_muestras=it.meta_muestras, activo=True, publicada=False,
-            fecha_creacion=datetime.now(timezone.utc), modificado_por=usuario_id))
+            fecha_creacion=_ahora_utc(), modificado_por=usuario_id))
     db.commit()
     logger.info(f"Parrilla guardada (borrador) ciclo={ciclo_id} linea={linea_id}: {len(items)} productos")
     return len(items)
@@ -159,7 +170,7 @@ def publicar_parrilla(db: Session, ciclo_id: int | None, linea_id: int, usuario_
         ParrillaPromocional.ciclo_id == ciclo_id, ParrillaPromocional.linea_id == linea_id).all()
     if not filas:
         raise ValueError("No hay parrilla que publicar para esta línea.")
-    ahora = datetime.now(timezone.utc)
+    ahora = _ahora_utc()
     for f in filas:
         f.publicada = True
         f.fecha_publicacion = ahora
@@ -221,7 +232,7 @@ def registrar_muestras(db: Session, vm_id: int, ciclo_id: int | None, medico_id:
         db.add(MuestraEntregada(
             vm_id=vm_id, ciclo_id=ciclo_id, medico_id=medico_id,
             producto=e.producto, cantidad=e.cantidad,
-            fecha_entrega=datetime.now(timezone.utc), registrado_por=usuario_id))
+            fecha_entrega=_ahora_utc(), registrado_por=usuario_id))
     db.commit()
     logger.info(f"Muestras registradas VM={vm_id} medico={medico_id} ciclo={ciclo_id}: {len(entregas)} producto(s)")
     return len(entregas)

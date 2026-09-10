@@ -21,6 +21,17 @@ from app.services.visita_cobertura_service import ciclo_por_defecto, CICLO_DIAS_
 from app.services import recalculo_service
 
 
+def _ahora_utc() -> datetime:
+    """UTC y sin huso: la escala en que estan definidas estas columnas.
+
+    Un valor consciente aqui volveria a dejar lo almacenado en manos de la zona de la
+    sesion de PostgreSQL. Hoy la conexion la fuerza a UTC (`app/db/database.py`), asi
+    que funcionaria igual — pero por una opcion de conexion, no porque el codigo lo
+    diga. Esa dependencia invisible es justo la que causo el desvio."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+
 class PlaneacionPublicadaError(Exception):
     """La planeación ya está publicada: es dato base de cálculo y no se puede modificar."""
 
@@ -206,7 +217,7 @@ def guardar_planeacion(db: Session, vm_id: int, ciclo_id: int | None,
         db.add(PlaneacionCiclo(
             vm_id=vm_id, ciclo_id=ciclo_id, medico_id=it.medico_id, tipo_visita=it.tipo_visita,
             semana=it.semana, dia_semana=it.dia_semana, hora_estimada=it.hora_estimada,
-            fecha_creacion=datetime.now(timezone.utc), modificado_por=usuario_id))
+            fecha_creacion=_ahora_utc(), modificado_por=usuario_id))
     db.commit()
     logger.info(f"Planeación guardada VM={vm_id} ciclo={ciclo_id}: {len(items)} ítems")
     return len(items)

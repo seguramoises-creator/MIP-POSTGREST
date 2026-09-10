@@ -18,6 +18,17 @@ from app.models.visita import MedicoVisita, CierreCicloVisita
 from app.models.dimensiones import RepresentanteMedico, Ciclo
 from app.services.visita_cobertura_service import ciclo_por_defecto, _mapa_visitas
 
+
+def _ahora_utc() -> datetime:
+    """UTC y sin huso: la escala en que estan definidas estas columnas.
+
+    Un valor consciente aqui volveria a dejar lo almacenado en manos de la zona de la
+    sesion de PostgreSQL. Hoy la conexion la fuerza a UTC (`app/db/database.py`), asi
+    que funcionaria igual — pero por una opcion de conexion, no porque el codigo lo
+    diga. Esa dependencia invisible es justo la que causo el desvio."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 # Umbrales de severidad por ciclos consecutivos sin visita.
 SEV_ALERTA = 1   # 1 ciclo — atención
 SEV_GRAVE = 2    # 2 ciclos — grave
@@ -130,7 +141,7 @@ def _resumen_cierre(db: Session, ciclo_id: int, aplicar: bool, usuario_id: int |
     }
     if aplicar:
         db.add(CierreCicloVisita(
-            ciclo_id=ciclo_id, fecha_cierre=datetime.now(timezone.utc),
+            ciclo_id=ciclo_id, fecha_cierre=_ahora_utc(),
             panel=panel, visitados=visitados, sin_visitar=sin_visitar,
             ruptura_nueva=ruptura_nueva, ruptura_critica=ruptura_critica,
             cerrado_por=usuario_id))

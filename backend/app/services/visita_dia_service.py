@@ -20,13 +20,21 @@ mediría la calidad de la captura y no el trabajo del representante.
 SIN PLANEACIÓN NO SE INVENTA UN CERO. `avance_calculable=False` distingue «no hay
 agenda contra la que medir» de «la agenda se cumplió al 0%». Un 0% en rojo sobre
 un equipo que no tenía nada planeado es una acusación falsa.
+
+EL DÍA ES EL DEL PAÍS. Las columnas `fecha_hora` guardan UTC; el día contra el que
+se pregunta es el del calendario del representante. Componer la ventana con
+`datetime.combine(f, time.min)` mezclaba las dos escalas: recortaba el día por las
+8 de la noche —medianoche UTC en RD— y ademas enseñaba `ultima_actividad` cuatro
+horas corrida. Todo lo que aquí acota un día pasa por `ventana_dia_local`.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, time, timedelta
+from datetime import date, timedelta, timezone
 
 from sqlalchemy import Integer, func
 from sqlalchemy.orm import Session
+
+from app.core.tiempo import ventana_dia_local, zona_horaria
 
 from app.models.coaching_more_models import CoachingSesion
 from app.models.dimensiones import Ciclo, Gerente, Linea, RepresentanteMedico
@@ -86,8 +94,9 @@ def resumen_dia(db: Session, pais_codigo: str, f: date,
     usuario, nunca en su lugar.
     """
     ciclo = _ciclo_de(db, pais_codigo, f)
-    desde = datetime.combine(f, time.min)
-    hasta = datetime.combine(f, time.max)
+    # Rango semiabierto en la escala en que están guardadas las columnas (UTC), pero
+    # recortando el día LOCAL del país.
+    _, desde, fin = ventana_dia_local(db, pais_codigo, f)
 
     rms_q = (db.query(RepresentanteMedico)
              .filter(RepresentanteMedico.pais_codigo == pais_codigo,
@@ -118,14 +127,14 @@ def resumen_dia(db: Session, pais_codigo: str, f: date,
                     func.max(VisitaRegistro.fecha_hora).label("ult"))
            .filter(VisitaRegistro.vm_id.in_(ids),
                    VisitaRegistro.ejecutada.is_(True),
-                   VisitaRegistro.fecha_hora >= desde, VisitaRegistro.fecha_hora <= hasta)
+                   VisitaRegistro.fecha_hora >= desde, VisitaRegistro.fecha_hora < fin)
            .group_by(VisitaRegistro.vm_id, VisitaRegistro.tipo_visita).all())
 
     far = (db.query(FactVisitaFarmacia.vm_id, func.count().label("n"),
                     func.max(FactVisitaFarmacia.fecha_hora).label("ult"))
            .filter(FactVisitaFarmacia.vm_id.in_(ids),
                    FactVisitaFarmacia.ejecutada.is_(True),
-                   FactVisitaFarmacia.fecha_hora >= desde, FactVisitaFarmacia.fecha_hora <= hasta)
+                   FactVisitaFarmacia.fecha_hora >= desde, FactVisitaFarmacia.fecha_hora < fin)
            .group_by(FactVisitaFarmacia.vm_id).all())
 
     more = dict(db.query(CoachingSesion.rm_id, func.count())
@@ -155,6 +164,8 @@ def resumen_dia(db: Session, pais_codigo: str, f: date,
     if ciclo:
         semana = _semana_de(ciclo, f)
         ini_sem, _fin_sem = _rango_semana(ciclo, semana)
+        # También el arranque de la semana es medianoche LOCAL, no medianoche UTC.
+        _, _ini_utc, _ = ventana_dia_local(db, pais_codigo, ini_sem)
         for p in (db.query(PlaneacionCiclo)
                   .filter(PlaneacionCiclo.vm_id.in_(ids),
                           PlaneacionCiclo.ciclo_id == ciclo.id,
@@ -167,10 +178,11 @@ def resumen_dia(db: Session, pais_codigo: str, f: date,
         hecho_sem = dict(db.query(VisitaRegistro.vm_id, func.count())
                          .filter(VisitaRegistro.vm_id.in_(ids),
                                  VisitaRegistro.ejecutada.is_(True),
-                                 VisitaRegistro.fecha_hora >= datetime.combine(ini_sem, time.min),
-                                 VisitaRegistro.fecha_hora <= hasta)
+                                 VisitaRegistro.fecha_hora >= _ini_utc,
+                                 VisitaRegistro.fecha_hora < fin)
                          .group_by(VisitaRegistro.vm_id).all())
 
+    _UTC, _tz = timezone.utc, zona_horaria(db, pais_codigo)
     filas = []
     for r in rms:
         d = por_rm[r.id]
@@ -181,7 +193,10 @@ def resumen_dia(db: Session, pais_codigo: str, f: date,
             "linea": nombres_lin.get(r.linea_id), "gerente": nombres_ger.get(r.gerente_id),
             "v": d["v"], "r": d["r"], "farmacias": d["farmacias"],
             "con_gd": d["con_gd"], "more": d["more"],
-            "ultima_actividad": d["ultima"].strftime("%H:%M") if d["ultima"] else None,
+            # La hora que el gerente reconoce es la del reloj de su representante:
+            # `fecha_hora` viene en UTC y sin traducir salía 4 horas adelantada.
+            "ultima_actividad": (d["ultima"].replace(tzinfo=_UTC).astimezone(_tz).strftime("%H:%M")
+                                 if d["ultima"] else None),
             "semana": {"planeadas": ps, "ejecutadas": hs, "avance_pct": _pct(hs, ps)},
             "dia": {"planeadas": pd, "ejecutadas": d["v"] + d["r"],
                     "avance_pct": _pct(d["v"] + d["r"], pd)},

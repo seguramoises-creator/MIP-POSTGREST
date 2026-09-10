@@ -20,6 +20,17 @@ from app.models.visita import MedicoVisita
 from app.models.dimensiones import RepresentanteMedico, Linea, Especialidad, Ciclo
 
 
+def _ahora_utc() -> datetime:
+    """UTC y sin huso: la escala en que estan definidas estas columnas.
+
+    Un valor consciente aqui volveria a dejar lo almacenado en manos de la zona de la
+    sesion de PostgreSQL. Hoy la conexion la fuerza a UTC (`app/db/database.py`), asi
+    que funcionaria igual — pero por una opcion de conexion, no porque el codigo lo
+    diga. Esa dependencia invisible es justo la que causo el desvio."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+
 class AprobacionError(Exception):
     pass
 
@@ -111,7 +122,7 @@ def solicitar_baja(db: Session, m: MedicoVisita, usuario) -> MedicoVisita:
         m.estado_aprobacion = "PENDIENTE_BAJA"
         m.ciclo_baja_id = ciclo_actual_id(db, m.vm_id)
     m.solicitado_por = getattr(usuario, "id", None)
-    m.fecha_solicitud = datetime.now(timezone.utc)
+    m.fecha_solicitud = _ahora_utc()
     db.commit(); db.refresh(m)
     logger.info(f"Solicitud de baja médico id={m.id} estado={m.estado_aprobacion} por={getattr(usuario,'id',None)}")
     return m
@@ -125,7 +136,7 @@ def aprobar(db: Session, m: MedicoVisita, usuario) -> MedicoVisita:
     era_alta = m.estado_aprobacion == "PENDIENTE_ALTA"
     m.estado_aprobacion = "APROBADO"   # para BAJA queda APROBADO con ciclo_baja programado
     m.aprobado_por = getattr(usuario, "id", None)
-    m.fecha_aprobacion = datetime.now(timezone.utc)
+    m.fecha_aprobacion = _ahora_utc()
     # Al aprobar el ALTA se revela la categoría: recién aquí el motor puntúa la plantilla
     # que capturó el representante (y que el GD pudo ajustar antes de aprobar).
     if era_alta:
@@ -192,7 +203,7 @@ def rechazar(db: Session, m: MedicoVisita, usuario, motivo: str | None) -> Medic
     else:
         raise AprobacionError("El médico no tiene una solicitud pendiente.")
     m.aprobado_por = getattr(usuario, "id", None)
-    m.fecha_aprobacion = datetime.now(timezone.utc)
+    m.fecha_aprobacion = _ahora_utc()
     m.motivo = motivo
     db.commit(); db.refresh(m)
     logger.info(f"Médico id={m.id} solicitud RECHAZADA por={getattr(usuario,'id',None)}")
