@@ -18,11 +18,23 @@ from datetime import datetime, timezone, timedelta
 from loguru import logger
 from sqlalchemy.orm import Session
 
+from app.core.tiempo import ventana_dia_local
 from app.models.dimensiones import Farmacia
 from app.models.visita import FarmaciaVisita, FactVisitaFarmacia
 from app.schemas.schemas_farmacia import VisitaFarmaciaRegistrar
 from app.services.visita_cobertura_service import ciclo_por_defecto
 from app.services import recalculo_service
+
+
+def _pais_del_vm(db: Session, vm_id: int) -> str | None:
+    from app.models.dimensiones import RepresentanteMedico
+    return db.query(RepresentanteMedico.pais_codigo).filter(
+        RepresentanteMedico.id == vm_id).scalar()
+
+
+def _ahora_utc() -> datetime:
+    """El instante actual tal y como se guarda: UTC y sin huso (ver `database.py`)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class PanelNoAprobadoError(ValueError):
@@ -84,7 +96,7 @@ def registrar_visita(db: Session, vm_id: int, panel: FarmaciaVisita,
     _guard_ciclo_abierto(db, ciclo_id)
 
     hace_minutos = datos.hace_minutos or 0
-    fecha_hora = datetime.now(timezone.utc) - timedelta(minutes=hace_minutos)
+    fecha_hora = _ahora_utc() - timedelta(minutes=hace_minutos)
 
     v = FactVisitaFarmacia(
         vm_id=vm_id, ciclo_id=ciclo_id, farmacia_id=panel.id,
@@ -143,7 +155,7 @@ def obtener_foto_visita(db: Session, visita_id: int):
 def estado_visita_panel(db: Session, vm_id: int, ciclo_id: int, panel_ids: list[int]) -> dict[int, dict]:
     """Estado de visita por farmacia del panel, por `farmacia_id` (id del panel,
     `Visita.DIM_FarmaciaVisita.id` — NO el id del maestro):
-      - `visitada_hoy`: alguna visita EJECUTADA de HOY (fecha UTC del servidor).
+      - `visitada_hoy`: alguna visita EJECUTADA en el día LOCAL del país del VM.
       - `visitada_ciclo`: alguna visita EJECUTADA dentro del `ciclo_id` dado.
       - `ultimo_comentario`: comentario de la visita EJECUTADA más reciente (de
         cualquier ciclo) — mismo criterio de "visita anterior" que el historial
@@ -154,7 +166,10 @@ def estado_visita_panel(db: Session, vm_id: int, ciclo_id: int, panel_ids: list[
     """
     if not panel_ids:
         return {}
-    hoy = datetime.now(timezone.utc).date()
+    # El día del visitador, traducido a UTC para comparar contra la columna. Con la
+    # fecha UTC a secas, una farmacia visitada a las 23:49 de RD salía como NO visitada
+    # hoy —para UTC ya era mañana— y la tarjeta del móvil enseñaba 0.
+    _, dia_inicio, dia_fin = ventana_dia_local(db, _pais_del_vm(db, vm_id))
     filas = (
         db.query(FactVisitaFarmacia)
         .filter(FactVisitaFarmacia.vm_id == vm_id,
@@ -172,9 +187,9 @@ def estado_visita_panel(db: Session, vm_id: int, ciclo_id: int, panel_ids: list[
             "visitada_hoy": False, "visitada_ciclo": False,
             "ultimo_comentario": v.comentario,
         })
-        # `.date()` evita comparar datetimes naive/aware entre sí (la columna es
-        # DateTime sin tz; el valor almacenado siempre es hora UTC, ver `_ahora()`).
-        if v.fecha_hora and v.fecha_hora.date() == hoy:
+        # La columna guarda UTC sin huso; `dia_inicio`/`dia_fin` vienen ya en esa
+        # misma escala, así que la comparación es homogénea y sin conversiones sueltas.
+        if v.fecha_hora and dia_inicio <= v.fecha_hora < dia_fin:
             d["visitada_hoy"] = True
         if v.ciclo_id == ciclo_id:
             d["visitada_ciclo"] = True

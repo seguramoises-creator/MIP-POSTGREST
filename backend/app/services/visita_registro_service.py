@@ -1,16 +1,45 @@
 """Registro de Visita (Parte 4 del spec). Usa la hora del SERVIDOR (no del cliente)
 para evitar manipulación; ventana de 60 min; comentario obligatorio y no genérico
 (validado en el schema); registro de no-visita con causa.
+
+DOS RELOJES, Y NO SON EL MISMO. Lo que se GUARDA es UTC (el instante, sin ambigüedad);
+lo que se PREGUNTA —«¿qué hizo hoy este visitador?»— es el día LOCAL de su país. Confundir
+uno con otro no da error, da un número creíble: medido el 2026-09-09 a las 23:49 hora de
+RD, la visita recién registrada no aparecía en el día porque para UTC ya era el día 10.
+El día local se resuelve con `app/core/tiempo.py`, que lee `DIM_Pais.zona_horaria`.
 """
 from datetime import datetime, timezone, timedelta
 
 from loguru import logger
 from sqlalchemy.orm import Session
 
+from app.core.tiempo import hoy_local, ventana_dia_local, zona_horaria
 from app.models.visita import MedicoVisita, VisitaRegistro
 from app.schemas.visita import VisitaRegistrar, VisitaNoVisita
 from app.services.visita_cobertura_service import ciclo_por_defecto
 from app.services import recalculo_service
+
+
+def _pais_del_vm(db: Session, vm_id: int) -> str | None:
+    from app.models.dimensiones import RepresentanteMedico
+    return db.query(RepresentanteMedico.pais_codigo).filter(
+        RepresentanteMedico.id == vm_id).scalar()
+
+
+def _ahora_utc() -> datetime:
+    """El instante actual tal y como se guarda: UTC y sin huso.
+
+    Sin el `replace` sería un valor consciente, y al entrar en una columna
+    `TIMESTAMP WITHOUT TIME ZONE` PostgreSQL lo pasaría a la zona de la sesión: lo
+    guardado dependería de la máquina y no del código (ver `app/db/database.py`)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _a_local(db: Session, pais_codigo: str | None, dt: datetime | None):
+    """Un `fecha_hora` guardado (UTC sin huso) visto en la zona del país."""
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc).astimezone(zona_horaria(db, pais_codigo))
 
 
 def _guard_ciclo_abierto(db, ciclo_id):
@@ -82,8 +111,12 @@ def registrar_visita(db: Session, vm_id: int, datos: VisitaRegistrar, usuario_id
         raise ValueError("No hay ciclo activo")
     _guard_ciclo_abierto(db, ciclo_id)
     # Hora del servidor menos los minutos indicados (ventana 60 min ya validada en el schema).
-    fecha_hora = datetime.now(timezone.utc) - timedelta(minutes=datos.hace_minutos)
-    _guard_ventana_ciclo(db, ciclo_id, fecha_hora.date())
+    fecha_hora = _ahora_utc() - timedelta(minutes=datos.hace_minutos)
+    # La ventana del ciclo son fechas de NEGOCIO (del calendario del país), así que se
+    # compara contra el día local del visitador. Con la fecha UTC, una visita capturada
+    # el último día del ciclo a las 21:00 en RD caía «fuera de la ventana» y se rechazaba.
+    pais = _pais_del_vm(db, vm_id)
+    _guard_ventana_ciclo(db, ciclo_id, _a_local(db, pais, fecha_hora).date())
     productos = "|".join(f"{p.producto}:{p.mencion}" for p in datos.productos) or None
     v = VisitaRegistro(
         vm_id=vm_id, ciclo_id=ciclo_id, medico_id=datos.medico_id,
@@ -111,10 +144,10 @@ def registrar_no_visita(db: Session, vm_id: int, datos: VisitaNoVisita, usuario_
     if ciclo_id is None:
         raise ValueError("No hay ciclo activo")
     _guard_ciclo_abierto(db, ciclo_id)
-    _guard_ventana_ciclo(db, ciclo_id, datetime.now(timezone.utc).date())
+    _guard_ventana_ciclo(db, ciclo_id, hoy_local(db, _pais_del_vm(db, vm_id)))
     v = VisitaRegistro(
         vm_id=vm_id, ciclo_id=ciclo_id, medico_id=datos.medico_id,
-        tipo_visita="V", fecha_hora=datetime.now(timezone.utc),
+        tipo_visita="V", fecha_hora=_ahora_utc(),
         comentario=(datos.comentario or None), ejecutada=False,
         causa_no_visita=datos.causa, registrado_por=usuario_id,
         uuid_cliente=getattr(datos, "uuid_cliente", None),
@@ -126,8 +159,11 @@ def registrar_no_visita(db: Session, vm_id: int, datos: VisitaNoVisita, usuario_
     return v
 
 
-def _serializar_visitas(db: Session, vs: list) -> list[dict]:
-    """Serializa registros de visita al dict del feed (con nombre del médico)."""
+def _serializar_visitas(db: Session, vs: list, pais_codigo: str | None = None) -> list[dict]:
+    """Serializa registros de visita al dict del feed (con nombre del médico).
+
+    `hora` sale en la hora LOCAL del país, que es la única que el visitador reconoce
+    como suya. Guardado va UTC; enseñado va local."""
     mids = {v.medico_id for v in vs}
     nombres = dict(db.query(MedicoVisita.id, MedicoVisita.nombre_completo)
                    .filter(MedicoVisita.id.in_(mids)).all()) if mids else {}
@@ -143,18 +179,26 @@ def _serializar_visitas(db: Session, vs: list) -> list[dict]:
         "productos": _prods(v.productos),
         "tiene_gps": v.latitud is not None and v.longitud is not None,
         "tiene_foto": v.foto is not None,
-        "hora": v.fecha_hora.isoformat() if v.fecha_hora else None,
+        "hora": (_a_local(db, pais_codigo, v.fecha_hora).replace(tzinfo=None).isoformat()
+                 if v.fecha_hora else None),
     } for v in vs]
 
 
 def visitas_del_dia(db: Session, vm_id: int) -> list[dict]:
-    """Visitas registradas HOY por el VM (para el feed del móvil)."""
-    hoy = datetime.now(timezone.utc).date()
-    inicio = datetime(hoy.year, hoy.month, hoy.day, tzinfo=timezone.utc)
+    """Visitas registradas HOY por el VM (para el feed del móvil).
+
+    «Hoy» es el día del visitador, no el del meridiano de Greenwich: se acota al día
+    local de su país traducido a UTC. El filtro anterior arrancaba en la medianoche UTC
+    —las 8 de la noche en RD—, así que a partir de esa hora el feed empezaba a contar
+    el trabajo de la jornada siguiente y a soltar el de la que el visitador estaba
+    terminando."""
+    pais = _pais_del_vm(db, vm_id)
+    _, inicio, fin = ventana_dia_local(db, pais)
     vs = db.query(VisitaRegistro).filter(
-        VisitaRegistro.vm_id == vm_id, VisitaRegistro.fecha_hora >= inicio,
+        VisitaRegistro.vm_id == vm_id,
+        VisitaRegistro.fecha_hora >= inicio, VisitaRegistro.fecha_hora < fin,
     ).order_by(VisitaRegistro.fecha_hora.desc()).all()
-    return _serializar_visitas(db, vs)
+    return _serializar_visitas(db, vs, pais)
 
 
 def historial_visitas(db: Session, vm_id: int, dias: int = 30, limite: int = 200) -> list[dict]:
@@ -164,12 +208,12 @@ def historial_visitas(db: Session, vm_id: int, dias: int = 30, limite: int = 200
     ver su comentario, pero no existe ningún endpoint de edición/borrado de
     visitas — el registro es inmutable."""
     dias = max(1, min(int(dias or 30), 365))
-    desde = datetime.now(timezone.utc) - timedelta(days=dias)
+    desde = _ahora_utc() - timedelta(days=dias)
     vs = (db.query(VisitaRegistro)
           .filter(VisitaRegistro.vm_id == vm_id, VisitaRegistro.fecha_hora >= desde)
           .order_by(VisitaRegistro.fecha_hora.desc())
           .limit(limite).all())
-    return _serializar_visitas(db, vs)
+    return _serializar_visitas(db, vs, _pais_del_vm(db, vm_id))
 
 
 # Días de la semana (Mon=0 .. Sun=6) para casar con PlaneacionCiclo.dia_semana.
@@ -187,7 +231,11 @@ def agenda_hoy(db: Session, vm_id: int) -> list[dict]:
     ciclo_id = ciclo_por_defecto(db, vm_id)  # ciclo ABIERTO del país del VM
     rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
     linea_id = rm.linea_id if rm else None
-    hoy = datetime.now(timezone.utc).date()
+    # El día —y con él el día de la SEMANA contra el que casa la planeación— es el del
+    # país del visitador. En UTC, a partir de las 8 de la noche en RD la agenda pasaba
+    # a mostrar la del día siguiente mientras el visitador aún trabajaba el suyo.
+    pais = rm.pais_codigo if rm else None
+    hoy = hoy_local(db, pais)
     hoy_nombre = _DIAS[hoy.weekday()]
 
     plan_all = db.query(PlaneacionCiclo).filter(
@@ -219,7 +267,7 @@ def agenda_hoy(db: Session, vm_id: int) -> list[dict]:
             VisitaRegistro.medico_id.in_(medico_ids)).all():
         if v.ejecutada:
             ejec_tipos.setdefault(v.medico_id, set()).add(v.tipo_visita)
-        elif v.fecha_hora and v.fecha_hora.date() == hoy:  # .date() evita choque naive/aware
+        elif v.fecha_hora and _a_local(db, pais, v.fecha_hora).date() == hoy:
             no_vis_hoy.add(v.medico_id)
 
     agenda = []

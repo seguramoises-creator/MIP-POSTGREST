@@ -19,7 +19,14 @@ from app.db.database import Base
 
 
 def _ahora() -> datetime:
-    return datetime.now(timezone.utc)
+    """UTC, y SIN huso — que es exactamente lo que cabe en estas columnas.
+
+    Las columnas son `TIMESTAMP WITHOUT TIME ZONE`. Devolver un valor consciente
+    dejaba el resultado en manos de la zona de la sesión de PostgreSQL (ver la nota
+    en `app/db/database.py`) y, además, hacía que el objeto recién creado en memoria
+    tuviera huso y el mismo objeto releído de la base no lo tuviera. Naive UTC en
+    los dos lados: una sola escala, sin conversiones implícitas."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class MedicoVisita(Base):

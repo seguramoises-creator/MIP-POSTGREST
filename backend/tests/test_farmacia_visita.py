@@ -172,24 +172,46 @@ def test_obtener_foto_visita_ok():
 # como la pestaña de Médico.
 # ─────────────────────────────────────────────────────────────────────────
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, time, timezone, timedelta
+from zoneinfo import ZoneInfo
+
+# La zona con la que se prueba. Las columnas guardan UTC SIN huso; el "hoy" del
+# visitador es el de su pais. Los datos de prueba imitan eso: naive UTC, nunca aware
+# — un aware aqui haria pasar la prueba con datos que la base jamas devuelve.
+RD = ZoneInfo("America/Santo_Domingo")
+
+
+def _utc_naive(dt_local):
+    """Un instante local de RD, escrito como lo guarda la base."""
+    return dt_local.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _ahora_naive():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def _db_en_rd():
+    """`db` de mentira cuyo pais resuelve a RD (y no a un MagicMock)."""
+    db = _fake_db()
+    db.query.return_value.filter.return_value.scalar.return_value = "America/Santo_Domingo"
+    return db
 
 
 def _visita_ejecutada(**over):
-    base = dict(farmacia_id=1, ejecutada=True, fecha_hora=datetime.now(timezone.utc),
+    base = dict(farmacia_id=1, ejecutada=True, fecha_hora=_ahora_naive(),
                 ciclo_id=42, comentario=None)
     base.update(over)
     return SimpleNamespace(**base)
 
 
 def test_estado_visita_panel_sin_panel_ids_devuelve_vacio():
-    db = _fake_db()
+    db = _db_en_rd()
     assert svc.estado_visita_panel(db, vm_id=7, ciclo_id=42, panel_ids=[]) == {}
 
 
 def test_estado_visita_panel_hoy_ciclo_y_ultimo_comentario():
-    db = _fake_db()
-    ahora = datetime.now(timezone.utc)
+    db = _db_en_rd()
+    ahora = _ahora_naive()
     ayer = ahora - timedelta(days=1)
     # Ordenadas DESC por fecha_hora (como hace la query real): la más reciente primero.
     filas = [
@@ -210,8 +232,8 @@ def test_estado_visita_panel_hoy_ciclo_y_ultimo_comentario():
 
 
 def test_estado_visita_panel_farmacia_solo_en_otro_ciclo():
-    db = _fake_db()
-    ayer = datetime.now(timezone.utc) - timedelta(days=5)
+    db = _db_en_rd()
+    ayer = _ahora_naive() - timedelta(days=5)
     db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
         _visita_ejecutada(farmacia_id=9, fecha_hora=ayer, ciclo_id=41, comentario="Ciclo anterior"),
     ]
@@ -221,6 +243,42 @@ def test_estado_visita_panel_farmacia_solo_en_otro_ciclo():
     assert estados[9]["visitada_hoy"] is False
     assert estados[9]["visitada_ciclo"] is False   # el ciclo pedido es el 42, la visita fue en el 41
     assert estados[9]["ultimo_comentario"] == "Ciclo anterior"
+
+
+def test_visitada_hoy_cubre_el_dia_local_entero_no_el_dia_utc():
+    """Las dos puntas del dia del visitador cuentan como HOY.
+
+    RD es UTC-4, asi que el dia local va de las 04:00 a las 04:00 UTC del dia
+    siguiente: sus dos extremos caen en fechas UTC DISTINTAS. Comparar contra la
+    fecha UTC solo podia acertar en uno de los dos, y fallaba justo de noche, que es
+    cuando el visitador cierra su jornada. Medido en el telefono el 2026-09-09: una
+    farmacia visitada a las 23:49 de RD salia como no visitada y la tarjeta decia 0.
+    """
+    db = _db_en_rd()
+    hoy_rd = datetime.now(RD).date()
+    temprano = _utc_naive(datetime.combine(hoy_rd, time(0, 30), tzinfo=RD))
+    tarde = _utc_naive(datetime.combine(hoy_rd, time(23, 30), tzinfo=RD))
+    assert temprano.date() != tarde.date(), "el caso pierde sentido si caen en el mismo dia UTC"
+
+    db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
+        _visita_ejecutada(farmacia_id=1, fecha_hora=tarde, comentario="De noche"),
+        _visita_ejecutada(farmacia_id=2, fecha_hora=temprano, comentario="De madrugada"),
+    ]
+    estados = svc.estado_visita_panel(db, vm_id=7, ciclo_id=42, panel_ids=[1, 2])
+    assert estados[1]["visitada_hoy"] is True
+    assert estados[2]["visitada_hoy"] is True
+
+
+def test_visitada_hoy_excluye_el_dia_local_anterior():
+    """Control del caso de arriba: si contara TODO, tampoco estaria midiendo nada."""
+    db = _db_en_rd()
+    ayer_rd = datetime.now(RD).date() - timedelta(days=1)
+    ayer_tarde = _utc_naive(datetime.combine(ayer_rd, time(23, 30), tzinfo=RD))
+    db.query.return_value.filter.return_value.order_by.return_value.all.return_value = [
+        _visita_ejecutada(farmacia_id=1, fecha_hora=ayer_tarde, comentario="Anoche"),
+    ]
+    estados = svc.estado_visita_panel(db, vm_id=7, ciclo_id=42, panel_ids=[1])
+    assert estados[1]["visitada_hoy"] is False
 
 
 # ─────────────────────────────────────────────────────────────────────────
