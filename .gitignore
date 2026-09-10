@@ -91,3 +91,5 @@ Thumbs.db
 # La clave privada NUNCA se versiona: se genera en cada servidor con
 # backend/scripts/integracion/generar_certificado_pg.sh y vive solo ahí.
 certs/
+descargas/*
+!descargas/LEEME.md

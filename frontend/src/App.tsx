@@ -35,6 +35,7 @@ const Productividad = lazyWithReload(() => import('./pages/productividad/Product
 const CoberturaPredictiva = lazyWithReload(() => import('./pages/cobertura-predictiva/CoberturaPredictiva'));
 const Coaching = lazyWithReload(() => import('./pages/coaching/Coaching'));
 const CoachingMore = lazyWithReload(() => import('./pages/coaching-more/CoachingMore'));
+const AppMovil = lazyWithReload(() => import('./pages/visita/AppMovil'));
 const Categorizacion = lazyWithReload(() => import('./pages/categorizacion/Categorizacion'));
 const Medicos = lazyWithReload(() => import('./pages/medicos/Medicos'));
 const Ranking = lazyWithReload(() => import('./pages/ranking/Ranking'));
@@ -354,6 +355,7 @@ function AppRoutes() {
             pantalla y sigue con `medico.panel`, que es su recurso correcto. */}
         <Route path="categorizacion" element={<ProtectedRoute recurso="categorizacion.operacion" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_MARCA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO','CONSULTA']}><Categorizacion /></ProtectedRoute>} />
         <Route path="medicos" element={<ProtectedRoute recurso="medico.maestro" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_MARCA','GERENTE_DISTRITO','REPRESENTANTE_MEDICO','CONSULTA']}><Medicos /></ProtectedRoute>} />
+        <Route path="app-movil" element={<AppMovil />} />
         <Route path="ranking" element={<ProtectedRoute recurso="ranking.rkt"><Ranking /></ProtectedRoute>} />
         <Route path="reconocimiento" element={<ProtectedRoute recurso="reconocimiento"><Reconocimiento /></ProtectedRoute>} />
         <Route path="lsii" element={<ProtectedRoute recurso="lsii.evaluar" allowedRoles={['ADMIN','PRESIDENCIA','DIR_COMERCIAL','GERENTE_PRODUCTIVIDAD','GERENTE_DISTRITO','GERENTE_MARCA','CONSULTA']}><Lsii /></ProtectedRoute>} />

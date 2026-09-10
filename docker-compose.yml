@@ -46,6 +46,13 @@ services:
       # interfaces y el frontend queda alcanzable desde internet por ese puerto, saltándose
       # el nginx del host y con él el TLS. Atado a loopback, el único que llega es el proxy.
       - "127.0.0.1:${FRONTEND_PORT:-8090}:80"
+    volumes:
+      # El APK de la app de campo, servido desde la propia suite. Va como VOLUMEN y no
+      # dentro de la imagen: publicar una versión nueva de la app es copiar un fichero,
+      # no reconstruir y redesplegar el frontend entero. Solo lectura — nginx sirve, no
+      # escribe. Si la carpeta está vacía, `/descargas/…` responde 404, que es la verdad;
+      # antes cualquier ruta caía en el index.html y devolvía 200 sin fichero alguno.
+      - ./descargas:/usr/share/nginx/html/descargas:ro
     depends_on:
       - backend
     restart: unless-stopped

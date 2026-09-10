@@ -9,7 +9,7 @@ import {
   CloudUpload, Settings, AdminPanelSettings, Assessment,
   SportsScore, Leaderboard, ScatterPlot, Quiz, AssignmentTurnedIn, Groups,
   MedicalServices, EditNote, EventNote, ReportProblem, Campaign, Paid,
-  ChevronLeft, ChevronRight, Add, Remove, RateReview, LocalPharmacy, Storefront,
+  ChevronLeft, ChevronRight, Add, Remove, RateReview, LocalPharmacy, Storefront, Android,
   Insights, CalendarMonth, RecordVoiceOver, Hub, Psychology, School, CloudSync,
   Grading, MonitorHeart
 } from '@mui/icons-material';
@@ -79,6 +79,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Cobertura Visita',    path: '/visita/cobertura', icon: <TrackChanges />,  recurso: 'cobertura.diaria', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
       { label: 'Ruptura / Cierre',    path: '/visita/ruptura',   icon: <ReportProblem />, recurso: 'cobertura.diaria', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
       { label: 'Parrilla & Muestras', path: '/visita/parrilla',  icon: <Campaign />,      recurso: 'parrilla.consulta', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
+      { label: 'App de campo',        path: '/app-movil',        icon: <Android />,       roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD', 'GERENTE_DISTRITO', 'REPRESENTANTE_MEDICO'] },
       { label: 'Coaching (MORE)',     path: '/coaching-more',    icon: <RateReview />,    recurso: 'coaching.hoja', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
     ],
   },
