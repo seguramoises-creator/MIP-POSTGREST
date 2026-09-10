@@ -27,8 +27,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#011D42" />
-		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#011D42" BaseSize="128,128" />
+		<!-- El icono es la LUPA de VISTA sobre el azul profundo de la marca. Va como
+		     PNG con transparencia y no como vectorial porque el logotipo no tiene uno:
+		     el `.svg` que existe lleva un JPEG incrustado (ver `identidades.ts`).
+		     `Color` pinta el fondo del icono adaptativo, así que el azul se ve alrededor
+		     del dibujo sea cual sea la forma que recorte el lanzador. -->
+		<MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.png" Color="#011D42" />
+		<MauiSplashScreen Include="Resources\AppIcon\appiconfg.png" Color="#011D42" BaseSize="180,180" />
 		<MauiImage Include="Resources\Images\*" />
 		<MauiFont Include="Resources\Fonts\*" />
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
@@ -48,18 +53,35 @@
 		     aquí. A cambio hay que arrancar el proveedor a mano (`Batteries_V2.Init()`
 		     en `MauiProgram`); sin esa llamada, la app falla al abrir la base. -->
 		<PackageReference Include="sqlite-net-base" Version="1.9.172" />
-		<!-- `bundle_sqlite3` y NO `bundle_green`, que es el que arrastra `sqlite-net-pcl`
-		     por defecto.
+		<!-- `bundle_green` (SQLite propio, empaquetado con la app) en su versión 2.1.13.
+		     Las dos decisiones tienen historia y conviene no repetirla:
 
-		     `bundle_green` empaqueta su propio binario de SQLite (`e_sqlite3`), y ESE
-		     binario tiene una vulnerabilidad de severidad alta declarada
-		     (GHSA-2m69-gcr7-jv3q) que sigue abierta en toda la línea 2.x — subir de
-		     versión no la arregla, lo comprobé. `bundle_sqlite3` usa en cambio el SQLite
-		     DEL SISTEMA operativo, que en Android mantiene parcheado el fabricante con
-		     las actualizaciones del teléfono. Se cambia la dependencia en vez de aceptar
-		     el aviso: es una base local con datos de campo, no un ejemplo. -->
-		<PackageReference Include="SQLitePCLRaw.bundle_sqlite3" Version="2.1.11" />
-		<PackageReference Include="SQLitePCLRaw.core" Version="2.1.11" />
+		     1. NO usar `bundle_sqlite3`. Ese usa el SQLite DEL SISTEMA, que sobre el
+		        papel es mejor —lo parchea el fabricante del teléfono— y por eso lo elegí
+		        primero para esquivar la vulnerabilidad del binario propio. En Android NO
+		        FUNCIONA: `libsqlite3.so` no está en la lista de bibliotecas públicas del
+		        NDK, así que el enlazador la bloquea y la app revienta AL ARRANCAR con
+		        `DllNotFoundException: sqlite3`. Compila, empaqueta, instala… y muere en
+		        `Batteries_V2.Init`. Solo se vio al ejecutarla en un teléfono real.
+
+		     2. El BINARIO nativo se fija en 2.1.13, que es la versión más nueva
+		        publicada: la 2.1.10 que arrastra la biblioteca por defecto tiene una
+		        vulnerabilidad de severidad alta declarada (GHSA-2m69-gcr7-jv3q), y es
+		        justo ese paquete —`lib.e_sqlite3`— el que la lleva. El `bundle_green`
+		        se queda en 2.1.11 porque no hay publicada ninguna posterior; lo que
+		        importa subir es el nativo, y fijarlo aquí evita que la resolución de
+		        dependencias vuelva a bajarlo por la puerta de atrás. -->
+		<!-- SOLO el nativo `.android`. Añadir además `SQLitePCLRaw.lib.e_sqlite3` —el
+		     paquete genérico— parece más completo y rompe la app: ese trae los binarios
+		     de Linux de escritorio, compilados contra glibc, y el empaquetado se los
+		     lleva al APK. El teléfono los rechaza al arrancar con
+		     `dlopen failed: library "libc.so.6" not found`, porque Android no usa glibc
+		     sino Bionic. El síntoma que se ve arriba es `DllNotFoundException: e_sqlite3`
+		     con el .so DENTRO del APK: está, pero no es para este sistema. -->
+		<PackageReference Include="SQLitePCLRaw.bundle_green" Version="2.1.11" />
+		<PackageReference Include="SQLitePCLRaw.core" Version="2.1.13" />
+		<PackageReference Include="SQLitePCLRaw.provider.e_sqlite3" Version="2.1.13" />
+		<PackageReference Include="SQLitePCLRaw.lib.e_sqlite3.android" Version="2.1.13" />
 	</ItemGroup>
 
 </Project>
