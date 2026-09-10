@@ -33,6 +33,7 @@ public class BaseLocal
                 await db.CreateTableAsync<FarmaciaPanel>();
                 await db.CreateTableAsync<ItemAgenda>();
                 await db.CreateTableAsync<ItemPlan>();
+                await db.CreateTableAsync<ProductoParrilla>();
                 await db.CreateTableAsync<EnvioPendiente>();
                 _db = db;
             }
@@ -65,6 +66,17 @@ public class BaseLocal
 
     public async Task<List<FarmaciaPanel>> FarmaciasAsync()
         => await (await ConexionAsync()).Table<FarmaciaPanel>().OrderBy(f => f.Nombre).ToListAsync();
+
+    public async Task ReemplazarProductosAsync(IEnumerable<ProductoParrilla> productos)
+    {
+        var db = await ConexionAsync();
+        await db.DeleteAllAsync<ProductoParrilla>();
+        await db.InsertAllAsync(productos);
+    }
+
+    public async Task<List<ProductoParrilla>> ProductosAsync()
+        => await (await ConexionAsync()).Table<ProductoParrilla>()
+                 .OrderBy(p => p.Prioridad).ToListAsync();
 
     public async Task ReemplazarAgendaAsync(IEnumerable<ItemAgenda> items)
     {

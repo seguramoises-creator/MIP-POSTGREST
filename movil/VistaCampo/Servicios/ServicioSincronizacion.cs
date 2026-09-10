@@ -213,10 +213,28 @@ public class ServicioSincronizacion
                 Dia = Texto(p, "dia"),
             }));
 
+            // La parrilla del ciclo: qué productos puede promocionar el visitador. Sin
+            // línea explícita el servidor usa la del propio VM, que es justo lo que hace
+            // falta aquí. El VM solo ve las parrillas PUBLICADAS.
+            var productos = await _api.ObtenerAsync<List<JsonElement>>("/visita/parrilla");
+            await _base.ReemplazarProductosAsync(productos.Select(p => new ProductoParrilla
+            {
+                Id = Entero(p, "id"),
+                Nombre = Texto(p, "nombre") ?? Texto(p, "producto") ?? "(sin nombre)",
+                MensajeClave = Texto(p, "mensaje_clave"),
+                Prioridad = Entero(p, "prioridad"),
+            }).Where(p => p.Id > 0));
+
             var farmacias = await _api.ObtenerAsync<List<JsonElement>>("/farmacias/panel");
             await _base.ReemplazarFarmaciasAsync(farmacias.Select(f => new FarmaciaPanel
             {
-                Id = Entero(f, "id"),
+                // `panel_id`, NO `id`: el servidor manda la fila del PANEL, y es ese
+                // número el que después identifica la farmacia al registrar la visita
+                // (`POST /farmacias/{panel_id}/visita`). Leer `id` devolvía 0 en todas,
+                // el filtro de abajo las descartaba y el panel salía VACÍO sin un solo
+                // error — la lista simplemente no tenía nada, que es indistinguible de
+                // «este visitador no tiene farmacias».
+                Id = Entero(f, "panel_id"),
                 Nombre = Texto(f, "nombre_completo") ?? Texto(f, "nombre") ?? "(sin nombre)",
                 Direccion = Texto(f, "direccion"),
                 EstadoAprobacion = Texto(f, "estado_aprobacion") ?? "APROBADO",

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Qué conexiones acepta la app.
+
+  POR DEFECTO, SOLO HTTPS. Es lo que Android impone desde la versión 9 y aquí se
+  mantiene: la app manda credenciales y datos de pacientes por esa conexión, y en la
+  calle el visitador se engancha a la wifi de un edificio médico que no controla nadie.
+
+  La EXCEPCIÓN son los servidores internos, que sí hablan HTTP plano: el montaje local
+  del cliente (`10.0.0.15`) y el puente al equipo de desarrollo (`localhost`, vía
+  `adb reverse`). Sin esta lista la app no puede conectarse a ellos y el fallo se ve
+  como «no se pudo contactar el servidor» — indistinguible de un problema de red, que
+  es exactamente lo que costó descubrirlo la primera vez.
+
+  Se listan por nombre, uno a uno, en vez de abrir el texto plano para todo: una app que
+  acepta HTTP contra cualquier destino acepta también al que se ponga en medio.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- Puente de desarrollo: el teléfono conectado por cable al equipo. -->
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <!-- Servidor del cliente en su propia red. -->
+        <domain includeSubdomains="false">10.0.0.15</domain>
+    </domain-config>
+</network-security-config>

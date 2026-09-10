@@ -115,6 +115,31 @@
                            Text="El sistema solo acepta visitas de la última hora." />
                 </VerticalStackLayout>
 
+                <!-- Los productos de la parrilla del ciclo. El ORDEN en que se marcan es
+                     la mención que se manda (1ª, 2ª, 3ª): el primero es el que se llevó
+                     la visita. -->
+                <VerticalStackLayout IsVisible="{Binding EsFarmacia, Converter={StaticResource Negar}}">
+                    <Label Text="Productos promocionados" Style="{StaticResource Etiqueta}" />
+                    <Label Style="{StaticResource Tenue}"
+                           IsVisible="{Binding HayProductos, Converter={StaticResource Negar}}"
+                           Text="No hay parrilla publicada para tu línea en este ciclo." />
+                    <CollectionView ItemsSource="{Binding Productos}" HeightRequest="190"
+                                    IsVisible="{Binding HayProductos}">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="m:ProductoParrilla">
+                                <Grid ColumnDefinitions="Auto,*" Margin="0,0,0,2">
+                                    <CheckBox IsChecked="{Binding Elegido}" VerticalOptions="Center" />
+                                    <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
+                                        <Label Text="{Binding Nombre}" FontAttributes="Bold" />
+                                        <Label Text="{Binding Subtitulo}" Style="{StaticResource Tenue}" />
+                                    </VerticalStackLayout>
+                                </Grid>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                    </CollectionView>
+                    <Label Text="{Binding ResumenProductos}" Style="{StaticResource Tenue}" />
+                </VerticalStackLayout>
+
                 <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding EsFarmacia, Converter={StaticResource Negar}}">
                     <CheckBox IsChecked="{Binding Acompanado}" />
                     <Label Grid.Column="1" VerticalOptions="Center" Text="Me acompañó el Gerente de Distrito" />

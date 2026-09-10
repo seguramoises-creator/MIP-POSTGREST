@@ -54,6 +54,21 @@ public partial class RegistrarVista : BaseVista
 
     public ObservableCollection<MedicoPanel> Medicos { get; } = new();
     public ObservableCollection<FarmaciaPanel> Farmacias { get; } = new();
+    public ObservableCollection<ProductoParrilla> Productos { get; } = new();
+
+    public bool HayProductos => Productos.Count > 0;
+
+    /// <summary>Los productos marcados, para el resumen de la pantalla.</summary>
+    public string ResumenProductos
+    {
+        get
+        {
+            var marcados = Productos.Where(p => p.Elegido).Select(p => p.Nombre).ToList();
+            return marcados.Count == 0
+                ? "Ninguno marcado."
+                : $"{marcados.Count}: {string.Join(", ", marcados)}";
+        }
+    }
 
     /// <summary>El catálogo de causas del servidor, con los mismos textos exactos.</summary>
     public List<string> Causas { get; } = new()
@@ -134,7 +149,24 @@ public partial class RegistrarVista : BaseVista
     [RelayCommand]
     public async Task CargarAsync()
     {
+        // El aviso de la vez anterior NO sobrevive a volver a la pestaña. Shell mantiene
+        // viva la página de cada pestaña, así que un «Guardado. Subiendo…» de hace media
+        // hora seguía en pantalla sobre un formulario vacío: el visitador vuelve a
+        // Registrar, ve el mensaje de éxito y cree que acaba de guardar algo. Lo que sí
+        // se respeta es lo que esté a medio escribir — eso es trabajo suyo.
+        Aviso = null;
+        Error = null;
+
         OnPropertyChanged(nameof(PuedeCapturar));
+        Productos.Clear();
+        foreach (var p in await _base.ProductosAsync())
+        {
+            p.Elegido = false;   // el catálogo se comparte; la marca es de ESTA visita
+            p.PropertyChanged += (_, __) => OnPropertyChanged(nameof(ResumenProductos));
+            Productos.Add(p);
+        }
+        OnPropertyChanged(nameof(HayProductos));
+        OnPropertyChanged(nameof(ResumenProductos));
         await FiltrarAsync();
     }
 
@@ -279,6 +311,12 @@ public partial class RegistrarVista : BaseVista
                     ["acompanado"] = Acompanado,
                     ["latitud"] = ubic?.Latitude,
                     ["longitud"] = ubic?.Longitude,
+                    // El servidor espera producto + número de mención (1ª, 2ª, 3ª…). El
+                    // orden en que se marcan ES la mención: la primera que se menciona
+                    // es la que se llevó la visita.
+                    ["productos"] = Productos.Where(p => p.Elegido)
+                        .Select((p, i) => new { producto = p.Nombre, mencion = i + 1 })
+                        .ToList(),
                 });
             }
 
@@ -312,6 +350,8 @@ public partial class RegistrarVista : BaseVista
         Comentario = ""; TipoVisita = "V"; HaceMinutos = 0;
         Acompanado = false; EsNoVisita = false; Causa = null;
         RutaFoto = null;
+        foreach (var p in Productos) p.Elegido = false;
+        OnPropertyChanged(nameof(ResumenProductos));
     }
 
     [RelayCommand] private void ElegirVista() => TipoVisita = "V";

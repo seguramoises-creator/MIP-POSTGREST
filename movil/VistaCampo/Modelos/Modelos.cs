@@ -1,3 +1,4 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using SQLite;
 
 namespace VistaCampo.Modelos;
@@ -52,6 +53,28 @@ public class MedicoPanel
     public bool SePuedeVisitar => Activo && EstadoAprobacion == "APROBADO";
     public string Subtitulo => string.Join(" · ",
         new[] { Especialidad, Centro }.Where(s => !string.IsNullOrWhiteSpace(s))!);
+}
+
+/// <summary>
+/// Un producto de la parrilla del ciclo — lo que el visitador puede promocionar.
+///
+/// Se descarga con el resto de los catálogos para que esté disponible sin conexión: si
+/// el producto solo se pudiera elegir con red, la visita registrada en un sótano
+/// quedaría sin él, y el producto mencionado es la mitad del valor del registro.
+/// </summary>
+[Table("productos")]
+public partial class ProductoParrilla : ObservableObject
+{
+    [PrimaryKey] public int Id { get; set; }
+    public string Nombre { get; set; } = "";
+    public string? MensajeClave { get; set; }
+    public int Prioridad { get; set; }
+
+    /// <summary>Marcado por el visitador en esta visita. No se guarda en el catálogo.</summary>
+    [Ignore] public bool Elegido { get => _elegido; set => SetProperty(ref _elegido, value); }
+    private bool _elegido;
+
+    public string Subtitulo => string.IsNullOrWhiteSpace(MensajeClave) ? " " : MensajeClave!;
 }
 
 /// <summary>Una farmacia del panel. Solo las aprobadas admiten registro (guarda F22).</summary>
