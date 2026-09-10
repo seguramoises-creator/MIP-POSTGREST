@@ -45,8 +45,31 @@ BLOCKLIST = {
     "FACT_TendenciaCiclo", "FACT_Visita", "FACT_Visita_V2", "FACT_KPI_RAW", "FACT_CargaExcel",
 }
 
+# ACTIVIDAD: lo que alguien HIZO durante el ciclo, con su fecha y su autor.
+#
+# La distinción que importa no es "insumo vs calculado", sino "lo que el ciclo trae
+# puesto" contra "lo que la gente hizo dentro de él". Copiar lo segundo a un ciclo nuevo
+# no da error: da un ciclo que dice que ya se trabajó. Con `--solo-configuracion` se
+# monta el ciclo destino igual que el origen —panel planeado, parrilla, costos, meta—
+# y se deja la actividad en cero, que es lo cierto mientras nadie salga a la calle.
+ACTIVIDAD = {
+    "FactVisita",                    # visitas y revisitas a médicos
+    "FactVisitaFarmacia",            # visitas a farmacia
+    "MuestraEntregada",              # muestras: cuelgan de una visita; sin ella, huérfanas
+    "Sesion",                        # coaching (hoja append-only, ni se puede borrar)
+    "FACT_Coaching",
+    "FACT_EvaluacionReceptividad",   # evaluaciones LSII del GD
+    "FACT_ResultadoIndicador",       # resultados de KPI del ciclo
+    "FACT_CategorizacionMedica",     # categorización resultante del ciclo
+    # `exam.DimExamen` no es actividad, pero tampoco se puede copiar aquí: sus preguntas
+    # cuelgan de `examen_id` y este script solo remapea `ciclo_id`, así que el examen
+    # llegaría al ciclo nuevo SIN NINGUNA pregunta. Un examen vacío no da error: se abre,
+    # se asigna y no pregunta nada. Duplicar un examen es trabajo de su propio módulo.
+    "DimExamen",
+}
 
-def _clases_ciclo():
+
+def _clases_ciclo(sin_actividad=False):
     """Clases mapeadas con `ciclo_id` que apunta a Config.DIM_Ciclo (excluye cat.* con ciclo_key)."""
     out = []
     for mapper in Base.registry.mappers:
@@ -58,19 +81,43 @@ def _clases_ciclo():
             continue  # ciclo_id sin FK a Config.DIM_Ciclo (staging) — omitir
         if cls.__tablename__ in BLOCKLIST:
             continue
+        if sin_actividad and cls.__tablename__ in ACTIVIDAD:
+            continue
         out.append(cls)
     return out
 
 
-def _copiar_tabla(db, cls, origen, destino, dry):
+def _huella(mapper, row, autoinc):
+    """Identidad de una fila a efectos de comparar dos ciclos: todo menos su PK,
+    su ciclo y las marcas de tiempo/autor (que cambian sin cambiar el contenido)."""
+    fuera = {autoinc, "ciclo_id", "fecha_creacion", "fecha_actualizacion",
+             "fecha_publicacion", "modificado_por", "registrado_por", "aprobado_en"}
+    return tuple(sorted((c, getattr(row, c)) for c in mapper.columns.keys() if c not in fuera))
+
+
+def _copiar_tabla(db, cls, origen, destino, dry, fusionar=False):
     mapper = cls.__mapper__
     pk = list(mapper.primary_key)
     autoinc = pk[0].name if (len(pk) == 1 and pk[0].autoincrement in (True, "auto")) else None
     filas = db.query(cls).filter(cls.ciclo_id == origen).all()
     if not filas:
         return 0
+
+    if fusionar:
+        # No se borra nada del destino. El motivo es concreto: la parrilla del ciclo 9
+        # tenia la linea 4 —la del VM que se estaba probando— y el ciclo 7 no tiene esa
+        # linea; el borrado la habria barrido y el visitador se habria quedado SIN
+        # productos, con el script informando «10 filas copiadas». Una copia no deberia
+        # poder llevarse por delante lo que el destino ya tenia y el origen no cubre.
+        ya = {_huella(mapper, r, autoinc)
+              for r in db.query(cls).filter(cls.ciclo_id == destino).all()}
+        filas = [r for r in filas if _huella(mapper, r, autoinc) not in ya]
+        if not filas:
+            return 0
+
     if not dry:
-        db.query(cls).filter(cls.ciclo_id == destino).delete(synchronize_session=False)
+        if not fusionar:
+            db.query(cls).filter(cls.ciclo_id == destino).delete(synchronize_session=False)
         for row in filas:
             data = {c: getattr(row, c) for c in mapper.columns.keys()}
             if autoinc:
@@ -97,6 +144,13 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="No escribe; solo muestra")
     ap.add_argument("--reabrir-destino", action="store_true", help="Marca el ciclo destino como abierto")
     ap.add_argument("--cerrar-origen", action="store_true", help="Cierra el ciclo origen tras copiar")
+    ap.add_argument("--fusionar", action="store_true",
+                    help="agrega sin borrar: respeta lo que el destino ya tenia y el "
+                         "origen no cubre (y no reinserta lo que ya esta igual)")
+    ap.add_argument("--solo-configuracion", action="store_true",
+                    help="copia como queda MONTADO el ciclo (planeacion, parrilla, costos, meta) "
+                         "y NO la actividad: visitas, revisitas, farmacias, coaching, muestras, "
+                         "LSII, KPI ni categorizacion")
     args = ap.parse_args()
 
     db = SessionLocal()
@@ -131,9 +185,15 @@ def main():
         print(f"DESTINO id={cd.id} {cd.nombre} {cd.fecha_inicio}->{cd.fecha_fin}")
         print("-" * 60)
 
+        if args.fusionar:
+            print("Modo FUSIONAR: no se borra nada del destino; solo se agrega lo que falta.")
+        if args.solo_configuracion:
+            print("Modo SOLO CONFIGURACION: no se copia nada de actividad "
+                  "(visitas, revisitas, farmacias, coaching, muestras, LSII, KPI, categorizacion).")
+            print("-" * 60)
         total = 0
-        for cls in _clases_ciclo():
-            n = _copiar_tabla(db, cls, args.origen, args.destino, args.dry_run)
+        for cls in _clases_ciclo(args.solo_configuracion):
+            n = _copiar_tabla(db, cls, args.origen, args.destino, args.dry_run, args.fusionar)
             if n:
                 print(f"  {('(copiaría)' if args.dry_run else 'copiado'):<12} {n:>5}  {cls.__table__.schema}.{cls.__tablename__}")
                 total += n
