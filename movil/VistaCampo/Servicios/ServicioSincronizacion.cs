@@ -234,7 +234,12 @@ public class ServicioSincronizacion
         var cerrado = c.TryGetProperty("cerrado", out var ce) && ce.ValueKind == JsonValueKind.True;
         var partes = new List<string> { $"📆 {Texto(c, "nombre") ?? "Ciclo"} · {(cerrado ? "cerrado" : "abierto")}" };
         if (c.TryGetProperty("semana", out var s) && s.ValueKind == JsonValueKind.Number)
+        {
             partes.Add($"semana {s.GetInt32()} de 4");
+            // Hoy la usa para saber qué está programado para HOY (semana + día del plan).
+            Preferences.Set("ciclo_semana", s.GetInt32());
+        }
+        else Preferences.Remove("ciclo_semana");
         if (DateTime.TryParse(Texto(c, "fecha_inicio"), out var fi) && DateTime.TryParse(Texto(c, "fecha_fin"), out var ff))
             partes.Add($"del {fi:dd/MM} al {ff:dd/MM}");
         var t = string.Join(" · ", partes);

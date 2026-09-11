@@ -12,6 +12,16 @@ namespace VistaCampo.VistaModelos;
 /// La pantalla que el visitador mira entre visita y visita: qué lleva hoy, qué le falta
 /// de la agenda y si su trabajo ya subió.
 /// </summary>
+/// <summary>Una fila de Hoy: médico o farmacia, con su marca (✓ visitado hoy, ⊘ no visitado).</summary>
+public class FilaHoy
+{
+    public string Icono { get; init; } = "🩺";
+    public string Nombre { get; init; } = "";
+    public string Detalle { get; init; } = "";
+    public string Marca { get; init; } = "";
+    public bool NoVisitado { get; init; }
+}
+
 public partial class HoyVista : BaseVista
 {
     private readonly ApiCliente _api;
@@ -70,8 +80,82 @@ public partial class HoyVista : BaseVista
     [ObservableProperty] private bool _hayRechazados;
     [ObservableProperty] private bool _sinCatalogos;
 
-    public ObservableCollection<ItemAgenda> Agenda { get; } = new();
     public ObservableCollection<VisitaDelDia> Registradas { get; } = new();
+
+    /// <summary>
+    /// Lo PROGRAMADO PARA HOY (semana del ciclo + día del plan), con ✓ si se visitó HOY.
+    ///
+    /// Antes esta lista era la agenda del ciclo entero y su ✓ significaba «completado en el
+    /// ciclo»: la pantalla enseñaba tres ✓ con «Vistas 1» arriba, y lo visitado fuera de la
+    /// agenda no aparecía en ninguna parte.
+    /// </summary>
+    public ObservableCollection<FilaHoy> AgendaHoy { get; } = new();
+
+    /// <summary>Registrado hoy SIN estar programado para hoy: otro día, fuera del plan, farmacias.</summary>
+    public ObservableCollection<FilaHoy> FueraDeAgenda { get; } = new();
+
+    [ObservableProperty] private string _tituloAgenda = "📋  Tu agenda de hoy";
+    [ObservableProperty] private string _tituloFuera = "➕  Fuera de tu agenda de hoy";
+    public bool SinAgendaHoy => AgendaHoy.Count == 0;
+    public bool SinFuera => FueraDeAgenda.Count == 0;
+    public string TextoFueraVacio => HayDatosDelDia
+        ? "Nada fuera de tu agenda hoy."
+        : "Sin conexión: no se sabe qué se registró hoy fuera de la agenda.";
+
+    private static readonly string[] DiasSemana =
+        { "Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado" };
+
+    private async Task<List<(int id, string nombre, string tipo, string? hora)>> ProgramadosHoyAsync()
+    {
+        var semana = Preferences.Get("ciclo_semana", 0);
+        var hoy = DiasSemana[(int)DateTime.Now.DayOfWeek];
+        if (semana > 0)
+            return (await _base.PlanAsync())
+                .Where(p => p.Semana == semana && p.Dia == hoy)
+                .OrderBy(p => p.Hora ?? "99").ThenBy(p => p.Medico)
+                .Select(p => (p.MedicoId, p.Medico, p.TipoVisita, p.Hora)).ToList();
+        // Sin saber la semana del ciclo, lo que el servidor marcó para hoy.
+        return (await _base.AgendaAsync()).Where(a => a.Grupo == "dia")
+            .Select(a => (a.MedicoId, a.Nombre, a.TipoVisita, a.HoraEstimada)).ToList();
+    }
+
+    /// <summary>`visitasHoy` null = no se pudo consultar el día: la agenda va sin marcas.</summary>
+    private async Task ConstruirListasAsync(List<VisitaDelDia>? visitasHoy, List<string>? farmaciasHoy)
+    {
+        var prog = await ProgramadosHoyAsync();
+        AgendaHoy.Clear();
+        FueraDeAgenda.Clear();
+        var idsProgramados = prog.Select(p => p.id).ToHashSet();
+        foreach (var p in prog)
+        {
+            var suyas = visitasHoy?.Where(v => v.MedicoId == p.id).ToList();
+            var hecha = suyas?.FirstOrDefault(v => v.Ejecutada);
+            var noVisitado = suyas is { Count: > 0 } && hecha is null;
+            var partes = new[] { p.tipo == "R" ? "Revisita" : "Vista", p.hora }
+                .Where(s => !string.IsNullOrWhiteSpace(s));
+            AgendaHoy.Add(new FilaHoy
+            {
+                Nombre = p.nombre,
+                Detalle = string.Join(" · ", partes) + (hecha is null ? "" : $" · hecha a las {hecha.HoraCorta}"),
+                Marca = hecha is not null ? "✓" : noVisitado ? "⊘" : "",
+                NoVisitado = noVisitado,
+            });
+        }
+        foreach (var v in visitasHoy?.Where(v => !idsProgramados.Contains(v.MedicoId)) ?? [])
+            FueraDeAgenda.Add(new FilaHoy
+            {
+                Nombre = v.Medico, Detalle = v.Subtitulo,
+                Marca = v.Ejecutada ? "✓" : "⊘", NoVisitado = !v.Ejecutada,
+            });
+        foreach (var f in farmaciasHoy ?? [])
+            FueraDeAgenda.Add(new FilaHoy { Icono = "🏥", Nombre = f, Detalle = "Farmacia visitada hoy", Marca = "✓" });
+
+        TituloAgenda = $"📋  Tu agenda de hoy · {AgendaHoy.Count(a => a.Marca == "✓")} de {AgendaHoy.Count} visitados";
+        TituloFuera = $"➕  Fuera de tu agenda de hoy · {FueraDeAgenda.Count}";
+        OnPropertyChanged(nameof(SinAgendaHoy));
+        OnPropertyChanged(nameof(SinFuera));
+        OnPropertyChanged(nameof(TextoFueraVacio));
+    }
 
     public bool PuedeCapturar => _instalacion.Config.PuedeCapturar;
 
@@ -141,8 +225,8 @@ public partial class HoyVista : BaseVista
         RefrescarEstadoCola();
         SinCatalogos = !await _base.HayCatalogosAsync();
 
-        Agenda.Clear();
-        foreach (var a in await _base.AgendaAsync()) Agenda.Add(a);
+        // Primero lo local (sirve sin red); si hay conexión se rehace con lo visitado hoy.
+        await ConstruirListasAsync(null, null);
 
         if (!ServicioSincronizacion.HayRed)
         {
@@ -180,6 +264,7 @@ public partial class HoyVista : BaseVista
                 Registradas.Add(new VisitaDelDia
                 {
                     Id = ServicioSincronizacion.Entero(v, "id"),
+                    MedicoId = ServicioSincronizacion.Entero(v, "medico_id"),
                     Medico = ServicioSincronizacion.Texto(v, "medico") ?? "(sin nombre)",
                     Tipo = tipo,
                     Hora = (ServicioSincronizacion.Texto(v, "hora") ?? "").Replace('T', ' '),
@@ -201,8 +286,14 @@ public partial class HoyVista : BaseVista
             catch (ErrorApi) { /* informativo: no tumba la carga del día */ }
 
             var farmacias = await _api.ObtenerAsync<List<JsonElement>>("/farmacias/panel");
-            Farmacias = farmacias.Count(f => f.TryGetProperty("visitada_hoy", out var h)
-                                             && h.ValueKind == JsonValueKind.True);
+            var farmaciasHoy = farmacias
+                .Where(f => f.TryGetProperty("visitada_hoy", out var h) && h.ValueKind == JsonValueKind.True)
+                .Select(f => ServicioSincronizacion.Texto(f, "nombre_completo")
+                             ?? ServicioSincronizacion.Texto(f, "nombre") ?? "Farmacia")
+                .ToList();
+            Farmacias = farmaciasHoy.Count;
+            HayDatosDelDia = true;
+            await ConstruirListasAsync(Registradas.ToList(), farmaciasHoy);
 
             // Solo aquí: las consultas llegaron y respondieron. Si fallan, `EjecutarAsync`
             // pone el error y las cifras se quedan en «—» — nunca en un cero inventado.

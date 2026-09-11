@@ -335,6 +335,12 @@ public class EnvioPendiente
 public class VisitaDelDia
 {
     public int Id { get; set; }
+    public int MedicoId { get; set; }
+
+    /// <summary>«09:10» de «2026-09-11 09:10:00».</summary>
+    public string HoraCorta => Hora.Length >= 16 ? Hora.Substring(11, 5) : Hora;
+    public string Subtitulo => (Ejecutada ? (Tipo == "R" ? "Revisita" : "Vista") : "No visitado")
+                               + (string.IsNullOrEmpty(HoraCorta) ? "" : $" · {HoraCorta}");
     public string Medico { get; set; } = "";
     public string Tipo { get; set; } = "V";
     public string Hora { get; set; } = "";

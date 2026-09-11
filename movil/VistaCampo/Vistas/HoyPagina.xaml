@@ -2,6 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:m="clr-namespace:VistaCampo.Modelos"
+             xmlns:vm="clr-namespace:VistaCampo.VistaModelos"
              x:Class="VistaCampo.Vistas.HoyPagina"
              Title="Hoy">
 
@@ -70,28 +71,72 @@
                     </Border>
                 </Grid>
 
-                <Label Text="📋  Tu agenda de hoy" Style="{StaticResource Titulo}" FontSize="15" Margin="0,6,0,0" />
-                <Label Style="{StaticResource Tenue}" IsVisible="{Binding Agenda.Count, Converter={StaticResource ListaVacia}}"
-                       Text="Sin agenda descargada para hoy." />
-
-                <CollectionView ItemsSource="{Binding Agenda}" HeightRequest="300">
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="m:ItemAgenda">
-                            <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,4" Padding="7">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <VerticalStackLayout>
+                <!-- AGENDA DE HOY: lo programado para hoy. La ✓ es «visitado HOY». Va en una
+                     lista que crece con su contenido: con alto fijo cortaba la lista y dejaba
+                     un hueco vacío debajo. -->
+                <Label Text="{Binding TituloAgenda}" Style="{StaticResource Titulo}" FontSize="15" Margin="0,6,0,0" />
+                <Label Style="{StaticResource Tenue}" IsVisible="{Binding SinAgendaHoy}"
+                       Text="No tienes médicos programados para hoy en tu planeación." />
+                <VerticalStackLayout Spacing="4" BindableLayout.ItemsSource="{Binding AgendaHoy}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:FilaHoy">
+                            <Border Style="{StaticResource Tarjeta}" Padding="7">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
+                                    <Label Text="{Binding Icono}" VerticalOptions="Center" />
+                                    <VerticalStackLayout Grid.Column="1">
                                         <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="12" />
-                                        <Label Style="{StaticResource Tenue}"
-                                               Text="{Binding TipoVisita, Converter={StaticResource TipoATexto}}" />
+                                        <Label Text="{Binding Detalle}" Style="{StaticResource Tenue}" />
                                     </VerticalStackLayout>
-                                    <Label Grid.Column="1" Text="✓" FontSize="22"
-                                           TextColor="{StaticResource Exito}"
-                                           IsVisible="{Binding Registrada}" VerticalOptions="Center" />
+                                    <Label Grid.Column="2" Text="{Binding Marca}" FontSize="20" VerticalOptions="Center"
+                                           TextColor="{StaticResource Exito}">
+                                        <Label.Triggers>
+                                            <DataTrigger TargetType="Label" Binding="{Binding NoVisitado}" Value="True">
+                                                <Setter Property="TextColor" Value="{StaticResource Error}" />
+                                            </DataTrigger>
+                                        </Label.Triggers>
+                                    </Label>
                                 </Grid>
                             </Border>
                         </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
+
+                <!-- FUERA DE AGENDA: separado y en otro color, para que no se confunda con lo
+                     programado. -->
+                <Border BackgroundColor="#FFF4E5" StrokeThickness="0" Padding="9,6" Margin="0,8,0,0"
+                        StrokeShape="RoundRectangle 8">
+                    <VerticalStackLayout>
+                        <Label Text="{Binding TituloFuera}" FontAttributes="Bold" FontSize="15"
+                               TextColor="{StaticResource Aviso}" />
+                        <Label Style="{StaticResource Tenue}"
+                               Text="Registrado hoy sin estar programado para hoy: médicos de otro día o fuera de tu plan, y farmacias." />
+                    </VerticalStackLayout>
+                </Border>
+                <Label Style="{StaticResource Tenue}" IsVisible="{Binding SinFuera}" Text="{Binding TextoFueraVacio}" />
+                <VerticalStackLayout Spacing="4" BindableLayout.ItemsSource="{Binding FueraDeAgenda}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="vm:FilaHoy">
+                            <Border Style="{StaticResource Tarjeta}" Padding="7" BackgroundColor="#FFFBF3"
+                                    Stroke="{StaticResource Aviso}">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
+                                    <Label Text="{Binding Icono}" VerticalOptions="Center" />
+                                    <VerticalStackLayout Grid.Column="1">
+                                        <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="12" />
+                                        <Label Text="{Binding Detalle}" Style="{StaticResource Tenue}" />
+                                    </VerticalStackLayout>
+                                    <Label Grid.Column="2" Text="{Binding Marca}" FontSize="20" VerticalOptions="Center"
+                                           TextColor="{StaticResource Exito}">
+                                        <Label.Triggers>
+                                            <DataTrigger TargetType="Label" Binding="{Binding NoVisitado}" Value="True">
+                                                <Setter Property="TextColor" Value="{StaticResource Error}" />
+                                            </DataTrigger>
+                                        </Label.Triggers>
+                                    </Label>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </VerticalStackLayout>
 
             </VerticalStackLayout>
         </ScrollView>
