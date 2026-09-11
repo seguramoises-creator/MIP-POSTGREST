@@ -32,6 +32,8 @@ public partial class FilaPlan : ObservableObject
     [ObservableProperty] private bool _revisita;
     [ObservableProperty] private int _semanaR;
     [ObservableProperty] private bool _seleccionada;
+    /// <summary>Enviada o aprobada: se ve en gris y solo se consulta.</summary>
+    [ObservableProperty] private bool _bloqueada;
 
     public string TextoCategoria => string.IsNullOrWhiteSpace(Categoria) ? "?" : Categoria!;
     public bool Planeada => SemanaV > 0;
@@ -41,6 +43,16 @@ public partial class FilaPlan : ObservableObject
     public bool V2 => SemanaV == 2;
     public bool V3 => SemanaV == 3;
     public bool V4 => SemanaV == 4;
+    // La semana de la Revisita también se marca en los botones de semana (más clara que la
+    // de la Vista): solo con el texto del botón de abajo, tocar la semana 4 no enseñaba nada.
+    public bool R1 => Revisita && SemanaR == 1;
+    public bool R2 => Revisita && SemanaR == 2;
+    public bool R3 => Revisita && SemanaR == 3;
+    public bool R4 => Revisita && SemanaR == 4;
+    public string TextoVistaConsulta => SemanaV == 0 ? "Sin planear"
+        : $"Semana {SemanaV}" + (string.IsNullOrEmpty(Dia) ? "" : $" · {Dia}");
+    public string TextoRevisitaConsulta => !(Revisita && SemanaR > 0) ? "Sin revisita"
+        : $"Semana {SemanaR}" + (string.IsNullOrEmpty(DiaR ?? Dia) ? "" : $" · {DiaR ?? Dia}");
     public bool DL => Dia == "Lunes";
     public bool DM => Dia == "Martes";
     public bool DX => Dia == "Miércoles";
@@ -77,7 +89,8 @@ public partial class FilaPlan : ObservableObject
         foreach (var p in new[] { nameof(Planeada), nameof(PuedeRevisita), nameof(V1), nameof(V2),
                                   nameof(V3), nameof(V4), nameof(DL), nameof(DM), nameof(DX),
                                   nameof(DJ), nameof(DV), nameof(TextoRevisita), nameof(Problema),
-                                  nameof(Resumen) })
+                                  nameof(Resumen), nameof(R1), nameof(R2), nameof(R3), nameof(R4),
+                                  nameof(TextoVistaConsulta), nameof(TextoRevisitaConsulta) })
             OnPropertyChanged(p);
     }
 }
@@ -118,9 +131,29 @@ public partial class PlanVista : BaseVista
     [ObservableProperty] private int _totalVistas;
     [ObservableProperty] private int _totalRevisitas;
     [ObservableProperty] private int _topSinPlanear;
+    /// <summary>«📆 Ciclo 9 2026 · abierto · semana 2 de 4 · del 01/09 al 28/09».</summary>
+    [ObservableProperty] private string? _cicloTexto;
+    [ObservableProperty] private string? _publicadaEn;
 
     public bool HaySeleccion => Seleccionada is not null;
+    public bool HayCiclo => !string.IsNullOrEmpty(CicloTexto);
     public bool Editable => EnLinea && Estado is "BORRADOR" or "DEVUELTA";
+    public bool SoloConsulta => !Editable;
+    public string TextoSoloConsulta => Estado switch
+    {
+        "PUBLICADA" => "🔒 Aprobada por tu gerente: solo consulta",
+        "ENVIADA" => "🔒 En revisión de tu gerente: solo consulta",
+        _ => "🔒 Solo consulta",
+    };
+
+    partial void OnCicloTextoChanged(string? value) => OnPropertyChanged(nameof(HayCiclo));
+    partial void OnPublicadaEnChanged(string? value) => OnPropertyChanged(nameof(EstadoTexto));
+
+    /// <summary>La fecha llega en UTC sin huso: se pasa a la hora del teléfono.</summary>
+    private string FechaAprobacion =>
+        DateTime.TryParse(PublicadaEn, out var f)
+            ? " el " + DateTime.SpecifyKind(f, DateTimeKind.Utc).ToLocalTime().ToString("dd/MM/yyyy")
+            : "";
     public bool HayTopSinPlanear => TopSinPlanear > 0;
     public string TextoPlaneados => $"{MedicosPlaneados}/{Panel}";
     public string TextoTop => $"⭐ {TopSinPlanear} médico(s) TOP sin planear: tu gerente no podrá aprobarla sin ellos.";
@@ -131,7 +164,7 @@ public partial class PlanVista : BaseVista
     public string EstadoTexto => Estado switch
     {
         "ENVIADA" => "⏳ Enviada a tu gerente",
-        "PUBLICADA" => "✅ Aprobada por tu gerente",
+        "PUBLICADA" => $"✅ Aprobada por tu gerente{FechaAprobacion}",
         "DEVUELTA" => "↩️ Devuelta por tu gerente",
         _ => "📝 Planeación en borrador",
     };
@@ -151,12 +184,23 @@ public partial class PlanVista : BaseVista
     public Color ColorEstado => Estado switch
     {
         "ENVIADA" => Color.FromArgb("#E3EEFF"),
-        "PUBLICADA" => Color.FromArgb("#E4F4EA"),
+        // Gris: planeada y validada por el gerente, ya no es terreno de edición.
+        "PUBLICADA" => Color.FromArgb("#E6E9EE"),
         "DEVUELTA" => Color.FromArgb("#FFF1DE"),
         _ => Color.FromArgb("#FFFFFF"),
     };
 
-    partial void OnEstadoChanged(string value) => NotificarEstado();
+    partial void OnEstadoChanged(string value)
+    {
+        NotificarEstado();
+        AplicarBloqueo();
+    }
+
+    private void AplicarBloqueo()
+    {
+        var b = Estado is "ENVIADA" or "PUBLICADA";
+        foreach (var f in _todas) f.Bloqueada = b;
+    }
     partial void OnEnLineaChanged(bool value) => NotificarEstado();
     partial void OnMotivoDevolucionChanged(string? value) => NotificarEstado();
     partial void OnBusquedaChanged(string value) => Filtrar();
@@ -186,7 +230,8 @@ public partial class PlanVista : BaseVista
 
     private void NotificarEstado()
     {
-        foreach (var p in new[] { nameof(Editable), nameof(EstadoTexto), nameof(EstadoDetalle), nameof(ColorEstado) })
+        foreach (var p in new[] { nameof(Editable), nameof(SoloConsulta), nameof(TextoSoloConsulta),
+                                  nameof(EstadoTexto), nameof(EstadoDetalle), nameof(ColorEstado) })
             OnPropertyChanged(p);
     }
 
@@ -216,6 +261,8 @@ public partial class PlanVista : BaseVista
                     var plan = await _api.ObtenerAsync<List<JsonElement>>("/visita/planeacion");
                     Estado = Texto(estado, "estado") ?? "BORRADOR";
                     MotivoDevolucion = Texto(estado, "motivo_devolucion");
+                    PublicadaEn = Texto(estado, "publicada_en");
+                    CicloTexto = ServicioSincronizacion.GuardarCiclo(estado) ?? CicloTexto;
                     var nombres = panel.ToDictionary(m => m.Id, m => m.Nombre);
                     items = plan.Select(p =>
                     {
@@ -245,6 +292,9 @@ public partial class PlanVista : BaseVista
                 items = await _base.PlanAsync();
             }
 
+            // Sin red, el ciclo que se guardó la última vez: mejor eso que no decir cuál es.
+            CicloTexto ??= Preferences.Get("ciclo_texto", null as string);
+
             var porMedico = items.GroupBy(i => i.MedicoId).ToDictionary(g => g.Key, g => g.ToList());
             _todas = panel.Select(m => Construir(m.Id, m.Nombre, m.Categoria, m.Subtitulo, m.EsTop, false, porMedico))
                           .ToList();
@@ -253,6 +303,7 @@ public partial class PlanVista : BaseVista
             foreach (var id in porMedico.Keys.Except(panel.Select(m => m.Id)))
                 _todas.Add(Construir(id, porMedico[id][0].Medico, null, "", false, true, porMedico));
             _todas = _todas.OrderBy(f => f.Nombre).ToList();
+            AplicarBloqueo();
 
             Seleccionada = null;
             HayCambios = false;
@@ -321,14 +372,11 @@ public partial class PlanVista : BaseVista
     [RelayCommand]
     private void ElegirFiltro(string filtro) => Filtro = filtro;
 
-    /// <summary>Si no se puede editar, dice POR QUÉ en vez de ignorar el toque.</summary>
-    private FilaPlan? EditandoA()
-    {
-        if (Seleccionada is null) return null;
-        if (Editable) return Seleccionada;
-        Aviso = EstadoDetalle;
-        return null;
-    }
+    /// <summary>
+    /// Bloqueada, el médico se abre en modo consulta (la ficha gris ya dice por qué): antes
+    /// cada toque repetía el mensaje del estado en el aviso y la tarjeta lo decía dos veces.
+    /// </summary>
+    private FilaPlan? EditandoA() => Seleccionada is not null && Editable ? Seleccionada : null;
 
     /// <summary>Tocar la semana que ya tenía la quita: así se deja a un médico sin planear.</summary>
     [RelayCommand]

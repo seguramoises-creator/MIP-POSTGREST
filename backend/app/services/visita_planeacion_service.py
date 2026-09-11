@@ -355,6 +355,28 @@ def desbloquear_planeacion(db: Session, vm_id: int, ciclo_id: int | None,
     return {"publicada": False, "ciclo_id": ciclo_id}
 
 
+def _ciclo_info(db: Session, ciclo_id: int) -> dict | None:
+    """Qué ciclo es, dicho para una persona: nombre, fechas y en qué semana va HOY.
+
+    El representante trabaja siempre el ciclo abierto de su país y no lo elige; pero sin
+    verlo escrito no sabe si el plan que mira es el de este ciclo o el anterior."""
+    from app.core.tiempo import hoy_local
+    from app.models.dimensiones import Ciclo
+    from app.services.visita_dia_service import _semana_de
+    c = db.get(Ciclo, ciclo_id)
+    if c is None:
+        return None
+    hoy = hoy_local(db, c.pais_codigo)
+    en_curso = bool(c.fecha_inicio and c.fecha_fin and c.fecha_inicio <= hoy <= c.fecha_fin)
+    return {
+        "id": c.id, "nombre": c.nombre, "cerrado": bool(c.cerrado),
+        "fecha_inicio": c.fecha_inicio.isoformat() if c.fecha_inicio else None,
+        "fecha_fin": c.fecha_fin.isoformat() if c.fecha_fin else None,
+        # Fuera de sus fechas no hay «semana actual»: se dice null, no una semana inventada.
+        "semana": min(max(_semana_de(c, hoy), 1), 4) if en_curso else None,
+    }
+
+
 def estado_planeacion(db: Session, vm_id: int, ciclo_id: int | None) -> dict:
     """Estado + historial de publicación (para que la UI sepa qué mostrar y el admin audite)."""
     ciclo_id = ciclo_id or ciclo_por_defecto(db, vm_id)
@@ -367,6 +389,7 @@ def estado_planeacion(db: Session, vm_id: int, ciclo_id: int | None) -> dict:
     estado = _estado_de(ultimo)
     return {
         "ciclo_id": ciclo_id,
+        "ciclo": _ciclo_info(db, ciclo_id),
         "estado": estado,
         "publicada": estado == "PUBLICADA",
         "publicada_en": ultimo.fecha.isoformat() if estado == "PUBLICADA" else None,

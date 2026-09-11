@@ -5,6 +5,11 @@
   UN SOLO EDITOR, abajo, para el médico que se toca — no botones de semana repetidos en
   cada fila. Con 200 médicos, diez botones por fila eran dos mil controles vivos y la
   lista se arrastraba; así la lista solo lleva texto y el editor existe una vez.
+
+  ENVIADA o APROBADA, la planeación se CONSULTA pero no se toca: las filas se ven en
+  gris con candado y el editor pasa a ser una ficha de lectura con la Vista y la Revisita
+  escritas. Antes el editor seguía pintando botones azules que no hacían nada, y la
+  Revisita solo aparecía en el texto de un botón.
 -->
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
@@ -25,13 +30,17 @@
             <Setter Property="Padding" Value="0" />
             <Setter Property="HeightRequest" Value="44" />
         </Style>
+        <Color x:Key="Gris">#E6E9EE</Color>
+        <Color x:Key="Revisita">#D6E4FF</Color>
     </ContentPage.Resources>
 
     <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" Padding="10,8" RowSpacing="7">
 
-        <!-- Estado de la planeación: lo primero que tiene que saber es si puede tocarla. -->
+        <!-- Ciclo y estado: lo primero es saber QUÉ ciclo se mira y si se puede tocar. -->
         <Border Style="{StaticResource Tarjeta}" BackgroundColor="{Binding ColorEstado}">
             <VerticalStackLayout Spacing="2">
+                <Label Text="{Binding CicloTexto}" IsVisible="{Binding HayCiclo}" FontSize="12"
+                       FontAttributes="Bold" TextColor="{DynamicResource Estructura}" />
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
                     <Label Text="{Binding EstadoTexto}" FontAttributes="Bold" FontSize="14"
                            VerticalOptions="Center" />
@@ -116,6 +125,9 @@
                 <DataTemplate x:DataType="vm:FilaPlan">
                     <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,5" Padding="8,6">
                         <Border.Triggers>
+                            <DataTrigger TargetType="Border" Binding="{Binding Bloqueada}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Gris}" />
+                            </DataTrigger>
                             <DataTrigger TargetType="Border" Binding="{Binding Seleccionada}" Value="True">
                                 <Setter Property="Stroke" Value="{DynamicResource Accion}" />
                                 <Setter Property="StrokeThickness" Value="2" />
@@ -141,19 +153,31 @@
                                             <Setter Property="TextColor" Value="{StaticResource Exito}" />
                                             <Setter Property="FontAttributes" Value="Bold" />
                                         </DataTrigger>
+                                        <DataTrigger TargetType="Label" Binding="{Binding Bloqueada}" Value="True">
+                                            <Setter Property="TextColor" Value="{StaticResource TextoTenue}" />
+                                        </DataTrigger>
                                     </Label.Triggers>
                                 </Label>
                             </VerticalStackLayout>
-                            <Label Grid.Column="2" Text="⭐" IsVisible="{Binding EsTop}" VerticalOptions="Center" />
+                            <HorizontalStackLayout Grid.Column="2" Spacing="3" VerticalOptions="Center">
+                                <Label Text="⭐" IsVisible="{Binding EsTop}" />
+                                <Label Text="🔒" IsVisible="{Binding Bloqueada}" />
+                            </HorizontalStackLayout>
                         </Grid>
                     </Border>
                 </DataTemplate>
             </CollectionView.ItemTemplate>
         </CollectionView>
 
-        <!-- Editor del médico tocado -->
+        <!-- Ficha del médico tocado: editor, o consulta si la planeación ya no es editable -->
         <Border Grid.Row="4" Style="{StaticResource Tarjeta}" IsVisible="{Binding HaySeleccion}"
                 Stroke="{DynamicResource Accion}" StrokeThickness="2">
+            <Border.Triggers>
+                <DataTrigger TargetType="Border" Binding="{Binding SoloConsulta}" Value="True">
+                    <Setter Property="BackgroundColor" Value="{StaticResource Gris}" />
+                    <Setter Property="Stroke" Value="{StaticResource TextoTenue}" />
+                </DataTrigger>
+            </Border.Triggers>
             <VerticalStackLayout Spacing="6">
                 <Grid ColumnDefinitions="*,Auto">
                     <Label Text="{Binding Seleccionada.Nombre}" FontAttributes="Bold" FontSize="13"
@@ -162,103 +186,136 @@
                             Command="{Binding CerrarEditorCommand}" />
                 </Grid>
 
-                <Grid ColumnDefinitions="Auto,*,*,*,*" ColumnSpacing="5">
-                    <Label Text="📅 Semana" FontAttributes="Bold" VerticalOptions="Center" />
-                    <Button Grid.Column="1" Text="1" Style="{StaticResource Chip}"
-                            Command="{Binding ElegirSemanaCommand}" CommandParameter="1">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.V1}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
-                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                    <Button Grid.Column="2" Text="2" Style="{StaticResource Chip}"
-                            Command="{Binding ElegirSemanaCommand}" CommandParameter="2">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.V2}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
-                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                    <Button Grid.Column="3" Text="3" Style="{StaticResource Chip}"
-                            Command="{Binding ElegirSemanaCommand}" CommandParameter="3">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.V3}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
-                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                    <Button Grid.Column="4" Text="4" Style="{StaticResource Chip}"
-                            Command="{Binding ElegirSemanaCommand}" CommandParameter="4">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.V4}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
-                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                </Grid>
+                <!-- CONSULTA: lo planeado, escrito; nada que parezca pulsable. -->
+                <VerticalStackLayout Spacing="4" IsVisible="{Binding SoloConsulta}">
+                    <Label Text="{Binding TextoSoloConsulta}" FontSize="12" FontAttributes="Bold"
+                           TextColor="{StaticResource TextoTenue}" />
+                    <Grid ColumnDefinitions="110,*" RowDefinitions="Auto,Auto" RowSpacing="4">
+                        <Label Text="📅 Vista" FontAttributes="Bold" />
+                        <Label Grid.Column="1" Text="{Binding Seleccionada.TextoVistaConsulta}" FontAttributes="Bold" />
+                        <Label Grid.Row="1" Text="🔁 Revisita" FontAttributes="Bold" />
+                        <Label Grid.Row="1" Grid.Column="1" Text="{Binding Seleccionada.TextoRevisitaConsulta}"
+                               FontAttributes="Bold" />
+                    </Grid>
+                </VerticalStackLayout>
 
-                <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="5">
-                    <Button Text="Lun" Style="{StaticResource Chip}"
-                            Command="{Binding ElegirDiaCommand}" CommandParameter="Lunes">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DL}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
-                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                    <Button Grid.Column="1" Text="Mar" Style="{StaticResource Chip}"
-                            Command="{Binding ElegirDiaCommand}" CommandParameter="Martes">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DM}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
-                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                    <Button Grid.Column="2" Text="Mié" Style="{StaticResource Chip}"
-                            Command="{Binding ElegirDiaCommand}" CommandParameter="Miércoles">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DX}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
-                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                    <Button Grid.Column="3" Text="Jue" Style="{StaticResource Chip}"
-                            Command="{Binding ElegirDiaCommand}" CommandParameter="Jueves">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DJ}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
-                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                    <Button Grid.Column="4" Text="Vie" Style="{StaticResource Chip}"
-                            Command="{Binding ElegirDiaCommand}" CommandParameter="Viernes">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DV}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
-                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
-                            </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
-                </Grid>
+                <!-- EDICIÓN -->
+                <VerticalStackLayout Spacing="6" IsVisible="{Binding Editable}">
+                    <Label Text="Azul: semana de la vista · celeste 🔁: semana de la revisita"
+                           Style="{StaticResource Tenue}" />
+                    <Grid ColumnDefinitions="Auto,*,*,*,*" ColumnSpacing="5">
+                        <Label Text="📅 Semana" FontAttributes="Bold" VerticalOptions="Center" />
+                        <Button Grid.Column="1" Text="1" Style="{StaticResource Chip}"
+                                Command="{Binding ElegirSemanaCommand}" CommandParameter="1">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.R1}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource Revisita}" />
+                                    <Setter Property="Text" Value="1 🔁" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.V1}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                        <Button Grid.Column="2" Text="2" Style="{StaticResource Chip}"
+                                Command="{Binding ElegirSemanaCommand}" CommandParameter="2">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.R2}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource Revisita}" />
+                                    <Setter Property="Text" Value="2 🔁" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.V2}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                        <Button Grid.Column="3" Text="3" Style="{StaticResource Chip}"
+                                Command="{Binding ElegirSemanaCommand}" CommandParameter="3">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.R3}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource Revisita}" />
+                                    <Setter Property="Text" Value="3 🔁" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.V3}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                        <Button Grid.Column="4" Text="4" Style="{StaticResource Chip}"
+                                Command="{Binding ElegirSemanaCommand}" CommandParameter="4">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.R4}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{StaticResource Revisita}" />
+                                    <Setter Property="Text" Value="4 🔁" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.V4}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                    </Grid>
 
-                <Button Text="{Binding Seleccionada.TextoRevisita}" Style="{StaticResource Chip}"
-                        Command="{Binding AlternarRevisitaCommand}">
-                    <Button.Triggers>
-                        <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.Revisita}" Value="True">
-                            <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
-                            <Setter Property="TextColor" Value="{StaticResource Blanco}" />
-                        </DataTrigger>
-                    </Button.Triggers>
-                </Button>
+                    <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="5">
+                        <Button Text="Lun" Style="{StaticResource Chip}"
+                                Command="{Binding ElegirDiaCommand}" CommandParameter="Lunes">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DL}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                        <Button Grid.Column="1" Text="Mar" Style="{StaticResource Chip}"
+                                Command="{Binding ElegirDiaCommand}" CommandParameter="Martes">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DM}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                        <Button Grid.Column="2" Text="Mié" Style="{StaticResource Chip}"
+                                Command="{Binding ElegirDiaCommand}" CommandParameter="Miércoles">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DX}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                        <Button Grid.Column="3" Text="Jue" Style="{StaticResource Chip}"
+                                Command="{Binding ElegirDiaCommand}" CommandParameter="Jueves">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DJ}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                        <Button Grid.Column="4" Text="Vie" Style="{StaticResource Chip}"
+                                Command="{Binding ElegirDiaCommand}" CommandParameter="Viernes">
+                            <Button.Triggers>
+                                <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DV}" Value="True">
+                                    <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                    <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                                </DataTrigger>
+                            </Button.Triggers>
+                        </Button>
+                    </Grid>
+
+                    <Button Text="{Binding Seleccionada.TextoRevisita}" Style="{StaticResource Chip}"
+                            Command="{Binding AlternarRevisitaCommand}">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.Revisita}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Revisita}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                </VerticalStackLayout>
             </VerticalStackLayout>
         </Border>
 

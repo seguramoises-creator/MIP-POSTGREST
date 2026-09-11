@@ -75,6 +75,10 @@ public partial class HoyVista : BaseVista
 
     public bool PuedeCapturar => _instalacion.Config.PuedeCapturar;
 
+    /// <summary>El ciclo que se está trabajando (se guarda al descargar catálogos o abrir Plan).</summary>
+    public string CicloTexto => Preferences.Get("ciclo_texto", "");
+    public bool HayCiclo => !string.IsNullOrEmpty(CicloTexto);
+
     /// <summary>
     /// Lo que se dice cuando la instalación no captura. Se explica en vez de esconder:
     /// un visitador que no ve el botón de registrar necesita saber por qué.
@@ -131,6 +135,8 @@ public partial class HoyVista : BaseVista
     public async Task CargarAsync()
     {
         OnPropertyChanged(nameof(PuedeCapturar));
+        OnPropertyChanged(nameof(CicloTexto));
+        OnPropertyChanged(nameof(HayCiclo));
         await _sync.RefrescarContadoresAsync();
         RefrescarEstadoCola();
         SinCatalogos = !await _base.HayCatalogosAsync();

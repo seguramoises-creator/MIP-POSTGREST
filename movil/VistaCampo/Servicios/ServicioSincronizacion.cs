@@ -223,6 +223,25 @@ public class ServicioSincronizacion
         }
     }
 
+    /// <summary>
+    /// «📆 Ciclo 9 2026 · abierto · semana 2 de 4 · del 01/09 al 28/09», a partir del estado
+    /// de la planeación. Se guarda para enseñarlo también sin conexión.
+    /// </summary>
+    public static string? GuardarCiclo(JsonElement estado)
+    {
+        if (estado.ValueKind != JsonValueKind.Object || !estado.TryGetProperty("ciclo", out var c)
+            || c.ValueKind != JsonValueKind.Object) return null;
+        var cerrado = c.TryGetProperty("cerrado", out var ce) && ce.ValueKind == JsonValueKind.True;
+        var partes = new List<string> { $"📆 {Texto(c, "nombre") ?? "Ciclo"} · {(cerrado ? "cerrado" : "abierto")}" };
+        if (c.TryGetProperty("semana", out var s) && s.ValueKind == JsonValueKind.Number)
+            partes.Add($"semana {s.GetInt32()} de 4");
+        if (DateTime.TryParse(Texto(c, "fecha_inicio"), out var fi) && DateTime.TryParse(Texto(c, "fecha_fin"), out var ff))
+            partes.Add($"del {fi:dd/MM} al {ff:dd/MM}");
+        var t = string.Join(" · ", partes);
+        Preferences.Set("ciclo_texto", t);
+        return t;
+    }
+
     // ── Descarga de catálogos ────────────────────────────────────────────────
 
     /// <summary>
@@ -272,6 +291,10 @@ public class ServicioSincronizacion
                 HoraEstimada = Texto(a, "hora_estimada"),
                 Grupo = Texto(a, "grupo") ?? "ciclo",
             }).Where(a => a.MedicoId > 0));
+
+            // El ciclo que se trabaja, para que Hoy lo diga sin tener que abrir Plan.
+            try { GuardarCiclo(await _api.ObtenerAsync<JsonElement>("/visita/planeacion/estado")); }
+            catch (ErrorApi) { /* informativo: sin él la descarga sigue */ }
 
             var plan = await _api.ObtenerAsync<List<JsonElement>>("/visita/planeacion");
             // La planeación viene por `medico_id` SIN el nombre: el nombre se resuelve

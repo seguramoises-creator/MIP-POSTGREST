@@ -152,6 +152,24 @@ def test_el_error_de_validacion_nombra_al_medico():
         svc._validar(items)
 
 
+# ── El ciclo que se trabaja, dicho con nombre, fechas y semana ────────────────
+
+def test_ciclo_info_da_nombre_fechas_y_semana(monkeypatch):
+    import datetime as dt
+    import app.core.tiempo as tiempo
+    ciclo = SimpleNamespace(id=53, nombre="Ciclo 9 2026", cerrado=False, pais_codigo="DO",
+                            fecha_inicio=dt.date(2026, 9, 1), fecha_fin=dt.date(2026, 9, 28))
+    db = MagicMock()
+    db.get.return_value = ciclo
+    monkeypatch.setattr(tiempo, "hoy_local", lambda db, p: dt.date(2026, 9, 11))
+    info = svc._ciclo_info(db, 53)
+    assert info["nombre"] == "Ciclo 9 2026" and info["fecha_inicio"] == "2026-09-01"
+    assert info["semana"] == 2
+    # Fuera de sus fechas no se inventa una semana.
+    monkeypatch.setattr(tiempo, "hoy_local", lambda db, p: dt.date(2026, 10, 5))
+    assert svc._ciclo_info(db, 53)["semana"] is None
+
+
 # ── El router ────────────────────────────────────────────────────────────────
 
 def test_aprobar_y_devolver_exigen_que_sea_de_su_equipo():
