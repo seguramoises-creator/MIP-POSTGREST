@@ -23,12 +23,14 @@
  *    paginador deja llegar a todos: recortar sin salida sería esconder gente, el
  *    mismo error que pintar un cero donde no hay dato.
  */
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
+import { KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material';
+import DetalleDiaRepresentante from './DetalleDiaRepresentante';
 import { useQuery } from '@tanstack/react-query';
 import {
   Box, Card, CardContent, Typography, Stack, Table, TableHead, TableRow,
   TableCell, TableBody, Chip, Alert, CircularProgress, TextField, LinearProgress, MenuItem,
-  Pagination,
+  Pagination, Collapse,
 } from '@mui/material';
 import { AVISO, AVISO_TENUE, BORDE_SUAVE, EXITO, SUPERFICIE_3 } from '../../theme/marca';
 import { marcaViva } from '../../theme/marcaViva';
@@ -110,7 +112,9 @@ export default function ResumenDia() {
 
   // Cambiar de día es empezar de cero: quedarse en la página 4 de un día que solo
   // tiene dos dejaría la tabla vacía sin explicar por qué.
-  useEffect(() => { setPagina(1); }, [fecha, gerenteId]);
+  useEffect(() => { setPagina(1); setAbierto(null); }, [fecha, gerenteId]);
+  // La fila desplegada: una a la vez, para que el detalle no convierta la tabla en un informe.
+  const [abierto, setAbierto] = useState<number | null>(null);
   const { data, isLoading, error } = useQuery({
     // El filtro va al SERVIDOR y no se aplica sobre lo ya traído: las tarjetas de
     // arriba y el avance de la semana los calcula él. Filtrar solo la tabla dejaría
@@ -260,7 +264,7 @@ export default function ResumenDia() {
               avisar se lee como la lista completa. */}
           <Typography variant="caption" sx={{ color: TEXTO_TENUE }}>
             {`${ordenados.length} representantes, del menor avance al mayor · `}
-            {`${conAgenda} con agenda esta semana`}
+            {`${conAgenda} con agenda esta semana · clic en un representante para ver el detalle del día`}
           </Typography>
         </CardContent>
         <Box sx={{ overflowX: 'auto' }}>
@@ -294,10 +298,15 @@ export default function ResumenDia() {
             <TableBody>
               {visibles.map((r: FilaRepresentante) => {
                 const sin = r.v + r.r + r.farmacias === 0;
+                const abiertaFila = abierto === r.rm_id;
                 return (
-                  <TableRow key={r.rm_id} hover>
+                  <Fragment key={r.rm_id}>
+                  <TableRow hover onClick={() => setAbierto(abiertaFila ? null : r.rm_id)}
+                            title="Clic para ver el detalle del día"
+                            sx={{ cursor: 'pointer', ...(abiertaFila ? { bgcolor: SUPERFICIE_3, '& > td': { borderBottom: 0 } } : {}) }}>
                     <TableCell>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 700, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        {abiertaFila ? <KeyboardArrowUp fontSize="small" /> : <KeyboardArrowDown fontSize="small" />}
                         {r.codigo} · {r.nombre}
                       </Typography>
                       <Typography variant="caption" sx={{ color: TEXTO_TENUE }}>
@@ -325,6 +334,16 @@ export default function ResumenDia() {
                            : r.ultima_actividad}
                     </TableCell>
                   </TableRow>
+                  {/* El detalle del día, desplegado bajo la fila. Se monta solo al abrir:
+                      pide sus datos entonces, no para todo el equipo a la vez. */}
+                  <TableRow>
+                    <TableCell colSpan={9} sx={{ p: 0, ...(abiertaFila ? {} : { borderBottom: 0 }) }}>
+                      <Collapse in={abiertaFila} timeout="auto" unmountOnExit>
+                        <DetalleDiaRepresentante rmId={r.rm_id} fecha={fecha} />
+                      </Collapse>
+                    </TableCell>
+                  </TableRow>
+                  </Fragment>
                 );
               })}
             </TableBody>

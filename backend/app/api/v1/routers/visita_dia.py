@@ -79,3 +79,21 @@ def resumen_dia(
         db, pais_codigo=pc, f=fecha or hoy_local(db, pc),
         gerente_id=gerente_id, linea_id=linea_id,
         rm_ids=_alcance(db, current_user))
+
+
+@router.get("/dia/detalle", summary="El día de un representante, registro por registro")
+def detalle_dia(
+    rm_id: int = Query(..., description="Representante"),
+    fecha: date | None = Query(None, description="Día a consultar; por omisión, hoy"),
+    db: Session = Depends(get_db),
+    current_user: Usuario = RequireAnyAuth,
+):
+    """Lo que hay detrás de la fila del monitor: cada visita, farmacia y hoja MORE del día.
+    Mismo alcance que el monitor: el representante ve su día y el gerente, su equipo."""
+    alcance = _alcance(db, current_user)
+    if alcance is not None and rm_id not in alcance:
+        raise HTTPException(403, "Ese representante no está en tu alcance.")
+    rm = db.get(RepresentanteMedico, rm_id)
+    if rm is None:
+        raise HTTPException(404, "Representante no encontrado.")
+    return visita_dia_service.detalle_dia(db, rm_id, fecha or hoy_local(db, rm.pais_codigo))

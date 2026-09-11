@@ -260,3 +260,72 @@ def resumen_dia(db: Session, pais_codigo: str, f: date,
 def _totales_vacios() -> dict:
     return {"medicas": 0, "farmacias": 0, "visitas": 0, "rms_con_actividad": 0,
             "rms_total": 0, "acompanadas_gd": 0, "hojas_more": 0}
+
+
+def detalle_dia(db: Session, rm_id: int, f: date) -> dict:
+    """El día de UN representante, registro por registro: lo que hay detrás de las cifras
+    de su fila (V, R, Con GD, farmacias, MORE). Un «6» sin nombres no le dice al gerente
+    a quién visitó, si lo acompañó ni si era lo que tenía programado."""
+    from app.models.dimensiones import Especialidad, Farmacia
+    from app.models.usuario import Usuario
+    from app.models.visita import FarmaciaVisita, MedicoVisita
+    from app.services.visita_registro_service import _planeados_para_hoy, _serializar_visitas
+
+    rm = db.get(RepresentanteMedico, rm_id)
+    if rm is None:
+        return {"rm_id": rm_id, "visitas": [], "farmacias": [], "more": []}
+    pais = rm.pais_codigo
+    _, desde, fin = ventana_dia_local(db, pais, f)
+
+    vs = (db.query(VisitaRegistro)
+          .filter(VisitaRegistro.vm_id == rm_id,
+                  VisitaRegistro.fecha_hora >= desde, VisitaRegistro.fecha_hora < fin)
+          .order_by(VisitaRegistro.fecha_hora).all())
+    visitas = _serializar_visitas(db, vs, pais)
+
+    # ¿Estaba programado para ESE día (semana del ciclo + día) o se visitó fuera de agenda?
+    ciclo = _ciclo_de(db, pais, f)
+    de_hoy: dict[int, str] = {}
+    if ciclo:
+        plan = db.query(PlaneacionCiclo).filter(
+            PlaneacionCiclo.vm_id == rm_id, PlaneacionCiclo.ciclo_id == ciclo.id).all()
+        de_hoy = _planeados_para_hoy(plan, ciclo, f)
+
+    mids = {v["medico_id"] for v in visitas}
+    datos_medico = {}
+    if mids:
+        datos_medico = {i: (e, c) for i, e, c in (
+            db.query(MedicoVisita.id, Especialidad.nombre, MedicoVisita.categoria)
+            .outerjoin(Especialidad, Especialidad.id == MedicoVisita.especialidad_id)
+            .filter(MedicoVisita.id.in_(mids)).all())}
+    for v in visitas:
+        v["especialidad"], v["categoria"] = datos_medico.get(v["medico_id"], (None, None))
+        v["programada_hoy"] = v["medico_id"] in de_hoy
+        v["hora"] = v["hora"][11:16] if v.get("hora") else None   # «09:00», ya en hora local
+
+    tz = zona_horaria(db, pais)
+    farmacias = [{
+        "id": x.id, "farmacia": nombre, "ejecutada": x.ejecutada,
+        "causa_no_visita": x.causa_no_visita, "comentario": x.comentario,
+        "hora": (x.fecha_hora.replace(tzinfo=timezone.utc).astimezone(tz).strftime("%H:%M")
+                 if x.fecha_hora else None),
+        "tiene_gps": x.latitud is not None and x.longitud is not None,
+        "tiene_foto": x.foto is not None,
+    } for x, nombre in (
+        db.query(FactVisitaFarmacia, Farmacia.nombre_completo)
+        .join(FarmaciaVisita, FarmaciaVisita.id == FactVisitaFarmacia.farmacia_id)
+        .join(Farmacia, Farmacia.id == FarmaciaVisita.maestro_farmacia_id)
+        .filter(FactVisitaFarmacia.vm_id == rm_id,
+                FactVisitaFarmacia.fecha_hora >= desde, FactVisitaFarmacia.fecha_hora < fin)
+        .order_by(FactVisitaFarmacia.fecha_hora).all())]
+
+    more = [{
+        "id": s.id, "gerente": gd, "medicos_vistos": s.medicos_vistos,
+        "evaluacion_promedio": float(s.evaluacion_promedio) if s.evaluacion_promedio is not None else None,
+    } for s, gd in (
+        db.query(CoachingSesion, Usuario.nombre_completo)
+        .outerjoin(Usuario, Usuario.id == CoachingSesion.gd_usuario_id)
+        .filter(CoachingSesion.rm_id == rm_id, CoachingSesion.fecha_coaching == f).all())]
+
+    return {"rm_id": rm.id, "codigo": rm.codigo, "nombre": rm.nombre, "fecha": f.isoformat(),
+            "visitas": visitas, "farmacias": farmacias, "more": more}
