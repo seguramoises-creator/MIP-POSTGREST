@@ -190,6 +190,16 @@ public partial class HoyVista : BaseVista
             // La tarjeta existía desde el principio y NADIE la alimentaba, así que
             // enseñaba «0» todos los días, con visitas a farmacia registradas y todo.
             // Un contador que nunca se escribe no se ve vacío: se ve como un cero.
+            // El ciclo que se trabaja se pide aquí también: si solo se leyera lo guardado,
+            // Hoy no lo diría hasta abrir Plan o sincronizar (medido tras instalar la app).
+            try
+            {
+                ServicioSincronizacion.GuardarCiclo(await _api.ObtenerAsync<JsonElement>("/visita/planeacion/estado"));
+                OnPropertyChanged(nameof(CicloTexto));
+                OnPropertyChanged(nameof(HayCiclo));
+            }
+            catch (ErrorApi) { /* informativo: no tumba la carga del día */ }
+
             var farmacias = await _api.ObtenerAsync<List<JsonElement>>("/farmacias/panel");
             Farmacias = farmacias.Count(f => f.TryGetProperty("visitada_hoy", out var h)
                                              && h.ValueKind == JsonValueKind.True);
