@@ -58,11 +58,16 @@ export interface VisitaDetalle {
   especialidad: string | null; categoria: string | null;
   /** Planeado para ese día (semana del ciclo + día); si no, fue fuera de agenda. */
   programada_hoy: boolean;
+  latitud: number | null; longitud: number | null;
 }
 export interface FarmaciaDetalle {
   id: number; farmacia: string; ejecutada: boolean; causa_no_visita: string | null;
   comentario: string | null; hora: string | null; tiene_gps: boolean; tiene_foto: boolean;
+  latitud: number | null; longitud: number | null;
 }
+/** La foto de una visita, con el alcance del monitor. Se pide como blob porque va con sesión. */
+export const fotoVisitaDia = (tipo: 'medico' | 'farmacia', id: number) =>
+  api.get<Blob>(`/visita/dia/foto/${tipo}/${id}`, { responseType: 'blob' }).then((r) => r.data);
 export interface MoreDetalle {
   id: number; gerente: string | null; medicos_vistos: number; evaluacion_promedio: number | null;
 }

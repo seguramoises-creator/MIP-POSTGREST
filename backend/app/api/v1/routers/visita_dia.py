@@ -97,3 +97,33 @@ def detalle_dia(
     if rm is None:
         raise HTTPException(404, "Representante no encontrado.")
     return visita_dia_service.detalle_dia(db, rm_id, fecha or hoy_local(db, rm.pais_codigo))
+
+
+@router.get("/dia/foto/{tipo}/{visita_id}", summary="Foto de una visita del detalle del día")
+def foto_dia(
+    tipo: str, visita_id: int,
+    db: Session = Depends(get_db),
+    current_user: Usuario = RequireAnyAuth,
+):
+    """La foto de una visita (médico o farmacia) vista desde el monitor.
+
+    Propia y no la de `/visita/{id}/foto`: aquella solo comprueba el PAÍS, así que un
+    representante podría ver la foto de otro cambiando el número. Aquí manda el mismo
+    alcance que el detalle del día — el RM, lo suyo; el GD, su equipo. El alcance se
+    comprueba ANTES de leer los bytes de la imagen."""
+    from fastapi import Response
+    from app.models.visita import FactVisitaFarmacia, VisitaRegistro
+    if tipo not in ("medico", "farmacia"):
+        raise HTTPException(404, "Tipo de visita desconocido.")
+    modelo = VisitaRegistro if tipo == "medico" else FactVisitaFarmacia
+    vm_id = db.query(modelo.vm_id).filter(modelo.id == visita_id).scalar()
+    if vm_id is None:
+        raise HTTPException(404, "Visita no encontrada.")
+    alcance = _alcance(db, current_user)
+    if alcance is not None and vm_id not in alcance:
+        raise HTTPException(403, "Esa visita no está en tu alcance.")
+    fila = db.query(modelo.foto, modelo.foto_mime).filter(modelo.id == visita_id).first()
+    if fila is None or not fila[0]:
+        raise HTTPException(404, "La visita no tiene foto.")
+    return Response(content=bytes(fila[0]), media_type=fila[1] or "image/jpeg",
+                    headers={"Cache-Control": "private, max-age=300"})

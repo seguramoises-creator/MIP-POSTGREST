@@ -282,6 +282,12 @@ def detalle_dia(db: Session, rm_id: int, f: date) -> dict:
                   VisitaRegistro.fecha_hora >= desde, VisitaRegistro.fecha_hora < fin)
           .order_by(VisitaRegistro.fecha_hora).all())
     visitas = _serializar_visitas(db, vs, pais)
+    # Las coordenadas, para ver DÓNDE se registró (el feed del móvil no las lleva).
+    coords = {v.id: (v.latitud, v.longitud) for v in vs}
+    for v in visitas:
+        lat, lon = coords.get(v["id"], (None, None))
+        v["latitud"] = float(lat) if lat is not None else None
+        v["longitud"] = float(lon) if lon is not None else None
 
     # ¿Estaba programado para ESE día (semana del ciclo + día) o se visitó fuera de agenda?
     ciclo = _ciclo_de(db, pais, f)
@@ -311,6 +317,8 @@ def detalle_dia(db: Session, rm_id: int, f: date) -> dict:
                  if x.fecha_hora else None),
         "tiene_gps": x.latitud is not None and x.longitud is not None,
         "tiene_foto": x.foto is not None,
+        "latitud": float(x.latitud) if x.latitud is not None else None,
+        "longitud": float(x.longitud) if x.longitud is not None else None,
     } for x, nombre in (
         db.query(FactVisitaFarmacia, Farmacia.nombre_completo)
         .join(FarmaciaVisita, FarmaciaVisita.id == FactVisitaFarmacia.farmacia_id)
