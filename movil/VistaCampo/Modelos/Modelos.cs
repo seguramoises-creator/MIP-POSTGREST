@@ -204,6 +204,24 @@ public partial class ItemAgenda : ObservableObject
     public string Nombre { get; set; } = "";
     public string TipoVisita { get; set; } = "V";
     public bool Registrada { get; set; }
+    /// <summary>El servidor vio HOY una visita ejecutada a este médico.</summary>
+    public bool VisitadaHoy { get; set; }
+
+    private bool _porEnviar;
+    /// <summary>Hay una captura suya en la cola del teléfono, todavía sin subir.</summary>
+    [Ignore] public bool PorEnviar
+    {
+        get => _porEnviar;
+        set { if (SetProperty(ref _porEnviar, value)) OnPropertyChanged(nameof(TextoEstado)); }
+    }
+
+    private bool _enServidorHoy;
+    /// <summary>Lo registrado hoy que el servidor ya devolvió (feed de hoy, más fresco que la agenda).</summary>
+    [Ignore] public bool EnServidorHoy
+    {
+        get => _enServidorHoy;
+        set { if (SetProperty(ref _enServidorHoy, value)) OnPropertyChanged(nameof(TextoEstado)); }
+    }
 
     public string? Especialidad { get; set; }
     public string? Centro { get; set; }
@@ -233,8 +251,17 @@ public partial class ItemAgenda : ObservableObject
         }
     }
 
+    /// <summary>
+    /// ☁️ = ya está en el servidor · 📱 = guardado en el teléfono, sin subir. Antes decía
+    /// «Registrada ✓» igual para lo subido y para lo que seguía en la cola, y el visitador
+    /// no podía saber qué había llegado.
+    /// </summary>
     [Ignore] public string TextoEstado =>
-        !Registrada ? "Pendiente" : NoVisita ? "No visitado" : "Registrada ✓";
+        PorEnviar ? "📱 Por enviar"
+        : EnServidorHoy || VisitadaHoy ? "☁️ Hoy ✓"
+        : !Registrada ? "Pendiente"
+        : NoVisita ? "☁️ No visitado"
+        : "☁️ Registrada ✓";
 
     [Ignore] public string Inicial
     {
@@ -276,6 +303,49 @@ public class ItemPlan
     {
         TipoVisita == "R" ? "Revisita" : "Vista", Dia, Hora,
     }.Where(s => !string.IsNullOrWhiteSpace(s))!);
+}
+
+/// <summary>
+/// El ciclo que se trabaja, listo para la tarjeta de Hoy y de Plan. Sale de lo guardado
+/// al sincronizar, así que también se ve sin conexión.
+/// </summary>
+public class InfoCiclo
+{
+    public bool Hay { get; init; }
+    public string Titulo { get; init; } = "";
+    public string Rango { get; init; } = "";
+    public string Estado { get; init; } = "";
+    public bool Abierto { get; init; }
+    public string TextoSemana { get; init; } = "";
+    public bool S1 { get; init; }
+    public bool S2 { get; init; }
+    public bool S3 { get; init; }
+    public bool S4 { get; init; }
+
+    public static InfoCiclo Leer()
+    {
+        var nombre = Preferences.Get("ciclo_nombre", "");
+        if (string.IsNullOrEmpty(nombre)) return new InfoCiclo();
+        // «C09-2026» es el código interno; a una persona se le dice «Ciclo 9 · 2026».
+        var m = System.Text.RegularExpressions.Regex.Match(nombre, @"^C0*(\d+)-(\d{4})$");
+        var titulo = m.Success ? $"Ciclo {m.Groups[1].Value} · {m.Groups[2].Value}" : nombre;
+        var es = new System.Globalization.CultureInfo("es");
+        var rango = "";
+        if (DateTime.TryParse(Preferences.Get("ciclo_inicio", ""), out var fi)
+            && DateTime.TryParse(Preferences.Get("ciclo_fin", ""), out var ff))
+            rango = fi.Month == ff.Month
+                ? $"Del {fi.Day} al {ff.Day} de {ff.ToString("MMMM", es)}"
+                : $"Del {fi.ToString("d 'de' MMMM", es)} al {ff.ToString("d 'de' MMMM", es)}";
+        var semana = Preferences.Get("ciclo_semana", 0);
+        var cerrado = Preferences.Get("ciclo_cerrado", false);
+        return new InfoCiclo
+        {
+            Hay = true, Titulo = titulo, Rango = rango, Abierto = !cerrado,
+            Estado = cerrado ? "Cerrado" : "Abierto",
+            TextoSemana = semana > 0 ? $"Semana {semana} de 4" : "Fuera de sus fechas",
+            S1 = semana >= 1, S2 = semana >= 2, S3 = semana >= 3, S4 = semana >= 4,
+        };
+    }
 }
 
 /// <summary>Estado de un envío en la cola.</summary>

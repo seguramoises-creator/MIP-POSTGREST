@@ -371,11 +371,39 @@ public partial class RegistrarVista : BaseVista
         }
         foreach (var p in new[] { nameof(HayRegistradas), nameof(HayAnteriores), nameof(TituloRegistradas) })
             OnPropertyChanged(p);
+        await MarcarEstadosAsync();
+    }
+
+    /// <summary>
+    /// Marca en la agenda qué está YA en el servidor (feed de hoy) y qué sigue en la cola del
+    /// teléfono. Antes todo decía «Registrada ✓», subido o no, y el visitador no podía
+    /// saber qué había llegado.
+    /// </summary>
+    private async Task MarcarEstadosAsync()
+    {
+        var enCola = new HashSet<int>();
+        foreach (var e in await _base.ColaAsync())
+        {
+            if (e.Estado == (int)EstadoEnvio.Enviado || e.Tipo is not ("visita" or "no-visita")) continue;
+            try
+            {
+                using var d = JsonDocument.Parse(e.Cuerpo);
+                enCola.Add(ServicioSincronizacion.Entero(d.RootElement, "medico_id"));
+            }
+            catch (JsonException) { }
+        }
+        var hoyServidor = RegistradasHoy.Where(v => v.Ejecutada).Select(v => v.MedicoId).ToHashSet();
+        foreach (var a in DelDia.Concat(DelCiclo))
+        {
+            a.PorEnviar = enCola.Contains(a.MedicoId);
+            a.EnServidorHoy = hoyServidor.Contains(a.MedicoId);
+        }
     }
 
     private static VisitaDelDia AVisita(JsonElement v) => new()
     {
         Id = ServicioSincronizacion.Entero(v, "id"),
+        MedicoId = ServicioSincronizacion.Entero(v, "medico_id"),
         Medico = ServicioSincronizacion.Texto(v, "medico") ?? "(sin nombre)",
         Tipo = ServicioSincronizacion.Texto(v, "tipo_visita") ?? "V",
         Hora = (ServicioSincronizacion.Texto(v, "hora") ?? "").Replace('T', ' '),
@@ -426,6 +454,8 @@ public partial class RegistrarVista : BaseVista
                           && (cat is null || string.Equals(m.Categoria, cat, StringComparison.OrdinalIgnoreCase)))
                           .Take(60))
             Panel.Add(m);
+
+        await MarcarEstadosAsync();
 
         foreach (var p in new[] { nameof(HayDelDia), nameof(HayDelCiclo), nameof(TituloDelDia),
                                   nameof(TituloDelCiclo), nameof(TextoPendientes) })
@@ -673,6 +703,14 @@ public partial class RegistrarVista : BaseVista
             // Ni se abre: el servidor la rechazaría por duplicada, y abrir un formulario
             // que no puede guardar solo sirve para que alguien escriba y lo pierda.
             Aviso = $"{item.Nombre} ya está registrada en este ciclo.";
+            return;
+        }
+        if (item.PorEnviar || item.EnServidorHoy)
+        {
+            // Registrarlo otra vez duplicaría la visita de hoy.
+            Aviso = item.PorEnviar
+                ? $"{item.Nombre} ya está guardada en tu teléfono y se enviará sola."
+                : $"{item.Nombre} ya la registraste hoy.";
             return;
         }
         Cita = ReferenceEquals(Cita, item) ? null : item;

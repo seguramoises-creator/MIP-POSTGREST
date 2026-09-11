@@ -14,6 +14,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:VistaCampo.VistaModelos"
+             xmlns:v="clr-namespace:VistaCampo.Vistas"
              x:Class="VistaCampo.Vistas.PlanPagina"
              x:Name="pagina"
              Title="Plan">
@@ -37,10 +38,10 @@
     <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" Padding="10,8" RowSpacing="7">
 
         <!-- Ciclo y estado: lo primero es saber QUÉ ciclo se mira y si se puede tocar. -->
+        <VerticalStackLayout Spacing="7">
+        <v:TarjetaCiclo BindingContext="{Binding Ciclo}" />
         <Border Style="{StaticResource Tarjeta}" BackgroundColor="{Binding ColorEstado}">
             <VerticalStackLayout Spacing="2">
-                <Label Text="{Binding CicloTexto}" IsVisible="{Binding HayCiclo}" FontSize="12"
-                       FontAttributes="Bold" TextColor="{DynamicResource Estructura}" />
                 <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
                     <Label Text="{Binding EstadoTexto}" FontAttributes="Bold" FontSize="14"
                            VerticalOptions="Center" />
@@ -56,6 +57,7 @@
                        TextColor="{StaticResource Estructura}" FontAttributes="Bold" />
             </VerticalStackLayout>
         </Border>
+        </VerticalStackLayout>
 
         <!-- Cifras del plan -->
         <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="6">

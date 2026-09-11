@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:m="clr-namespace:VistaCampo.Modelos"
              xmlns:vm="clr-namespace:VistaCampo.VistaModelos"
+             xmlns:v="clr-namespace:VistaCampo.Vistas"
              x:Class="VistaCampo.Vistas.HoyPagina"
              Title="Hoy">
 
@@ -10,14 +11,16 @@
         <ScrollView>
             <VerticalStackLayout Padding="10" Spacing="8">
 
+                <!-- El ciclo que se trabaja, en su propia tarjeta. -->
+                <v:TarjetaCiclo BindingContext="{Binding Ciclo}" />
+
                 <!-- Estado de la cola: lo primero, porque es lo que responde «¿subió mi trabajo?» -->
                 <Border Style="{StaticResource Tarjeta}">
                     <Grid ColumnDefinitions="*,Auto">
                         <VerticalStackLayout>
                             <Label Text="📤  Estado de envío" Style="{StaticResource Tenue}" />
                             <Label Text="{Binding EstadoCola}" FontSize="15" FontAttributes="Bold" />
-                            <Label Text="{Binding CicloTexto}" IsVisible="{Binding HayCiclo}"
-                                   FontSize="12" FontAttributes="Bold" TextColor="{DynamicResource Estructura}" />
+                            <Label Text="{Binding DetalleCola}" Style="{StaticResource Tenue}" />
                         </VerticalStackLayout>
                         <Button Grid.Column="1" Text="🔄  Sincronizar" Style="{StaticResource BotonSecundario}"
                                 WidthRequest="130" Command="{Binding SincronizarCommand}" />
@@ -75,6 +78,8 @@
                      lista que crece con su contenido: con alto fijo cortaba la lista y dejaba
                      un hueco vacío debajo. -->
                 <Label Text="{Binding TituloAgenda}" Style="{StaticResource Titulo}" FontSize="15" Margin="0,6,0,0" />
+                <Label Style="{StaticResource Tenue}"
+                       Text="✓ ☁️ ya está en el servidor  ·  📱 guardado en el teléfono, por enviar" />
                 <Label Style="{StaticResource Tenue}" IsVisible="{Binding SinAgendaHoy}"
                        Text="No tienes médicos programados para hoy en tu planeación." />
                 <VerticalStackLayout Spacing="4" BindableLayout.ItemsSource="{Binding AgendaHoy}">

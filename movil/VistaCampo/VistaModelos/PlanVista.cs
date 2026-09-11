@@ -146,7 +146,14 @@ public partial class PlanVista : BaseVista
         _ => "🔒 Solo consulta",
     };
 
-    partial void OnCicloTextoChanged(string? value) => OnPropertyChanged(nameof(HayCiclo));
+    partial void OnCicloTextoChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HayCiclo));
+        OnPropertyChanged(nameof(Ciclo));
+    }
+
+    /// <summary>El ciclo, para la misma tarjeta que en Hoy.</summary>
+    public InfoCiclo Ciclo => InfoCiclo.Leer();
     partial void OnPublicadaEnChanged(string? value) => OnPropertyChanged(nameof(EstadoTexto));
 
     /// <summary>La fecha llega en UTC sin huso: se pasa a la hora del teléfono.</summary>
@@ -309,6 +316,7 @@ public partial class PlanVista : BaseVista
             HayCambios = false;
             Recontar();
             Filtrar();
+            OnPropertyChanged(nameof(Ciclo));
         });
     }
 

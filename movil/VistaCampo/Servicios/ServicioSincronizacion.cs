@@ -110,6 +110,9 @@ public class ServicioSincronizacion
                 await _base.ActualizarAsync(envio);
             }
             await _base.LimpiarEnviadosAsync();
+            // Hora de la última pasada que terminó sin tropiezos: Hoy la enseña para que el
+            // visitador sepa hasta cuándo está seguro de que su trabajo está en el servidor.
+            if (Aviso is null) Preferences.Set("ultimo_envio_ok", DateTime.UtcNow.ToString("o"));
         }
         finally
         {
@@ -232,6 +235,11 @@ public class ServicioSincronizacion
         if (estado.ValueKind != JsonValueKind.Object || !estado.TryGetProperty("ciclo", out var c)
             || c.ValueKind != JsonValueKind.Object) return null;
         var cerrado = c.TryGetProperty("cerrado", out var ce) && ce.ValueKind == JsonValueKind.True;
+        // Por piezas, para que la tarjeta del ciclo (InfoCiclo) lo pinte a su manera.
+        Preferences.Set("ciclo_nombre", Texto(c, "nombre") ?? "");
+        Preferences.Set("ciclo_cerrado", cerrado);
+        Preferences.Set("ciclo_inicio", Texto(c, "fecha_inicio") ?? "");
+        Preferences.Set("ciclo_fin", Texto(c, "fecha_fin") ?? "");
         var partes = new List<string> { $"📆 {Texto(c, "nombre") ?? "Ciclo"} · {(cerrado ? "cerrado" : "abierto")}" };
         if (c.TryGetProperty("semana", out var s) && s.ValueKind == JsonValueKind.Number)
         {
@@ -294,6 +302,7 @@ public class ServicioSincronizacion
                 Categoria = Texto(a, "categoria"),
                 DiaSemana = Texto(a, "dia_semana"),
                 HoraEstimada = Texto(a, "hora_estimada"),
+                VisitadaHoy = a.TryGetProperty("visitada_hoy", out var vh) && vh.ValueKind == JsonValueKind.True,
                 Grupo = Texto(a, "grupo") ?? "ciclo",
             }).Where(a => a.MedicoId > 0));
 

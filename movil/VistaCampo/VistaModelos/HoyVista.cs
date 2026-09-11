@@ -102,20 +102,13 @@ public partial class HoyVista : BaseVista
         ? "Nada fuera de tu agenda hoy."
         : "Sin conexión: no se sabe qué se registró hoy fuera de la agenda.";
 
-    private static readonly string[] DiasSemana =
-        { "Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado" };
-
     private async Task<List<(int id, string nombre, string tipo, string? hora)>> ProgramadosHoyAsync()
     {
-        var semana = Preferences.Get("ciclo_semana", 0);
-        var hoy = DiasSemana[(int)DateTime.Now.DayOfWeek];
-        if (semana > 0)
-            return (await _base.PlanAsync())
-                .Where(p => p.Semana == semana && p.Dia == hoy)
-                .OrderBy(p => p.Hora ?? "99").ThenBy(p => p.Medico)
-                .Select(p => (p.MedicoId, p.Medico, p.TipoVisita, p.Hora)).ToList();
-        // Sin saber la semana del ciclo, lo que el servidor marcó para hoy.
+        // LA MISMA fuente que el grupo «del día» de Registrar (el servidor lo decide por
+        // semana del ciclo + día). Cuando cada pantalla lo calculaba a su manera, Registrar
+        // decía cinco médicos del día y Hoy uno.
         return (await _base.AgendaAsync()).Where(a => a.Grupo == "dia")
+            .OrderBy(a => a.HoraEstimada ?? "99").ThenBy(a => a.Nombre)
             .Select(a => (a.MedicoId, a.Nombre, a.TipoVisita, a.HoraEstimada)).ToList();
     }
 
@@ -126,29 +119,43 @@ public partial class HoyVista : BaseVista
         AgendaHoy.Clear();
         FueraDeAgenda.Clear();
         var idsProgramados = prog.Select(p => p.id).ToHashSet();
+        var cola = await PorEnviarAsync();
         foreach (var p in prog)
         {
             var suyas = visitasHoy?.Where(v => v.MedicoId == p.id).ToList();
             var hecha = suyas?.FirstOrDefault(v => v.Ejecutada);
             var noVisitado = suyas is { Count: > 0 } && hecha is null;
+            var enCola = cola.FirstOrDefault(c => c.medicoId == p.id).etiqueta is not null;
             var partes = new[] { p.tipo == "R" ? "Revisita" : "Vista", p.hora }
                 .Where(s => !string.IsNullOrWhiteSpace(s));
             AgendaHoy.Add(new FilaHoy
             {
                 Nombre = p.nombre,
-                Detalle = string.Join(" · ", partes) + (hecha is null ? "" : $" · hecha a las {hecha.HoraCorta}"),
-                Marca = hecha is not null ? "✓" : noVisitado ? "⊘" : "",
-                NoVisitado = noVisitado,
+                Detalle = string.Join(" · ", partes)
+                    + (hecha is not null ? $" · hecha a las {hecha.HoraCorta} · ☁️ en el servidor"
+                       : enCola ? " · 📱 guardada, por enviar" : ""),
+                Marca = hecha is not null ? "✓" : enCola ? "📱" : noVisitado ? "⊘" : "",
+                NoVisitado = noVisitado && !enCola,
             });
         }
         foreach (var v in visitasHoy?.Where(v => !idsProgramados.Contains(v.MedicoId)) ?? [])
             FueraDeAgenda.Add(new FilaHoy
             {
-                Nombre = v.Medico, Detalle = v.Subtitulo,
+                Nombre = v.Medico, Detalle = $"{v.Subtitulo} · ☁️ en el servidor",
                 Marca = v.Ejecutada ? "✓" : "⊘", NoVisitado = !v.Ejecutada,
             });
         foreach (var f in farmaciasHoy ?? [])
-            FueraDeAgenda.Add(new FilaHoy { Icono = "🏥", Nombre = f, Detalle = "Farmacia visitada hoy", Marca = "✓" });
+            FueraDeAgenda.Add(new FilaHoy { Icono = "🏥", Nombre = f, Detalle = "Farmacia · ☁️ en el servidor", Marca = "✓" });
+        // Lo capturado que aún no subió también se ve, y dicho: guardado en el teléfono.
+        foreach (var c in cola.Where(c => c.medicoId == 0 || !idsProgramados.Contains(c.medicoId)))
+            FueraDeAgenda.Add(new FilaHoy
+            {
+                Icono = c.tipo == "farmacia" ? "🏥" : "🩺",
+                Nombre = c.etiqueta!,
+                Detalle = (c.tipo == "farmacia" ? "Farmacia" : c.tipo == "no-visita" ? "No visitado" : "Visita")
+                          + " · 📱 guardada en el teléfono, por enviar",
+                Marca = "📱",
+            });
 
         TituloAgenda = $"📋  Tu agenda de hoy · {AgendaHoy.Count(a => a.Marca == "✓")} de {AgendaHoy.Count} visitados";
         TituloFuera = $"➕  Fuera de tu agenda de hoy · {FueraDeAgenda.Count}";
@@ -159,9 +166,43 @@ public partial class HoyVista : BaseVista
 
     public bool PuedeCapturar => _instalacion.Config.PuedeCapturar;
 
-    /// <summary>El ciclo que se está trabajando (se guarda al descargar catálogos o abrir Plan).</summary>
-    public string CicloTexto => Preferences.Get("ciclo_texto", "");
-    public bool HayCiclo => !string.IsNullOrEmpty(CicloTexto);
+    /// <summary>El ciclo que se está trabajando, para la tarjeta de arriba.</summary>
+    public InfoCiclo Ciclo => InfoCiclo.Leer();
+
+    /// <summary>Qué pasa con lo capturado: subido, guardado en el teléfono o rechazado.</summary>
+    [ObservableProperty] private string _detalleCola = "";
+
+    private static string UltimoEnvio()
+    {
+        var crudo = Preferences.Get("ultimo_envio_ok", "");
+        if (!DateTime.TryParse(crudo, null, System.Globalization.DateTimeStyles.RoundtripKind, out var t))
+            return "Nada guardado en el teléfono sin enviar.";
+        var l = t.ToLocalTime();
+        return l.Date == DateTime.Today
+            ? $"Todo subido · última sincronización hoy a las {l:HH:mm}"
+            : $"Todo subido · última sincronización el {l:dd/MM} a las {l:HH:mm}";
+    }
+
+    /// <summary>Capturas que siguen en el teléfono (pendientes o rechazadas), con su médico.</summary>
+    private async Task<List<(int medicoId, string? etiqueta, string tipo)>> PorEnviarAsync()
+    {
+        var l = new List<(int, string?, string)>();
+        foreach (var e in await _base.ColaAsync())
+        {
+            if (e.Estado == (int)EstadoEnvio.Enviado || e.Tipo is not ("visita" or "no-visita" or "farmacia"))
+                continue;
+            var id = 0;
+            if (e.Tipo != "farmacia")
+                try
+                {
+                    using var d = JsonDocument.Parse(e.Cuerpo);
+                    id = ServicioSincronizacion.Entero(d.RootElement, "medico_id");
+                }
+                catch (JsonException) { }
+            l.Add((id, string.IsNullOrWhiteSpace(e.Etiqueta) ? "(sin nombre)" : e.Etiqueta, e.Tipo));
+        }
+        return l;
+    }
 
     /// <summary>
     /// Lo que se dice cuando la instalación no captura. Se explica en vez de esconder:
@@ -211,22 +252,29 @@ public partial class HoyVista : BaseVista
         HayPendientes = _sync.Pendientes > 0;
         HayRechazados = _sync.Rechazados > 0;
         EstadoCola = _sync.Rechazados > 0
-            ? $"{_sync.Rechazados} sin subir — revisar"
-            : _sync.Pendientes > 0 ? $"{_sync.Pendientes} por enviar" : "Al día";
+            ? $"⚠️ {_sync.Rechazados} sin subir — revisar"
+            : _sync.Pendientes > 0 ? $"📱 {_sync.Pendientes} por enviar" : "☁️ Todo en el servidor";
+        DetalleCola = _sync.Rechazados > 0
+            ? "El servidor no los aceptó: el motivo está en Perfil › Tu cola de envío."
+            : _sync.Pendientes > 0
+                ? "Guardado en el teléfono: sube solo cuando hay señal, o toca Sincronizar."
+                : UltimoEnvio();
     }
 
     [RelayCommand]
     public async Task CargarAsync()
     {
+        // Ya hay una carga en curso: salir SIN tocar las listas. El RefreshView vuelve a
+        // disparar este comando cuando `Ocupado` pasa a true, y esa segunda entrada vaciaba
+        // la agenda y se iba (EjecutarAsync la descartaba): la ✓ de lo visitado hoy
+        // desaparecía con «Vistas 3» arriba.
+        if (Ocupado) return;
         OnPropertyChanged(nameof(PuedeCapturar));
-        OnPropertyChanged(nameof(CicloTexto));
-        OnPropertyChanged(nameof(HayCiclo));
+        OnPropertyChanged(nameof(Ciclo));
         await _sync.RefrescarContadoresAsync();
         RefrescarEstadoCola();
         SinCatalogos = !await _base.HayCatalogosAsync();
 
-        // Primero lo local (sirve sin red); si hay conexión se rehace con lo visitado hoy.
-        await ConstruirListasAsync(null, null);
 
         if (!ServicioSincronizacion.HayRed)
         {
@@ -234,6 +282,7 @@ public partial class HoyVista : BaseVista
             // dice que no hay conexión. Un cero afirma; una ausencia no.
             HayDatosDelDia = false;
             Aviso = "Sin conexión: no se pudo consultar tu día. Lo que registres se guarda igual.";
+            await ConstruirListasAsync(null, null);   // agenda local + lo que está en la cola
             return;
         }
         // Se limpia lo que puso la carga ANTERIOR, pero NUNCA el aviso de la cola: es el
@@ -280,8 +329,7 @@ public partial class HoyVista : BaseVista
             try
             {
                 ServicioSincronizacion.GuardarCiclo(await _api.ObtenerAsync<JsonElement>("/visita/planeacion/estado"));
-                OnPropertyChanged(nameof(CicloTexto));
-                OnPropertyChanged(nameof(HayCiclo));
+                OnPropertyChanged(nameof(Ciclo));
             }
             catch (ErrorApi) { /* informativo: no tumba la carga del día */ }
 
@@ -299,17 +347,21 @@ public partial class HoyVista : BaseVista
             // pone el error y las cifras se quedan en «—» — nunca en un cero inventado.
             HayDatosDelDia = true;
         });
+        // Si la consulta falló, al menos la agenda local y lo que está en la cola.
+        if (Error is not null) await ConstruirListasAsync(null, null);
     }
 
     [RelayCommand]
     private async Task SincronizarAsync()
     {
+        string? fallo = null;
         await EjecutarAsync(async () =>
         {
             await _sync.ProcesarAsync();
-            var fallo = await _sync.DescargarCatalogosAsync();
-            if (fallo is not null) Aviso = fallo;
-            await CargarAsync();
+            fallo = await _sync.DescargarCatalogosAsync();
         });
+        // Fuera de EjecutarAsync: CargarAsync no entra mientras la pantalla está ocupada.
+        await CargarAsync();
+        if (fallo is not null) Aviso = fallo;
     }
 }

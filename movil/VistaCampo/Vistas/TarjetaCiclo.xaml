@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  El ciclo que se trabaja, en una tarjeta propia: nombre legible, fechas en palabras,
+  estado y la semana en curso dibujada. Antes era una línea de texto metida bajo el estado
+  de envío («📆 C09-2026 · abierto · semana 2 de 4 · del 01/09 al 28/09»), que se partía
+  a mitad de frase y competía con lo que de verdad dice esa tarjeta.
+-->
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:m="clr-namespace:VistaCampo.Modelos"
+             x:Class="VistaCampo.Vistas.TarjetaCiclo"
+             x:DataType="m:InfoCiclo">
+    <Border Style="{StaticResource Tarjeta}" Padding="12,9" IsVisible="{Binding Hay}">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+            <VerticalStackLayout Spacing="1" VerticalOptions="Center">
+                <Label Text="CICLO DE TRABAJO" FontSize="10" FontAttributes="Bold" CharacterSpacing="1"
+                       TextColor="{StaticResource TextoTenue}" />
+                <Label Text="{Binding Titulo}" FontSize="18" FontAttributes="Bold"
+                       TextColor="{DynamicResource Estructura}" />
+                <Label Text="{Binding Rango}" FontSize="12" TextColor="{StaticResource TextoTenue}" />
+            </VerticalStackLayout>
+            <VerticalStackLayout Grid.Column="1" Spacing="4" VerticalOptions="Center">
+                <Border StrokeThickness="0" BackgroundColor="#E4F4EA" Padding="9,2"
+                        StrokeShape="RoundRectangle 10" HorizontalOptions="End">
+                    <Border.Triggers>
+                        <DataTrigger TargetType="Border" Binding="{Binding Abierto}" Value="False">
+                            <Setter Property="BackgroundColor" Value="#FDECEA" />
+                        </DataTrigger>
+                    </Border.Triggers>
+                    <Label Text="{Binding Estado}" FontSize="11" FontAttributes="Bold"
+                           TextColor="{StaticResource Exito}">
+                        <Label.Triggers>
+                            <DataTrigger TargetType="Label" Binding="{Binding Abierto}" Value="False">
+                                <Setter Property="TextColor" Value="{StaticResource Error}" />
+                            </DataTrigger>
+                        </Label.Triggers>
+                    </Label>
+                </Border>
+                <Label Text="{Binding TextoSemana}" FontSize="12" FontAttributes="Bold" HorizontalOptions="End" />
+                <HorizontalStackLayout Spacing="3" HorizontalOptions="End">
+                    <BoxView WidthRequest="18" HeightRequest="6" CornerRadius="3" Color="{StaticResource Borde}">
+                        <BoxView.Triggers>
+                            <DataTrigger TargetType="BoxView" Binding="{Binding S1}" Value="True">
+                                <Setter Property="Color" Value="{DynamicResource Accion}" />
+                            </DataTrigger>
+                        </BoxView.Triggers>
+                    </BoxView>
+                    <BoxView WidthRequest="18" HeightRequest="6" CornerRadius="3" Color="{StaticResource Borde}">
+                        <BoxView.Triggers>
+                            <DataTrigger TargetType="BoxView" Binding="{Binding S2}" Value="True">
+                                <Setter Property="Color" Value="{DynamicResource Accion}" />
+                            </DataTrigger>
+                        </BoxView.Triggers>
+                    </BoxView>
+                    <BoxView WidthRequest="18" HeightRequest="6" CornerRadius="3" Color="{StaticResource Borde}">
+                        <BoxView.Triggers>
+                            <DataTrigger TargetType="BoxView" Binding="{Binding S3}" Value="True">
+                                <Setter Property="Color" Value="{DynamicResource Accion}" />
+                            </DataTrigger>
+                        </BoxView.Triggers>
+                    </BoxView>
+                    <BoxView WidthRequest="18" HeightRequest="6" CornerRadius="3" Color="{StaticResource Borde}">
+                        <BoxView.Triggers>
+                            <DataTrigger TargetType="BoxView" Binding="{Binding S4}" Value="True">
+                                <Setter Property="Color" Value="{DynamicResource Accion}" />
+                            </DataTrigger>
+                        </BoxView.Triggers>
+                    </BoxView>
+                </HorizontalStackLayout>
+            </VerticalStackLayout>
+        </Grid>
+    </Border>
+</ContentView>
