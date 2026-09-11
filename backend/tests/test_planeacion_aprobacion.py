@@ -91,7 +91,7 @@ def test_la_revision_se_traduce_a_409_como_la_publicada():
 
 
 def test_guardar_una_devuelta_si_se_puede(monkeypatch):
-    monkeypatch.setattr(svc, "_validar", lambda items: None)
+    monkeypatch.setattr(svc, "_validar", lambda items, nombres=None: None)
     n = svc.guardar_planeacion(_db(_ev("DEVUELTA", "x")), 47, 41, [], usuario_id=9)
     assert n == 0
 
@@ -137,6 +137,19 @@ def test_devolver_una_enviada_guarda_el_motivo():
 def test_no_se_devuelve_lo_que_no_esta_enviado():
     with pytest.raises(ValueError, match="no está pendiente"):
         svc.devolver_planeacion(_db(None), 47, 41, usuario_id=3, motivo="x")
+
+
+# ── Los errores de validación nombran al médico ───────────────────────────────
+
+def test_el_error_de_validacion_nombra_al_medico():
+    """Antes decía «(médico 6165)»: el representante no sabía a quién corregir."""
+    from app.schemas.visita import PlaneacionItem
+    items = [PlaneacionItem(medico_id=6165, tipo_visita="V", semana=2, dia_semana="Martes"),
+             PlaneacionItem(medico_id=6165, tipo_visita="R", semana=2, dia_semana="Martes")]
+    with pytest.raises(ValueError, match="ALBA NELLYS PÉREZ"):
+        svc._validar(items, {6165: "ALBA NELLYS PÉREZ"})
+    with pytest.raises(ValueError, match="médico 6165"):   # sin nombre conocido, el id
+        svc._validar(items)
 
 
 # ── El router ────────────────────────────────────────────────────────────────

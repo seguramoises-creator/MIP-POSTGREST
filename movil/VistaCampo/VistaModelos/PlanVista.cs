@@ -48,10 +48,22 @@ public partial class FilaPlan : ObservableObject
     public bool DV => Dia == "Viernes";
     public string TextoRevisita => Revisita ? $"🔁 Con revisita · semana {SemanaR}" : "🔁 Sin revisita";
 
+    /// <summary>
+    /// La combinación que el servidor rechaza (P02/P03). Solo puede venir de lo ya guardado
+    /// —el editor pone la Revisita dos semanas después—, y por eso hay que SEÑALARLA: el
+    /// servidor rechaza la planeación entera por una sola fila.
+    /// </summary>
+    public string? Problema => !(Planeada && Revisita && SemanaR > 0) ? null
+        : SemanaR < SemanaV ? $"la revisita (semana {SemanaR}) va antes que la vista (semana {SemanaV})"
+        : SemanaR == SemanaV && !string.IsNullOrEmpty(Dia) && (DiaR ?? Dia) == Dia
+            ? $"la vista y la revisita caen el mismo día (semana {SemanaV}, {Dia})"
+        : null;
+
     /// <summary>«Vista S1 · Lun · Revisita S3», o «Sin planear».</summary>
     public string Resumen => SemanaV == 0
         ? (EsTop ? "Sin planear · TOP: es obligatorio" : "Sin planear")
-        : $"Vista S{SemanaV}{(string.IsNullOrEmpty(Dia) ? "" : " · " + Dia[..3])}"
+        : (Problema is null ? "" : "⚠ ")
+          + $"Vista S{SemanaV}{(string.IsNullOrEmpty(Dia) ? "" : " · " + Dia[..3])}"
           + (Revisita ? $" · Revisita S{SemanaR}" : "")
           + (FueraDePanel ? " · ya no está en tu panel" : "");
 
@@ -64,7 +76,8 @@ public partial class FilaPlan : ObservableObject
     {
         foreach (var p in new[] { nameof(Planeada), nameof(PuedeRevisita), nameof(V1), nameof(V2),
                                   nameof(V3), nameof(V4), nameof(DL), nameof(DM), nameof(DX),
-                                  nameof(DJ), nameof(DV), nameof(TextoRevisita), nameof(Resumen) })
+                                  nameof(DJ), nameof(DV), nameof(TextoRevisita), nameof(Problema),
+                                  nameof(Resumen) })
             OnPropertyChanged(p);
     }
 }
@@ -400,6 +413,17 @@ public partial class PlanVista : BaseVista
 
     private async Task GuardarEnServidorAsync()
     {
+        // Se comprueba ANTES de mandar y se dice QUIÉN: el servidor rechaza la planeación
+        // entera por una fila, y su mensaje no dice en qué parte de 200 médicos está.
+        var problemas = _todas.Where(f => f.Problema is not null)
+                              .Select(f => $"{f.Nombre}: {f.Problema}.").ToList();
+        if (problemas.Count > 0)
+        {
+            Filtro = "planeados";
+            throw new ErrorApi(string.Join("\n", problemas.Take(3))
+                + (problemas.Count > 3 ? $"\n…y {problemas.Count - 3} más (marcados con ⚠)." : "")
+                + "\nToca el médico y vuelve a marcar su revisita.");
+        }
         await _api.EnviarJsonAsync<JsonElement>("/visita/planeacion", new { items = ItemsParaServidor() });
         HayCambios = false;
         await _base.ReemplazarPlanAsync(_todas.Where(f => f.Planeada).SelectMany(f =>

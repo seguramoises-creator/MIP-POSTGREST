@@ -379,25 +379,28 @@ def estado_planeacion(db: Session, vm_id: int, ciclo_id: int | None) -> dict:
     }
 
 
-def _validar(items: list[PlaneacionItem]) -> None:
+def _validar(items: list[PlaneacionItem], nombres: dict[int, str] | None = None) -> None:
+    """P01-P03. El error nombra al MÉDICO, no su id: «(médico 6165)» obliga al
+    representante a revisar el plan fila por fila para encontrar a quién se refiere."""
     por_medico: dict[int, list[PlaneacionItem]] = {}
     for it in items:
         por_medico.setdefault(it.medico_id, []).append(it)
     for mid, grupo in por_medico.items():
+        quien = (nombres or {}).get(mid) or f"médico {mid}"
         if len(grupo) > 2:
-            raise ValueError(f"Máximo 2 visitas por médico (médico {mid} tiene {len(grupo)})")
+            raise ValueError(f"Máximo 2 visitas por médico ({quien} tiene {len(grupo)})")
         tipos = [g.tipo_visita for g in grupo]
         if tipos.count("V") > 1 or tipos.count("R") > 1:
-            raise ValueError(f"Un médico solo puede tener 1 Vista y 1 Revisita (médico {mid})")
+            raise ValueError(f"Un médico solo puede tener 1 Vista y 1 Revisita ({quien})")
         if "V" in tipos and "R" in tipos:
             v = next(g for g in grupo if g.tipo_visita == "V")
             r = next(g for g in grupo if g.tipo_visita == "R")
             if r.semana < v.semana:
-                raise ValueError(f"La Revisita debe ir en semana >= la Vista (médico {mid})")
+                raise ValueError(f"La Revisita debe ir en semana >= la Vista ({quien})")
             if r.semana == v.semana and r.dia_semana and v.dia_semana and r.dia_semana == v.dia_semana:
-                raise ValueError(f"Vista y Revisita no pueden ser el mismo día (médico {mid})")
+                raise ValueError(f"Vista y Revisita no pueden ser el mismo día ({quien})")
         if "R" in tipos and "V" not in tipos:
-            raise ValueError(f"No se puede planear Revisita sin Vista (médico {mid})")
+            raise ValueError(f"No se puede planear Revisita sin Vista ({quien})")
 
 
 def guardar_planeacion(db: Session, vm_id: int, ciclo_id: int | None,
@@ -409,7 +412,10 @@ def guardar_planeacion(db: Session, vm_id: int, ciclo_id: int | None,
     # Publicada = congelada. El guard va ANTES del delete-then-insert: sin él, un re-guardado
     # borraria el plan publicado y lo reescribiria, moviendo el denominador de la cobertura.
     _guard_no_publicada(db, vm_id, ciclo_id)
-    _validar(items)
+    ids = {it.medico_id for it in items}
+    nombres = ({m.id: m.nombre_completo for m in
+                db.query(MedicoVisita).filter(MedicoVisita.id.in_(ids)).all()} if ids else {})
+    _validar(items, nombres)
     db.query(PlaneacionCiclo).filter(
         PlaneacionCiclo.vm_id == vm_id, PlaneacionCiclo.ciclo_id == ciclo_id).delete(synchronize_session=False)
     for it in items:
