@@ -213,8 +213,9 @@ export interface CoberturaResumen {
   categorias: Record<string, CatCobertura>;
   // `semana`/`dia`: cuándo estaba planeada la Vista (sin_visita) o la Revisita
   // (falta_revisita); null = sin planear.
-  sin_visita: { id: number; nombre: string; categoria: string; es_top: boolean; semana?: number | null; dia?: string | null }[];
-  falta_revisita: { id: number; nombre: string; categoria: string; es_top: boolean; semana?: number | null; dia?: string | null }[];
+  // `vencido`: su día planeado ya pasó y sigue sin visita (o sin revisita).
+  sin_visita: { id: number; nombre: string; categoria: string; es_top: boolean; semana?: number | null; dia?: string | null; vencido?: boolean }[];
+  falta_revisita: { id: number; nombre: string; categoria: string; es_top: boolean; semana?: number | null; dia?: string | null; vencido?: boolean }[];
   /** Semana (1-4) del ciclo que corre hoy; null fuera de sus fechas. */
   semana_actual?: number | null;
   ruptura: { id: number; nombre: string; categoria: string; ciclos_sin_visita: number }[];

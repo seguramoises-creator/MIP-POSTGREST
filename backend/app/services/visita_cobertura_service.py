@@ -132,6 +132,19 @@ def _agrupar_planeacion(filas) -> dict[int, dict[str, tuple[int | None, str | No
     return out
 
 
+def _vencido(ciclo, hoy, semana, dia) -> bool:
+    """¿Ya pasó el día planeado sin visita? Con día: su fecha exacta (semana del ciclo +
+    día). Sin día: la semana entera. Sin semana (no planeado) no hay nada que vencer."""
+    if ciclo is None or hoy is None or not semana:
+        return False
+    from app.services.visita_top_service import fecha_planeada
+    from app.services.visita_dia_service import _rango_semana
+    f = fecha_planeada(ciclo, semana, dia) if dia else None
+    if f is not None:
+        return f < hoy
+    return _rango_semana(ciclo, semana)[1] < hoy
+
+
 def _semana_en_curso(db: Session, ciclo_id: int) -> int | None:
     """Semana (1-4) del ciclo que corre HOY en su país; None fuera de sus fechas."""
     from app.services.visita_dia_service import _semana_de
@@ -189,6 +202,8 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
                  PlaneacionCiclo.semana, PlaneacionCiclo.dia_semana)
         .filter(PlaneacionCiclo.ciclo_id == ciclo_id, PlaneacionCiclo.medico_id.in_(ids or [-1]))
         .all()) if ids else {}
+    ciclo_obj = db.get(Ciclo, ciclo_id)
+    hoy = hoy_local(db, ciclo_obj.pais_codigo) if ciclo_obj else None
 
     total = len(medicos)
     visitados = con_revisita = 0
@@ -214,7 +229,8 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
             sv, dv = plan.get(m.id, {}).get("V", (None, None))
             item = {"id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria,
                     "especialidad_id": m.especialidad_id, "es_top": m.es_top,
-                    "semana": sv, "dia": dv}   # semana de la VISTA planeada (None = sin planear)
+                    "semana": sv, "dia": dv,   # semana de la VISTA planeada (None = sin planear)
+                    "vencido": _vencido(ciclo_obj, hoy, sv, dv)}
             sin_visita.append(item)
             if m.es_top:
                 top_sin_visita.append(item)
@@ -222,7 +238,8 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
             sr, dr = plan.get(m.id, {}).get("R", (None, None))
             item = {"id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria,
                     "es_top": m.es_top,
-                    "semana": sr, "dia": dr}   # semana de la REVISITA planeada (None = sin planear)
+                    "semana": sr, "dia": dr,   # semana de la REVISITA planeada (None = sin planear)
+                    "vencido": _vencido(ciclo_obj, hoy, sr, dr)}
             falta_revisita.append(item)
             if m.es_top:
                 top_falta_revisita.append(item)

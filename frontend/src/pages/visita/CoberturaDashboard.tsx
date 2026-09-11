@@ -29,86 +29,86 @@ function formatearNombres(nombres: string[], tope = 30): string {
 // ── Lista de pendientes POR SEMANA del ciclo ──
 interface MedicoSemana {
   id: number; nombre: string; categoria: string | null; es_top: boolean;
-  semana?: number | null; dia?: string | null;
+  semana?: number | null; dia?: string | null; vencido?: boolean;
 }
-/** Alto fijo de la lista: las dos tarjetas (sin visita / falta revisita) miden lo mismo. */
-const ALTO_LISTA = 300;
-const TOPE_FILAS = 300;
-const SEMANAS = ['1', '2', '3', '4'];
+/** Gris claro: pendiente cuyo día todavía no llega. */
+const GRIS_CLARO = '#9AA3AF';
 
 /**
- * Pendientes agrupados por la semana del ciclo en que estaban planeados. Una lista plana
- * de 2.730 nombres no dice qué urge: lo de la semana 1 ya está vencido y lo de la 4 aún
- * no toca. Arriba, un botón por semana con cuántos quedan sin visitar hasta hoy.
+ * Las 4 semanas del ciclo en columnas, lado a lado. Encima de cada una, el total que sigue
+ * sin visitar (o sin revisita); cada médico en ROJO si su día planeado ya pasó y en GRIS
+ * CLARO si todavía no llega. Lo no planeado no se pinta aquí: esto mide la agenda.
  */
-function ListaPorSemana({ titulo, color, items, semanaActual, textoSinSemana, extra }: {
+function ColumnasPorSemana({ titulo, color, items, semanaActual, verbo, extra }: {
   titulo: string; color: 'error' | 'warning'; items: MedicoSemana[]; semanaActual: number | null | undefined;
-  textoSinSemana: string; extra?: ReactNode;
+  verbo: string; extra?: ReactNode;
 }) {
   const grupos = useMemo(() => {
-    const g: Record<string, MedicoSemana[]> = { 1: [], 2: [], 3: [], 4: [], sin: [] };
-    items.forEach((m) => g[m.semana && m.semana >= 1 && m.semana <= 4 ? String(m.semana) : 'sin'].push(m));
+    const g: Record<string, MedicoSemana[]> = { 1: [], 2: [], 3: [], 4: [] };
+    items.forEach((m) => { if (m.semana && m.semana >= 1 && m.semana <= 4) g[String(m.semana)].push(m); });
+    // Primero lo vencido (lo que urge), después por nombre.
+    Object.values(g).forEach((l) => l.sort((a, b) => Number(!!b.vencido) - Number(!!a.vencido) || a.nombre.localeCompare(b.nombre)));
     return g;
   }, [items]);
-  const porDefecto = semanaActual && grupos[String(semanaActual)].length
-    ? String(semanaActual)
-    : ([...SEMANAS, 'sin'].find((k) => grupos[k].length) ?? '1');
-  const [elegida, setElegida] = useState<string | null>(null);
-  const actual = elegida && grupos[elegida] ? elegida : porDefecto;
-  const lista = grupos[actual];
-  const n = Number(actual);
-  const explicacion = actual === 'sin'
-    ? `${textoSinSemana}: no están en la planeación del ciclo.`
-    : semanaActual && n < semanaActual ? `Planeados para la semana ${n}, ya pasada, y todavía sin visitar.`
-    : n === semanaActual ? 'Planeados para esta semana, todavía sin visitar.'
-    : `Planeados para la semana ${n}; aún no llega.`;
+  const total = SEMANAS.reduce((s, k) => s + grupos[k].length, 0);
+  const vencidos = SEMANAS.reduce((s, k) => s + grupos[k].filter((m) => m.vencido).length, 0);
 
   return (
     <Card variant="outlined" sx={{ height: '100%', width: '100%' }}>
       <CardContent>
         <Typography fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
           {titulo} {extra}
-          <Chip size="small" color={color} label={`${items.length} médicos`} sx={{ ml: 'auto' }} />
+          <Chip size="small" color={color} label={`${total} planeados sin ${verbo}`} sx={{ ml: 'auto' }} />
         </Typography>
-        <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
+        <Stack direction="row" spacing={1.5} sx={{ mt: 0.5 }}>
+          <Typography variant="caption" sx={{ color: ERROR, fontWeight: 700 }}>■ {vencidos} ya pasó su día</Typography>
+          <Typography variant="caption" sx={{ color: GRIS_CLARO, fontWeight: 700 }}>■ {total - vencidos} aún no llega su día</Typography>
+        </Stack>
+        <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mt: 1 }}>
           {SEMANAS.map((k) => {
-            const s = Number(k);
-            const vencida = !!semanaActual && s < semanaActual;
-            const enCurso = s === semanaActual;
+            const lista = grupos[k];
+            const venc = lista.filter((m) => m.vencido).length;
+            const enCurso = Number(k) === semanaActual;
             return (
-              <Chip key={k} size="small" clickable onClick={() => setElegida(k)}
-                    color={actual === k ? (vencida ? 'error' : 'primary') : vencida ? 'error' : 'default'}
-                    variant={actual === k ? 'filled' : 'outlined'}
-                    label={`Sem ${k}${enCurso ? ' · en curso' : vencida ? ' · vencida' : ''} · ${grupos[k].length}`} />
+              <Box key={k} sx={{ flex: 1, minWidth: 0, border: `1px solid ${BORDE_SUAVE}`, borderRadius: 1, overflow: 'hidden' }}>
+                <Box sx={{ px: 1, py: 0.5, bgcolor: venc > 0 ? '#FDECEA' : '#F1F3F6', borderBottom: `1px solid ${BORDE_SUAVE}` }}>
+                  <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.secondary', display: 'block' }}>
+                    Semana {k}{enCurso ? ' · en curso' : ''}
+                  </Typography>
+                  <Typography sx={{ fontSize: 22, fontWeight: 800, lineHeight: 1.1, color: venc > 0 ? ERROR : GRIS_CLARO }}>
+                    {lista.length}
+                  </Typography>
+                  <Typography variant="caption" sx={{ display: 'block', minHeight: 18, color: venc > 0 ? ERROR : GRIS_CLARO }}>
+                    {venc > 0 && venc < lista.length ? `${venc} vencidos · ${lista.length - venc} por venir`
+                      : venc > 0 ? 'ya pasó su día' : lista.length ? 'aún no llega su día' : ' '}
+                  </Typography>
+                </Box>
+                <Box sx={{ height: ALTO_LISTA, overflow: 'auto', px: 0.75, py: 0.5 }}>
+                  {lista.length === 0 ? (
+                    <Typography variant="caption" color="text.secondary">Nadie pendiente.</Typography>
+                  ) : lista.slice(0, TOPE_FILAS).map((m) => (
+                    <Typography key={m.id} variant="caption"
+                                title={`${m.nombre} · Cat. ${m.categoria ?? '?'}${m.dia ? ` · ${m.dia}` : ''}${m.vencido ? ' · su día ya pasó' : ''}`}
+                                sx={{ display: 'block', lineHeight: 1.35, color: m.vencido ? ERROR : GRIS_CLARO, fontWeight: m.vencido ? 600 : 400 }}>
+                      {m.nombre}{m.dia ? ` · ${m.dia.slice(0, 3)}` : ''}{m.es_top ? ' · TOP' : ''}
+                    </Typography>
+                  ))}
+                  {lista.length > TOPE_FILAS && (
+                    <Typography variant="caption" color="text.secondary">… y {lista.length - TOPE_FILAS} más.</Typography>
+                  )}
+                </Box>
+              </Box>
             );
           })}
-          <Chip size="small" clickable onClick={() => setElegida('sin')}
-                variant={actual === 'sin' ? 'filled' : 'outlined'}
-                label={`${textoSinSemana} · ${grupos.sin.length}`} />
         </Stack>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-          {explicacion}
-        </Typography>
-        <Box sx={{ mt: 0.5, height: ALTO_LISTA, overflow: 'auto', borderTop: `1px solid ${BORDE_SUAVE}`, pt: 0.5 }}>
-          {lista.length === 0 ? (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>Nadie pendiente aquí.</Typography>
-          ) : lista.slice(0, TOPE_FILAS).map((m) => (
-            <Typography key={m.id} variant="body2" color="text.secondary">
-              • {m.nombre} <Chip size="small" variant="outlined" label={m.categoria ?? '?'} sx={{ ml: 0.5, height: 16 }} />
-              {m.dia && <Typography component="span" variant="caption" sx={{ ml: 0.5 }}>{m.dia}</Typography>}
-              {m.es_top && <Chip size="small" color="error" label="TOP" sx={{ ml: 0.5, height: 16, fontWeight: 700 }} />}
-            </Typography>
-          ))}
-          {lista.length > TOPE_FILAS && (
-            <Typography variant="caption" color="text.secondary">
-              … y {lista.length - TOPE_FILAS} más.
-            </Typography>
-          )}
-        </Box>
       </CardContent>
     </Card>
   );
 }
+/** Alto fijo de la lista: las dos tarjetas (sin visita / falta revisita) miden lo mismo. */
+const ALTO_LISTA = 300;
+const TOPE_FILAS = 300;
+const SEMANAS = ['1', '2', '3', '4'];
 
 // ── Botón "i" + panel de ranking por visitador (detalle desplegable) ──
 function DetalleVisitador({ metrica, titulo, paisCodigo }: { metrica: string; titulo: string; paisCodigo?: string }) {
@@ -366,13 +366,13 @@ export default function CoberturaDashboard() {
       {/* Las dos del mismo tamaño (Grid estirado + lista de alto fijo) y leídas por semana. */}
       <Grid container spacing={2} alignItems="stretch">
         <Grid item xs={12} md={6} sx={{ display: 'flex' }}>
-          <ListaPorSemana titulo="🔴 Sin ninguna visita" color="error" items={data.sin_visita}
-                          semanaActual={data.semana_actual} textoSinSemana="Sin planear"
-                          extra={<DetalleVisitador metrica="sin_visitar" titulo="Médicos sin visita" paisCodigo={paisCodigo} />} />
+          <ColumnasPorSemana titulo="🔴 Sin ninguna visita" color="error" items={data.sin_visita}
+                             semanaActual={data.semana_actual} verbo="visitar"
+                             extra={<DetalleVisitador metrica="sin_visitar" titulo="Médicos sin visita" paisCodigo={paisCodigo} />} />
         </Grid>
         <Grid item xs={12} md={6} sx={{ display: 'flex' }}>
-          <ListaPorSemana titulo="🟡 Falta Revisita" color="warning" items={data.falta_revisita}
-                          semanaActual={data.semana_actual} textoSinSemana="Sin revisita planeada" />
+          <ColumnasPorSemana titulo="🟡 Falta Revisita" color="warning" items={data.falta_revisita}
+                             semanaActual={data.semana_actual} verbo="revisita" />
         </Grid>
       </Grid>
     </Box>
