@@ -21,6 +21,17 @@ export interface FilaRepresentante {
   ultima_actividad: string | null;
   semana: Avance;
   dia: Avance;
+  /** La farmacia se trabaja APARTE: sin planeación, su avance es la cobertura del ciclo. */
+  farmacia?: FarmaciaRepresentante;
+}
+
+export interface FarmaciaRepresentante {
+  hoy: number;
+  semana: number;
+  visitadas_ciclo: number;
+  universo: number;
+  /** null cuando el representante no tiene farmacias aprobadas en su panel. */
+  cobertura_pct: number | null;
 }
 
 export interface ResumenDia {
@@ -33,6 +44,9 @@ export interface ResumenDia {
   };
   semana: { numero: number | null; planeadas: number; ejecutadas: number;
             avance_pct: number | null; calculable: boolean };
+  /** Cobertura de farmacia del equipo en el ciclo — separada de la visita médica. */
+  farmacia?: { semana: number; visitadas_ciclo: number; universo: number;
+               cobertura_pct: number | null; calculable: boolean };
   representantes: FilaRepresentante[];
 }
 

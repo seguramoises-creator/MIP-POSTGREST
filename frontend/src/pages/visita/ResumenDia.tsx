@@ -57,10 +57,12 @@ function Tarjeta({ titulo, valor, detalle }: { titulo: string; valor: string; de
   );
 }
 
-/** Porcentaje de avance, o «—» cuando no hay agenda contra la que medir. */
-function Avance({ pct, hechas, planeadas }: { pct: number | null; hechas: number; planeadas: number }) {
+/** Porcentaje de avance, o «—» cuando no hay referencia contra la que medir. */
+function Avance({ pct, hechas, planeadas, vacio = 'Sin visitas planeadas para esta semana' }: {
+  pct: number | null; hechas: number; planeadas: number; vacio?: string;
+}) {
   if (pct === null) {
-    return <Typography variant="body2" sx={{ color: TEXTO_TENUE }} title="Sin visitas planeadas para esta semana">—</Typography>;
+    return <Typography variant="body2" sx={{ color: TEXTO_TENUE }} title={vacio}>—</Typography>;
   }
   const color = pct >= 90 ? EXITO : pct >= 60 ? AVISO : undefined;
   return (
@@ -75,6 +77,9 @@ function Avance({ pct, hechas, planeadas }: { pct: number | null; hechas: number
     </Box>
   );
 }
+
+/** Raya vertical que abre cada grupo de columnas (visita médica · farmacia · resto). */
+const SEPARADOR = { borderLeft: `1px solid ${BORDE_SUAVE}` };
 
 /** Filas por página. Fija la altura de la tarjeta: no crece con el equipo. */
 const POR_PAGINA = 14;
@@ -130,6 +135,9 @@ export default function ResumenDia() {
   const actual = Math.min(pagina, paginas);
   const visibles = ordenados.slice((actual - 1) * POR_PAGINA, actual * POR_PAGINA);
   const conAgenda = representantes.filter((r) => r.semana.avance_pct !== null).length;
+  // La farmacia se mide aparte. `??` por si el servidor aún no la manda (despliegue a medias):
+  // mejor «no calculable» que una pantalla en blanco.
+  const far = data.farmacia ?? { semana: 0, visitadas_ciclo: 0, universo: 0, cobertura_pct: null, calculable: false };
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
@@ -165,46 +173,88 @@ export default function ResumenDia() {
                  detalle="Acompañamientos documentados" />
       </Stack>
 
-      {/* El avance del equipo, o el motivo por el que no se puede calcular. */}
-      <Card variant="outlined" sx={{ mb: 1.5, borderRadius: 2,
-                                     bgcolor: semana.calculable ? SUPERFICIE_3 : AVISO_TENUE }}>
-        <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
-          {semana.calculable ? (
-            <>
-              <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                Avance de la semana {semana.numero} · {ciclo?.nombre}
-              </Typography>
-              <Typography variant="body2" sx={{ color: TEXTO_TENUE, mb: 1 }}>
-                {semana.ejecutadas} visitas registradas de {semana.planeadas} planeadas para esta
-                semana, contadas hasta el día consultado.
-              </Typography>
-              <Stack direction="row" spacing={2} alignItems="center">
-                <Typography sx={{ fontSize: 26, fontWeight: 800, color: marcaViva.taupeMedio }}>
-                  {semana.avance_pct}%
+      {/* VISITA MÉDICA y FARMACIA se trabajan por separado y se miden por separado: la
+          visita contra lo planeado en la semana; la farmacia, que no se planea, por la
+          cobertura de su panel en el ciclo. Sumarlas en un solo avance mezclaría dos
+          denominadores que no tienen nada que ver. */}
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} sx={{ mb: 1.5 }}>
+        <Card variant="outlined" sx={{ flex: 1, borderRadius: 2,
+                                       bgcolor: semana.calculable ? SUPERFICIE_3 : AVISO_TENUE }}>
+          <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
+            {semana.calculable ? (
+              <>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  Visita médica · semana {semana.numero} · {ciclo?.nombre}
                 </Typography>
-                <LinearProgress variant="determinate" value={Math.min(semana.avance_pct ?? 0, 100)}
-                                sx={{ flex: 1, height: 8, borderRadius: 4 }} />
-              </Stack>
-            </>
-          ) : (
-            <>
-              <Typography variant="body2" sx={{ fontWeight: 700, color: AVISO }}>
-                Avance contra agenda: no calculable
-              </Typography>
-              <Typography variant="body2" sx={{ color: TEXTO_TENUE }}>
-                No hay visitas planeadas para esta semana del ciclo, así que no existe una
-                referencia contra la que medir. La actividad registrada sí se muestra abajo.
-              </Typography>
-            </>
-          )}
-        </CardContent>
-      </Card>
+                <Typography variant="body2" sx={{ color: TEXTO_TENUE, mb: 1 }}>
+                  {semana.ejecutadas} visitas registradas de {semana.planeadas} planeadas para esta
+                  semana, contadas hasta el día consultado.
+                </Typography>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Typography sx={{ fontSize: 26, fontWeight: 800, color: marcaViva.taupeMedio }}>
+                    {semana.avance_pct}%
+                  </Typography>
+                  <LinearProgress variant="determinate" value={Math.min(semana.avance_pct ?? 0, 100)}
+                                  sx={{ flex: 1, height: 8, borderRadius: 4 }} />
+                </Stack>
+              </>
+            ) : (
+              <>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: AVISO }}>
+                  Visita médica: avance no calculable
+                </Typography>
+                <Typography variant="body2" sx={{ color: TEXTO_TENUE }}>
+                  No hay visitas planeadas para esta semana del ciclo, así que no existe una
+                  referencia contra la que medir. La actividad registrada sí se muestra abajo.
+                </Typography>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card variant="outlined" sx={{ flex: 1, borderRadius: 2,
+                                       bgcolor: far.calculable ? SUPERFICIE_3 : AVISO_TENUE }}>
+          <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
+            {far.calculable ? (
+              <>
+                <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                  Farmacia · cobertura del ciclo
+                </Typography>
+                <Typography variant="body2" sx={{ color: TEXTO_TENUE, mb: 1 }}>
+                  {far.visitadas_ciclo} de {far.universo} farmacias del panel ya visitadas en el
+                  ciclo · {far.semana} visita{far.semana === 1 ? '' : 's'} a farmacia esta semana.
+                </Typography>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Typography sx={{ fontSize: 26, fontWeight: 800, color: marcaViva.taupeMedio }}>
+                    {far.cobertura_pct}%
+                  </Typography>
+                  <LinearProgress variant="determinate" color="secondary"
+                                  value={Math.min(far.cobertura_pct ?? 0, 100)}
+                                  sx={{ flex: 1, height: 8, borderRadius: 4 }} />
+                </Stack>
+              </>
+            ) : (
+              <>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: AVISO }}>
+                  Farmacia: cobertura no calculable
+                </Typography>
+                <Typography variant="body2" sx={{ color: TEXTO_TENUE }}>
+                  Ningún representante del filtro tiene farmacias aprobadas en su panel, así que
+                  no hay universo contra el que medir. Las visitas a farmacia sí se cuentan abajo.
+                </Typography>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </Stack>
 
       <Card variant="outlined" sx={{ borderRadius: 2 }}>
         <CardContent sx={{ pb: 1 }}>
           <Typography fontWeight={700}>La jornada de cada representante</Typography>
           <Typography variant="body2" sx={{ color: TEXTO_TENUE }}>
-            V: visitas médicas · R: revisitas · Con GD: acompañadas · MORE: hojas completadas.
+            <b>Visita médica</b> — V: visitas · R: revisitas · Con GD: acompañadas · avance contra lo
+            planeado en la semana. <b>Farmacia</b> — visitas de hoy · cobertura del panel en el
+            ciclo. MORE: hojas completadas.
           </Typography>
           {/* Qué se está viendo, dicho antes de la tabla: una lista recortada sin
               avisar se lee como la lista completa. */}
@@ -216,15 +266,29 @@ export default function ResumenDia() {
         <Box sx={{ overflowX: 'auto' }}>
           <Table size="small">
             <TableHead>
+              {/* Dos grupos con su propio encabezado: lo que es de la visita médica no se
+                  lee mezclado con lo de farmacia. */}
+              <TableRow sx={{ '& th': { py: 0.5, fontWeight: 700 } }}>
+                <TableCell rowSpan={2} sx={{ borderBottom: `2px solid ${BORDE_SUAVE}` }}>
+                  Representante / línea
+                </TableCell>
+                <TableCell colSpan={4} align="center" sx={{ bgcolor: SUPERFICIE_3, ...SEPARADOR }}>
+                  Visita médica
+                </TableCell>
+                <TableCell colSpan={2} align="center" sx={{ bgcolor: SUPERFICIE_3, ...SEPARADOR }}>
+                  Farmacia
+                </TableCell>
+                <TableCell rowSpan={2} align="right"
+                           sx={{ borderBottom: `2px solid ${BORDE_SUAVE}`, ...SEPARADOR }}>MORE</TableCell>
+                <TableCell rowSpan={2} sx={{ borderBottom: `2px solid ${BORDE_SUAVE}` }}>Última actividad</TableCell>
+              </TableRow>
               <TableRow sx={{ '& th': { borderBottom: `2px solid ${BORDE_SUAVE}` } }}>
-                <TableCell>Representante / línea</TableCell>
-                <TableCell align="right">V</TableCell>
+                <TableCell align="right" sx={SEPARADOR}>V</TableCell>
                 <TableCell align="right">R</TableCell>
-                <TableCell align="right">Farm.</TableCell>
                 <TableCell align="right">Con GD</TableCell>
-                <TableCell align="right">MORE</TableCell>
-                <TableCell>Última actividad</TableCell>
-                <TableCell>Avance de la semana</TableCell>
+                <TableCell>Avance semana</TableCell>
+                <TableCell align="right" sx={SEPARADOR}>Hoy</TableCell>
+                <TableCell>Cobertura ciclo</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -240,19 +304,25 @@ export default function ResumenDia() {
                         {[r.linea, r.gerente].filter(Boolean).join(' · ') || '—'}
                       </Typography>
                     </TableCell>
-                    <TableCell align="right">{r.v}</TableCell>
+                    <TableCell align="right" sx={SEPARADOR}>{r.v}</TableCell>
                     <TableCell align="right">{r.r}</TableCell>
-                    <TableCell align="right">{r.farmacias}</TableCell>
                     <TableCell align="right">{r.con_gd}</TableCell>
-                    <TableCell align="right">{r.more}</TableCell>
+                    <TableCell>
+                      <Avance pct={r.semana.avance_pct} hechas={r.semana.ejecutadas}
+                              planeadas={r.semana.planeadas} />
+                    </TableCell>
+                    <TableCell align="right" sx={SEPARADOR}>{r.farmacias}</TableCell>
+                    <TableCell>
+                      <Avance pct={r.farmacia?.cobertura_pct ?? null}
+                              hechas={r.farmacia?.visitadas_ciclo ?? 0}
+                              planeadas={r.farmacia?.universo ?? 0}
+                              vacio="Sin farmacias aprobadas en su panel" />
+                    </TableCell>
+                    <TableCell align="right" sx={SEPARADOR}>{r.more}</TableCell>
                     <TableCell>
                       {/* «Sin registros» y no «0 visitas»: puede no haber sincronizado. */}
                       {sin ? <Chip size="small" label="Sin registros" variant="outlined" />
                            : r.ultima_actividad}
-                    </TableCell>
-                    <TableCell>
-                      <Avance pct={r.semana.avance_pct} hechas={r.semana.ejecutadas}
-                              planeadas={r.semana.planeadas} />
                     </TableCell>
                   </TableRow>
                 );

@@ -70,11 +70,13 @@ ORACULO = {
     Recurso.CATEGORIZACION_OPERACION:[RO, RT, RA, RA, CF, RA, RA, RA, RA, AD],
     Recurso.MEDICO_MAESTRO:          [RA, RA, RA, RA, CF, RA, RA, RA, RA, AD],
     Recurso.MEDICO_MAESTRO_EDITAR:   [_,  CF, CF, _,  CF, _,  _,  _,  _,  AD],
+    # Aprobación de la planeación del ciclo (sep-2026): VM envía, GD de su equipo aprueba.
+    Recurso.PLANEACION_APROBAR:      [_,  AT, _,  _,  _,  _,  _,  _,  _,  AD],
 }
 
 
-def test_matriz_tiene_35_recursos():
-    assert len(RECURSOS) == 35
+def test_matriz_tiene_36_recursos():
+    assert len(RECURSOS) == 36
     assert set(MATRIZ) == set(RECURSOS)
     assert set(ORACULO) == set(RECURSOS)
 

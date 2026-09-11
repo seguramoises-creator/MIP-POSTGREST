@@ -249,6 +249,7 @@ public class ServicioSincronizacion
                 Categoria = Texto(m, "categoria"),
                 EstadoAprobacion = Texto(m, "estado_aprobacion") ?? "APROBADO",
                 Activo = !m.TryGetProperty("activo", out var a) || a.GetBoolean(),
+                EsTop = m.TryGetProperty("es_top", out var t) && t.ValueKind == JsonValueKind.True,
             }).Where(m => m.Id > 0));
 
             var agenda = await _api.ObtenerAsync<List<JsonElement>>("/visita/agenda-hoy");

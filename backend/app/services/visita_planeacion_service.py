@@ -36,6 +36,13 @@ class PlaneacionPublicadaError(Exception):
     """La planeación ya está publicada: es dato base de cálculo y no se puede modificar."""
 
 
+class PlaneacionEnRevisionError(PlaneacionPublicadaError):
+    """La planeación está enviada al Gerente de Distrito: congelada mientras la revisa.
+
+    Hereda de `PlaneacionPublicadaError` a propósito: todo camino que ya traducía «no se
+    puede modificar» a 409 cubre también este estado sin tener que acordarse de él."""
+
+
 class TopSinPlanearError(Exception):
     """La planeación omite médicos TOP. §7.3 del requerimiento de Mallén: al
     publicar, VISTA verifica que todos los TOP del panel estén incluidos y, si
@@ -69,18 +76,39 @@ def _ultimo_evento(db: Session, vm_id: int, ciclo_id: int) -> PlaneacionEvento |
             .order_by(PlaneacionEvento.fecha.desc(), PlaneacionEvento.id.desc()).first())
 
 
+def _estado_de(ev: PlaneacionEvento | None) -> str:
+    """BORRADOR | ENVIADA | PUBLICADA | DEVUELTA, a partir del último evento.
+
+    DESBLOQUEADA no es un estado propio: devuelve la planeación a borrador."""
+    if ev is None or ev.evento == "DESBLOQUEADA":
+        return "BORRADOR"
+    return ev.evento
+
+
+def estado_actual(db: Session, vm_id: int, ciclo_id: int) -> str:
+    return _estado_de(_ultimo_evento(db, vm_id, ciclo_id))
+
+
 def esta_publicada(db: Session, vm_id: int, ciclo_id: int) -> bool:
     """Publicada = el último evento del (vm, ciclo) es PUBLICADA. Sin eventos → borrador."""
-    ev = _ultimo_evento(db, vm_id, ciclo_id)
-    return ev is not None and ev.evento == "PUBLICADA"
+    return estado_actual(db, vm_id, ciclo_id) == "PUBLICADA"
 
 
 def _guard_no_publicada(db: Session, vm_id: int, ciclo_id: int) -> None:
-    if esta_publicada(db, vm_id, ciclo_id):
+    """La planeación solo se edita en BORRADOR o DEVUELTA.
+
+    ENVIADA también se bloquea: si el representante pudiera seguir cambiándola mientras
+    su gerente la revisa, el gerente aprobaría una planeación distinta de la que leyó."""
+    estado = estado_actual(db, vm_id, ciclo_id)
+    if estado == "PUBLICADA":
         raise PlaneacionPublicadaError(
             "La planeación de este ciclo ya fue publicada y no puede modificarse: es el dato "
             "base con el que se calcula tu cobertura. Si hay un error, un administrador debe "
             "desbloquearla indicando el motivo.")
+    if estado == "ENVIADA":
+        raise PlaneacionEnRevisionError(
+            "La planeación está enviada a tu Gerente de Distrito y en revisión: no se puede "
+            "modificar hasta que la apruebe o te la devuelva con sus observaciones.")
 
 
 def _medicos_del_ciclo(db: Session, vm_id: int, ciclo_id: int) -> list[MedicoVisita]:
@@ -126,21 +154,186 @@ def publicar_planeacion(db: Session, vm_id: int, ciclo_id: int | None, usuario_i
         raise ValueError("No hay ciclo activo")
     _guard_ciclo_abierto(db, ciclo_id)
     _guard_no_publicada(db, vm_id, ciclo_id)
-    n = db.query(PlaneacionCiclo).filter(
-        PlaneacionCiclo.vm_id == vm_id, PlaneacionCiclo.ciclo_id == ciclo_id).count()
-    if n == 0:
-        raise ValueError("No hay planeación que publicar: guarda al menos un médico primero.")
-    faltantes = top_sin_planear(db, vm_id, ciclo_id)
-    if faltantes:
-        nombres = _formatear_nombres([f["nombre"] for f in faltantes])
-        raise TopSinPlanearError(
-            f"No se puede publicar: faltan {len(faltantes)} médico(s) TOP en la "
-            f"planeación del ciclo. Agrégalos y vuelve a intentarlo: {nombres}.")
+    n = _validar_publicable(db, vm_id, ciclo_id, "publicar")
     db.add(PlaneacionEvento(vm_id=vm_id, ciclo_id=ciclo_id, evento="PUBLICADA",
                             usuario_id=usuario_id, items=n))
     db.commit()
     logger.info(f"Planeación PUBLICADA vm={vm_id} ciclo={ciclo_id} items={n} por usuario={usuario_id}")
     return {"publicada": True, "items": n, "ciclo_id": ciclo_id}
+
+
+def _validar_publicable(db: Session, vm_id: int, ciclo_id: int, verbo: str) -> int:
+    """Lo que tiene que cumplir una planeación para enviarse, aprobarse o publicarse.
+
+    Se vuelve a exigir AL APROBAR y no solo al enviar: entre un momento y otro puede
+    haberse marcado un médico TOP nuevo, y aprobar entonces congelaría un plan que ya
+    no cumple el §7.3."""
+    n = db.query(PlaneacionCiclo).filter(
+        PlaneacionCiclo.vm_id == vm_id, PlaneacionCiclo.ciclo_id == ciclo_id).count()
+    if n == 0:
+        raise ValueError(f"No hay planeación que {verbo}: guarda al menos un médico primero.")
+    faltantes = top_sin_planear(db, vm_id, ciclo_id)
+    if faltantes:
+        nombres = _formatear_nombres([f["nombre"] for f in faltantes])
+        raise TopSinPlanearError(
+            f"No se puede {verbo}: faltan {len(faltantes)} médico(s) TOP en la "
+            f"planeación del ciclo. Agrégalos y vuelve a intentarlo: {nombres}.")
+    return n
+
+
+def enviar_planeacion(db: Session, vm_id: int, ciclo_id: int | None, usuario_id: int | None) -> dict:
+    """El representante manda su planeación a su Gerente de Distrito para aprobación.
+
+    Desde aquí queda bloqueada para él (ENVIADA) hasta que el gerente la apruebe —y
+    entonces se publica— o se la devuelva con motivo."""
+    ciclo_id = ciclo_id or ciclo_por_defecto(db, vm_id)
+    if ciclo_id is None:
+        raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
+    _guard_no_publicada(db, vm_id, ciclo_id)
+    n = _validar_publicable(db, vm_id, ciclo_id, "enviar")
+    db.add(PlaneacionEvento(vm_id=vm_id, ciclo_id=ciclo_id, evento="ENVIADA",
+                            usuario_id=usuario_id, items=n))
+    db.commit()
+    logger.info(f"Planeación ENVIADA a aprobación vm={vm_id} ciclo={ciclo_id} items={n}")
+    _avisar_gerente(db, vm_id, n)
+    return {"estado": "ENVIADA", "items": n, "ciclo_id": ciclo_id}
+
+
+def _exigir_enviada(db: Session, vm_id: int, ciclo_id: int) -> None:
+    estado = estado_actual(db, vm_id, ciclo_id)
+    if estado != "ENVIADA":
+        raise ValueError(
+            "Esta planeación no está pendiente de aprobación "
+            f"(estado actual: {estado.lower()}). Solo se aprueba o devuelve una planeación enviada.")
+
+
+def aprobar_planeacion(db: Session, vm_id: int, ciclo_id: int | None, usuario_id: int | None) -> dict:
+    """El Gerente de Distrito aprueba: la planeación queda PUBLICADA (congelada).
+
+    Aprobar ES publicar —mismo evento, mismo congelamiento—, así todo lo que ya
+    dependía de «publicada» (cobertura, guards de edición) funciona sin cambios. Lo que
+    cambia es quién la dispara: el `usuario_id` del evento es el del gerente."""
+    ciclo_id = ciclo_id or ciclo_por_defecto(db, vm_id)
+    if ciclo_id is None:
+        raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
+    _exigir_enviada(db, vm_id, ciclo_id)
+    n = _validar_publicable(db, vm_id, ciclo_id, "aprobar")
+    db.add(PlaneacionEvento(vm_id=vm_id, ciclo_id=ciclo_id, evento="PUBLICADA",
+                            usuario_id=usuario_id, items=n))
+    db.commit()
+    logger.info(f"Planeación APROBADA (publicada) vm={vm_id} ciclo={ciclo_id} items={n} por gerente={usuario_id}")
+    return {"estado": "PUBLICADA", "publicada": True, "items": n, "ciclo_id": ciclo_id}
+
+
+def devolver_planeacion(db: Session, vm_id: int, ciclo_id: int | None,
+                        usuario_id: int | None, motivo: str) -> dict:
+    """El Gerente de Distrito la devuelve con observaciones: vuelve a ser editable.
+
+    El motivo es obligatorio: devolver sin decir qué corregir obliga al representante
+    a adivinar, y la próxima versión llega con el mismo problema."""
+    ciclo_id = ciclo_id or ciclo_por_defecto(db, vm_id)
+    if ciclo_id is None:
+        raise ValueError("No hay ciclo activo")
+    _guard_ciclo_abierto(db, ciclo_id)
+    if not (motivo or "").strip():
+        raise ValueError("Indica qué debe corregir el representante (queda registrado).")
+    _exigir_enviada(db, vm_id, ciclo_id)
+    db.add(PlaneacionEvento(vm_id=vm_id, ciclo_id=ciclo_id, evento="DEVUELTA",
+                            usuario_id=usuario_id, motivo=motivo.strip()[:300]))
+    db.commit()
+    logger.info(f"Planeación DEVUELTA vm={vm_id} ciclo={ciclo_id} por gerente={usuario_id}: {motivo}")
+    return {"estado": "DEVUELTA", "ciclo_id": ciclo_id}
+
+
+def _avisar_gerente(db: Session, vm_id: int, items: int) -> None:
+    """Correo al Gerente de Distrito: tiene una planeación por aprobar. Best-effort:
+    un fallo de correo nunca revierte el envío, que ya quedó registrado."""
+    try:
+        from app.models.dimensiones import Gerente, RepresentanteMedico
+        from app.models.usuario import Usuario
+        from app.services import notification_service
+        rm = db.query(RepresentanteMedico).filter(RepresentanteMedico.id == vm_id).first()
+        if not rm or not rm.gerente_id:
+            return
+        ger = db.query(Gerente).filter(Gerente.id == rm.gerente_id).first()
+        correo = ger.email if (ger and ger.email) else None
+        if not correo:
+            ug = db.query(Usuario).filter(Usuario.gerente_id == rm.gerente_id).first()
+            correo = ug.email if ug else None
+        if correo:
+            notification_service.notificar_planeacion_por_aprobar(
+                correo, ger.nombre if ger else "Gerente", rm.nombre, items)
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Aviso de planeación enviada al GD falló (no bloquea) vm={vm_id}: {e}")
+
+
+def equipo_planeaciones(db: Session, rm_ids: list[int], ciclo_id: int | None) -> list[dict]:
+    """Una fila por representante con el estado de su planeación: la bandeja del gerente.
+
+    Incluye a quien todavía no planeó (BORRADOR con 0 médicos): esconderlo haría creer
+    al gerente que su equipo está completo cuando falta gente por empezar."""
+    from app.models.dimensiones import RepresentanteMedico
+    rms = (db.query(RepresentanteMedico)
+           .filter(RepresentanteMedico.id.in_(rm_ids or [-1]),
+                   RepresentanteMedico.activo.is_(True))
+           .order_by(RepresentanteMedico.codigo).all())
+    filas = []
+    for rm in rms:
+        cid = ciclo_id or ciclo_por_defecto(db, rm.id)
+        if cid is None:
+            continue
+        plan = db.query(PlaneacionCiclo).filter(
+            PlaneacionCiclo.vm_id == rm.id, PlaneacionCiclo.ciclo_id == cid).all()
+        ev = _ultimo_evento(db, rm.id, cid)
+        estado = _estado_de(ev)
+        filas.append({
+            "vm_id": rm.id, "codigo": rm.codigo, "nombre": rm.nombre, "ciclo_id": cid,
+            "estado": estado,
+            "fecha_estado": ev.fecha.isoformat() if ev and estado != "BORRADOR" else None,
+            "motivo": ev.motivo if ev and estado == "DEVUELTA" else None,
+            "panel": len(_medicos_del_ciclo(db, rm.id, cid)),
+            "medicos_planeados": len({p.medico_id for p in plan if p.tipo_visita == "V"}),
+            "vistas": sum(1 for p in plan if p.tipo_visita == "V"),
+            "revisitas": sum(1 for p in plan if p.tipo_visita == "R"),
+        })
+    return filas
+
+
+def detalle_planeacion(db: Session, vm_id: int, ciclo_id: int | None) -> dict:
+    """La planeación leída como la revisa un gerente: un renglón por médico, con su
+    semana de Vista y de Revisita, más los médicos del panel que quedaron fuera."""
+    from app.models.dimensiones import Especialidad
+    ciclo_id = ciclo_id or ciclo_por_defecto(db, vm_id)
+    if ciclo_id is None:
+        return {"ciclo_id": None, "estado": "BORRADOR", "medicos": [], "sin_planear": []}
+    medicos = {m.id: m for m in _medicos_del_ciclo(db, vm_id, ciclo_id)}
+    esp = {e.id: e.nombre for e in db.query(Especialidad).all()}
+    por_medico: dict[int, dict] = {}
+    for p in db.query(PlaneacionCiclo).filter(
+            PlaneacionCiclo.vm_id == vm_id, PlaneacionCiclo.ciclo_id == ciclo_id).all():
+        m = medicos.get(p.medico_id) or db.get(MedicoVisita, p.medico_id)
+        d = por_medico.setdefault(p.medico_id, {
+            "medico_id": p.medico_id,
+            "nombre": m.nombre_completo if m else f"Médico {p.medico_id}",
+            "categoria": m.categoria if m else None,
+            "especialidad": esp.get(m.especialidad_id) if m else None,
+            "top": bool(m and m.es_top),
+            "semana_v": None, "dia_v": None, "semana_r": None, "dia_r": None})
+        sufijo = "r" if p.tipo_visita == "R" else "v"
+        d[f"semana_{sufijo}"] = p.semana
+        d[f"dia_{sufijo}"] = p.dia_semana
+    sin_planear = [{"medico_id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria,
+                    "top": bool(m.es_top)}
+                   for m in medicos.values() if m.id not in por_medico]
+    ev = _ultimo_evento(db, vm_id, ciclo_id)
+    return {
+        "ciclo_id": ciclo_id, "estado": _estado_de(ev),
+        "motivo": ev.motivo if ev and ev.evento == "DEVUELTA" else None,
+        "medicos": sorted(por_medico.values(), key=lambda d: (d["semana_v"] or 9, d["nombre"])),
+        "sin_planear": sorted(sin_planear, key=lambda d: (not d["top"], d["categoria"] or "Z", d["nombre"])),
+    }
 
 
 def desbloquear_planeacion(db: Session, vm_id: int, ciclo_id: int | None,
@@ -170,10 +363,16 @@ def estado_planeacion(db: Session, vm_id: int, ciclo_id: int | None) -> dict:
     eventos = (db.query(PlaneacionEvento)
                .filter(PlaneacionEvento.vm_id == vm_id, PlaneacionEvento.ciclo_id == ciclo_id)
                .order_by(PlaneacionEvento.fecha.desc(), PlaneacionEvento.id.desc()).all())
+    ultimo = eventos[0] if eventos else None
+    estado = _estado_de(ultimo)
     return {
         "ciclo_id": ciclo_id,
-        "publicada": bool(eventos) and eventos[0].evento == "PUBLICADA",
-        "publicada_en": eventos[0].fecha.isoformat() if eventos and eventos[0].evento == "PUBLICADA" else None,
+        "estado": estado,
+        "publicada": estado == "PUBLICADA",
+        "publicada_en": ultimo.fecha.isoformat() if estado == "PUBLICADA" else None,
+        "enviada_en": ultimo.fecha.isoformat() if estado == "ENVIADA" else None,
+        # Lo que el gerente pidió corregir: el representante lo lee al abrir su plan.
+        "motivo_devolucion": ultimo.motivo if estado == "DEVUELTA" else None,
         "historial": [{"evento": e.evento, "fecha": e.fecha.isoformat(),
                        "usuario_id": e.usuario_id, "motivo": e.motivo, "items": e.items}
                       for e in eventos],

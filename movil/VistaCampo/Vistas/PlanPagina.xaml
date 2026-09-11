@@ -1,61 +1,272 @@
 <?xml version="1.0" encoding="utf-8" ?>
+<!--
+  La planeación del ciclo desde el teléfono.
+
+  UN SOLO EDITOR, abajo, para el médico que se toca — no botones de semana repetidos en
+  cada fila. Con 200 médicos, diez botones por fila eran dos mil controles vivos y la
+  lista se arrastraba; así la lista solo lleva texto y el editor existe una vez.
+-->
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:m="clr-namespace:VistaCampo.Modelos"
-             xmlns:sys="clr-namespace:System;assembly=netstandard"
+             xmlns:vm="clr-namespace:VistaCampo.VistaModelos"
              x:Class="VistaCampo.Vistas.PlanPagina"
+             x:Name="pagina"
              Title="Plan">
 
-    <Grid RowDefinitions="Auto,Auto,*" Padding="16" RowSpacing="12">
+    <ContentPage.Resources>
+        <Style x:Key="Chip" TargetType="Button">
+            <Setter Property="BackgroundColor" Value="{StaticResource Superficie}" />
+            <Setter Property="TextColor" Value="{DynamicResource Accion}" />
+            <Setter Property="BorderColor" Value="{StaticResource Borde}" />
+            <Setter Property="BorderWidth" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="FontAttributes" Value="Bold" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HeightRequest" Value="44" />
+        </Style>
+    </ContentPage.Resources>
 
-        <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
-            <Border Style="{StaticResource Tarjeta}">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" Padding="10,8" RowSpacing="7">
+
+        <!-- Estado de la planeación: lo primero que tiene que saber es si puede tocarla. -->
+        <Border Style="{StaticResource Tarjeta}" BackgroundColor="{Binding ColorEstado}">
+            <VerticalStackLayout Spacing="2">
+                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                    <Label Text="{Binding EstadoTexto}" FontAttributes="Bold" FontSize="14"
+                           VerticalOptions="Center" />
+                    <ActivityIndicator Grid.Column="1" IsRunning="{Binding Ocupado}" IsVisible="{Binding Ocupado}"
+                                       WidthRequest="22" HeightRequest="22" Color="{DynamicResource Accion}" />
+                    <Button Grid.Column="2" Text="🔄" Style="{StaticResource BotonSecundario}"
+                            WidthRequest="48" Padding="0" Command="{Binding CargarCommand}" />
+                </Grid>
+                <Label Text="{Binding EstadoDetalle}" Style="{StaticResource Tenue}" />
+                <Label Text="{Binding Error}" IsVisible="{Binding HayError}" FontSize="12"
+                       TextColor="{StaticResource Error}" FontAttributes="Bold" />
+                <Label Text="{Binding Aviso}" IsVisible="{Binding HayAviso}" FontSize="12"
+                       TextColor="{StaticResource Estructura}" FontAttributes="Bold" />
+            </VerticalStackLayout>
+        </Border>
+
+        <!-- Cifras del plan -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,*,*" ColumnSpacing="6">
+            <Border Style="{StaticResource Tarjeta}" Padding="8,5">
                 <VerticalStackLayout>
-                    <Label Text="Vistas planeadas" Style="{StaticResource Tenue}" />
-                    <Label Text="{Binding TotalVistas}" FontSize="30" FontAttributes="Bold" />
+                    <Label Text="🩺 Médicos" Style="{StaticResource Tenue}" />
+                    <Label Text="{Binding TextoPlaneados}" FontSize="18" FontAttributes="Bold" />
                 </VerticalStackLayout>
             </Border>
-            <Border Grid.Column="1" Style="{StaticResource Tarjeta}">
+            <Border Grid.Column="1" Style="{StaticResource Tarjeta}" Padding="8,5">
                 <VerticalStackLayout>
-                    <Label Text="Revisitas" Style="{StaticResource Tenue}" />
-                    <Label Text="{Binding TotalRevisitas}" FontSize="30" FontAttributes="Bold" />
+                    <Label Text="📅 Vistas" Style="{StaticResource Tenue}" />
+                    <Label Text="{Binding TotalVistas}" FontSize="18" FontAttributes="Bold" />
+                </VerticalStackLayout>
+            </Border>
+            <Border Grid.Column="2" Style="{StaticResource Tarjeta}" Padding="8,5">
+                <VerticalStackLayout>
+                    <Label Text="🔁 Revisitas" Style="{StaticResource Tenue}" />
+                    <Label Text="{Binding TotalRevisitas}" FontSize="18" FontAttributes="Bold" />
                 </VerticalStackLayout>
             </Border>
         </Grid>
 
-        <Border Grid.Row="1" Style="{StaticResource Tarjeta}" BackgroundColor="#FDECEA"
-                IsVisible="{Binding HayProblemas}">
-            <VerticalStackLayout>
-                <Label Text="Tu plan tiene problemas" FontAttributes="Bold"
-                       TextColor="{StaticResource Error}" />
-                <CollectionView ItemsSource="{Binding Problemas}" HeightRequest="90">
-                    <CollectionView.ItemTemplate>
-                        <DataTemplate x:DataType="sys:String">
-                            <Label Text="{Binding .}" FontSize="13" TextColor="{StaticResource Error}" />
-                        </DataTemplate>
-                    </CollectionView.ItemTemplate>
-                </CollectionView>
-            </VerticalStackLayout>
-        </Border>
+        <!-- Buscar y filtrar -->
+        <VerticalStackLayout Grid.Row="2" Spacing="5">
+            <Label Text="{Binding TextoTop}" IsVisible="{Binding HayTopSinPlanear}" FontSize="12"
+                   FontAttributes="Bold" TextColor="{StaticResource Aviso}" />
+            <Entry Placeholder="🔍 Buscar médico" Text="{Binding Busqueda}" />
+            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="5">
+                <Button Text="📋 Todos" Style="{StaticResource Chip}"
+                        Command="{Binding ElegirFiltroCommand}" CommandParameter="todos">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding FiltroTodos}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                            <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Grid.Column="1" Text="⭕ Sin planear" Style="{StaticResource Chip}"
+                        Command="{Binding ElegirFiltroCommand}" CommandParameter="sin">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding FiltroSin}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                            <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+                <Button Grid.Column="2" Text="✅ Planeados" Style="{StaticResource Chip}"
+                        Command="{Binding ElegirFiltroCommand}" CommandParameter="planeados">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding FiltroPlaneados}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                            <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+            </Grid>
+        </VerticalStackLayout>
 
-        <CollectionView Grid.Row="2" ItemsSource="{Binding Items}"
-                        IsGrouped="False">
+        <!-- Los médicos del panel -->
+        <CollectionView Grid.Row="3" ItemsSource="{Binding Filas}">
+            <CollectionView.EmptyView>
+                <Label Text="No hay médicos que coincidan." Style="{StaticResource Tenue}"
+                       HorizontalOptions="Center" Margin="0,20" />
+            </CollectionView.EmptyView>
             <CollectionView.ItemTemplate>
-                <DataTemplate x:DataType="m:ItemPlan">
-                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,5">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <VerticalStackLayout>
-                                <Label Text="{Binding Medico}" FontAttributes="Bold" />
-                                <Label Style="{StaticResource Tenue}"
-                                       Text="{Binding TipoVisita, Converter={StaticResource TipoATexto}}" />
+                <DataTemplate x:DataType="vm:FilaPlan">
+                    <Border Style="{StaticResource Tarjeta}" Margin="0,0,0,5" Padding="8,6">
+                        <Border.Triggers>
+                            <DataTrigger TargetType="Border" Binding="{Binding Seleccionada}" Value="True">
+                                <Setter Property="Stroke" Value="{DynamicResource Accion}" />
+                                <Setter Property="StrokeThickness" Value="2" />
+                            </DataTrigger>
+                        </Border.Triggers>
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding BindingContext.SeleccionarCommand, Source={x:Reference pagina}}"
+                                CommandParameter="{Binding .}" />
+                        </Border.GestureRecognizers>
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="7">
+                            <Border WidthRequest="22" HeightRequest="22" StrokeThickness="0"
+                                    BackgroundColor="#D6E4FF" StrokeShape="RoundRectangle 11"
+                                    VerticalOptions="Center">
+                                <Label Text="{Binding TextoCategoria}" FontSize="10" FontAttributes="Bold"
+                                       TextColor="#1E52C7" HorizontalOptions="Center" VerticalOptions="Center" />
+                            </Border>
+                            <VerticalStackLayout Grid.Column="1">
+                                <Label Text="{Binding Nombre}" FontAttributes="Bold" FontSize="12" />
+                                <Label Text="{Binding Resumen}" Style="{StaticResource Tenue}">
+                                    <Label.Triggers>
+                                        <DataTrigger TargetType="Label" Binding="{Binding Planeada}" Value="True">
+                                            <Setter Property="TextColor" Value="{StaticResource Exito}" />
+                                            <Setter Property="FontAttributes" Value="Bold" />
+                                        </DataTrigger>
+                                    </Label.Triggers>
+                                </Label>
                             </VerticalStackLayout>
-                            <Label Grid.Column="1" VerticalOptions="Center" FontAttributes="Bold"
-                                   TextColor="{DynamicResource Accion}"
-                                   Text="{Binding Semana, StringFormat='Semana {0}'}" />
+                            <Label Grid.Column="2" Text="⭐" IsVisible="{Binding EsTop}" VerticalOptions="Center" />
                         </Grid>
                     </Border>
                 </DataTemplate>
             </CollectionView.ItemTemplate>
         </CollectionView>
+
+        <!-- Editor del médico tocado -->
+        <Border Grid.Row="4" Style="{StaticResource Tarjeta}" IsVisible="{Binding HaySeleccion}"
+                Stroke="{DynamicResource Accion}" StrokeThickness="2">
+            <VerticalStackLayout Spacing="6">
+                <Grid ColumnDefinitions="*,Auto">
+                    <Label Text="{Binding Seleccionada.Nombre}" FontAttributes="Bold" FontSize="13"
+                           VerticalOptions="Center" LineBreakMode="TailTruncation" />
+                    <Button Grid.Column="1" Text="✖" Style="{StaticResource Chip}" WidthRequest="44"
+                            Command="{Binding CerrarEditorCommand}" />
+                </Grid>
+
+                <Grid ColumnDefinitions="Auto,*,*,*,*" ColumnSpacing="5">
+                    <Label Text="📅 Semana" FontAttributes="Bold" VerticalOptions="Center" />
+                    <Button Grid.Column="1" Text="1" Style="{StaticResource Chip}"
+                            Command="{Binding ElegirSemanaCommand}" CommandParameter="1">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.V1}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Grid.Column="2" Text="2" Style="{StaticResource Chip}"
+                            Command="{Binding ElegirSemanaCommand}" CommandParameter="2">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.V2}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Grid.Column="3" Text="3" Style="{StaticResource Chip}"
+                            Command="{Binding ElegirSemanaCommand}" CommandParameter="3">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.V3}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Grid.Column="4" Text="4" Style="{StaticResource Chip}"
+                            Command="{Binding ElegirSemanaCommand}" CommandParameter="4">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.V4}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                </Grid>
+
+                <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="5">
+                    <Button Text="Lun" Style="{StaticResource Chip}"
+                            Command="{Binding ElegirDiaCommand}" CommandParameter="Lunes">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DL}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Grid.Column="1" Text="Mar" Style="{StaticResource Chip}"
+                            Command="{Binding ElegirDiaCommand}" CommandParameter="Martes">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DM}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Grid.Column="2" Text="Mié" Style="{StaticResource Chip}"
+                            Command="{Binding ElegirDiaCommand}" CommandParameter="Miércoles">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DX}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Grid.Column="3" Text="Jue" Style="{StaticResource Chip}"
+                            Command="{Binding ElegirDiaCommand}" CommandParameter="Jueves">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DJ}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                    <Button Grid.Column="4" Text="Vie" Style="{StaticResource Chip}"
+                            Command="{Binding ElegirDiaCommand}" CommandParameter="Viernes">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.DV}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                                <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
+                </Grid>
+
+                <Button Text="{Binding Seleccionada.TextoRevisita}" Style="{StaticResource Chip}"
+                        Command="{Binding AlternarRevisitaCommand}">
+                    <Button.Triggers>
+                        <DataTrigger TargetType="Button" Binding="{Binding Seleccionada.Revisita}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{DynamicResource Accion}" />
+                            <Setter Property="TextColor" Value="{StaticResource Blanco}" />
+                        </DataTrigger>
+                    </Button.Triggers>
+                </Button>
+            </VerticalStackLayout>
+        </Border>
+
+        <!-- Guardar y enviar: solo mientras la planeación es suya para editar. -->
+        <Grid Grid.Row="5" ColumnDefinitions="*,*" ColumnSpacing="8" IsVisible="{Binding Editable}">
+            <Button Text="💾 Guardar" Style="{StaticResource BotonSecundario}" Command="{Binding GuardarCommand}" />
+            <Button Grid.Column="1" Text="📤 Enviar a mi gerente" Style="{StaticResource BotonPrincipal}"
+                    Command="{Binding EnviarCommand}" />
+        </Grid>
     </Grid>
 </ContentPage>

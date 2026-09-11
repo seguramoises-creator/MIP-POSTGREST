@@ -6,14 +6,14 @@ import {
   Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
 import { Save, EventNote, Warning, CheckCircle, FilterList, Search, Badge, SupervisorAccount, Layers,
-         Lock, LockOpen, PublishedWithChanges } from '@mui/icons-material';
+         Lock, LockOpen, PublishedWithChanges, Send, HourglassTop, Undo } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { useCicloStore } from '../../store/ciclo.store';
 import { usePuede } from '../../store/permisos.store';
 import { catChipSx } from './categoriaColores';
 import {
   listarMedicos, obtenerPlaneacion, planeacionResumen, guardarPlaneacion, listarVMs, miGerente,
-  planeacionEstado, publicarPlaneacion, desbloquearPlaneacion,
+  planeacionEstado, publicarPlaneacion, desbloquearPlaneacion, enviarPlaneacion,
   type MedicoVisita, type PlaneacionItem, type PlaneacionResumen, type Catalogo, type MiGerente,
   type PlaneacionEstado,
 } from '../../services/visita.service';
@@ -77,9 +77,11 @@ export default function PlaneacionVisita() {
   const [motivoDesbloqueo, setMotivoDesbloqueo] = useState('');
   const [publicando, setPublicando] = useState(false);
   const congelada = !!estado?.publicada;
-  // Bloquea la edición: ciclo en consulta, planeación publicada, o el usuario no puede REGISTRAR
-  // (roles de solo lectura como CONSULTA/GD/Analista/Dirección la ven pero no la modifican).
-  const bloqueado = esSoloLectura || congelada || !puedeEditar;
+  // Enviada a su Gerente de Distrito: congelada mientras la revisa (el servidor también lo exige).
+  const enRevision = estado?.estado === 'ENVIADA';
+  // Bloquea la edición: ciclo en consulta, planeación publicada o en revisión, o el usuario no
+  // puede REGISTRAR (roles de solo lectura como CONSULTA/GD/Analista/Dirección la ven sin tocarla).
+  const bloqueado = esSoloLectura || congelada || enRevision || !puedeEditar;
   const esAdmin = rol === 'ADMIN';
 
   // Filtro visual (no afecta el guardado: se persiste TODO el plan, no solo lo visible).
@@ -188,8 +190,7 @@ export default function PlaneacionVisita() {
     };
   }, [plan, medicos]);
 
-  async function guardar() {
-    setGuardando(true); setMsg(null);
+  function construirItems(): PlaneacionItem[] {
     const items: PlaneacionItem[] = [];
     for (const [idStr, f] of Object.entries(plan)) {
       const id = Number(idStr);
@@ -198,6 +199,12 @@ export default function PlaneacionVisita() {
         items.push({ medico_id: id, tipo_visita: 'R', semana: f.rSemana, dia_semana: (f.rDia || f.vDia) || null });
       }
     }
+    return items;
+  }
+
+  async function guardar() {
+    setGuardando(true); setMsg(null);
+    const items = construirItems();
     try {
       const res = await guardarPlaneacion(items, vmParam);
       setMsg({ tipo: 'success', texto: `Planeación guardada (${res.guardadas} ítems).` });
@@ -219,6 +226,22 @@ export default function PlaneacionVisita() {
       setEstado(await planeacionEstado(vmParam));
     } catch (e) {
       setMsg({ tipo: 'error', texto: msgError(e, 'No se pudo publicar la planeación.') });
+    } finally { setPublicando(false); }
+  }
+
+  // El representante no publica: GUARDA lo que ve en pantalla y lo ENVÍA a su gerente en un
+  // solo paso. Enviar sin guardar mandaría la última versión guardada, no la que está viendo.
+  async function enviar() {
+    setPublicando(true); setMsg(null);
+    try {
+      await guardarPlaneacion(construirItems(), vmParam);
+      const r = await enviarPlaneacion();
+      setConfirmarPublicar(false);
+      setMsg({ tipo: 'success', texto: `Planeación enviada a tu Gerente de Distrito (${r.items} visitas).` });
+      setEstado(await planeacionEstado(vmParam));
+      setResumen(await planeacionResumen(vmParam));
+    } catch (e) {
+      setMsg({ tipo: 'error', texto: msgError(e, 'No se pudo enviar la planeación.') });
     } finally { setPublicando(false); }
   }
 
@@ -283,6 +306,19 @@ export default function PlaneacionVisita() {
           <b>Planeación publicada</b>{estado?.publicada_en ? ` el ${estado.publicada_en.slice(0, 10)}` : ''} —
           ya no puede modificarse. Es el dato base con el que se calcula tu cobertura del ciclo.
           {!esAdmin && ' Si hay un error, un administrador debe desbloquearla.'}
+        </Alert>
+      )}
+      {enRevision && (
+        <Alert severity="info" icon={<HourglassTop />} sx={{ mb: 2 }}>
+          <b>Enviada a {esVM ? 'tu' : 'su'} Gerente de Distrito</b>
+          {estado?.enviada_en ? ` el ${new Date(`${estado.enviada_en}Z`).toLocaleDateString()}` : ''} —
+          está en revisión y no se puede modificar hasta que la apruebe o la devuelva con observaciones.
+        </Alert>
+      )}
+      {estado?.estado === 'DEVUELTA' && (
+        <Alert severity="warning" icon={<Undo />} sx={{ mb: 2 }}>
+          <b>{esVM ? 'Tu gerente te la devolvió' : 'Devuelta por el gerente'}</b> — corrige y vuelve a enviarla.
+          {estado.motivo_devolucion && <><br /><i>«{estado.motivo_devolucion}»</i></>}
         </Alert>
       )}
 
@@ -521,11 +557,14 @@ export default function PlaneacionVisita() {
               {guardando ? 'Guardando…' : 'Guardar planeación'}
             </Button>
             {/* Publicar CONGELA la planeación. Solo tiene sentido sobre un borrador con datos. */}
-            {!congelada && (
-              <Button variant="outlined" color="success" startIcon={<PublishedWithChanges />}
-                      disabled={publicando || bloqueado || !resumen?.total_planeadas}
+            {/* El representante la ENVÍA a su gerente (que la aprueba y así se publica);
+                publicar directo queda para el ADMIN. */}
+            {!congelada && !enRevision && (
+              <Button variant="outlined" color="success"
+                      startIcon={esVM ? <Send /> : <PublishedWithChanges />}
+                      disabled={publicando || bloqueado || (!esVM && !resumen?.total_planeadas)}
                       onClick={() => setConfirmarPublicar(true)}>
-                Publicar planeación del ciclo
+                {esVM ? 'Enviar a mi gerente' : 'Publicar planeación del ciclo'}
               </Button>
             )}
           </>
@@ -543,8 +582,21 @@ export default function PlaneacionVisita() {
       {/* Confirmación de publicación: es irreversible, así que se dice sin rodeos. */}
       <Dialog open={confirmarPublicar} onClose={() => setConfirmarPublicar(false)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Lock color="success" /> Publicar la planeación
+          {esVM ? <><Send color="success" /> Enviar a tu Gerente de Distrito</>
+                : <><Lock color="success" /> Publicar la planeación</>}
         </DialogTitle>
+        {esVM ? (
+          <DialogContent>
+            <Typography variant="body2" sx={{ mb: 1.5 }}>
+              Se guardará lo que ves en pantalla ({vivo.total} visitas, {vivo.cobertura}% de tu panel) y
+              se enviará a tu gerente para que la apruebe.
+            </Typography>
+            <Alert severity="info">
+              Mientras la revisa <b>no podrás modificarla</b>. Si hay algo que corregir, te la devolverá
+              con sus observaciones; al aprobarla queda publicada para todo el ciclo.
+            </Alert>
+          </DialogContent>
+        ) : (
         <DialogContent>
           <Typography variant="body2" sx={{ mb: 1.5 }}>
             Vas a congelar <b>{resumen?.total_planeadas} visitas planeadas</b> ({resumen?.cobertura_planeada_pct}% de
@@ -559,11 +611,18 @@ export default function PlaneacionVisita() {
             Revisa la parrilla antes de continuar.
           </Typography>
         </DialogContent>
+        )}
         <DialogActions>
           <Button onClick={() => setConfirmarPublicar(false)}>Cancelar</Button>
-          <Button variant="contained" color="success" disabled={publicando} onClick={publicar}>
-            {publicando ? 'Publicando…' : 'Sí, publicar y congelar'}
-          </Button>
+          {esVM ? (
+            <Button variant="contained" color="success" disabled={publicando} onClick={enviar}>
+              {publicando ? 'Enviando…' : 'Sí, enviar'}
+            </Button>
+          ) : (
+            <Button variant="contained" color="success" disabled={publicando} onClick={publicar}>
+              {publicando ? 'Publicando…' : 'Sí, publicar y congelar'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 

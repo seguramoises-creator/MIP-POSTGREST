@@ -88,6 +88,11 @@ class Recurso:
     CATEGORIZACION_OPERACION = "categorizacion.operacion"
     MEDICO_MAESTRO = "medico.maestro"
     MEDICO_MAESTRO_EDITAR = "medico.maestro.editar"
+    # Aprobación de la planeación del ciclo (sep-2026). El representante la arma y la ENVÍA;
+    # su Gerente de Distrito la aprueba (= la publica y congela) o la devuelve con motivo.
+    # Va aparte de `planeacion.ciclo` porque ahí el GD solo LEE: una celda no puede decir
+    # «lee la de su equipo» y «aprueba la de su equipo» a la vez sin darle también registrar.
+    PLANEACION_APROBAR = "planeacion.aprobar"
 
 
 # (slug, nombre legible, módulo) — orden = filas del spec §5
@@ -127,6 +132,7 @@ RECURSOS_META: dict[str, tuple[str, str]] = {
     Recurso.CATEGORIZACION_OPERACION: ("Categorización: pantallas operativas y parámetros", "Panel médico"),
     Recurso.MEDICO_MAESTRO: ("Maestro de médicos: consulta e importación", "Panel médico"),
     Recurso.MEDICO_MAESTRO_EDITAR: ("Maestro de médicos: editar ficha existente", "Panel médico"),
+    Recurso.PLANEACION_APROBAR: ("Aprobación de la planeación del ciclo (VM→GD)", "Planeación y cobertura"),
 }
 
 RECURSOS: list[str] = list(RECURSOS_META.keys())

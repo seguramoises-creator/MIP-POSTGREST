@@ -11,7 +11,7 @@ import {
   MedicalServices, EditNote, EventNote, ReportProblem, Campaign, Paid,
   ChevronLeft, ChevronRight, Add, Remove, RateReview, LocalPharmacy, Storefront, Android,
   Insights, CalendarMonth, RecordVoiceOver, Hub, Psychology, School, CloudSync,
-  Grading, MonitorHeart
+  Grading, MonitorHeart, FactCheck
 } from '@mui/icons-material';
 import { useAuthStore } from '../../store/auth.store';
 import { usePuede } from '../../store/permisos.store';
@@ -94,6 +94,8 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: 'Panel Farmacia',        path: '/visita/panel-farmacia', icon: <LocalPharmacy />, recurso: 'farmacia.panel', roles: ['ADMIN', 'GERENTE_DISTRITO', 'GERENTE_PRODUCTIVIDAD', 'REPRESENTANTE_MEDICO'] },
       { label: 'Maestro de Farmacias',  path: '/farmacias/maestro', icon: <Storefront />, recurso: 'farmacia.maestro', accion: 'configure', roles: ['ADMIN', 'GERENTE_PRODUCTIVIDAD'] },
       { label: 'Planeación Ciclo',      path: '/visita/planeacion',   icon: <EventNote />,       recurso: 'planeacion.ciclo', roles: ['ADMIN', 'REPRESENTANTE_MEDICO'] },
+      // El Gerente de Distrito aprueba (o devuelve) la planeación que le envía su equipo.
+      { label: 'Aprobar planeaciones',  path: '/visita/aprobar-planeacion', icon: <FactCheck />, recurso: 'planeacion.aprobar', accion: 'approve', roles: ['ADMIN', 'GERENTE_DISTRITO'] },
     ],
   },
   {

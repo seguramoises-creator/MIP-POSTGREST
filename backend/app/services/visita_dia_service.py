@@ -182,6 +182,31 @@ def resumen_dia(db: Session, pais_codigo: str, f: date,
                                  VisitaRegistro.fecha_hora < fin)
                          .group_by(VisitaRegistro.vm_id).all())
 
+    # ── Farmacia: se trabaja APARTE de la visita médica ─────────────────────
+    # La farmacia no tiene planeación (se visita ad-hoc), así que no hay «planeadas de
+    # la semana» contra las que medir. Su avance es la COBERTURA DEL CICLO a la fecha:
+    # farmacias distintas del panel aprobado ya visitadas / farmacias del panel. La
+    # definición es la de `cobertura_farmacia_service` —se llama, no se copia— para que
+    # este número y el del módulo de Farmacias no puedan discrepar.
+    far_sem: dict[int, int] = {}
+    cob_far: dict[int, dict] = {}
+    if ciclo:
+        from app.services import cobertura_farmacia_service
+        far_sem = dict(db.query(FactVisitaFarmacia.vm_id, func.count())
+                       .filter(FactVisitaFarmacia.vm_id.in_(ids),
+                               FactVisitaFarmacia.ejecutada.is_(True),
+                               FactVisitaFarmacia.fecha_hora >= _ini_utc,
+                               FactVisitaFarmacia.fecha_hora < fin)
+                       .group_by(FactVisitaFarmacia.vm_id).all())
+        cob_far = {i: cobertura_farmacia_service.cobertura_rm(db, i, ciclo.id) for i in ids}
+
+    def _farmacia(i: int, hoy_n: int) -> dict:
+        c = cob_far.get(i) or {"visitadas": 0, "universo": 0}
+        return {"hoy": hoy_n, "semana": far_sem.get(i, 0),
+                "visitadas_ciclo": c["visitadas"], "universo": c["universo"],
+                # Sin farmacias en el panel no hay cobertura que medir: «—», no 0 %.
+                "cobertura_pct": _pct(c["visitadas"], c["universo"])}
+
     _UTC, _tz = timezone.utc, zona_horaria(db, pais_codigo)
     filas = []
     for r in rms:
@@ -200,9 +225,12 @@ def resumen_dia(db: Session, pais_codigo: str, f: date,
             "semana": {"planeadas": ps, "ejecutadas": hs, "avance_pct": _pct(hs, ps)},
             "dia": {"planeadas": pd, "ejecutadas": d["v"] + d["r"],
                     "avance_pct": _pct(d["v"] + d["r"], pd)},
+            "farmacia": _farmacia(r.id, d["farmacias"]),
         })
 
     total_ps, total_hs = sum(plan_sem.values()), sum(hecho_sem.values())
+    tot_vis_far = sum(c["visitadas"] for c in cob_far.values())
+    tot_uni_far = sum(c["universo"] for c in cob_far.values())
     return {
         "fecha": f.isoformat(),
         "ciclo": ({"id": ciclo.id, "nombre": ciclo.nombre,
@@ -218,9 +246,13 @@ def resumen_dia(db: Session, pais_codigo: str, f: date,
             "acompanadas_gd": sum(x["con_gd"] for x in por_rm.values()),
             "hojas_more": sum(x["more"] for x in por_rm.values()),
         },
+        # `semana` es la VISITA MÉDICA (planeada contra ejecutada); la farmacia va aparte.
         "semana": {"numero": semana, "planeadas": total_ps, "ejecutadas": total_hs,
                    "avance_pct": _pct(total_hs, total_ps),
                    "calculable": total_ps > 0},
+        "farmacia": {"semana": sum(far_sem.values()), "visitadas_ciclo": tot_vis_far,
+                     "universo": tot_uni_far, "cobertura_pct": _pct(tot_vis_far, tot_uni_far),
+                     "calculable": tot_uni_far > 0},
         "representantes": filas,
     }
 

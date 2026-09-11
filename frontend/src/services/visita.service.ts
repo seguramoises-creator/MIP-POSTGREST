@@ -309,11 +309,14 @@ export const planeacionResumen = (vmId?: number) =>
 
 // ── Publicación de la planeación (la CONGELA: es el denominador de la cobertura) ──
 export interface PlaneacionEvento {
-  evento: 'PUBLICADA' | 'DESBLOQUEADA'; fecha: string;
+  evento: 'PUBLICADA' | 'DESBLOQUEADA' | 'ENVIADA' | 'DEVUELTA'; fecha: string;
   usuario_id: number | null; motivo: string | null; items: number | null;
 }
+/** BORRADOR → (el RM la envía) ENVIADA → (su GD) PUBLICADA, o DEVUELTA con motivo. */
+export type EstadoPlaneacion = 'BORRADOR' | 'ENVIADA' | 'PUBLICADA' | 'DEVUELTA';
 export interface PlaneacionEstado {
-  ciclo_id: number | null; publicada: boolean; publicada_en: string | null;
+  ciclo_id: number | null; estado: EstadoPlaneacion; publicada: boolean; publicada_en: string | null;
+  enviada_en: string | null; motivo_devolucion: string | null;
   historial: PlaneacionEvento[];
 }
 export const planeacionEstado = (vmId?: number) =>
@@ -324,6 +327,37 @@ export const publicarPlaneacion = (vmId?: number) =>
 /** Solo ADMIN. `vmId` es obligatorio y el motivo queda registrado. */
 export const desbloquearPlaneacion = (vmId: number, motivo: string) =>
   api.post<{ publicada: boolean }>('/visita/planeacion/desbloquear', { motivo },
+    { params: { vm_id: vmId } }).then(r => r.data);
+
+// ── Aprobación de la planeación por el Gerente de Distrito (sep-2026) ────────
+/** El representante envía SU planeación a su gerente (el backend fuerza su rm_id). */
+export const enviarPlaneacion = () =>
+  api.post<{ estado: EstadoPlaneacion; items: number }>('/visita/planeacion/enviar').then(r => r.data);
+export interface PlaneacionEquipoFila {
+  vm_id: number; codigo: string; nombre: string; ciclo_id: number;
+  estado: EstadoPlaneacion; fecha_estado: string | null; motivo: string | null;
+  panel: number; medicos_planeados: number; vistas: number; revisitas: number;
+}
+export interface PlaneacionDetalleMedico {
+  medico_id: number; nombre: string; categoria: string | null; especialidad: string | null; top: boolean;
+  semana_v: number | null; dia_v: string | null; semana_r: number | null; dia_r: string | null;
+}
+export interface PlaneacionDetalle {
+  ciclo_id: number | null; estado: EstadoPlaneacion; motivo: string | null;
+  medicos: PlaneacionDetalleMedico[];
+  sin_planear: { medico_id: number; nombre: string; categoria: string | null; top: boolean }[];
+}
+/** Bandeja del gerente: el GD recibe siempre su equipo; el ADMIN puede filtrar por gerente. */
+export const planeacionEquipo = (gerenteId?: number) =>
+  api.get<PlaneacionEquipoFila[]>('/visita/planeacion/equipo',
+    { params: gerenteId ? { gerente_id: gerenteId } : {} }).then(r => r.data);
+export const planeacionDetalle = (vmId: number) =>
+  api.get<PlaneacionDetalle>('/visita/planeacion/detalle', { params: { vm_id: vmId } }).then(r => r.data);
+export const aprobarPlaneacion = (vmId: number) =>
+  api.post<{ estado: EstadoPlaneacion; items: number }>('/visita/planeacion/aprobar', null,
+    { params: { vm_id: vmId } }).then(r => r.data);
+export const devolverPlaneacion = (vmId: number, motivo: string) =>
+  api.post<{ estado: EstadoPlaneacion }>('/visita/planeacion/devolver', { motivo },
     { params: { vm_id: vmId } }).then(r => r.data);
 
 // ── Ruptura de secuencia / Cierre de ciclo ────────────────────────────

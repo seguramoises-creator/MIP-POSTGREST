@@ -50,6 +50,8 @@ public class MedicoPanel
     /// <summary>APROBADO | PENDIENTE_ALTA | RECHAZADO. Solo un aprobado admite visita.</summary>
     public string EstadoAprobacion { get; set; } = "APROBADO";
     public bool Activo { get; set; } = true;
+    /// <summary>Médico TOP del SFA: el servidor no deja enviar una planeación que lo omita.</summary>
+    public bool EsTop { get; set; }
 
     public bool SePuedeVisitar => Activo && EstadoAprobacion == "APROBADO";
     public string Subtitulo => string.Join(" · ",

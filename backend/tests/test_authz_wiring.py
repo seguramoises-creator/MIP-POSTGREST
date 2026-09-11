@@ -95,9 +95,24 @@ def test_visita_planeacion_registrar_solo_rm():
     # GERENTE_MARCA no lee planeacion → estado 403
     assert _client(router, U(Rol.GERENTE_MARCA)).get(
         "/api/v1/visita/planeacion/estado").status_code == 403
-    # RM sí registra (pasa el guard)
+    # RM sí registra (pasa el guard) — pero su camino es ENVIAR a su gerente, no publicar.
     assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).post(
-        "/api/v1/visita/planeacion/publicar").status_code != 403
+        "/api/v1/visita/planeacion/enviar").status_code != 403
+    # Publicar directo ya no es del RM (sep-2026): si pudiera, la aprobación del GD sobraría.
+    assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).post(
+        "/api/v1/visita/planeacion/publicar").status_code == 403
+
+
+def test_visita_planeacion_aprobar_solo_gd_y_admin():
+    from app.api.v1.routers.visita import router
+    # planeacion.aprobar: el RM no aprueba ni ve la bandeja del equipo.
+    assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).post(
+        "/api/v1/visita/planeacion/aprobar?vm_id=1").status_code == 403
+    assert _client(router, U(Rol.REPRESENTANTE_MEDICO, rm_id=1)).get(
+        "/api/v1/visita/planeacion/equipo").status_code == 403
+    # Otras gerencias tampoco: la aprobación es del GD de ese representante.
+    assert _client(router, U(Rol.GERENTE_MARCA)).post(
+        "/api/v1/visita/planeacion/aprobar?vm_id=1").status_code == 403
 
 
 def test_reconocimiento_lsii_etl_por_matriz():

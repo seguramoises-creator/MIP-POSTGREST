@@ -511,6 +511,23 @@ def notificar_asignacion_examen_gerente(destinatario: str, nombre_gerente: str,
     return _enviar(destinatario, f"Examen asignado a su equipo - {examen_nombre}", cuerpo)
 
 
+def notificar_planeacion_por_aprobar(destinatario: str, nombre_gerente: str,
+                                     representante: str, items: int) -> bool:
+    """Avisa al Gerente de Distrito que un representante le envió su planeación del ciclo.
+    Best-effort (no bloquea el envío)."""
+    if not _habilitado() or not destinatario:
+        return False
+    cuerpo = f"""<html><body style="font-family:Arial,sans-serif;color:#333;">
+  <h2 style="color:{_COLOR_TITULO};">Planeación del ciclo — requiere aprobación</h2>
+  <p>Hola <strong>{nombre_gerente}</strong>, el representante <strong>{representante}</strong>
+     le envió su planeación del ciclo (<strong>{items}</strong> visitas planeadas).</p>
+  <p>Entra a la plataforma, sección <strong>Aprobar planeaciones</strong>, para revisarla y
+     aprobarla o devolverla con sus observaciones.</p>
+  {_pie_pagina()}
+</body></html>"""
+    return _enviar(destinatario, f"Planeación por aprobar - {representante}", cuerpo)
+
+
 def notificar_medico_pendiente_aprobacion(destinatario: str, nombre_gerente: str,
                                           representante: str, medico: str,
                                           especialidad: Optional[str] = None,

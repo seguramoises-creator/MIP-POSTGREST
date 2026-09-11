@@ -47,6 +47,9 @@ from app.core.authz.constantes import Accion as _Acc, Recurso as _Rec, Alcance a
 RegistrarVisitaGuard = Depends(_require_authz(_Acc.REGISTER, _Rec.VISITA_REGISTRAR))
 ReadPlaneacion = Depends(_require_authz(_Acc.READ, _Rec.PLANEACION_CICLO))
 RegistrarPlaneacion = Depends(_require_authz(_Acc.REGISTER, _Rec.PLANEACION_CICLO))
+# Aprobación de la planeación (sep-2026): el GD de su equipo + ADMIN. `approve` implica `read`.
+ReadAprobarPlaneacion = Depends(_require_authz(_Acc.READ, _Rec.PLANEACION_APROBAR))
+AprobarPlaneacion = Depends(_require_authz(_Acc.APPROVE, _Rec.PLANEACION_APROBAR))
 ReadParrilla = Depends(_require_authz(_Acc.READ, _Rec.PARRILLA_CONSULTA))
 ConfigurarParrilla = Depends(_require_authz(_Acc.CONFIGURE, _Rec.PARRILLA_CONFIGURAR))
 # Cobertura de Visita (gauges/ranking) y Ruptura: lectura por matriz (cobertura.diaria). La ven
@@ -740,7 +743,15 @@ def estado_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
 def publicar_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
                         db: Session = Depends(get_db), current_user=RegistrarPlaneacion):
     """Publica (CONGELA) la planeación del ciclo. Irreversible salvo desbloqueo del ADMIN:
-    es el denominador con el que se calcula la cobertura."""
+    es el denominador con el que se calcula la cobertura.
+
+    Desde sep-2026 el representante NO publica la suya: la ENVÍA a su Gerente de Distrito
+    (`/planeacion/enviar`) y se publica cuando él la aprueba. Publicar directo queda para
+    el ADMIN; si el representante pudiera, la aprobación sería un paso que se salta."""
+    if _rol(current_user) == "REPRESENTANTE_MEDICO":
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Tu planeación la aprueba tu Gerente de Distrito: envíasela con «Enviar a mi gerente».")
     from app.services import visita_planeacion_service
     try:
         return visita_planeacion_service.publicar_planeacion(
@@ -770,6 +781,96 @@ def desbloquear_planeacion(vm_id: int, motivo: str = Body(..., embed=True),
     from app.services import visita_planeacion_service
     try:
         return visita_planeacion_service.desbloquear_planeacion(
+            db, vm_id, ciclo_id, getattr(current_user, "id", None), motivo)
+    except ValueError as e:
+        _raise_captura_error(e)
+
+
+def _exigir_equipo(db, current_user, vm_id: int) -> None:
+    """Un Gerente de Distrito solo actúa sobre representantes de SU equipo.
+
+    `_scope_vm` valida el país pero no el equipo (agujero preexistente, anotado allí):
+    para aprobar no basta, porque un GD podría aprobar la planeación de otro distrito."""
+    _exigir_pais_vm(db, current_user, vm_id)
+    if _rol(current_user) == "GERENTE_DISTRITO":
+        from app.core.scope_gd import rm_ids_de_gd
+        if vm_id not in rm_ids_de_gd(db, getattr(current_user, "gerente_id", None)):
+            raise HTTPException(status.HTTP_403_FORBIDDEN,
+                                "Ese representante no es de tu equipo.")
+
+
+@router.post("/planeacion/enviar", response_model=dict)
+def enviar_planeacion(ciclo_id: int | None = None,
+                      db: Session = Depends(get_db), current_user=RegistrarPlaneacion):
+    """El representante envía su planeación a su Gerente de Distrito para aprobación.
+    Queda bloqueada para él hasta que el gerente la apruebe o se la devuelva."""
+    from app.services import visita_planeacion_service
+    try:
+        return visita_planeacion_service.enviar_planeacion(
+            db, _vm_registro(db, current_user, None), ciclo_id, getattr(current_user, "id", None))
+    except (visita_planeacion_service.PlaneacionPublicadaError,
+            visita_planeacion_service.TopSinPlanearError) as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    except ValueError as e:
+        _raise_captura_error(e)
+
+
+@router.get("/planeacion/equipo", response_model=list[dict])
+def planeaciones_del_equipo(ciclo_id: int | None = None, gerente_id: int | None = None,
+                            db: Session = Depends(get_db), current_user=ReadAprobarPlaneacion):
+    """Bandeja del gerente: el estado de la planeación de cada representante de su equipo.
+    El GD se fuerza a su propio equipo; el ADMIN puede indicar un gerente o verlos todos."""
+    from app.models.dimensiones import RepresentanteMedico
+    from app.core.scope_gd import rm_ids_de_gd
+    from app.services import visita_planeacion_service
+    if _rol(current_user) == "GERENTE_DISTRITO":
+        if not getattr(current_user, "gerente_id", None):
+            raise HTTPException(403, "Tu usuario no tiene un gerente_id asignado.")
+        ids = rm_ids_de_gd(db, current_user.gerente_id)
+    elif gerente_id:
+        ids = rm_ids_de_gd(db, gerente_id)
+    else:
+        q = db.query(RepresentanteMedico.id).filter(RepresentanteMedico.activo.is_(True))
+        paises = _scope.paises_visibles(db, current_user)
+        if paises is not None:
+            q = q.filter(RepresentanteMedico.pais_codigo.in_(paises or ["--"]))
+        ids = {r[0] for r in q.all()}
+    return visita_planeacion_service.equipo_planeaciones(db, list(ids), ciclo_id)
+
+
+@router.get("/planeacion/detalle", response_model=dict)
+def detalle_planeacion(vm_id: int | None = None, ciclo_id: int | None = None,
+                       db: Session = Depends(get_db), current_user=ReadPlaneacion):
+    """La planeación por médico (semana de Vista y de Revisita) + los médicos sin planear."""
+    from app.services import visita_planeacion_service
+    vm = _vm_registro(db, current_user, vm_id)
+    _exigir_equipo(db, current_user, vm)
+    return visita_planeacion_service.detalle_planeacion(db, vm, ciclo_id)
+
+
+@router.post("/planeacion/aprobar", response_model=dict)
+def aprobar_planeacion(vm_id: int, ciclo_id: int | None = None,
+                       db: Session = Depends(get_db), current_user=AprobarPlaneacion):
+    """El Gerente de Distrito aprueba la planeación enviada: queda publicada (congelada)."""
+    _exigir_equipo(db, current_user, vm_id)
+    from app.services import visita_planeacion_service
+    try:
+        return visita_planeacion_service.aprobar_planeacion(
+            db, vm_id, ciclo_id, getattr(current_user, "id", None))
+    except visita_planeacion_service.TopSinPlanearError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
+    except ValueError as e:
+        _raise_captura_error(e)
+
+
+@router.post("/planeacion/devolver", response_model=dict)
+def devolver_planeacion(vm_id: int, motivo: str = Body(..., embed=True), ciclo_id: int | None = None,
+                        db: Session = Depends(get_db), current_user=AprobarPlaneacion):
+    """El Gerente de Distrito la devuelve con observaciones: vuelve a ser editable para el RM."""
+    _exigir_equipo(db, current_user, vm_id)
+    from app.services import visita_planeacion_service
+    try:
+        return visita_planeacion_service.devolver_planeacion(
             db, vm_id, ciclo_id, getattr(current_user, "id", None), motivo)
     except ValueError as e:
         _raise_captura_error(e)

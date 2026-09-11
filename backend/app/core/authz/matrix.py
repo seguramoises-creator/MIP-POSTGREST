@@ -83,6 +83,9 @@ MATRIZ: dict[str, dict] = {
     Recurso.FARMACIA_PANEL:          _fila(REG_OWN, R_TEAM, R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   R_ALL,   _N,      ADMIN_CELL),
     Recurso.FARMACIA_APROBAR:        _fila(_N,      (Accion.APPROVE, Alcance.TEAM), _N, _N, _N, _N, _N, _N, _N,   ADMIN_CELL),
     Recurso.FARMACIA_MAESTRO:        _fila(_N,      _N,       _N,      _N,      CFG,     _N,      _N,      _N,      _N,      ADMIN_CELL),
+    # Planeación del ciclo (sep-2026): el VM la envía, SOLO su Gerente de Distrito (su equipo) +
+    # ADMIN la aprueban o la devuelven. Mismo patrón que farmacia.aprobar.
+    Recurso.PLANEACION_APROBAR:      _fila(_N,      (Accion.APPROVE, Alcance.TEAM), _N, _N, _N, _N, _N, _N, _N,   ADMIN_CELL),
     # Categorización + Maestro de Médicos (jul-2026): filas calcadas del acceso que `categorizacion.py`
     # y `maestro_medicos.py` ya concedían con `require_roles`, para que cablearlos a la matriz no le
     # quite (ni le dé) acceso a nadie. Verificado endpoint por endpoint en `test_authz_wiring_calcado.py`.
