@@ -122,8 +122,12 @@ def foto_dia(
     alcance = _alcance(db, current_user)
     if alcance is not None and vm_id not in alcance:
         raise HTTPException(403, "Esa visita no está en tu alcance.")
-    fila = db.query(modelo.foto, modelo.foto_mime).filter(modelo.id == visita_id).first()
+    from app.services.visita_registro_service import CABECERAS_FOTO, mime_de_imagen
+    fila = db.query(modelo.foto).filter(modelo.id == visita_id).first()
     if fila is None or not fila[0]:
         raise HTTPException(404, "La visita no tiene foto.")
-    return Response(content=bytes(fila[0]), media_type=fila[1] or "image/jpeg",
-                    headers={"Cache-Control": "private, max-age=300"})
+    contenido = bytes(fila[0])
+    # El tipo sale de los bytes: el `foto_mime` guardado lo puso el cliente y podría decir
+    # `text/html` sobre un archivo políglota (XSS en el origen de la suite).
+    return Response(content=contenido, media_type=mime_de_imagen(contenido),
+                    headers={"Cache-Control": "private, max-age=300", **CABECERAS_FOTO})

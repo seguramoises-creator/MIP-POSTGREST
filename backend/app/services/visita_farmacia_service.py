@@ -144,7 +144,9 @@ def obtener_foto_visita(db: Session, visita_id: int):
     v = db.query(FactVisitaFarmacia).filter(FactVisitaFarmacia.id == visita_id).first()
     if v is None or not v.foto:
         return None
-    return bytes(v.foto), (v.foto_mime or "image/jpeg")
+    from app.services.visita_registro_service import mime_de_imagen
+    contenido = bytes(v.foto)
+    return contenido, mime_de_imagen(contenido)   # de los bytes, no del foto_mime del cliente
 
 
 # ── Estado de visita del panel (pestaña Farmacia de Registrar Visita) ──────────

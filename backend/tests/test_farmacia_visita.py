@@ -159,11 +159,16 @@ def test_obtener_foto_visita_inexistente_none():
 
 def test_obtener_foto_visita_ok():
     db = _fake_db()
-    v = SimpleNamespace(foto=b"abc", foto_mime="image/jpeg")
+    # Bytes con cabecera JPEG real: la subida rechaza cualquier otra cosa.
+    v = SimpleNamespace(foto=b"\xff\xd8\xffabc", foto_mime="image/jpeg")
     db.query.return_value.filter.return_value.first.return_value = v
     contenido, mime = svc.obtener_foto_visita(db, 1)
-    assert contenido == b"abc"
+    assert contenido == b"\xff\xd8\xffabc"
     assert mime == "image/jpeg"
+    # El tipo sale de los bytes, no del foto_mime guardado: lo que no es imagen, binario.
+    db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(
+        foto=b"abc", foto_mime="image/jpeg")
+    assert svc.obtener_foto_visita(db, 1)[1] == "application/octet-stream"
 
 
 # ─────────────────────────────────────────────────────────────────────────

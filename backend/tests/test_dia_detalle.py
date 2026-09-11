@@ -48,10 +48,31 @@ def test_un_gerente_no_ve_la_foto_de_otro_distrito():
 def test_la_foto_propia_se_devuelve_como_imagen():
     db = MagicMock()
     db.query.return_value.filter.return_value.scalar.return_value = 4
-    db.query.return_value.filter.return_value.first.return_value = (b"\xff\xd8\xffJPEG", "image/jpeg")
+    db.query.return_value.filter.return_value.first.return_value = (b"\xff\xd8\xffJPEG",)
     u = SimpleNamespace(rol="REPRESENTANTE_MEDICO", rm_id=4)
     resp = r.foto_dia(tipo="medico", visita_id=938, db=db, current_user=u)
     assert resp.media_type == "image/jpeg" and resp.body.startswith(b"\xff\xd8\xff")
+    assert resp.headers["x-content-type-options"] == "nosniff"
+    assert "sandbox" in resp.headers["content-security-policy"]
+
+
+def test_el_tipo_sale_de_los_bytes_no_del_mime_guardado():
+    """XSS: un políglota subido como `text/html` NUNCA se sirve como página."""
+    from app.services.visita_registro_service import mime_de_imagen
+    assert mime_de_imagen(b"\xff\xd8\xff<html><script>alert(1)</script>") == "image/jpeg"
+    assert mime_de_imagen(b"\x89PNG\r\n\x1a\n...") == "image/png"
+    assert mime_de_imagen(b"<svg onload=alert(1)>") == "application/octet-stream"
+
+
+def test_las_fotos_de_siempre_tampoco_usan_el_mime_del_cliente():
+    """Mismo arreglo en /visita/{id}/foto y /farmacias/{id}/foto (servicios)."""
+    from app.services import visita_farmacia_service, visita_registro_service
+    for svc in (visita_registro_service, visita_farmacia_service):
+        db = MagicMock()
+        db.query.return_value.filter.return_value.first.return_value = SimpleNamespace(
+            foto=b"\xff\xd8\xff<script>", foto_mime="text/html")
+        _, mime = svc.obtener_foto_visita(db, 1)
+        assert mime == "image/jpeg", svc.__name__
 
 
 def test_tipo_desconocido_es_404():

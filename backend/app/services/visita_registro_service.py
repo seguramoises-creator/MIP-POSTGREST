@@ -340,6 +340,27 @@ def _es_imagen(contenido: bytes) -> bool:
     return contenido[:3] == _MAGIC_JPEG or contenido[:6] == _MAGIC_PNG
 
 
+def mime_de_imagen(contenido: bytes) -> str:
+    """El tipo que se SIRVE sale de los bytes, nunca del `foto_mime` guardado.
+
+    `foto_mime` es el Content-Type que mandó el cliente al subir: la subida exige que el
+    archivo EMPIECE como JPEG/PNG, pero con `text/html` guardado, un archivo políglota
+    (cabecera de imagen + HTML/JS detrás) se serviría como página desde el mismo origen
+    de la suite → XSS. Lo que no sea JPEG/PNG sale como binario opaco."""
+    if contenido[:3] == _MAGIC_JPEG:
+        return "image/jpeg"
+    if contenido[:6] == _MAGIC_PNG:
+        return "image/png"
+    return "application/octet-stream"
+
+
+#: Cabeceras para servir una foto: sin adivinar el tipo y sin ejecutar nada si se abre sola.
+CABECERAS_FOTO = {
+    "X-Content-Type-Options": "nosniff",
+    "Content-Security-Policy": "default-src 'none'; img-src 'self'; sandbox",
+}
+
+
 def guardar_foto_visita(db: Session, visita_id: int, contenido: bytes, mime: str) -> None:
     """Valida (magic bytes JPEG/PNG + tamaño ≤ 15MB) y guarda la foto como BLOB.
     El frontend ya normaliza la foto a JPEG comprimido antes de subir."""
@@ -360,4 +381,5 @@ def obtener_foto_visita(db: Session, visita_id: int):
     v = db.query(VisitaRegistro).filter(VisitaRegistro.id == visita_id).first()
     if v is None or not v.foto:
         return None
-    return bytes(v.foto), (v.foto_mime or "image/jpeg")
+    contenido = bytes(v.foto)
+    return contenido, mime_de_imagen(contenido)   # de los bytes, no del foto_mime del cliente
