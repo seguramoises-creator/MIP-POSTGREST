@@ -7,7 +7,7 @@
              x:Class="VistaCampo.Vistas.HoyPagina"
              Title="Hoy">
 
-    <RefreshView IsRefreshing="{Binding Ocupado}" Command="{Binding CargarCommand}">
+    <RefreshView IsRefreshing="{Binding Refrescando, Mode=TwoWay}" Command="{Binding RefrescarCommand}">
         <ScrollView>
             <VerticalStackLayout Padding="10" Spacing="8">
 

@@ -102,14 +102,14 @@ public partial class HoyVista : BaseVista
         ? "Nada fuera de tu agenda hoy."
         : "Sin conexión: no se sabe qué se registró hoy fuera de la agenda.";
 
-    private async Task<List<(int id, string nombre, string tipo, string? hora)>> ProgramadosHoyAsync()
+    private async Task<List<(int id, string nombre, string tipo, string? hora, bool visitada)>> ProgramadosHoyAsync()
     {
         // LA MISMA fuente que el grupo «del día» de Registrar (el servidor lo decide por
         // semana del ciclo + día). Cuando cada pantalla lo calculaba a su manera, Registrar
         // decía cinco médicos del día y Hoy uno.
         return (await _base.AgendaAsync()).Where(a => a.Grupo == "dia")
             .OrderBy(a => a.HoraEstimada ?? "99").ThenBy(a => a.Nombre)
-            .Select(a => (a.MedicoId, a.Nombre, a.TipoVisita, a.HoraEstimada)).ToList();
+            .Select(a => (a.MedicoId, a.Nombre, a.TipoVisita, a.HoraEstimada, a.VisitadaHoy)).ToList();
     }
 
     /// <summary>`visitasHoy` null = no se pudo consultar el día: la agenda va sin marcas.</summary>
@@ -126,6 +126,9 @@ public partial class HoyVista : BaseVista
             var hecha = suyas?.FirstOrDefault(v => v.Ejecutada);
             var noVisitado = suyas is { Count: > 0 } && hecha is null;
             var enCola = cola.FirstOrDefault(c => c.medicoId == p.id).etiqueta is not null;
+            // Sin conexión no se puede preguntar el día, pero la agenda de la última
+            // sincronización ya decía si estaba visitado: «0 de 1» con la visita hecha era falso.
+            var segunAgenda = visitasHoy is null && p.visitada;
             var partes = new[] { p.tipo == "R" ? "Revisita" : "Vista", p.hora }
                 .Where(s => !string.IsNullOrWhiteSpace(s));
             AgendaHoy.Add(new FilaHoy
@@ -133,8 +136,9 @@ public partial class HoyVista : BaseVista
                 Nombre = p.nombre,
                 Detalle = string.Join(" · ", partes)
                     + (hecha is not null ? $" · hecha a las {hecha.HoraCorta} · ☁️ en el servidor"
-                       : enCola ? " · 📱 guardada, por enviar" : ""),
-                Marca = hecha is not null ? "✓" : enCola ? "📱" : noVisitado ? "⊘" : "",
+                       : enCola ? " · 📱 guardada, por enviar"
+                       : segunAgenda ? " · ☁️ en el servidor (según la última sincronización)" : ""),
+                Marca = hecha is not null || segunAgenda ? "✓" : enCola ? "📱" : noVisitado ? "⊘" : "",
                 NoVisitado = noVisitado && !enCola,
             });
         }
@@ -171,6 +175,21 @@ public partial class HoyVista : BaseVista
 
     /// <summary>Qué pasa con lo capturado: subido, guardado en el teléfono o rechazado.</summary>
     [ObservableProperty] private string _detalleCola = "";
+
+    /// <summary>
+    /// Solo el gesto de deslizar para refrescar. Va separado de `Ocupado` a propósito: con el
+    /// RefreshView atado a `Ocupado`, cada carga lo ponía en true y el RefreshView relanzaba
+    /// el comando — la carga se volvía a disparar a sí misma.
+    /// </summary>
+    [ObservableProperty] private bool _refrescando;
+    private bool _recargarAlTerminar;
+
+    [RelayCommand]
+    private async Task RefrescarAsync()
+    {
+        try { await CargarAsync(); }
+        finally { Refrescando = false; }
+    }
 
     private static string UltimoEnvio()
     {
@@ -230,17 +249,34 @@ public partial class HoyVista : BaseVista
     {
         _sync.Cambio -= AlCambiarLaCola;
         _sync.Cambio += AlCambiarLaCola;
+        Connectivity.Current.ConnectivityChanged -= AlCambiarLaRed;
+        Connectivity.Current.ConnectivityChanged += AlCambiarLaRed;
     }
 
-    public void Desactivar() => _sync.Cambio -= AlCambiarLaCola;
+    public void Desactivar()
+    {
+        _sync.Cambio -= AlCambiarLaCola;
+        Connectivity.Current.ConnectivityChanged -= AlCambiarLaRed;
+    }
+
+    /// <summary>
+    /// Al volver la señal, «Sin conexión» deja de ser verdad: se vuelve a consultar el día.
+    /// Unos segundos de espera porque Android avisa de la red antes de que resuelva nombres.
+    /// </summary>
+    private void AlCambiarLaRed(object? sender, ConnectivityChangedEventArgs e) =>
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            if (e.NetworkAccess == NetworkAccess.Internet) await Task.Delay(3000);
+            await CargarAsync();
+        });
 
     private void AlCambiarLaCola() => MainThread.BeginInvokeOnMainThread(async () =>
     {
         var habia = HayPendientes;
         RefrescarEstadoCola();
-        // Si la cola acababa de vaciarse, el día cambió y el error de conexión que se
-        // mostraba ya no es cierto: se vuelve a consultar en vez de dejar el cartel viejo.
-        if (habia && !HayPendientes) await CargarAsync();
+        // Si la cola cambió (se guardó algo, o subió), las listas ya no dicen la verdad: la
+        // tarjeta no puede decir «Todo en el servidor» con una fila «📱 por enviar» debajo.
+        if (habia != HayPendientes) await CargarAsync();
     });
 
     private void RefrescarEstadoCola()
@@ -264,11 +300,11 @@ public partial class HoyVista : BaseVista
     [RelayCommand]
     public async Task CargarAsync()
     {
-        // Ya hay una carga en curso: salir SIN tocar las listas. El RefreshView vuelve a
-        // disparar este comando cuando `Ocupado` pasa a true, y esa segunda entrada vaciaba
-        // la agenda y se iba (EjecutarAsync la descartaba): la ✓ de lo visitado hoy
-        // desaparecía con «Vistas 3» arriba.
-        if (Ocupado) return;
+        // Ya hay una carga en curso: no se pisa, pero TAMPOCO se pierde — se vuelve a cargar
+        // al terminar. Descartarla dejaba la pantalla vieja: al volver la señal la cola se
+        // vaciaba sola, la tarjeta decía «Todo en el servidor» y la lista seguía con
+        // «📱 por enviar» y «Sin conexión» (medido en el teléfono, modo avión).
+        if (Ocupado) { _recargarAlTerminar = true; return; }
         OnPropertyChanged(nameof(PuedeCapturar));
         OnPropertyChanged(nameof(Ciclo));
         await _sync.RefrescarContadoresAsync();
@@ -349,6 +385,11 @@ public partial class HoyVista : BaseVista
         });
         // Si la consulta falló, al menos la agenda local y lo que está en la cola.
         if (Error is not null) await ConstruirListasAsync(null, null);
+        if (_recargarAlTerminar)
+        {
+            _recargarAlTerminar = false;
+            await CargarAsync();
+        }
     }
 
     [RelayCommand]
