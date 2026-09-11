@@ -124,6 +124,26 @@ def _rm_ids_por(db: Session, gerente_id: int | None, linea_id: int | None,
     return [r[0] for r in q.all()]
 
 
+def _agrupar_planeacion(filas) -> dict[int, dict[str, tuple[int | None, str | None]]]:
+    """(medico_id, tipo, semana, dia) → {medico_id: {"V": (semana, dia), "R": (...)}}."""
+    out: dict[int, dict[str, tuple[int | None, str | None]]] = {}
+    for mid, tipo, semana, dia in filas:
+        out.setdefault(mid, {})[tipo] = (semana, dia)
+    return out
+
+
+def _semana_en_curso(db: Session, ciclo_id: int) -> int | None:
+    """Semana (1-4) del ciclo que corre HOY en su país; None fuera de sus fechas."""
+    from app.services.visita_dia_service import _semana_de
+    c = db.get(Ciclo, ciclo_id)
+    if c is None or not c.fecha_inicio or not c.fecha_fin:
+        return None
+    hoy = hoy_local(db, c.pais_codigo)
+    if not (c.fecha_inicio <= hoy <= c.fecha_fin):
+        return None
+    return min(max(_semana_de(c, hoy), 1), 4)
+
+
 def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
                     gerente_id: int | None = None, linea_id: int | None = None,
                     solo_ruptura: bool = False, pais_codigo: str | None = None,
@@ -160,6 +180,15 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
         mq = mq.filter(MedicoVisita.ciclos_sin_visita >= 3)
     medicos = [m for m in mq.all() if cuenta_en_ciclo(m, ciclo_orden, ordenes)]
     mapa = _mapa_visitas(db, ciclo_id, vm_id)
+    # Semana (y día) en que cada médico estaba planeado: las listas de pendientes se leen
+    # POR SEMANA del ciclo — lo de la semana 1 ya está vencido, lo de la 4 aún no toca.
+    from app.models.visita import PlaneacionCiclo
+    ids = [m.id for m in medicos]
+    plan = _agrupar_planeacion(
+        db.query(PlaneacionCiclo.medico_id, PlaneacionCiclo.tipo_visita,
+                 PlaneacionCiclo.semana, PlaneacionCiclo.dia_semana)
+        .filter(PlaneacionCiclo.ciclo_id == ciclo_id, PlaneacionCiclo.medico_id.in_(ids or [-1]))
+        .all()) if ids else {}
 
     total = len(medicos)
     visitados = con_revisita = 0
@@ -182,14 +211,18 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
         if comp:
             con_revisita += 1
         elif not vis:
+            sv, dv = plan.get(m.id, {}).get("V", (None, None))
             item = {"id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria,
-                    "especialidad_id": m.especialidad_id, "es_top": m.es_top}
+                    "especialidad_id": m.especialidad_id, "es_top": m.es_top,
+                    "semana": sv, "dia": dv}   # semana de la VISTA planeada (None = sin planear)
             sin_visita.append(item)
             if m.es_top:
                 top_sin_visita.append(item)
         if vis and not comp:  # solo Vista, falta Revisita
+            sr, dr = plan.get(m.id, {}).get("R", (None, None))
             item = {"id": m.id, "nombre": m.nombre_completo, "categoria": m.categoria,
-                    "es_top": m.es_top}
+                    "es_top": m.es_top,
+                    "semana": sr, "dia": dr}   # semana de la REVISITA planeada (None = sin planear)
             falta_revisita.append(item)
             if m.es_top:
                 top_falta_revisita.append(item)
@@ -201,6 +234,7 @@ def _cobertura_base(db: Session, ciclo_id: int, vm_id: int | None,
         "pct_gap": round(100 - _pct(visitados, total), 1),
         "categorias": cat, "sin_visita": sin_visita, "falta_revisita": falta_revisita,
         "top_sin_visita": top_sin_visita, "top_falta_revisita": top_falta_revisita,
+        "semana_actual": _semana_en_curso(db, ciclo_id),
     }
 
 
@@ -221,7 +255,7 @@ def resumen_cobertura(db: Session, ciclo_id: int | None = None, vm_id: int | Non
         return {"ciclo_id": None, "panel": 0, "visitados": 0, "con_revisita": 0,
                 "sin_visitar": 0, "pct_cobertura": 0, "pct_completa": 0, "pct_gap": 0,
                 "categorias": {}, "sin_visita": [], "falta_revisita": [], "ruptura": [],
-                "top_sin_visita": [], "top_falta_revisita": []}
+                "top_sin_visita": [], "top_falta_revisita": [], "semana_actual": None}
     base = _cobertura_base(db, ciclo_id, vm_id, gerente_id, linea_id, solo_ruptura, pais_codigo,
                            permitidos)
     # Ruptura de secuencia (≥3 ciclos sin visita) — respeta los mismos filtros de scope.

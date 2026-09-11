@@ -211,8 +211,12 @@ export interface CoberturaResumen {
   acompanadas?: number; visitas_ejecutadas?: number; pct_acompanamiento?: number;
   objetivo_cobertura: number; objetivo_completa: number;
   categorias: Record<string, CatCobertura>;
-  sin_visita: { id: number; nombre: string; categoria: string; es_top: boolean }[];
-  falta_revisita: { id: number; nombre: string; categoria: string; es_top: boolean }[];
+  // `semana`/`dia`: cuándo estaba planeada la Vista (sin_visita) o la Revisita
+  // (falta_revisita); null = sin planear.
+  sin_visita: { id: number; nombre: string; categoria: string; es_top: boolean; semana?: number | null; dia?: string | null }[];
+  falta_revisita: { id: number; nombre: string; categoria: string; es_top: boolean; semana?: number | null; dia?: string | null }[];
+  /** Semana (1-4) del ciclo que corre hoy; null fuera de sus fechas. */
+  semana_actual?: number | null;
   ruptura: { id: number; nombre: string; categoria: string; ciclos_sin_visita: number }[];
   // Médicos TOP (SFA de Mallén) que no tienen ninguna visita / que les falta la Revisita.
   // Subconjuntos de sin_visita/falta_revisita, ya filtrados por es_top === true.
