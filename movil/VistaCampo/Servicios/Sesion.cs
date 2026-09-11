@@ -24,6 +24,9 @@ public class Sesion
         set => Preferences.Set(CLAVE_SERVIDOR, value.TrimEnd('/'));
     }
 
+    /// <summary>Por qué se llevó al usuario a la entrada (sesión vencida). Se muestra una vez.</summary>
+    public string? MotivoSalida { get; set; }
+
     public string? Usuario { get; private set; }
     public string? NombreCompleto { get; private set; }
     public string? Rol { get; private set; }

@@ -30,6 +30,14 @@ public partial class EntrarVista : BaseVista
 
     public void RefrescarIdentidad() => OnPropertyChanged(nameof(Bienvenida));
 
+    /// <summary>Si se llegó aquí porque venció la sesión, se dice una vez.</summary>
+    public void MostrarMotivoSalida()
+    {
+        if (string.IsNullOrEmpty(_sesion.MotivoSalida)) return;
+        Aviso = _sesion.MotivoSalida;
+        _sesion.MotivoSalida = null;
+    }
+
     [RelayCommand]
     private void AlternarClave() => MostrarClave = !MostrarClave;
 
@@ -69,6 +77,8 @@ public partial class EntrarVista : BaseVista
                 Aviso = "Entraste, pero no se pudieron descargar los catálogos: " + fallo;
 
             if (Shell.Current is not null) await Shell.Current.GoToAsync("//hoy");
+            // Si se volvió a entrar tras vencer la sesión, lo que quedó en cola sube ya.
+            _ = _sync.ProcesarAsync();
         });
     }
 }

@@ -17,5 +17,6 @@ public partial class EntrarPagina : ContentPage
         base.OnAppearing();
         // La identidad puede haber llegado del servidor después de construir la página.
         _vm.RefrescarIdentidad();
+        _vm.MostrarMotivoSalida();
     }
 }

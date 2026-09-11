@@ -8,12 +8,16 @@ public partial class App : Application
     private readonly ServicioInstalacion _instalacion;
     private readonly ServicioSincronizacion _sync;
 
-    public App(Sesion sesion, ServicioInstalacion instalacion, ServicioSincronizacion sync)
+    public App(Sesion sesion, ServicioInstalacion instalacion, ServicioSincronizacion sync, ApiCliente api)
     {
         InitializeComponent();
         _sesion = sesion;
         _instalacion = instalacion;
         _sync = sync;
+
+        // Sesión vencida de verdad (el servidor rechazó el refresh): a la entrada, diciendo
+        // por qué. La cola NO se toca: al volver a entrar, lo pendiente sube solo.
+        api.SesionVencida += () => MainThread.BeginInvokeOnMainThread(async () => await IrAEntrarAsync());
 
         // La identidad puede cambiar en el servidor: cuando llega, se repinta.
         _instalacion.Cambio += AplicarIdentidad;
@@ -77,6 +81,22 @@ public partial class App : Application
 
         await Shell.Current.GoToAsync("//hoy");
         await _sync.ProcesarAsync();
+    }
+
+    private bool _saliendo;
+
+    private async Task IrAEntrarAsync()
+    {
+        if (_saliendo || Shell.Current is null) return;
+        _saliendo = true;
+        try
+        {
+            await _sesion.CerrarAsync();
+            _sesion.MotivoSalida = "Tu sesión venció: vuelve a entrar. Lo que tenías por enviar "
+                                   + "sigue guardado en el teléfono y subirá al entrar.";
+            await Shell.Current.GoToAsync("//entrar");
+        }
+        finally { _saliendo = false; }
     }
 
     /// <summary>

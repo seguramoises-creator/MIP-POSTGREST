@@ -34,6 +34,15 @@ public class ApiCliente
 {
     private readonly HttpClient _http;
     private readonly Sesion _sesion;
+    private readonly SemaphoreSlim _renovando = new(1, 1);
+
+    /// <summary>
+    /// El servidor ya no acepta la sesión (refresh revocado o caducado): hay que volver a
+    /// entrar. Lo escucha la app para llevar al visitador a la pantalla de entrada; antes
+    /// seguía trabajando con la sesión muerta y cada envío decía «No se pudo validar las
+    /// credenciales», sin decirle nunca qué hacer.
+    /// </summary>
+    public event Action? SesionVencida;
 
     public static readonly JsonSerializerOptions Json = new()
     {
@@ -72,6 +81,7 @@ public class ApiCliente
     private async Task<HttpResponseMessage> EnviarAsync(HttpMethod metodo, string ruta,
                                                         Func<HttpContent?>? cuerpo = null)
     {
+        var tokenUsado = await _sesion.AccessTokenAsync();
         HttpResponseMessage resp;
         try
         {
@@ -82,7 +92,7 @@ public class ApiCliente
             throw new ErrorApi("No se pudo contactar el servidor. Revisa tu conexión.");
         }
 
-        if (resp.StatusCode == HttpStatusCode.Unauthorized && await RenovarAsync())
+        if (resp.StatusCode == HttpStatusCode.Unauthorized && await RenovarAsync(tokenUsado))
         {
             resp.Dispose();
             try
@@ -231,18 +241,55 @@ public class ApiCliente
         await LanzarSiFalloAsync(r);
     }
 
-    private async Task<bool> RenovarAsync()
+    /// <summary>
+    /// Renueva el token de acceso con el refresh. UNA renovación a la vez.
+    ///
+    /// EL SERVIDOR ROTA EL REFRESH: al renovar, revoca el que se usó y entrega uno nuevo.
+    /// Aquí se guardaba el viejo, así que la primera renovación funcionaba y la segunda
+    /// —dos horas después de entrar— recibía «revocado»: desde ahí nada subía. Por eso se
+    /// guarda el que devuelve el servidor, y por eso va con cerrojo: dos peticiones que
+    /// caducan a la vez gastarían el mismo refresh y la segunda perdería la sesión.
+    /// </summary>
+    private async Task<bool> RenovarAsync(string? tokenUsado)
     {
-        var refresco = await _sesion.RefreshTokenAsync();
-        if (string.IsNullOrEmpty(refresco)) return false;
+        await _renovando.WaitAsync();
         try
         {
-            using var r = await _http.PostAsJsonAsync(Url("/auth/refresh"), new { refresh_token = refresco });
-            if (!r.IsSuccessStatusCode) return false;
-            using var doc = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
-            await _sesion.GuardarTokensAsync(doc.RootElement.GetProperty("access_token").GetString()!, refresco);
-            return true;
+            // Otra petición ya renovó mientras esta esperaba: basta reintentar con el nuevo.
+            var actual = await _sesion.AccessTokenAsync();
+            if (!string.IsNullOrEmpty(actual) && actual != tokenUsado) return true;
+
+            var refresco = await _sesion.RefreshTokenAsync();
+            if (string.IsNullOrEmpty(refresco)) return false;
+
+            HttpResponseMessage r;
+            try
+            {
+                r = await _http.PostAsJsonAsync(Url("/auth/refresh"), new { refresh_token = refresco });
+            }
+            catch
+            {
+                return false;   // sin red la sesión NO se da por perdida: se reintentará
+            }
+            using (r)
+            {
+                if (r.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                {
+                    // El servidor contestó y dijo que no: esto sí es sesión vencida.
+                    SesionVencida?.Invoke();
+                    return false;
+                }
+                if (!r.IsSuccessStatusCode) return false;
+                using var doc = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
+                var raiz = doc.RootElement;
+                var nuevo = raiz.TryGetProperty("refresh_token", out var nr) && nr.ValueKind == JsonValueKind.String
+                    ? nr.GetString()!
+                    : refresco;
+                await _sesion.GuardarTokensAsync(raiz.GetProperty("access_token").GetString()!, nuevo);
+                return true;
+            }
         }
         catch { return false; }
+        finally { _renovando.Release(); }
     }
 }
