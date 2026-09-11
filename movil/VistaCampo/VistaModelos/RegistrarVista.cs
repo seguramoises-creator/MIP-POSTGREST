@@ -81,7 +81,21 @@ public partial class RegistrarVista : BaseVista
     public ObservableCollection<MedicoPanel> Panel { get; } = new();
     public ObservableCollection<FarmaciaPanel> FarmaciasPendientes { get; } = new();
     public ObservableCollection<FarmaciaPanel> FarmaciasVisitadas { get; } = new();
-    public ObservableCollection<ProductoParrilla> Productos { get; } = new();
+    private ObservableCollection<ProductoParrilla> _productos = new();
+
+    /// <summary>
+    /// Se REEMPLAZA entera al recargar, nunca se vacía con Clear(). La ficha que la pinta
+    /// vive en una plantilla que se monta y desmonta con cada visita: una ficha ya cerrada
+    /// seguía escuchando la lista, y al vaciarla MAUI intentaba desmontar vistas de Android
+    /// ya destruidas → ObjectDisposedException y la app se cerraba (7 cierres registrados en
+    /// el teléfono entre el 10 y el 11 de septiembre, todos en este Clear). Con una lista
+    /// nueva, las fichas viejas se quedan con la suya y nadie toca vistas muertas.
+    /// </summary>
+    public ObservableCollection<ProductoParrilla> Productos
+    {
+        get => _productos;
+        private set => SetProperty(ref _productos, value);
+    }
     public ObservableCollection<VisitaDelDia> RegistradasHoy { get; } = new();
     public ObservableCollection<VisitaDelDia> Anteriores { get; } = new();
 
@@ -334,13 +348,13 @@ public partial class RegistrarVista : BaseVista
         Error = null;
 
         OnPropertyChanged(nameof(PuedeCapturar));
-        Productos.Clear();
-        foreach (var p in await _base.ProductosAsync())
+        var productos = await _base.ProductosAsync();
+        foreach (var p in productos)
         {
             p.Reiniciar();   // el catálogo se comparte; lo marcado es de ESTA visita
             p.PropertyChanged += (_, __) => RefrescarResumen();
-            Productos.Add(p);
         }
+        Productos = new ObservableCollection<ProductoParrilla>(productos);
         OnPropertyChanged(nameof(HayProductos));
         RefrescarResumen();
         await FiltrarAsync();
