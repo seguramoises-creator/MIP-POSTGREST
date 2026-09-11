@@ -198,8 +198,8 @@ public partial class HoyVista : BaseVista
             return "Nada guardado en el teléfono sin enviar.";
         var l = t.ToLocalTime();
         return l.Date == DateTime.Today
-            ? $"Todo subido · última sincronización hoy a las {l:HH:mm}"
-            : $"Todo subido · última sincronización el {l:dd/MM} a las {l:HH:mm}";
+            ? $"Última sincronización: hoy a las {l:HH:mm}"
+            : $"Última sincronización: el {l:dd/MM} a las {l:HH:mm}";
     }
 
     /// <summary>Capturas que siguen en el teléfono (pendientes o rechazadas), con su médico.</summary>
